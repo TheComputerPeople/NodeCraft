@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 2,
+  "name": "MultiGraph",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [
+    { "id": "v_score", "name": "Score", "type": { "id": "int" }, "defaultValue": 0 }
+  ],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        { "id": "s", "type": "core:event.start", "position": { "x": 0, "y": 0 }, "properties": {} },
+        { "id": "set", "type": "core:variable.set", "position": { "x": 200, "y": 0 }, "properties": { "pin:name": "Score", "pin:value": 1 } },
+        { "id": "get", "type": "core:variable.get", "position": { "x": 200, "y": 150 }, "properties": { "pin:name": "Score" } },
+        { "id": "p", "type": "core:console.print", "position": { "x": 400, "y": 0 }, "properties": {} }
+      ],
+      "connections": [
+        { "id": "c1", "fromNode": "s", "fromPin": "execOut", "toNode": "set", "toPin": "execIn" },
+        { "id": "c2", "fromNode": "set", "fromPin": "execOut", "toNode": "p", "toPin": "execIn" },
+        { "id": "c3", "fromNode": "get", "fromPin": "value", "toNode": "p", "toPin": "value" }
+      ],
+      "comments": []
+    },
+    {
+      "id": "Second",
+      "name": "Second",
+      "kind": "event",
+      "nodes": [
+        { "id": "s", "type": "core:event.start", "position": { "x": 0, "y": 0 }, "properties": {} },
+        { "id": "get", "type": "core:variable.get", "position": { "x": 0, "y": 150 }, "properties": { "pin:name": "Score" } },
+        { "id": "p", "type": "core:console.print", "position": { "x": 200, "y": 0 }, "properties": {} }
+      ],
+      "connections": [
+        { "id": "c1", "fromNode": "s", "fromPin": "execOut", "toNode": "p", "toPin": "execIn" },
+        { "id": "c2", "fromNode": "get", "fromPin": "value", "toNode": "p", "toPin": "value" }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: Start nodes of every event graph run in order and share member variables; node ids repeat across graphs.",
+    "expectedOutput": ["1", "1"]
+  }
+}

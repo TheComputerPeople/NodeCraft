@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "name": "Defaults",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        { "id": "start", "type": "core:event.start", "position": { "x": 0, "y": 0 }, "properties": {} },
+        { "id": "print_before", "type": "core:console.print", "position": { "x": 200, "y": 0 }, "properties": {} },
+        { "id": "add_late", "type": "core:math.add", "position": { "x": 400, "y": 150 }, "properties": {} },
+        { "id": "print_after", "type": "core:console.print", "position": { "x": 650, "y": 0 }, "properties": {} }
+      ],
+      "connections": [
+        { "id": "c1", "fromNode": "start", "fromPin": "execOut", "toNode": "print_before", "toPin": "execIn" },
+        { "id": "c2", "fromNode": "add_late", "fromPin": "result", "toNode": "print_before", "toPin": "value" },
+        { "id": "c3", "fromNode": "print_before", "fromPin": "execOut", "toNode": "add_late", "toPin": "execIn" },
+        { "id": "c4", "fromNode": "add_late", "fromPin": "execOut", "toNode": "print_after", "toPin": "execIn" },
+        { "id": "c5", "fromNode": "add_late", "fromPin": "result", "toNode": "print_after", "toPin": "value" }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: an impure output reads as its type default before the node runs; unconnected inputs use the pin definition's default (Add: 10 + 20).",
+    "expectedOutput": ["0", "30"]
+  }
+}

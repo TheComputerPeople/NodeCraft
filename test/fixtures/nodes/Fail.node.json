@@ -1,0 +1,20 @@
+{
+  "type": "test.fail",
+  "version": 1,
+  "displayName": "Fail",
+  "category": "Test",
+  "description": "Raises an error, for testing how errors stop a run.",
+  "inputs": [
+    { "id": "execIn", "name": "", "kind": "exec", "direction": "input" }
+  ],
+  "outputs": [
+    { "id": "execOut", "name": "", "kind": "exec", "direction": "output" }
+  ],
+  "implementation": {
+    "kind": "code",
+    "languages": {
+      "javascript": "throw new Error(\"boom\");",
+      "python": "raise ValueError(\"boom\")"
+    }
+  }
+}

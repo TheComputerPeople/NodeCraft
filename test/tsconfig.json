@@ -11,7 +11,9 @@
     "unit",
     "webview",
     "integration",
+    "conformance",
     "../src/core",
-    "../src/extension/webview-html.ts"
+    "../src/extension/webview-html.ts",
+    "../src/extension/runner.ts"
   ]
 }

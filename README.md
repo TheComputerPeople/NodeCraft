@@ -43,6 +43,7 @@ The TypeScript configuration includes the DOM library definitions because VS Cod
 | `npm run check` | Type-checks the extension, the webview and the tests without emitting output |
 | `npm test` | Runs every test: unit tests, then browser tests of the webview |
 | `npm run test:unit` / `npm run test:webview` | Run one group |
+| `npm run test:conformance` | Runs every fixture graph in Simulate and as generated TypeScript, JavaScript and Python, and checks they print the same output (part of `npm test`; needs Node.js 22.18+ and Python 3) |
 | `npm run test:integration` | Launches VS Code with the extension and runs smoke tests inside it (not part of `npm test`) |
 
 The browser tests drive the real webview bundle in an installed Microsoft Edge or Google Chrome through `playwright-core` (no browser download). Set `BLUEPRINT_TEST_BROWSER` to a Chromium executable to use a different one; without any browser those tests are skipped.
@@ -54,6 +55,7 @@ Source layout:
 - `src/webview/`: the graph editor UI, written in TypeScript and bundled by esbuild. It has no runtime dependencies.
 - `test/unit/`: unit tests for `src/core`.
 - `test/webview/`: browser tests for the editor UI.
+- `test/conformance/`: the conformance suite. Fixture graphs in `test/fixtures/graphs/` declare their expected output; golden files in `test/fixtures/codegen/` record generated code (`UPDATE_GOLDEN=1 npm run test:unit` rewrites them).
 - `test/integration/`: tests that run inside a real VS Code.
 
 The integration tests download the minimum supported VS Code version (from `engines.vscode`) into `.vscode-test/` on first run, and open a VS Code window while they run. They work from a VS Code terminal too: the launcher clears `ELECTRON_RUN_AS_NODE`, which VS Code sets for its child processes.

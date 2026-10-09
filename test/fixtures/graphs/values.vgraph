@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 2,
+  "name": "Values",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        { "id": "start", "type": "core:event.start", "position": { "x": 0, "y": 0 }, "properties": {} },
+        { "id": "set_text", "type": "core:variable.set", "position": { "x": 200, "y": 0 }, "properties": { "pin:name": "Text", "pin:value": "5" } },
+        { "id": "get_text", "type": "core:variable.get", "position": { "x": 200, "y": 150 }, "properties": { "pin:name": "Text" } },
+        { "id": "add_text", "type": "core:math.add", "position": { "x": 400, "y": 0 }, "properties": { "pin:b": 1 } },
+        { "id": "print_sum", "type": "core:console.print", "position": { "x": 600, "y": 0 }, "properties": {} },
+        { "id": "print_true", "type": "core:console.print", "position": { "x": 800, "y": 0 }, "properties": { "pin:value": true } },
+        { "id": "get_nothing", "type": "core:variable.get", "position": { "x": 800, "y": 150 }, "properties": { "pin:name": "Nothing" } },
+        { "id": "print_null", "type": "core:console.print", "position": { "x": 1000, "y": 0 }, "properties": {} },
+        { "id": "add_tenths", "type": "core:math.add", "position": { "x": 1200, "y": 0 }, "properties": { "pin:a": 0.1, "pin:b": 0.2 } },
+        { "id": "print_tenths", "type": "core:console.print", "position": { "x": 1400, "y": 0 }, "properties": {} },
+        { "id": "add_big", "type": "core:math.add", "position": { "x": 1600, "y": 0 }, "properties": { "pin:a": 1e21, "pin:b": 0 } },
+        { "id": "print_big", "type": "core:console.print", "position": { "x": 1800, "y": 0 }, "properties": {} },
+        { "id": "add_tiny", "type": "core:math.add", "position": { "x": 2000, "y": 0 }, "properties": { "pin:a": 1e-7, "pin:b": 0 } },
+        { "id": "print_tiny", "type": "core:console.print", "position": { "x": 2200, "y": 0 }, "properties": {} },
+        { "id": "set_empty", "type": "core:variable.set", "position": { "x": 2400, "y": 0 }, "properties": { "pin:name": "Empty", "pin:value": "" } },
+        { "id": "get_empty", "type": "core:variable.get", "position": { "x": 2400, "y": 150 }, "properties": { "pin:name": "Empty" } },
+        { "id": "branch_empty", "type": "core:flow.branch", "position": { "x": 2600, "y": 0 }, "properties": {} },
+        { "id": "empty_true", "type": "core:console.print", "position": { "x": 2800, "y": -100 }, "properties": { "pin:value": "empty is true" } },
+        { "id": "empty_false", "type": "core:console.print", "position": { "x": 2800, "y": 100 }, "properties": { "pin:value": "empty is false" } },
+        { "id": "print_half", "type": "core:console.print", "position": { "x": 3000, "y": 100 }, "properties": { "pin:value": 2.5 } }
+      ],
+      "connections": [
+        { "id": "c1", "fromNode": "start", "fromPin": "execOut", "toNode": "set_text", "toPin": "execIn" },
+        { "id": "c2", "fromNode": "set_text", "fromPin": "execOut", "toNode": "add_text", "toPin": "execIn" },
+        { "id": "c3", "fromNode": "get_text", "fromPin": "value", "toNode": "add_text", "toPin": "a" },
+        { "id": "c4", "fromNode": "add_text", "fromPin": "execOut", "toNode": "print_sum", "toPin": "execIn" },
+        { "id": "c5", "fromNode": "add_text", "fromPin": "result", "toNode": "print_sum", "toPin": "value" },
+        { "id": "c6", "fromNode": "print_sum", "fromPin": "execOut", "toNode": "print_true", "toPin": "execIn" },
+        { "id": "c7", "fromNode": "print_true", "fromPin": "execOut", "toNode": "print_null", "toPin": "execIn" },
+        { "id": "c8", "fromNode": "get_nothing", "fromPin": "value", "toNode": "print_null", "toPin": "value" },
+        { "id": "c9", "fromNode": "print_null", "fromPin": "execOut", "toNode": "add_tenths", "toPin": "execIn" },
+        { "id": "c10", "fromNode": "add_tenths", "fromPin": "execOut", "toNode": "print_tenths", "toPin": "execIn" },
+        { "id": "c11", "fromNode": "add_tenths", "fromPin": "result", "toNode": "print_tenths", "toPin": "value" },
+        { "id": "c12", "fromNode": "print_tenths", "fromPin": "execOut", "toNode": "add_big", "toPin": "execIn" },
+        { "id": "c13", "fromNode": "add_big", "fromPin": "execOut", "toNode": "print_big", "toPin": "execIn" },
+        { "id": "c14", "fromNode": "add_big", "fromPin": "result", "toNode": "print_big", "toPin": "value" },
+        { "id": "c15", "fromNode": "print_big", "fromPin": "execOut", "toNode": "add_tiny", "toPin": "execIn" },
+        { "id": "c16", "fromNode": "add_tiny", "fromPin": "execOut", "toNode": "print_tiny", "toPin": "execIn" },
+        { "id": "c17", "fromNode": "add_tiny", "fromPin": "result", "toNode": "print_tiny", "toPin": "value" },
+        { "id": "c18", "fromNode": "print_tiny", "fromPin": "execOut", "toNode": "set_empty", "toPin": "execIn" },
+        { "id": "c19", "fromNode": "set_empty", "fromPin": "execOut", "toNode": "branch_empty", "toPin": "execIn" },
+        { "id": "c20", "fromNode": "get_empty", "fromPin": "value", "toNode": "branch_empty", "toPin": "condition" },
+        { "id": "c21", "fromNode": "branch_empty", "fromPin": "true", "toNode": "empty_true", "toPin": "execIn" },
+        { "id": "c22", "fromNode": "branch_empty", "fromPin": "false", "toNode": "empty_false", "toPin": "execIn" },
+        { "id": "c23", "fromNode": "empty_false", "fromPin": "execOut", "toNode": "print_half", "toPin": "execIn" }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: text-to-number conversion, number formatting, null printing and empty-string truthiness.",
+    "expectedOutput": ["6", "true", "", "0.30000000000000004", "1e+21", "1e-7", "empty is false", "2.5"]
+  }
+}

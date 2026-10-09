@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "name": "Errors",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        { "id": "start", "type": "core:event.start", "position": { "x": 0, "y": 0 }, "properties": {} },
+        { "id": "before", "type": "core:console.print", "position": { "x": 200, "y": 0 }, "properties": { "pin:value": "before" } },
+        { "id": "fail", "type": "test.fail", "position": { "x": 400, "y": 0 }, "properties": {} },
+        { "id": "after", "type": "core:console.print", "position": { "x": 600, "y": 0 }, "properties": { "pin:value": "after" } }
+      ],
+      "connections": [
+        { "id": "c1", "fromNode": "start", "fromPin": "execOut", "toNode": "before", "toPin": "execIn" },
+        { "id": "c2", "fromNode": "before", "fromPin": "execOut", "toNode": "fail", "toPin": "execIn" },
+        { "id": "c3", "fromNode": "fail", "fromPin": "execOut", "toNode": "after", "toPin": "execIn" }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: an error raised by a node stops the run.",
+    "expectedOutput": ["before"],
+    "expectedError": true
+  }
+}
