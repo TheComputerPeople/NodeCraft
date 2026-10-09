@@ -83,7 +83,7 @@ Exit: `npm test` passes (and runs in CI once the repo has a remote), the v1 samp
 Goal: the same graph compiles to two very different languages and behaves identically.
 
 - **Visual IR and compiler pipeline**: validation → IR (control flow from exec wires, expressions from pure nodes) → language pack → generated file and source map, written where the pack's output placement says (next to the graph for TypeScript and Python). Phase 1 also builds the output-plan contract, generated-file naming and rename/move/delete handling from [output-placement.md](output-placement.md).
-- Blueprint semantics are written down and tested, including the subtle ones (for example, pure nodes are re-evaluated each time a connected impure node executes).
+- Blueprint semantics are written down and tested, including the subtle ones (for example, pure nodes are re-evaluated each time a connected impure node executes). See [semantics.md](semantics.md).
 - **TypeScript/JavaScript pack** first (the current runtime and node templates are already JS).
 - **Python pack** second: different syntax, runtime and typing discipline, with low toolchain friction. It exposes JS-shaped assumptions early.
 - **Compile** button plus a Compiler Results panel. Errors and warnings appear as badges on the offending nodes, as in Unreal.

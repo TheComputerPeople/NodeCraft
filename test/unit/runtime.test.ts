@@ -51,12 +51,30 @@ describe('GraphRuntime: control flow', () => {
     assert.deepEqual(logs(events), ['first', 'second']);
   });
 
-  test('a node reached by two paths runs once', () => {
+  test('a node runs every time execution reaches it, as in Unreal', () => {
     const events = run(doc(
-      [node('s', 'core:event.start'), node('q', 'core:flow.sequence'), node('p', 'core:console.print', { 'pin:value': 'once' })],
+      [node('s', 'core:event.start'), node('q', 'core:flow.sequence'), node('p', 'core:console.print', { 'pin:value': 'again' })],
       [wire('s', 'execOut', 'q', 'execIn'), wire('q', 'then0', 'p', 'execIn'), wire('q', 'then1', 'p', 'execIn')]
     ));
-    assert.deepEqual(logs(events), ['once']);
+    assert.deepEqual(logs(events), ['again', 'again']);
+  });
+
+  test('an exec output wired to several inputs runs them in connection order', () => {
+    const events = run(doc(
+      [node('s', 'core:event.start'), node('a', 'core:console.print', { 'pin:value': 'a' }), node('b', 'core:console.print', { 'pin:value': 'b' })],
+      [wire('s', 'execOut', 'b', 'execIn'), wire('s', 'execOut', 'a', 'execIn')]
+    ));
+    assert.deepEqual(logs(events), ['b', 'a']);
+  });
+
+  test('Branch treats 0, NaN, empty strings and null as false', () => {
+    const branchOn = (condition: unknown) => logs(run(doc(
+      [node('s', 'core:event.start'), node('br', 'core:flow.branch', { 'pin:condition': condition }),
+        node('t', 'core:console.print', { 'pin:value': 'T' }), node('f', 'core:console.print', { 'pin:value': 'F' })],
+      [wire('s', 'execOut', 'br', 'execIn'), wire('br', 'true', 't', 'execIn'), wire('br', 'false', 'f', 'execIn')]
+    )))[0];
+    assert.deepEqual([0, Number.NaN, '', null, false].map(branchOn), ['F', 'F', 'F', 'F', 'F']);
+    assert.deepEqual([1, 'false', true].map(branchOn), ['T', 'T', 'T']);
   });
 
   for (const [label, connections] of [
@@ -66,7 +84,7 @@ describe('GraphRuntime: control flow', () => {
     test(`stops and reports ${label}`, () => {
       const events = run(doc([node('s', 'core:event.start'), node('q', 'core:flow.sequence'), node('q2', 'core:flow.sequence')], [...connections]));
       assert.ok(events.some((e) => e.kind === 'error' && /cycle/.test(e.message ?? '')));
-      assert.equal(events.at(-1)?.kind, 'graph.complete');
+      assert.equal(events.at(-1)?.message, 'Graph execution stopped by an error.');
     });
   }
 });
@@ -84,12 +102,58 @@ describe('GraphRuntime: variables', () => {
     assert.deepEqual(logs(events), ['42']);
   });
 
-  test('a data cycle between Get Variable nodes terminates', () => {
+  test('a data cycle between Get Variable nodes is reported and stops the run', () => {
     const events = run(doc(
       [node('s', 'core:event.start'), node('a', 'core:variable.get'), node('b', 'core:variable.get'), node('p', 'core:console.print')],
       [wire('s', 'execOut', 'p', 'execIn'), wire('a', 'value', 'b', 'name'), wire('b', 'value', 'a', 'name'), wire('a', 'value', 'p', 'value')]
     ));
-    assert.equal(events.at(-1)?.kind, 'graph.complete');
+    assert.ok(events.some((e) => e.kind === 'error' && /Data cycle/.test(e.message ?? '')));
+    assert.deepEqual(logs(events), []);
+  });
+
+  test('an undeclared variable reads as null until set', () => {
+    const events = run(doc(
+      [node('s', 'core:event.start'), node('get', 'core:variable.get', { 'pin:name': 'Missing' }), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'p', 'execIn'), wire('get', 'value', 'p', 'value')]
+    ));
+    assert.deepEqual(logs(events), ['']);
+  });
+
+  test('declared variables start at their default, else their type default', () => {
+    const events = run(doc(
+      [node('s', 'core:event.start'), node('g1', 'core:variable.get', { 'pin:name': 'Lives' }), node('g2', 'core:variable.get', { 'pin:name': 'Alive' }),
+        node('p1', 'core:console.print'), node('p2', 'core:console.print')],
+      [wire('s', 'execOut', 'p1', 'execIn'), wire('p1', 'execOut', 'p2', 'execIn'), wire('g1', 'value', 'p1', 'value'), wire('g2', 'value', 'p2', 'value')],
+      [{ id: 'v1', name: 'Lives', type: { id: 'int' }, defaultValue: 3 }, { id: 'v2', name: 'Alive', type: { id: 'bool' } }]
+    ));
+    assert.deepEqual(logs(events), ['3', 'false']);
+  });
+});
+
+describe('GraphRuntime: data flow and values', () => {
+  test('an impure node output holds its type default until the node runs', () => {
+    const events = run(doc(
+      [node('s', 'core:event.start'), node('add', 'core:math.add'), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'p', 'execIn'), wire('add', 'result', 'p', 'value')]
+    ));
+    assert.deepEqual(logs(events), ['0']);
+  });
+
+  test('unconnected inputs fall back to the pin definition default', () => {
+    // No pin:a / pin:b stored on the node: Add's definition defaults are 10 and 20.
+    const events = run(doc(
+      [node('s', 'core:event.start'), node('add', 'core:math.add'), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'add', 'execIn'), wire('add', 'execOut', 'p', 'execIn'), wire('add', 'result', 'p', 'value')]
+    ));
+    assert.deepEqual(logs(events), ['30']);
+  });
+
+  test('Print formats values by the shared rules', () => {
+    const printed = (value: unknown) => logs(run(doc(
+      [node('s', 'core:event.start'), node('p', 'core:console.print', { 'pin:value': value })],
+      [wire('s', 'execOut', 'p', 'execIn')]
+    )))[0];
+    assert.deepEqual([true, false, null, 0.1, 30, 1e21, 1e-7, 'text'].map(printed), ['true', 'false', '', '0.1', '30', '1e+21', '1e-7', 'text']);
   });
 });
 
