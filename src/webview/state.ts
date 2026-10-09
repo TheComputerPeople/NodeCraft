@@ -17,11 +17,15 @@ export interface DraftConnection {
 }
 
 // An existing connection whose `side` end is being dragged to a new pin.
+// Existing connections whose `side` end is being dragged to a new pin: one wire (Ctrl+click on a
+// wire) or every wire on a pin (Ctrl+drag from the pin, as in Unreal).
 export interface Rewire {
-  connectionId: string;
+  connectionIds: string[];
   side: 'from' | 'to';
   startX: number;
   startY: number;
+  // Releasing away from a pin removes the wire (single-wire rewire) or cancels (moving all).
+  dropRemoves: boolean;
 }
 
 export interface NodeDrag {
@@ -36,12 +40,20 @@ export interface Panning {
   startY: number;
   panX: number;
   panY: number;
+  // Right-button presses pan when dragged and open a context menu when not (as in Unreal).
+  button: number;
+  moved: boolean;
+  // The node under a right-button press, for its context menu.
+  nodeId: string | null;
 }
+
+// Marquee modes, as in Unreal: drag replaces, Shift+drag adds, Ctrl+drag removes.
+export type SelectionMode = 'replace' | 'add' | 'remove';
 
 export interface GroupSelection {
   startX: number;
   startY: number;
-  additive: boolean;
+  mode: SelectionMode;
   base: Set<string>;
   moved: boolean;
 }
@@ -82,6 +94,10 @@ export interface EditorState {
   // The latest compile result, and whether the graph changed since (Unreal shows that as "?").
   compile: CompileReport | null;
   compileState: 'unknown' | 'dirty' | 'compiling' | CompileReport['status'];
+  // The pin under the pointer; its wires are highlighted.
+  hoverPin: PinAddress | null;
+  // A placement key held down (B, S, P, ...): clicking the canvas places that node.
+  heldKey: string | null;
 }
 
 export const state: EditorState = {
@@ -108,5 +124,7 @@ export const state: EditorState = {
   runtimePaintPending: false,
   languages: [],
   compile: null,
-  compileState: 'unknown'
+  compileState: 'unknown',
+  hoverPin: null,
+  heldKey: null
 };

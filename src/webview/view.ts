@@ -38,10 +38,14 @@ export function zoomAt(clientX: number, clientY: number, zoomIn: boolean): void 
   renderEdges();
 }
 
-export function fitGraph(): void {
+// Fits the view to the selected nodes when `selection` is set and something is selected (Unreal's
+// Home), otherwise to the whole graph.
+export function fitGraph(selection = false): void {
   if (!state.graph?.nodes.length) return;
-  const xs = state.graph.nodes.map((n) => n.position.x);
-  const ys = state.graph.nodes.map((n) => n.position.y);
+  const selected = selection ? state.graph.nodes.filter((n) => state.selectedNodeIds.has(n.id)) : [];
+  const nodes = selected.length ? selected : state.graph.nodes;
+  const xs = nodes.map((n) => n.position.x);
+  const ys = nodes.map((n) => n.position.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs) + 260, minY = Math.min(...ys), maxY = Math.max(...ys) + 180;
   const rect = dom.canvasWrap.getBoundingClientRect();
   state.zoom = Math.min(1.3, Math.max(0.6, Math.min(rect.width / (maxX - minX + 120), rect.height / (maxY - minY + 120))));

@@ -86,6 +86,15 @@ function renderPin(node: GraphNode, pin: PinDefinition): HTMLElement {
   handle.title = pin.kind === 'exec' ? 'Execution pin' : `${pin.name} (${formatType(pin.type)})`;
   handle.addEventListener('mousedown', (e) => onPinMouseDown(node, pin, e));
   handle.addEventListener('dragstart', (e) => e.preventDefault());
+  // Hovering a pin highlights its wires, as in Unreal.
+  handle.addEventListener('mouseenter', () => {
+    state.hoverPin = { node: node.id, pin: pin.id };
+    renderEdges();
+  });
+  handle.addEventListener('mouseleave', () => {
+    state.hoverPin = null;
+    renderEdges();
+  });
 
   if (pin.direction === 'input') row.append(handle, label);
   else row.append(label, handle);
@@ -97,12 +106,17 @@ export function renderEdges(pointer: Point | null = null): void {
   dom.edges.innerHTML = '';
   if (!state.graph) return;
   const rect = dom.canvasWrap.getBoundingClientRect();
+  const moving = new Set(state.rewire?.connectionIds ?? []);
+  const hover = state.hoverPin;
   for (const c of state.graph.connections) {
+    // Wires being moved are drawn from the pointer instead (below).
+    if (moving.has(c.id)) continue;
     const source = pinElement(c.fromNode, c.fromPin);
     const target = pinElement(c.toNode, c.toPin);
     if (!source || !target) continue;
     const ran = state.executedNodeIds.has(c.fromNode) && state.executedNodeIds.has(c.toNode);
-    addPath(centerOf(source, rect), centerOf(target, rect), ran ? 'active' : '', c.id);
+    const hovered = !!hover && ((c.fromNode === hover.node && c.fromPin === hover.pin) || (c.toNode === hover.node && c.toPin === hover.pin));
+    addPath(centerOf(source, rect), centerOf(target, rect), [ran ? 'active' : '', hovered ? 'hover' : ''].join(' ').trim(), c.id);
   }
 
   const draft = state.draftConnection;
@@ -116,13 +130,13 @@ export function renderEdges(pointer: Point | null = null): void {
 
   const rewire = state.rewire;
   if (rewire) {
-    const c = state.graph.connections.find((connection) => connection.id === rewire.connectionId);
-    const source = c && pinElement(c.fromNode, c.fromPin);
-    const target = c && pinElement(c.toNode, c.toPin);
-    if (source && target) {
-      const moving = screenPointToWorld(pointer ?? { x: rewire.startX, y: rewire.startY }, rect);
-      if (rewire.side === 'from') addPath(moving, centerOf(target, rect), 'draft');
-      else addPath(centerOf(source, rect), moving, 'draft');
+    const end = screenPointToWorld(pointer ?? { x: rewire.startX, y: rewire.startY }, rect);
+    for (const c of state.graph.connections.filter((connection) => moving.has(connection.id))) {
+      // The end that stays put: the far pin of each wire being moved.
+      const fixed = rewire.side === 'from' ? pinElement(c.toNode, c.toPin) : pinElement(c.fromNode, c.fromPin);
+      if (!fixed) continue;
+      if (rewire.side === 'from') addPath(end, centerOf(fixed, rect), 'draft');
+      else addPath(centerOf(fixed, rect), end, 'draft');
     }
   }
 }
@@ -136,9 +150,10 @@ function addPath(a: Point, b: Point, className = '', connectionId: string | null
     hit.setAttribute('class', 'edge-hit');
     hit.dataset.connectionId = connectionId;
     hit.addEventListener('mousedown', (e) => {
+      // Other buttons fall through to the canvas (right-drag pans).
+      if (e.button !== 0) return;
       e.stopPropagation();
       e.preventDefault();
-      if (e.button !== 0) return;
       if (e.altKey) removeConnection(connectionId);
       else if (e.ctrlKey || e.metaKey) beginRewireFromConnection(connectionId, e.clientX, e.clientY);
     });

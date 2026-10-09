@@ -77,7 +77,7 @@ export function connectNewNode(newNodeId: string, source: editing.PinAddress): v
   const endpoints = sourceDef.direction === 'output'
     ? { fromNode: source.node, fromPin: source.pin, toNode: newNodeId, toPin: candidate.id }
     : { fromNode: newNodeId, fromPin: candidate.id, toNode: source.node, toPin: source.pin };
-  editing.connect(graph, endpoints, newConnectionId());
+  editing.connect(graph, lookupDefinition, endpoints, newConnectionId());
   markDirty();
   render();
 }
@@ -93,25 +93,25 @@ export function completeConnection(targetNodeId: string, targetPinId: string): v
   if (!draft || !state.graph) return;
   const endpoints = editing.resolveConnection(state.graph, lookupDefinition, { node: draft.node, pin: draft.pin }, { node: targetNodeId, pin: targetPinId });
   if (!endpoints) return;
-  editing.connect(state.graph, endpoints, newConnectionId());
+  editing.connect(state.graph, lookupDefinition, endpoints, newConnectionId());
   markDirty();
   render();
 }
 
+// Selection follows Unreal: click selects, Shift+click adds, Ctrl+click toggles.
 export function onNodeMouseDown(node: GraphNode, e: MouseEvent): void {
   if (e.button !== 0) return;
   const target = eventElement(e);
-  if (target?.closest('.pin') || target?.closest('input')) return;
+  if (target?.closest('.pin') || target?.closest('input, select, textarea')) return;
   hideContextMenu();
-  const additive = e.shiftKey || e.ctrlKey || e.metaKey;
-  if (additive && state.selectedNodeIds.has(node.id)) {
-    // Modifier-click on a selected node removes it from the selection; no drag starts.
+  const toggle = e.ctrlKey || e.metaKey;
+  if (toggle && state.selectedNodeIds.has(node.id)) {
     selectNode(node.id, true);
     e.stopPropagation();
     e.preventDefault();
     return;
   }
-  if (additive) state.selectedNodeIds.add(node.id);
+  if (toggle || e.shiftKey) state.selectedNodeIds.add(node.id);
   else if (!state.selectedNodeIds.has(node.id)) state.selectedNodeIds = new Set([node.id]);
   state.selectedNodeId = node.id;
   syncSelectionClasses();
@@ -137,6 +137,18 @@ function beginNodeDrag(node: GraphNode, e: MouseEvent): void {
   };
 }
 
+// Arrow keys move the selection, as in Unreal.
+export function moveSelection(dx: number, dy: number): void {
+  if (!state.graph || !state.selectedNodeIds.size) return;
+  for (const node of state.graph.nodes) {
+    if (!state.selectedNodeIds.has(node.id)) continue;
+    node.position.x += dx;
+    node.position.y += dy;
+  }
+  markDirty();
+  render();
+}
+
 export function onPinMouseDown(node: GraphNode, pin: PinDefinition, e: MouseEvent): void {
   if (e.button !== 0) return;
   // Do not preventDefault here: the window-level mousemove/mouseup listeners need the normal
@@ -152,40 +164,30 @@ export function onPinMouseDown(node: GraphNode, pin: PinDefinition, e: MouseEven
     return;
   }
   if (e.ctrlKey || e.metaKey) {
-    beginRewireFromPin(node.id, pin.id, e.clientX, e.clientY);
+    beginMoveConnections(node.id, pin.id, e.clientX, e.clientY);
     return;
   }
   state.draftConnection = { node: node.id, pin: pin.id, kind: pin.kind, direction: pin.direction, startX: e.clientX, startY: e.clientY };
   renderEdges();
 }
 
-function beginRewireFromPin(nodeId: string, pinId: string, clientX: number, clientY: number): void {
+// Ctrl+drag from a pin picks up all of its wires, to drop them on another pin (Unreal's "move
+// all connections").
+function beginMoveConnections(nodeId: string, pinId: string, clientX: number, clientY: number): void {
   if (!state.graph || !pinDef(nodeId, pinId)) return;
   const isThisPin = (node: string, pin: string): boolean => node === nodeId && pin === pinId;
-  const candidates = state.graph.connections.filter((c) => isThisPin(c.fromNode, c.fromPin) || isThisPin(c.toNode, c.toPin));
-  if (!candidates.length) {
-    setStatus('That pin has no connection to rewire.');
+  const wires = state.graph.connections.filter((c) => isThisPin(c.fromNode, c.fromPin) || isThisPin(c.toNode, c.toPin));
+  if (!wires.length) {
+    setStatus('That pin has no connections to move.');
     return;
   }
-  // With several wires on the pin, grab the one whose far end is closest to the cursor.
-  let selected = candidates[0];
-  let bestDistance = Infinity;
-  for (const c of candidates) {
-    const opposite = isThisPin(c.fromNode, c.fromPin) ? pinElement(c.toNode, c.toPin) : pinElement(c.fromNode, c.fromPin);
-    const r = opposite?.getBoundingClientRect();
-    if (!r) continue;
-    const d = Math.hypot(r.left + r.width / 2 - clientX, r.top + r.height / 2 - clientY);
-    if (d < bestDistance) {
-      bestDistance = d;
-      selected = c;
-    }
-  }
-  const side = isThisPin(selected.fromNode, selected.fromPin) ? 'from' : 'to';
-  state.rewire = { connectionId: selected.id, side, startX: clientX, startY: clientY };
+  // A pin is either an output (its wires' "from" end) or an input (their "to" end).
+  const side = isThisPin(wires[0].fromNode, wires[0].fromPin) ? 'from' : 'to';
+  state.rewire = { connectionIds: wires.map((c) => c.id), side, startX: clientX, startY: clientY, dropRemoves: false };
   renderEdges({ x: clientX, y: clientY });
 }
 
-// Grabs the end of the wire nearest to where it was clicked.
+// Ctrl+click on a wire grabs the end nearest to the click.
 export function beginRewireFromConnection(connectionId: string, clientX: number, clientY: number): void {
   const connection = state.graph?.connections.find((c) => c.id === connectionId);
   if (!connection) return;
@@ -197,22 +199,29 @@ export function beginRewireFromConnection(connectionId: string, clientX: number,
   const b = centerOf(target, rect);
   const click = screenPointToWorld({ x: clientX, y: clientY }, rect);
   const side = Math.hypot(click.x - a.x, click.y - a.y) <= Math.hypot(click.x - b.x, click.y - b.y) ? 'from' : 'to';
-  state.rewire = { connectionId, side, startX: clientX, startY: clientY };
+  state.rewire = { connectionIds: [connectionId], side, startX: clientX, startY: clientY, dropRemoves: true };
   renderEdges({ x: clientX, y: clientY });
 }
 
-// Releasing off a pin, or on an incompatible one, removes the connection (as in Unreal).
+// Dropping on a compatible pin moves the wires there. Dropping elsewhere removes a single grabbed
+// wire, or leaves moved wires where they were.
 export function finishRewire(e: MouseEvent): void {
   const rewire = state.rewire;
+  state.rewire = null;
   if (!rewire || !state.graph) return;
   const targetPin = eventElement(e)?.closest<HTMLElement>('.pin');
   const target = targetPin && { node: targetPin.dataset.node ?? '', pin: targetPin.dataset.pin ?? '' };
-  if (target && editing.rewire(state.graph, lookupDefinition, rewire.connectionId, rewire.side, target)) {
+  let moved = 0;
+  if (target) {
+    for (const id of rewire.connectionIds) {
+      if (editing.rewire(state.graph, lookupDefinition, id, rewire.side, target)) moved++;
+    }
+  }
+  if (moved) {
     markDirty();
     render();
-  } else {
-    removeConnection(rewire.connectionId);
+  } else if (rewire.dropRemoves) {
+    rewire.connectionIds.forEach(removeConnection);
   }
-  state.rewire = null;
   renderEdges();
 }

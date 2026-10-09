@@ -37,12 +37,32 @@ describe('resolveConnection', () => {
   });
 });
 
-describe('connect', () => {
-  test('replaces the existing connection into the same input pin', () => {
+describe('connect: Unreal wiring rules', () => {
+  test('a data input takes one wire: a new one replaces the old', () => {
     const g = sample();
-    editing.connect(g, { fromNode: 'add_1', fromPin: 'result', toNode: 'print_true', toPin: 'value' }, 'fresh');
+    editing.connect(g, lookup, { fromNode: 'add_1', fromPin: 'result', toNode: 'print_true', toPin: 'value' }, 'fresh');
     const into = g.connections.filter((c) => c.toNode === 'print_true' && c.toPin === 'value');
     assert.deepEqual(into.map((c) => c.id), ['fresh']);
+  });
+
+  test('a data output feeds many inputs', () => {
+    const g = sample();
+    editing.connect(g, lookup, { fromNode: 'add_1', fromPin: 'result', toNode: 'print_false', toPin: 'value' }, 'second');
+    assert.equal(g.connections.filter((c) => c.fromNode === 'add_1' && c.fromPin === 'result').length, 2);
+  });
+
+  test('an exec output drives one input: a new wire replaces the old', () => {
+    const g = sample();
+    // c3: branch_1.true → print_true. Rewiring the True output elsewhere replaces it.
+    editing.connect(g, lookup, { fromNode: 'branch_1', fromPin: 'true', toNode: 'end_false', toPin: 'execIn' }, 'fresh');
+    assert.deepEqual(g.connections.filter((c) => c.fromNode === 'branch_1' && c.fromPin === 'true').map((c) => c.id), ['fresh']);
+  });
+
+  test('an exec input accepts many wires', () => {
+    const g = sample();
+    // print_false already has c4 coming in; adding another keeps both.
+    editing.connect(g, lookup, { fromNode: 'print_true', fromPin: 'execOut', toNode: 'print_false', toPin: 'execIn' }, 'fresh');
+    assert.deepEqual(g.connections.filter((c) => c.toNode === 'print_false' && c.toPin === 'execIn').map((c) => c.id).sort(), ['c4', 'fresh']);
   });
 });
 
@@ -62,11 +82,18 @@ describe('rewire', () => {
     assert.equal(JSON.stringify(g.connections), before);
   });
 
-  test('displaces a connection already wired into the new target', () => {
+  test('moving a wire onto an exec input keeps the wires already there', () => {
     const g = sample();
     // c4 feeds branch.false → print_false.execIn; move c3's target there too.
     assert.equal(editing.rewire(g, lookup, 'c3', 'to', { node: 'print_false', pin: 'execIn' }), true);
-    assert.ok(!g.connections.some((c) => c.id === 'c4'));
+    assert.ok(g.connections.some((c) => c.id === 'c4'));
+  });
+
+  test('moving a wire onto a data input displaces the wire already there', () => {
+    const g = sample();
+    editing.connect(g, lookup, { fromNode: 'add_1', fromPin: 'result', toNode: 'print_false', toPin: 'value' }, 'other');
+    assert.equal(editing.rewire(g, lookup, 'c7', 'to', { node: 'print_false', pin: 'value' }), true);
+    assert.ok(!g.connections.some((c) => c.id === 'other'));
   });
 });
 

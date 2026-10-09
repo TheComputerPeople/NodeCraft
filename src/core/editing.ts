@@ -57,9 +57,20 @@ export function resolveConnection(graph: GraphContent, lookup: DefinitionLookup,
   return { fromNode: from.node, fromPin: from.pin, toNode: to.node, toPin: to.pin };
 }
 
-// Adds a connection, replacing whatever was already wired into the target input pin.
-export function connect(graph: GraphContent, endpoints: Endpoints, connectionId: string): GraphConnection {
-  graph.connections = graph.connections.filter((c) => !(c.toNode === endpoints.toNode && c.toPin === endpoints.toPin));
+// Unreal's wiring rules: an exec output drives one exec input (which may have many drivers), and a
+// data input reads from one output (which may feed many inputs). True for connections a new wire
+// with `endpoints` would replace.
+function replacedBy(graph: GraphContent, lookup: DefinitionLookup, endpoints: Endpoints): (c: GraphConnection) => boolean {
+  const execOutput = pinDefinition(graph, lookup, endpoints.fromNode, endpoints.fromPin)?.kind === 'exec';
+  const dataInput = pinDefinition(graph, lookup, endpoints.toNode, endpoints.toPin)?.kind !== 'exec';
+  return (c) => (execOutput && c.fromNode === endpoints.fromNode && c.fromPin === endpoints.fromPin)
+    || (dataInput && c.toNode === endpoints.toNode && c.toPin === endpoints.toPin);
+}
+
+// Adds a connection, replacing the ones Unreal's wiring rules say it supersedes.
+export function connect(graph: GraphContent, lookup: DefinitionLookup, endpoints: Endpoints, connectionId: string): GraphConnection {
+  const replaced = replacedBy(graph, lookup, endpoints);
+  graph.connections = graph.connections.filter((c) => !replaced(c));
   const connection = { id: connectionId, ...endpoints };
   graph.connections.push(connection);
   return connection;
@@ -78,7 +89,8 @@ export function rewire(graph: GraphContent, lookup: DefinitionLookup, connection
   const to = pinDefinition(graph, lookup, endpoints.toNode, endpoints.toPin);
   if (!from || !to || !pinsCompatible(from, to)) return false;
 
-  graph.connections = graph.connections.filter((c) => c.id === connection.id || !(c.toNode === endpoints.toNode && c.toPin === endpoints.toPin));
+  const replaced = replacedBy(graph, lookup, endpoints);
+  graph.connections = graph.connections.filter((c) => c.id === connection.id || !replaced(c));
   Object.assign(connection, endpoints);
   return true;
 }

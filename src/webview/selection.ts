@@ -2,7 +2,7 @@ import { connectedNodeIds } from '../core/editing';
 import { dom, nodeElement, setStatus } from './dom';
 import { renderInspector } from './panels';
 import { syncSelectionClasses } from './render';
-import { state } from './state';
+import { SelectionMode, state } from './state';
 
 function refreshSelection(): void {
   syncSelectionClasses();
@@ -47,14 +47,15 @@ export function beginGroupSelection(e: MouseEvent): void {
   if (!state.graph) return;
   state.draftConnection = null;
   state.rewire = null;
-  const additive = e.shiftKey || e.ctrlKey || e.metaKey;
-  const base = additive ? new Set(state.selectedNodeIds) : new Set<string>();
-  if (!additive) {
+  // Unreal: drag replaces the selection, Shift+drag adds to it, Ctrl+drag removes from it.
+  const mode: SelectionMode = e.ctrlKey || e.metaKey ? 'remove' : e.shiftKey ? 'add' : 'replace';
+  const base = mode === 'replace' ? new Set<string>() : new Set(state.selectedNodeIds);
+  if (mode === 'replace') {
     state.selectedNodeIds.clear();
     state.selectedNodeId = null;
     syncSelectionClasses();
   }
-  state.selection = { startX: e.clientX, startY: e.clientY, additive, base, moved: false };
+  state.selection = { startX: e.clientX, startY: e.clientY, mode, base, moved: false };
   updateSelectionBox(e.clientX, e.clientY);
   e.preventDefault();
 }
@@ -76,7 +77,9 @@ export function updateGroupSelection(e: MouseEvent): void {
     const r = nodeElement(node.id)?.getBoundingClientRect();
     if (r && box.left <= r.right && box.right >= r.left && box.top <= r.bottom && box.bottom >= r.top) hits.add(node.id);
   }
-  state.selectedNodeIds = selection.additive ? new Set([...selection.base, ...hits]) : hits;
+  state.selectedNodeIds = selection.mode === 'add' ? new Set([...selection.base, ...hits])
+    : selection.mode === 'remove' ? new Set([...selection.base].filter((id) => !hits.has(id)))
+    : hits;
   if (!state.selectedNodeId || !state.selectedNodeIds.has(state.selectedNodeId)) state.selectedNodeId = [...state.selectedNodeIds][0] ?? null;
   refreshSelection();
 }

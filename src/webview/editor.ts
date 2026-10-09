@@ -1,6 +1,6 @@
 // Webview entry point: wires DOM and host events to the editor modules.
 import { HostMessage, RuntimeLogEvent } from '../core/model';
-import { compatibleDefinitionsForDraft, completeConnection, deleteSelected, finishRewire } from './actions';
+import { addNode, compatibleDefinitionsForDraft, completeConnection, deleteSelected, duplicateSelected, finishRewire, moveSelection } from './actions';
 import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, setLanguage, showCompileResult } from './compile-results';
 import { applySettings, flushSave, loadDocument, markDirty, setDefinitions } from './document';
 import { dom, eventElement, nodeElement, setStatus } from './dom';
@@ -14,12 +14,20 @@ import { applyTransform, fitGraph, screenToWorld, zoomAt } from './view';
 
 const RUN_TRAIL_MS = 1500;
 
+// Nodes placed by holding a key and clicking the canvas, as in Unreal (P places BeginPlay, which
+// is our Start event). C, for comments, arrives with comment boxes.
+const PLACEMENT_KEYS: Record<string, string> = { b: 'core:flow.branch', s: 'core:flow.sequence', p: 'core:event.start' };
+// Distance, in world units, that an arrow key moves the selection.
+const NUDGE = 16;
+
 // Each action first sends pending edits, so the host works on what is on screen.
-dom.compileButton.addEventListener('click', () => {
+function compileNow(): void {
   flushSave();
   markCompiling();
   postToHost({ type: 'compile' });
-});
+}
+
+dom.compileButton.addEventListener('click', compileNow);
 dom.runButton.addEventListener('click', () => {
   flushSave();
   setStatus('Compiling…');
@@ -31,7 +39,7 @@ dom.simulateButton.addEventListener('click', () => {
 });
 dom.languageSelect.addEventListener('change', () => setLanguage(dom.languageSelect.value));
 dom.resultsClose.addEventListener('click', hideResults);
-dom.fitButton.addEventListener('click', fitGraph);
+dom.fitButton.addEventListener('click', () => fitGraph());
 renderCompileButton();
 dom.search.addEventListener('input', renderPalette);
 
@@ -85,60 +93,93 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
   }
 });
 
+// Keyboard shortcuts follow Unreal's Blueprint editor (docs/unreal-conventions.md).
 document.addEventListener('keydown', (e) => {
   if (eventElement(e)?.matches('input, textarea, select')) return;
   const mod = e.ctrlKey || e.metaKey;
+  const key = e.key.toLowerCase();
   if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedNodeIds.size) {
     deleteSelected();
     e.preventDefault();
-  }
-  if (mod && e.key.toLowerCase() === 'a') {
+  } else if (mod && key === 'a') {
     selectAllNodes();
     e.preventDefault();
-  }
-  if (e.key === 'Escape') {
+  } else if (mod && key === 'd') {
+    duplicateSelected();
+    e.preventDefault();
+  } else if (mod && key === 's') {
+    flushSave();
+    e.preventDefault();
+  } else if (e.key === 'F7') {
+    compileNow();
+    e.preventDefault();
+  } else if (e.key === 'Home') {
+    fitGraph(true);
+    e.preventDefault();
+  } else if (e.key.startsWith('Arrow') && state.selectedNodeIds.size && !mod) {
+    const [dx, dy] = { ArrowLeft: [-NUDGE, 0], ArrowRight: [NUDGE, 0], ArrowUp: [0, -NUDGE], ArrowDown: [0, NUDGE] }[e.key] ?? [0, 0];
+    moveSelection(dx, dy);
+    e.preventDefault();
+  } else if (e.key === 'Escape') {
     hideContextMenu();
     state.draftConnection = null;
     state.rewire = null;
     state.selection = null;
     hideSelectionBox();
     renderEdges();
-  }
-  if (mod && e.key.toLowerCase() === 's') {
-    flushSave();
-    e.preventDefault();
+  } else if (!mod && !e.altKey && PLACEMENT_KEYS[key]) {
+    state.heldKey = key;
   }
 });
 
-dom.canvasWrap.addEventListener('contextmenu', (e) => {
-  e.preventDefault();
-  const target = eventElement(e);
-  if (target?.closest('#context-menu')) return;
-  const nodeId = target?.closest<HTMLElement>('.node')?.dataset.node;
+document.addEventListener('keyup', (e) => {
+  if (e.key.toLowerCase() === state.heldKey) state.heldKey = null;
+});
+window.addEventListener('blur', () => {
+  state.heldKey = null;
+});
+
+// Right-click menus open on release, so a right-drag can pan instead (as in Unreal).
+dom.canvasWrap.addEventListener('contextmenu', (e) => e.preventDefault());
+
+function openContextMenu(nodeId: string | null, clientX: number, clientY: number): void {
   if (nodeId) {
     if (!state.selectedNodeIds.has(nodeId)) selectNode(nodeId, false, true);
     else setPrimarySelection(nodeId);
-    showNodeContextMenu(nodeId, e.clientX, e.clientY);
+    showNodeContextMenu(nodeId, clientX, clientY);
   } else {
-    showAddNodeMenu(screenToWorld(e.clientX, e.clientY), e.clientX, e.clientY, state.definitions, 'Add Node');
+    showAddNodeMenu(screenToWorld(clientX, clientY), clientX, clientY, state.definitions, 'Add Node');
   }
-});
+}
 
-// Pins and nodes stop propagation, so this only sees presses on the background and wires.
+// Pins and nodes stop propagation of left presses, so a left press here is on the background.
 dom.canvasWrap.addEventListener('mousedown', (e) => {
   const target = eventElement(e);
   if (target?.closest('#context-menu')) return;
   hideContextMenu();
-  if (e.button === 1) {
-    state.panning = { startX: e.clientX, startY: e.clientY, panX: state.pan.x, panY: state.pan.y };
+  if (e.button === 1 || e.button === 2) {
+    const nodeId = target?.closest<HTMLElement>('.node')?.dataset.node ?? null;
+    state.panning = { startX: e.clientX, startY: e.clientY, panX: state.pan.x, panY: state.pan.y, button: e.button, moved: false, nodeId };
     e.preventDefault();
     return;
   }
-  if (e.button === 0 && !target?.closest('.node, .pin, .edge-hit')) beginGroupSelection(e);
+  if (e.button !== 0 || target?.closest('.node, .pin, .edge-hit')) return;
+  const placed = state.heldKey && PLACEMENT_KEYS[state.heldKey];
+  if (placed) {
+    addNode(placed, screenToWorld(e.clientX, e.clientY));
+    e.preventDefault();
+    return;
+  }
+  beginGroupSelection(e);
 });
 
 window.addEventListener('mouseup', (e) => {
-  state.panning = null;
+  const panning = state.panning;
+  if (panning) {
+    state.panning = null;
+    if (panning.button === 2 && !panning.moved && e.button === 2) openContextMenu(panning.nodeId, e.clientX, e.clientY);
+    return;
+  }
 
   if (state.selection) {
     finishGroupSelection();
@@ -170,9 +211,15 @@ window.addEventListener('mouseup', (e) => {
 });
 
 window.addEventListener('mousemove', (e) => {
-  if (state.panning) {
-    state.pan.x = state.panning.panX + (e.clientX - state.panning.startX);
-    state.pan.y = state.panning.panY + (e.clientY - state.panning.startY);
+  const panning = state.panning;
+  if (panning) {
+    const dx = e.clientX - panning.startX;
+    const dy = e.clientY - panning.startY;
+    // A small wobble during a right-click still counts as a click.
+    if (!panning.moved && Math.hypot(dx, dy) < 4) return;
+    panning.moved = true;
+    state.pan.x = panning.panX + dx;
+    state.pan.y = panning.panY + dy;
     applyTransform();
     renderEdges();
     return;
