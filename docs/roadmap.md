@@ -200,35 +200,44 @@ Confirmed on 2026-10-08:
 
 ## Appendix: Blueprint parity checklist
 
-Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. Verify every shortcut against the current Unreal 5.x editor before implementing it.
+Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. The expected behaviors, with sources, are in [unreal-conventions.md](unreal-conventions.md); Epic's Blueprint Editor Cheat Sheet is the reference where it covers a behavior.
 
 | Area | Unreal behavior | Status | Phase |
 |---|---|---|---|
+| Navigation | Right-mouse drag pans; wheel zooms | 🟡 (middle-drag pans) | 2 |
+| Navigation | Home zooms to fit the selection | ⬜ | 2 |
+| Selection | Shift+click adds, Ctrl+click toggles | 🟡 (any modifier toggles) | 2 |
+| Selection | Marquee: drag replaces, Shift+drag adds, Ctrl+drag removes | 🟡 (modifiers add) | 2 |
 | Wiring | Drag pin to pin | ✅ | — |
 | Wiring | Drag pin to empty space opens a filtered action menu | ✅ | — |
 | Wiring | Exec inputs accept many wires; exec outputs and data inputs accept one | ⬜ (every input takes one wire, every output many) | 2 |
 | Wiring | Alt+click a pin breaks its links | ✅ | — |
-| Wiring | Ctrl+drag a pin moves its links | 🟡 (Ctrl+click rewire) | 2 |
-| Wiring | Double-click a wire adds a reroute node | ⬜ | 2 |
-| Wiring | Q straightens connections; alignment shortcuts | ⬜ | 2 |
+| Wiring | Ctrl+drag a pin moves all its links | 🟡 (Ctrl+click moves the nearest one) | 2 |
+| Wiring | Hovering a pin highlights its wires | ⬜ | 2 |
+| Wiring | Double-click a wire adds a reroute node (community) | ⬜ | 2 |
+| Wiring | Alignment menu; Q straightens, Shift+W/A/S/D align (community) | ⬜ | 2 |
 | Nodes | Right-click action menu with "Context Sensitive" toggle | 🟡 (menu, no toggle) | 2 |
-| Nodes | Hold-key + click spawning (B, S, D, …) | ⬜ | 2 |
-| Nodes | Copy/paste between graphs | ⬜ | 2 |
+| Nodes | Hold-key + click placement: B, S, C, P | ⬜ | 2 |
+| Nodes | Hold-key + click placement: D, G, F, M, N, O (need Phase 4 nodes) | ⬜ | 4 |
+| Nodes | Cut/copy/paste (also between graphs), Ctrl+D duplicate | 🟡 (Duplicate in the node menu) | 2 |
+| Nodes | Arrow keys move the selection; F2 renames | ⬜ | 2 |
 | Nodes | C wraps the selection in a comment | ⬜ | 2 |
-| Nodes | Collapse to function/macro | ⬜ | 2 |
+| Nodes | Collapse to function/macro | ⬜ | 4 (needs callable functions) |
 | Nodes | Inline default values on pins | ⬜ (Details only) | 2 |
-| Nodes | Add-pin (+) on Sequence, Make Array, … | ⬜ | 2 |
-| Nodes | Wildcard pins, split struct pins | ⬜ | 2 |
+| Nodes | Add-pin (+) on Sequence | ⬜ | 2 |
+| Nodes | Make Array, wildcard pins, split struct pins | ⬜ | 4 (needs container and struct operations) |
 | Nodes | Automatic conversion nodes | ⬜ | 2 |
-| Visuals | Exec pins white, data pins colored by type | 🟡 | 2 |
+| Visuals | Exec pins white arrows, data pins and wires colored by type | 🟡 | 2 |
 | Visuals | Title styles for event/function/pure/macro | ⬜ | 2 |
 | Panels | Details panel | 🟡 (named Inspector) | 2 |
-| Panels | My Blueprint panel | ⬜ | 2 |
-| Variables | Ctrl-drag → Get, Alt-drag → Set | ⬜ | 2 |
+| Panels | My Blueprint panel, graph tabs | ⬜ | 2 |
+| Variables | Get/Set nodes bound to a variable | 🟡 (variable named by a Name input) | 2 |
+| Variables | Ctrl-drag → Get, Alt-drag → Set, drag onto a pin | ⬜ | 2 |
 | Variables | Promote pin to variable | ⬜ | 2 |
 | Variables | Container types (array/set/map) | 🟡 (types and schema; no UI) | 2 |
-| Search | Find in Blueprint / Find in All Blueprints | ⬜ | 2 |
+| Search | Find in Blueprint (Ctrl+F) / Find in All Blueprints (Ctrl+Shift+F) | ⬜ | 2 |
 | Compile | Compile button, Compiler Results, error badges on nodes | ✅ | — |
+| Compile | F7 compiles | ⬜ | 2 |
 | Structure | Functions, macros, local variables | ⬜ | 4 |
 | Structure | Flow-control library (loops, Do Once, Gate, …) | 🟡 (Branch, Sequence) | 4 |
 | Structure | Structs, enums, Make/Break | ⬜ | 4 |
@@ -236,6 +245,6 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Event dispatchers, custom events | ⬜ | 4 |
 | Structure | Latent actions (Delay) | ⬜ | 4 |
 | Interop | Native functions appear as nodes (`BlueprintCallable`) | 🟡 (hand-written `*.node.json`) | 3 |
-| Debugging | F9 breakpoints, F10/F11 stepping | ⬜ | 5 |
+| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ⬜ | 5 |
 | Debugging | Pin value hover, Watch this value | ⬜ | 5 |
 | Debugging | Execution flow highlighting | 🟡 (run trail) | 5 |
