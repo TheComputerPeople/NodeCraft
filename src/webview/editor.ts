@@ -13,7 +13,7 @@ import { applyTransform, fitGraph, screenToWorld, zoomAt } from './view';
 
 const RUN_TRAIL_MS = 1500;
 
-dom.runButton.addEventListener('click', () => postToHost({ type: 'runGraph' }));
+dom.runButton.addEventListener('click', () => postToHost({ type: 'simulate' }));
 dom.fitButton.addEventListener('click', fitGraph);
 dom.search.addEventListener('input', renderPalette);
 

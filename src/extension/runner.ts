@@ -11,6 +11,7 @@ export interface RunOutcome {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  aborted: boolean;
 }
 
 // None of the runner's candidate commands could be started.
@@ -21,6 +22,8 @@ export interface RunOptions {
   // Used instead of the runner's candidates, e.g. from a setting.
   command?: string[];
   timeoutMs?: number;
+  // Aborting kills the process (e.g. when the same graph is run again).
+  signal?: AbortSignal;
   onStdout?: (text: string) => void;
   onStderr?: (text: string) => void;
 }
@@ -42,7 +45,7 @@ function runCommand(command: string[], options: RunOptions): Promise<RunOutcome 
     // Python on Windows otherwise writes in the console code page, garbling non-ASCII output.
     const env: NodeJS.ProcessEnv = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
     delete env.ELECTRON_RUN_AS_NODE;
-    const child = spawn(executable, args, { cwd: options.cwd, env, windowsHide: true });
+    const child = spawn(executable, args, { cwd: options.cwd, env, windowsHide: true, signal: options.signal });
     let stdout = '';
     let stderr = '';
     let timedOut = false;
@@ -62,11 +65,12 @@ function runCommand(command: string[], options: RunOptions): Promise<RunOutcome 
     child.on('error', (error: NodeJS.ErrnoException) => {
       clearTimeout(timer);
       if (error.code === 'ENOENT') resolve(undefined);
-      else resolve({ command, exitCode: null, stdout, stderr: stderr + error.message, timedOut });
+      else if (error.name === 'AbortError') resolve({ command, exitCode: null, stdout, stderr, timedOut, aborted: true });
+      else resolve({ command, exitCode: null, stdout, stderr: stderr + error.message, timedOut, aborted: false });
     });
     child.on('close', (exitCode) => {
       clearTimeout(timer);
-      resolve({ command, exitCode, stdout, stderr, timedOut });
+      resolve({ command, exitCode, stdout, stderr, timedOut, aborted: options.signal?.aborted ?? false });
     });
   });
 }

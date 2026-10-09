@@ -161,11 +161,11 @@ describe('webview editor', () => {
     await e.send({ type: 'settings', trusted: false });
     assert.equal(await e.page.isDisabled('#run'), true);
     await e.page.locator('#run').click({ force: true });
-    assert.ok(!(await e.posted()).some((m) => m.type === 'runGraph'), 'a disabled Run button sends nothing');
+    assert.ok(!(await e.posted()).some((m) => m.type === 'simulate'), 'a disabled Run button sends nothing');
 
     await e.send({ type: 'settings', trusted: true });
     assert.equal(await e.page.isDisabled('#run'), false);
     await e.page.click('#run');
-    assert.ok((await e.posted()).some((m) => m.type === 'runGraph'));
+    assert.ok((await e.posted()).some((m) => m.type === 'simulate'));
   });
 });

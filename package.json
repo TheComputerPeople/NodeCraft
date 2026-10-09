@@ -39,7 +39,20 @@
     "commands": [
       {
         "command": "blueprintVisualScripting.createGraph",
-        "title": "Blueprint Visual Scripting: New Graph"
+        "title": "New Graph",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.compile",
+        "title": "Compile Graph",
+        "category": "Blueprint Visual Scripting",
+        "icon": "$(check)"
+      },
+      {
+        "command": "blueprintVisualScripting.run",
+        "title": "Run Graph",
+        "category": "Blueprint Visual Scripting",
+        "icon": "$(play)"
       }
     ],
     "customEditors": [
@@ -62,8 +75,60 @@
           "default": 150,
           "minimum": 0,
           "description": "Milliseconds to debounce graph writes to the .vgraph document."
+        },
+        "blueprintVisualScripting.compileOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Compile a graph to its target language whenever it is saved, keeping the generated file next to it up to date."
+        },
+        "blueprintVisualScripting.runCommands": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "markdownDescription": "Command used to run generated code, per language id, overriding the default (`node` for TypeScript and JavaScript; `py -3` or `python3` for Python). Example: `{ \"python\": [\"C:/Python313/python.exe\"] }`."
         }
       }
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "blueprintVisualScripting.compile",
+          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor",
+          "group": "navigation@1"
+        },
+        {
+          "command": "blueprintVisualScripting.run",
+          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor",
+          "group": "navigation@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "blueprintVisualScripting.compile",
+          "when": "resourceExtname == .vgraph",
+          "group": "blueprint@1"
+        },
+        {
+          "command": "blueprintVisualScripting.run",
+          "when": "resourceExtname == .vgraph",
+          "group": "blueprint@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "blueprintVisualScripting.compile",
+          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor || resourceExtname == .vgraph"
+        },
+        {
+          "command": "blueprintVisualScripting.run",
+          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor || resourceExtname == .vgraph"
+        }
+      ]
     }
   },
   "scripts": {

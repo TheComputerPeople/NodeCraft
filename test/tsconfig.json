@@ -14,6 +14,7 @@
     "conformance",
     "../src/core",
     "../src/extension/webview-html.ts",
-    "../src/extension/runner.ts"
+    "../src/extension/runner.ts",
+    "../src/extension/placement.ts"
   ]
 }

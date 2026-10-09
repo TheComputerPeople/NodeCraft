@@ -79,7 +79,7 @@ Placement splits into four parts, so the decision logic stays testable and langu
 
 1. **Project probing (extension host).** It collects facts a strategy asks for: whether files exist and what they contain, the CMake File API reply, `cargo metadata` output, the Java language server's source paths. Each language pack declares which probes it needs.
 2. **Planning (language pack, in `src/core`).** A pure function from the graph's location plus the probe results to an **output plan**: which files to write and where, which extension-owned files to regenerate, which one-time hooks to propose, and which diagnostics to report. It has no file system access, so it's unit-testable with fixture projects.
-3. **Applying (extension host).** It writes generated and extension-owned files through a workspace edit, so it's undoable. It proposes one-time hooks as a diff preview, remembers the answer per workspace, and never re-asks after a decline unless the quick fix is used.
+3. **Applying (extension host).** It writes generated files directly, skipping the write when the content is unchanged so file watchers and builds aren't triggered (regenerated output has nothing to undo). Edits to user-owned files go through a workspace edit, so they're undoable. It proposes one-time hooks as a diff preview, remembers the answer per workspace, and never re-asks after a decline unless the quick fix is used.
 4. **Verifying (extension host plus pack).** It runs the pack's checks after generation and on build, and reports in Compiler Results.
 
 The same machinery covers edge cases in the first three languages: a TypeScript folder outside `tsconfig.json`'s `include`, a Python folder that isn't importable, a legacy C# project. So it isn't special machinery for four languages.

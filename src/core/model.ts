@@ -1,3 +1,4 @@
+import type { CompileDiagnostic } from './compiler/diagnostics';
 import type { TypeRef } from './types';
 
 export type { TypeRef } from './types';
@@ -124,8 +125,29 @@ export interface RuntimeLogEvent {
   message?: string;
 }
 
+// The outcome of compiling a graph, shown in the editor's Compiler Results panel.
+export interface CompileReport {
+  status: 'ok' | 'warnings' | 'errors';
+  diagnostics: CompileDiagnostic[];
+  language: string;
+  // The generated file, relative to the workspace, when compilation succeeded.
+  outputFile?: string;
+}
+
+export interface RunStatus {
+  state: 'running' | 'finished' | 'failed';
+  message: string;
+}
+
+// A target language the editor can offer: a pack that can generate code.
+export interface LanguageOption {
+  id: string;
+  displayName: string;
+}
+
 export interface UIMessage {
-  type: 'ready' | 'applyDocument' | 'runGraph';
+  // run: compile, then run the generated code; simulate: run in the editor's interpreter.
+  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate';
   document?: GraphDocument;
 }
 
@@ -136,6 +158,8 @@ export interface HostMessage {
     | 'definitions'
     | 'settings'
     | 'runtimeEvent'
+    | 'compileResult'
+    | 'runStatus'
     | 'error';
   // Absent on 'init' when the file could not be parsed; the webview then stays read-only.
   document?: GraphDocument;
@@ -144,5 +168,8 @@ export interface HostMessage {
   // Whether the workspace is trusted; running graphs is disabled when it isn't.
   trusted?: boolean;
   event?: RuntimeLogEvent;
+  languages?: LanguageOption[];
+  compile?: CompileReport;
+  run?: RunStatus;
   message?: string;
 }

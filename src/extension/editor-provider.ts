@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
+import { LanguagePackRegistry } from '../core/language-pack';
+import { CompileReport, GraphDocument, HostMessage, LanguageOption, UIMessage } from '../core/model';
 import { NodeRegistry } from '../core/registry';
-import { GraphDocument, HostMessage, UIMessage } from '../core/model';
-import { parseDocument, serializeDocument } from '../core/serializer';
 import { GraphRuntime } from '../core/runtime';
+import { parseDocument, serializeDocument } from '../core/serializer';
+import { CompileService } from './compile-service';
 import { createNonce, renderEditorHtml } from './webview-html';
 
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
@@ -11,9 +13,14 @@ type PanelSet = Set<vscode.WebviewPanel>;
 
 export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly panelsByDocument = new Map<string, PanelSet>();
-  private outputChannel: vscode.OutputChannel | undefined;
 
-  constructor(private readonly context: vscode.ExtensionContext, private readonly registry: NodeRegistry) {
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly registry: NodeRegistry,
+    private readonly languages: LanguagePackRegistry,
+    private readonly compiler: CompileService,
+    private readonly output: () => vscode.OutputChannel
+  ) {
     context.subscriptions.push(
       registry.onDidChange(() => {
         const message: HostMessage = { type: 'definitions', definitions: registry.all() };
@@ -66,7 +73,15 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
             } catch (error) {
               parseError = `Cannot open graph: ${describeError(error)}`;
             }
-            this.post(webviewPanel, { type: 'init', document: graphDocument, definitions: this.registry.all(), saveDelay: getSaveDelay(), trusted: vscode.workspace.isTrusted });
+            this.post(webviewPanel, {
+              type: 'init',
+              document: graphDocument,
+              definitions: this.registry.all(),
+              saveDelay: getSaveDelay(),
+              trusted: vscode.workspace.isTrusted,
+              languages: this.languageOptions(),
+              compile: this.compiler.lastReport(document.uri)
+            });
             if (parseError) this.post(webviewPanel, { type: 'error', message: parseError });
             break;
           }
@@ -78,10 +93,21 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
             await this.updateDocument(document, text);
             break;
           }
-          case 'runGraph':
-            this.runGraph(document, webviewPanel);
+          case 'compile': {
+            const { report } = await this.compiler.compile(document);
+            this.notifyCompiled(document.uri, report);
             break;
-          default:
+          }
+          case 'run':
+            if (!this.ensureTrusted(webviewPanel)) break;
+            await this.compiler.run(
+              document,
+              (run) => this.broadcast(key, { type: 'runStatus', run }),
+              (report) => this.notifyCompiled(document.uri, report)
+            );
+            break;
+          case 'simulate':
+            if (this.ensureTrusted(webviewPanel)) this.simulate(document);
             break;
         }
       } catch (error) {
@@ -115,19 +141,31 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     }));
   }
 
+  // Shows a compile result in every editor open on the graph.
+  notifyCompiled(uri: vscode.Uri, report: CompileReport): void {
+    this.broadcast(uri.toString(), { type: 'compileResult', compile: report });
+  }
+
+  private languageOptions(): LanguageOption[] {
+    return this.languages.all().filter((p) => p.generator).map((p) => ({ id: p.id, displayName: p.displayName }));
+  }
+
+  // Running executes code-node snippets and generated code, which is as risky as running workspace
+  // code. The buttons are disabled too; this guards against a stale webview.
+  private ensureTrusted(panel: vscode.WebviewPanel): boolean {
+    if (vscode.workspace.isTrusted) return true;
+    this.post(panel, { type: 'error', message: RESTRICTED_MODE_MESSAGE });
+    return false;
+  }
+
   private async updateDocument(document: vscode.TextDocument, text: string): Promise<void> {
     const edit = new vscode.WorkspaceEdit();
     edit.replace(document.uri, new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), text);
     await vscode.workspace.applyEdit(edit);
   }
 
-  private runGraph(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
-    // Running executes code-node snippets from workspace libraries, which is as risky as running
-    // workspace code. The Run button is disabled too; this guards against a stale webview.
-    if (!vscode.workspace.isTrusted) {
-      this.post(panel, { type: 'error', message: RESTRICTED_MODE_MESSAGE });
-      return;
-    }
+  // Runs the graph in the editor's reference interpreter.
+  private simulate(document: vscode.TextDocument): void {
     let graphDocument: GraphDocument;
     try {
       graphDocument = parseDocument(document.getText(), this.getFallbackName(document)).document;
@@ -136,28 +174,21 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       return;
     }
 
-    const output = this.getOutputChannel();
+    const output = this.output();
     output.clear();
     output.show(true);
+    output.appendLine('Simulating in the editor');
     const runtime = new GraphRuntime(this.registry, (event) => {
       this.broadcast(document.uri.toString(), { type: 'runtimeEvent', event });
       if (event.kind === 'log') output.appendLine(event.message ?? '');
       else if (event.kind === 'error') output.appendLine(`[error] ${event.message ?? ''}`);
-    });
+    }, this.languages);
     runtime.run(graphDocument);
   }
 
   private getHtml(webview: vscode.Webview): string {
     const asset = (name: string): string => webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview', name)).toString();
     return renderEditorHtml({ cspSource: webview.cspSource, nonce: createNonce(), scriptUri: asset('editor.js'), styleUri: asset('editor.css') });
-  }
-
-  private getOutputChannel(): vscode.OutputChannel {
-    if (!this.outputChannel) {
-      this.outputChannel = vscode.window.createOutputChannel('Blueprint Visual Scripting');
-      this.context.subscriptions.push(this.outputChannel);
-    }
-    return this.outputChannel;
   }
 
   private post(panel: vscode.WebviewPanel, message: HostMessage): void {
