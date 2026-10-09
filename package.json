@@ -1,0 +1,86 @@
+{
+  "name": "blueprint-visual-scripting",
+  "displayName": "Blueprint Visual Scripting",
+  "description": "Language-neutral Blueprint-style visual scripting for VS Code.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://example.invalid/blueprint-visual-scripting"
+  },
+  "engines": {
+    "vscode": ">=1.140.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "blueprint",
+    "visual scripting",
+    "nodes",
+    "graph",
+    "visual programming"
+  ],
+  "activationEvents": [
+    "onCustomEditor:blueprintVisualScripting.graphEditor",
+    "onCommand:blueprintVisualScripting.createGraph"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "blueprintVisualScripting.createGraph",
+        "title": "Blueprint Visual Scripting: New Graph"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "blueprintVisualScripting.graphEditor",
+        "displayName": "Blueprint Visual Graph",
+        "selector": [
+          {
+            "filenamePattern": "*.vgraph"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configuration": {
+      "title": "Blueprint Visual Scripting",
+      "properties": {
+        "blueprintVisualScripting.autoSaveDelay": {
+          "type": "number",
+          "default": 150,
+          "minimum": 0,
+          "description": "Milliseconds to debounce graph writes to the .vgraph document."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "check": "tsc --noEmit -p ./",
+    "package": "npm run compile && npx --yes @vscode/vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.140.0",
+    "typescript": "^7.0.2"
+  },
+  "files": [
+    "dist/**",
+    "src/**",
+    "webview/**",
+    "schemas/**",
+    "docs/**",
+    "visual-nodes/**",
+    "sample/**",
+    ".vscode/**",
+    "README.md",
+    "LICENSE",
+    "tsconfig.json"
+  ]
+}

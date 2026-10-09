@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/blueprint-node-package.schema.json",
+  "title": "Visual Node Package",
+  "type": "object",
+  "required": ["name", "version", "nodes"],
+  "properties": {
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "nodes": { "type": "array", "items": { "type": "string" } }
+  }
+}

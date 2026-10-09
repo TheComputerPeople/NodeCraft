@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/blueprint-vgraph.schema.json",
+  "title": "Blueprint Visual Graph",
+  "type": "object",
+  "required": ["schemaVersion", "name", "variables", "nodes", "connections"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "name": { "type": "string" },
+    "language": { "type": "string" },
+    "variables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "$ref": "#/$defs/typeRef" },
+          "defaultValue": {}
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "position", "properties"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string" },
+          "position": {
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            }
+          },
+          "properties": { "type": "object" }
+        }
+      }
+    },
+    "connections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "fromNode", "fromPin", "toNode", "toPin"],
+        "properties": {
+          "id": { "type": "string" },
+          "fromNode": { "type": "string" },
+          "fromPin": { "type": "string" },
+          "toNode": { "type": "string" },
+          "toPin": { "type": "string" }
+        }
+      }
+    },
+    "metadata": { "type": "object" }
+  },
+  "$defs": {
+    "typeRef": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "nullable": { "type": "boolean" }
+      }
+    }
+  }
+}
