@@ -141,6 +141,8 @@ export interface HostMessage {
   document?: GraphDocument;
   definitions?: NodeDefinition[];
   saveDelay?: number;
+  // Whether the workspace is trusted; running graphs is disabled when it isn't.
+  trusted?: boolean;
   event?: RuntimeLogEvent;
   message?: string;
 }

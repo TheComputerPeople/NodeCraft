@@ -25,6 +25,10 @@ export function setDefinitions(definitions: NodeDefinition[]): void {
 
 export function applySettings(message: HostMessage): void {
   if (typeof message.saveDelay === 'number' && message.saveDelay >= 0) state.saveDelay = message.saveDelay;
+  if (typeof message.trusted === 'boolean') {
+    dom.runButton.disabled = !message.trusted;
+    dom.runButton.title = message.trusted ? 'Run Graph' : 'Running graphs is disabled in Restricted Mode. Trust this workspace to run graphs.';
+  }
 }
 
 // Shows `doc`, staying on the same graph when it still exists (e.g. after an undo).

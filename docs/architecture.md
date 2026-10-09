@@ -41,4 +41,4 @@ The MVP runtime is intentionally small. It demonstrates execution pins, data dep
 
 ## Security
 
-Executing user-authored code nodes is equivalent to executing workspace code. A production release should make this permission explicit and integrate with VS Code Workspace Trust. Webview CSP and restrictive local-resource roots should remain enabled.
+Executing user-authored code nodes is equivalent to executing workspace code, so the extension integrates with VS Code Workspace Trust (`capabilities.untrustedWorkspaces: "limited"`). In Restricted Mode graphs can be opened and edited, but the Run button is disabled and the host refuses run requests; granting trust enables Run in open editors. Node libraries are still loaded in Restricted Mode because a definition is plain data; code only executes when a graph runs. Code generation (Phase 1) must apply the same gate. Webview CSP and restrictive local-resource roots should remain enabled.

@@ -66,7 +66,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
             } catch (error) {
               parseError = `Cannot open graph: ${describeError(error)}`;
             }
-            this.post(webviewPanel, { type: 'init', document: graphDocument, definitions: this.registry.all(), saveDelay: getSaveDelay() });
+            this.post(webviewPanel, { type: 'init', document: graphDocument, definitions: this.registry.all(), saveDelay: getSaveDelay(), trusted: vscode.workspace.isTrusted });
             if (parseError) this.post(webviewPanel, { type: 'error', message: parseError });
             break;
           }
@@ -79,7 +79,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
             break;
           }
           case 'runGraph':
-            this.runGraph(document);
+            this.runGraph(document, webviewPanel);
             break;
           default:
             break;
@@ -109,6 +109,10 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
         this.post(webviewPanel, { type: 'settings', saveDelay: getSaveDelay() });
       }
     }));
+
+    disposables.push(vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      this.post(webviewPanel, { type: 'settings', trusted: true });
+    }));
   }
 
   private async updateDocument(document: vscode.TextDocument, text: string): Promise<void> {
@@ -117,7 +121,13 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     await vscode.workspace.applyEdit(edit);
   }
 
-  private runGraph(document: vscode.TextDocument): void {
+  private runGraph(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
+    // Running executes code-node snippets from workspace libraries, which is as risky as running
+    // workspace code. The Run button is disabled too; this guards against a stale webview.
+    if (!vscode.workspace.isTrusted) {
+      this.post(panel, { type: 'error', message: RESTRICTED_MODE_MESSAGE });
+      return;
+    }
     let graphDocument: GraphDocument;
     try {
       graphDocument = parseDocument(document.getText(), this.getFallbackName(document)).document;
@@ -164,6 +174,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   }
 }
 
+const RESTRICTED_MODE_MESSAGE = 'Running graphs is disabled in Restricted Mode. Trust this workspace to run graphs.';
 const SAVE_DELAY_SETTING = 'blueprintVisualScripting.autoSaveDelay';
 const DEFAULT_SAVE_DELAY_MS = 150;
 

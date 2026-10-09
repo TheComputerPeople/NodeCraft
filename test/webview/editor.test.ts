@@ -145,4 +145,27 @@ describe('webview editor', () => {
     await e.page.waitForSelector('.node.executing[data-node="start_1"]');
     assert.equal(await e.count('.node.executing'), 1);
   });
+
+  test('ignores run highlights from other graphs', async (t) => {
+    const e = await openSample(t);
+    if (!e) return;
+    await e.send({ type: 'runtimeEvent', event: { kind: 'node.enter', graphId: 'OtherGraph', nodeId: 'start_1' } });
+    await e.send({ type: 'runtimeEvent', event: { kind: 'node.enter', graphId: 'EventGraph', nodeId: 'add_1' } });
+    await e.page.waitForSelector('.node.executing[data-node="add_1"]');
+    assert.equal(await e.count('.node.executing[data-node="start_1"]'), 0);
+  });
+
+  test('disables Run in an untrusted workspace until trust is granted', async (t) => {
+    const e = await openSample(t);
+    if (!e) return;
+    await e.send({ type: 'settings', trusted: false });
+    assert.equal(await e.page.isDisabled('#run'), true);
+    await e.page.locator('#run').click({ force: true });
+    assert.ok(!(await e.posted()).some((m) => m.type === 'runGraph'), 'a disabled Run button sends nothing');
+
+    await e.send({ type: 'settings', trusted: true });
+    assert.equal(await e.page.isDisabled('#run'), false);
+    await e.page.click('#run');
+    assert.ok((await e.posted()).some((m) => m.type === 'runGraph'));
+  });
 });
