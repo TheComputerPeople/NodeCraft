@@ -3,6 +3,7 @@ import { NodeRegistry } from '../core/registry';
 import { HostMessage, UIMessage, GraphDefinition } from '../core/model';
 import { parseGraph, serializeGraph } from '../core/serializer';
 import { GraphRuntime } from '../core/runtime';
+import { createNonce, renderEditorHtml } from './webview-html';
 
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
 
@@ -44,9 +45,9 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
 
     webviewPanel.webview.options = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'webview')]
+      localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')]
     };
-    webviewPanel.webview.html = await this.getHtml(webviewPanel.webview);
+    webviewPanel.webview.html = this.getHtml(webviewPanel.webview);
 
     // Text this panel last wrote to the document. The resulting change event is an echo of
     // state the webview already has; reloading it would rebuild the UI mid-edit.
@@ -136,49 +137,9 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     runtime.run(graph);
   }
 
-  private async getHtml(webview: vscode.Webview): Promise<string> {
-    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'webview', 'editor.js'));
-    const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'webview', 'editor.css'));
-    const nonce = createNonce();
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
-<link rel="stylesheet" href="${styleUri}">
-<title>Blueprint Visual Graph</title>
-</head>
-<body>
-<div id="app">
-  <aside id="palette" class="panel">
-    <div class="panel-title">Nodes</div>
-    <input id="search" class="search" placeholder="Search nodes…" aria-label="Search nodes">
-    <div id="categories"></div>
-  </aside>
-  <main id="workspace">
-    <div id="toolbar">
-      <button id="run" title="Run Graph">▶ Run</button>
-      <button id="fit" title="Fit graph">Fit</button>
-      <span id="graph-name">Untitled</span>
-      <span id="status">Ready</span>
-    </div>
-    <div id="canvas-wrap">
-      <svg id="edges" aria-hidden="true"></svg>
-      <div id="world"></div>
-      <div id="selection-box" hidden></div>
-      <div id="context-menu" hidden></div>
-    </div>
-    <div id="help">Drag pins to connect. Ctrl+click a wire/pin to rewire; release off a pin to remove. Alt+click breaks connections. Right-click opens a menu. Click-drag the background to box-select; middle-drag pans; wheel zooms.</div>
-  </main>
-  <aside id="inspector" class="panel">
-    <div class="panel-title">Inspector</div>
-    <div id="inspector-content" class="muted">Select a node to edit defaults.</div>
-  </aside>
-</div>
-<script nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`;
+  private getHtml(webview: vscode.Webview): string {
+    const asset = (name: string): string => webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview', name)).toString();
+    return renderEditorHtml({ cspSource: webview.cspSource, nonce: createNonce(), scriptUri: asset('editor.js'), styleUri: asset('editor.css') });
   }
 
   private getOutputChannel(): vscode.OutputChannel {
@@ -218,13 +179,6 @@ function describeError(error: unknown): string {
 // VS Code converts inserted text to the document's EOL, so compare line-ending-insensitively.
 function normalizeEol(text: string): string {
   return text.replace(/\r\n/g, '\n');
-}
-
-function createNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < 32; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
-  return result;
 }
 
 export const GRAPH_VIEW_TYPE = VIEW_TYPE;

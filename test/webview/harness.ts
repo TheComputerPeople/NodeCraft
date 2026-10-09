@@ -1,0 +1,135 @@
+// Loads the real webview markup and bundle in a Chromium-based browser, with a stand-in for the
+// VS Code webview API that records what the editor posts to the host.
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { Browser, Page, chromium } from 'playwright-core';
+import { GraphDefinition, HostMessage, UIMessage } from '../../src/core/model';
+import { NodeRegistry, parseNodeDefinition } from '../../src/core/registry';
+import { parseGraph } from '../../src/core/serializer';
+import { renderEditorHtml } from '../../src/extension/webview-html';
+
+const repoRoot = path.resolve(__dirname, '../../..');
+const bundleDir = path.join(repoRoot, 'dist/webview');
+
+// Returns a browser, or the reason none could be started (tests are then skipped).
+export async function launchBrowser(): Promise<Browser | string> {
+  if (!fs.existsSync(path.join(bundleDir, 'editor.js'))) return 'dist/webview/editor.js is missing; run `npm run compile:webview`';
+  const executablePath = process.env.BLUEPRINT_TEST_BROWSER;
+  if (executablePath) return chromium.launch({ executablePath });
+  for (const channel of ['msedge', 'chrome']) {
+    try {
+      return await chromium.launch({ channel });
+    } catch {
+      // Try the next installed browser.
+    }
+  }
+  return 'No Edge or Chrome found; install one or set BLUEPRINT_TEST_BROWSER to a Chromium executable';
+}
+
+function harnessUrl(): string {
+  const file = path.join(__dirname, 'editor.html');
+  if (!fs.existsSync(file)) {
+    const asset = (name: string): string => pathToFileURL(path.join(bundleDir, name)).href;
+    fs.writeFileSync(file, renderEditorHtml({ cspSource: 'file:', nonce: 'test-nonce', scriptUri: asset('editor.js'), styleUri: asset('editor.css') }));
+  }
+  return pathToFileURL(file).href;
+}
+
+export function sampleGraph(): GraphDefinition {
+  return parseGraph(fs.readFileSync(path.join(repoRoot, 'sample/demo.vgraph'), 'utf8'));
+}
+
+export function sampleDefinitions() {
+  const registry = new NodeRegistry();
+  const double = parseNodeDefinition(fs.readFileSync(path.join(repoRoot, 'sample/visual-nodes/Math/Double.node.json'), 'utf8'));
+  if (double) registry.register(double);
+  return registry.all();
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export class EditorPage {
+  readonly errors: string[] = [];
+
+  private constructor(readonly page: Page) {
+    page.on('pageerror', (error) => this.errors.push(error.message));
+    page.on('console', (message) => {
+      if (message.type() === 'error') this.errors.push(message.text());
+    });
+  }
+
+  static async open(browser: Browser): Promise<EditorPage> {
+    const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+    const editor = new EditorPage(page);
+    await page.addInitScript(() => {
+      const w = window as unknown as { __posted: unknown[]; acquireVsCodeApi: () => unknown };
+      w.__posted = [];
+      w.acquireVsCodeApi = () => ({ postMessage: (m: unknown) => w.__posted.push(JSON.parse(JSON.stringify(m))) });
+    });
+    await page.goto(harnessUrl());
+    return editor;
+  }
+
+  // Opens the sample graph the way the host does, with saves sent immediately.
+  static async withSample(browser: Browser): Promise<EditorPage> {
+    const editor = await EditorPage.open(browser);
+    await editor.send({ type: 'init', graph: sampleGraph(), definitions: sampleDefinitions(), saveDelay: 0 });
+    return editor;
+  }
+
+  // Delivers a host message synchronously, as VS Code's postMessage would (eventually) do.
+  async send(message: HostMessage): Promise<void> {
+    await this.page.evaluate((m) => window.dispatchEvent(new MessageEvent('message', { data: m })), message);
+  }
+
+  posted(): Promise<UIMessage[]> {
+    return this.page.evaluate(() => (window as unknown as { __posted: UIMessage[] }).__posted);
+  }
+
+  // The graph from the most recent save, waiting for one to arrive.
+  async lastSavedGraph(): Promise<GraphDefinition> {
+    await this.page.waitForFunction(() => (window as unknown as { __posted: UIMessage[] }).__posted.some((m) => m.type === 'applyGraph'));
+    const saves = (await this.posted()).filter((m) => m.type === 'applyGraph');
+    return saves[saves.length - 1].graph!;
+  }
+
+  async pinCenter(nodeId: string, pinId: string): Promise<Point> {
+    return this.center(`.pin[data-node="${nodeId}"][data-pin="${pinId}"]`);
+  }
+
+  async center(selector: string): Promise<Point> {
+    const box = await this.page.locator(selector).boundingBox();
+    if (!box) throw new Error(`No visible element for ${selector}`);
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  }
+
+  // Screen position of the middle of a wire.
+  async wireMidpoint(connectionId: string): Promise<Point> {
+    return this.page.evaluate((id) => {
+      const path = document.querySelector<SVGPathElement>(`.edge-hit[data-connection-id="${id}"]`);
+      if (!path) throw new Error(`No wire ${id}`);
+      const p = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM()!);
+      return { x: p.x, y: p.y };
+    }, connectionId);
+  }
+
+  async drag(from: Point, to: Point): Promise<void> {
+    const mouse = this.page.mouse;
+    await mouse.move(from.x, from.y);
+    await mouse.down();
+    await mouse.move(to.x, to.y, { steps: 8 });
+    await mouse.up();
+  }
+
+  count(selector: string): Promise<number> {
+    return this.page.locator(selector).count();
+  }
+
+  async close(): Promise<void> {
+    await this.page.close();
+  }
+}

@@ -61,22 +61,27 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
+    "compile": "tsc -p ./ && npm run compile:webview",
+    "compile:webview": "esbuild src/webview/editor.ts src/webview/editor.css --bundle --outdir=dist/webview --format=iife --target=es2022 --sourcemap",
     "watch": "tsc -watch -p ./",
-    "check": "tsc --noEmit -p ./ && tsc --noEmit -p test",
-    "test": "npm run test:unit",
-    "test:unit": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\" && tsc -p test && node --test \"out/test/unit/**/*.test.js\"",
+    "watch:webview": "npm run compile:webview -- --watch",
+    "check": "tsc --noEmit -p ./ && tsc --noEmit -p src/webview && tsc --noEmit -p test",
+    "test": "npm run compile:webview && npm run build:test && node --test \"out/test/**/*.test.js\"",
+    "test:unit": "npm run build:test && node --test \"out/test/unit/**/*.test.js\"",
+    "test:webview": "npm run compile:webview && npm run build:test && node --test \"out/test/webview/**/*.test.js\"",
+    "build:test": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\" && tsc -p test",
     "package": "npm run compile && npx --yes @vscode/vsce package"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "@types/vscode": "^1.140.0",
+    "esbuild": "^0.28.2",
+    "playwright-core": "^1.64.0",
     "typescript": "^7.0.2"
   },
   "files": [
     "dist/**",
     "src/**",
-    "webview/**",
     "schemas/**",
     "docs/**",
     "visual-nodes/**",

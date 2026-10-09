@@ -36,21 +36,23 @@ The sample graph will execute and write its Print output to the `Blueprint Visua
 The TypeScript configuration includes the DOM library definitions because VS Code extension-host Node versions expose the standard `TextEncoder`/`TextDecoder` globals used for `.vgraph` file serialization. This does not add a browser runtime dependency.
 
 
-`npm run compile` compiles the extension host code.
+| Command | What it does |
+|---|---|
+| `npm run compile` | Compiles the extension host with `tsc` and bundles the webview with esbuild into `dist/` |
+| `npm run watch` / `npm run watch:webview` | Rebuild the extension host / the webview on change |
+| `npm run check` | Type-checks the extension, the webview and the tests without emitting output |
+| `npm test` | Runs every test: unit tests, then browser tests of the webview |
+| `npm run test:unit` / `npm run test:webview` | Run one group |
 
-`npm run watch` runs TypeScript in watch mode.
-
-`npm run check` type-checks the extension and the tests without emitting output.
-
-`npm test` runs the unit tests with Node's built-in test runner.
+The browser tests drive the real webview bundle in an installed Microsoft Edge or Google Chrome through `playwright-core` (no browser download). Set `BLUEPRINT_TEST_BROWSER` to a Chromium executable to use a different one; without any browser those tests are skipped.
 
 Source layout:
 
-- `src/core/`: the graph model, serializer, node registry and reference runtime. It must not import `vscode` or Node built-ins, so it can be shared with the webview and tested in plain Node (a unit test enforces this).
-- `src/extension/`: VS Code integration (activation, the custom editor, workspace node-library loading).
+- `src/core/`: the graph model, serializer, node registry, reference runtime and graph-editing operations. It must not import `vscode` or Node built-ins, so it can be shared with the webview and tested in plain Node (a unit test enforces this).
+- `src/extension/`: VS Code integration (activation, the custom editor, workspace node-library loading, webview markup).
+- `src/webview/`: the graph editor UI, written in TypeScript and bundled by esbuild. It has no runtime dependencies.
 - `test/unit/`: unit tests for `src/core`.
-
-The webview editor is intentionally dependency-free in this first project so the repository can be extracted and run without a separate frontend build system.
+- `test/webview/`: browser tests for the editor UI.
 
 ## Custom node libraries
 

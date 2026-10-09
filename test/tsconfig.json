@@ -5,5 +5,5 @@
     "outDir": "../out",
     "types": ["node"]
   },
-  "include": ["unit", "../src/core"]
+  "include": ["unit", "webview", "../src/core", "../src/extension/webview-html.ts"]
 }

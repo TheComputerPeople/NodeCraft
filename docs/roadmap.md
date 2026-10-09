@@ -199,6 +199,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 |---|---|---|---|
 | Wiring | Drag pin to pin | ✅ | — |
 | Wiring | Drag pin to empty space opens a filtered action menu | ✅ | — |
+| Wiring | Exec inputs accept many wires; exec outputs and data inputs accept one | ⬜ (every input takes one wire, every output many) | 2 |
 | Wiring | Alt+click a pin breaks its links | ✅ | — |
 | Wiring | Ctrl+drag a pin moves its links | 🟡 (Ctrl+click rewire) | 2 |
 | Wiring | Double-click a wire adds a reroute node | ⬜ | 2 |
