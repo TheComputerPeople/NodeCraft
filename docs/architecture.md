@@ -9,8 +9,9 @@ The graph is the source of truth. It is not a JavaScript AST and it is not a C++
 - `GraphDefinition`: serializable graph asset.
 - `NodeDefinition`: reusable node signature and implementation metadata.
 - `PinDefinition`: typed execution/data port.
-- `GraphRuntime`: reference interpreter for the MVP.
-- Future `LanguageAdapter`: maps the language-neutral graph/IR to a target language.
+- `TypeRef` (`src/core/types.ts`): canonical, language-neutral pin type with Unreal-style containers (array/set/map). Graphs and node definitions only use canonical type ids.
+- `LanguagePack` (`src/core/language-pack.ts`): everything the extension knows about one target language (detection markers, capabilities, type mapping, and optionally an in-process simulator for code nodes). Built-in packs live in `src/core/languages/`. Code generation, symbol import and debugging join the interface in later phases (see `docs/roadmap.md`).
+- `GraphRuntime`: reference interpreter. It is language-neutral; code nodes run only through the graph language's pack simulator.
 
 ## Function Library model
 

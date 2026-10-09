@@ -1,10 +1,9 @@
+import type { TypeRef } from './types';
+
+export type { TypeRef } from './types';
+
 export type PinKind = 'exec' | 'data';
 export type PinDirection = 'input' | 'output';
-
-export interface TypeRef {
-  id: string;
-  nullable?: boolean;
-}
 
 export interface PinDefinition {
   id: string;

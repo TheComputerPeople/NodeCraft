@@ -1,12 +1,13 @@
+import { DEFAULT_LANGUAGE } from './languages';
 import { GraphDefinition } from './model';
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
-export function createEmptyGraph(name = 'NewGraph'): GraphDefinition {
+export function createEmptyGraph(name = 'NewGraph', language = DEFAULT_LANGUAGE): GraphDefinition {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     name,
-    language: 'javascript',
+    language,
     variables: [],
     nodes: [],
     connections: [],
@@ -23,7 +24,7 @@ export function parseGraph(text: string, fallbackName = 'NewGraph'): GraphDefini
   return {
     schemaVersion: parsed.schemaVersion ?? CURRENT_SCHEMA_VERSION,
     name: parsed.name ?? fallbackName,
-    language: parsed.language ?? 'javascript',
+    language: parsed.language ?? DEFAULT_LANGUAGE,
     variables: Array.isArray(parsed.variables) ? parsed.variables : [],
     nodes: parsed.nodes,
     connections: parsed.connections,

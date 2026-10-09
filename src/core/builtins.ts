@@ -27,8 +27,8 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
     {
       type: 'core:math.add', version: 1, displayName: 'Add', category: 'Math',
       description: 'Add two numbers.', color: '#72a7ff',
-      inputs: [execInput(), dataInput('a', 'A', 'number', 10), dataInput('b', 'B', 'number', 20)],
-      outputs: [execOutput(), dataOutput('result', 'Result', 'number')],
+      inputs: [execInput(), dataInput('a', 'A', 'float', 10), dataInput('b', 'B', 'float', 20)],
+      outputs: [execOutput(), dataOutput('result', 'Result', 'float')],
       implementation: { kind: 'native', operation: 'add' }
     },
     {
@@ -40,7 +40,7 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
     {
       type: 'core:variable.set', version: 1, displayName: 'Set Variable', category: 'Variables',
       description: 'Set a graph variable.', color: '#ff8b7b',
-      inputs: [execInput(), dataInput('name', 'Name', 'string', 'Score'), dataInput('value', 'Value', 'number', 0)],
+      inputs: [execInput(), dataInput('name', 'Name', 'string', 'Score'), dataInput('value', 'Value', 'float', 0)],
       outputs: [execOutput()], implementation: { kind: 'native', operation: 'set-variable' }
     },
     {

@@ -68,11 +68,11 @@ Example:
   "category": "Math",
   "inputs": [
     { "id": "execIn", "name": "", "kind": "exec", "direction": "input" },
-    { "id": "value", "name": "Value", "kind": "data", "direction": "input", "type": { "id": "number" }, "defaultValue": 2 }
+    { "id": "value", "name": "Value", "kind": "data", "direction": "input", "type": { "id": "float" }, "defaultValue": 2 }
   ],
   "outputs": [
     { "id": "execOut", "name": "", "kind": "exec", "direction": "output" },
-    { "id": "result", "name": "Result", "kind": "data", "direction": "output", "type": { "id": "number" } }
+    { "id": "result", "name": "Result", "kind": "data", "direction": "output", "type": { "id": "float" } }
   ],
   "implementation": {
     "kind": "code",

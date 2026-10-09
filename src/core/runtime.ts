@@ -1,5 +1,7 @@
-import { NodeRegistry } from './registry';
+import { LanguagePackRegistry } from './language-pack';
+import { DEFAULT_LANGUAGE, builtinLanguagePacks } from './languages';
 import { GraphDefinition, GraphNode, NodeDefinition, RuntimeLogEvent } from './model';
+import { NodeRegistry } from './registry';
 
 interface RuntimeContext {
   variables: Record<string, unknown>;
@@ -10,7 +12,11 @@ interface RuntimeContext {
 }
 
 export class GraphRuntime {
-  constructor(private readonly registry: NodeRegistry, private readonly emit: (event: RuntimeLogEvent) => void) {}
+  constructor(
+    private readonly registry: NodeRegistry,
+    private readonly emit: (event: RuntimeLogEvent) => void,
+    private readonly languages: LanguagePackRegistry = builtinLanguagePacks()
+  ) {}
 
   run(graph: GraphDefinition): void {
     const context: RuntimeContext = { variables: {}, visited: new Set(), executing: new Set() };
@@ -106,24 +112,26 @@ export class GraphRuntime {
         break;
       default:
         if (definition.implementation?.kind === 'code') {
-          if (graph.language && graph.language !== 'javascript' && graph.language !== 'typescript') {
-            this.emit({ kind: 'error', nodeId: node.id, nodeType: node.type, message: `Code node ${node.type} needs a JavaScript runtime adapter for this MVP. Graph language is ${graph.language}.` });
+          const fail = (message: string): void => this.emit({ kind: 'error', nodeId: node.id, nodeType: node.type, message });
+          const languageId = graph.language || DEFAULT_LANGUAGE;
+          const pack = this.languages.get(languageId);
+          if (!pack) {
+            fail(`Unknown graph language "${languageId}".`);
             break;
           }
-          const code = definition.implementation.languages.javascript ?? definition.implementation.languages.typescript;
-          if (!code) {
-            this.emit({ kind: 'error', nodeId: node.id, nodeType: node.type, message: `No JavaScript implementation for ${node.type}.` });
+          if (!pack.simulator) {
+            fail(`Simulate can't run code node ${node.type}: ${pack.displayName} code can't run inside the editor.`);
             break;
           }
-          const dataInputs = definition.inputs.filter((p) => p.kind === 'data');
-          // Pin ids are used as parameter names when they are valid identifiers, so code can refer
-          // to them directly; otherwise a generated name is used and only ${pinId} reaches it.
-          const paramByPin = new Map(dataInputs.map((p, i) => [p.id, isIdentifier(p.id) ? p.id : `__pin${i}`]));
-          const values = dataInputs.map((p) => input(p.id));
+          const sources = definition.implementation.languages;
+          const sourceLanguage = pack.simulator.sourceLanguages.find((key) => sources[key] !== undefined);
+          if (!sourceLanguage) {
+            fail(`Code node ${node.type} has no ${pack.simulator.sourceLanguages.join(' or ')} implementation.`);
+            break;
+          }
+          const inputs = definition.inputs.filter((p) => p.kind === 'data').map((p) => ({ id: p.id, value: input(p.id) }));
           try {
-            const body = code.replace(/\$\{([^}]+)\}/g, (_m, name: string) => paramByPin.get(name) ?? name);
-            const fn = new Function(...paramByPin.values(), body) as (...args: unknown[]) => unknown;
-            const result = fn(...values);
+            const result = pack.simulator.run(sources[sourceLanguage], inputs);
             const outputPins = definition.outputs.filter((p) => p.kind === 'data');
             if (outputPins[0]) node.properties[`runtime:${outputPins[0].id}`] = result;
             exit(outputPins[0] ? { [outputPins[0].id]: result } : {});
@@ -175,15 +183,4 @@ export class GraphRuntime {
 
 function nativeOperation(definition: NodeDefinition): string {
   return definition.implementation?.kind === 'native' ? definition.implementation.operation : '';
-}
-
-// The syntax check alone would accept parameter lists like "a, b" or "a = 1", hence the regex.
-function isIdentifier(name: string): boolean {
-  if (!/^[A-Za-z_$][\w$]*$/.test(name)) return false;
-  try {
-    new Function(name, '');
-    return true;
-  } catch {
-    return false;
-  }
 }

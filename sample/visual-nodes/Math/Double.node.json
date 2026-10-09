@@ -17,7 +17,7 @@
       "name": "Value",
       "kind": "data",
       "direction": "input",
-      "type": { "id": "number" },
+      "type": { "id": "float" },
       "defaultValue": 5
     }
   ],
@@ -33,7 +33,7 @@
       "name": "Result",
       "kind": "data",
       "direction": "output",
-      "type": { "id": "number" }
+      "type": { "id": "float" }
     }
   ],
   "implementation": {

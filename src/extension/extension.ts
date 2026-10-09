@@ -3,10 +3,13 @@ import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
 import { NodeRegistry } from '../core/registry';
 import { watchWorkspaceNodeLibraries } from './node-libraries';
 import { createEmptyGraph, serializeGraph } from '../core/serializer';
+import { builtinLanguagePacks } from '../core/languages';
+import { detectWorkspaceLanguage } from './languages';
 
 export function activate(context: vscode.ExtensionContext): void {
   // Libraries load in the background; open editors receive the updated definitions when ready.
   const registry = new NodeRegistry();
+  const languages = builtinLanguagePacks();
   context.subscriptions.push(watchWorkspaceNodeLibraries(registry));
 
   context.subscriptions.push(
@@ -26,7 +29,9 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       if (!target) return;
 
-      const graph = createEmptyGraph(target.path.split('/').pop()?.replace(/\.vgraph$/i, '') || 'NewGraph');
+      const name = target.path.split('/').pop()?.replace(/\.vgraph$/i, '') || 'NewGraph';
+      const language = await detectWorkspaceLanguage(languages);
+      const graph = createEmptyGraph(name, language?.id);
       await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(serializeGraph(graph)));
       await vscode.commands.executeCommand('vscode.open', target);
     })

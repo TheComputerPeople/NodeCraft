@@ -2,6 +2,7 @@
 // manipulation: no DOM, no rendering, no persistence. Functions that change the graph mutate the
 // object passed in and report whether anything changed so callers can decide to save and redraw.
 import { GraphConnection, GraphNode, NodeDefinition, PinDefinition } from './model';
+import { canConnect } from './types';
 
 export interface GraphContent {
   nodes: GraphNode[];
@@ -38,15 +39,9 @@ export function pinDefinition(graph: GraphContent, lookup: DefinitionLookup, nod
   return [...def.inputs, ...def.outputs].find((p) => p.id === pinId);
 }
 
-export function compatibleTypes(from: string | undefined, to: string | undefined): boolean {
-  return from === to || from === 'any' || to === 'any'
-    || (from === 'int' && to === 'number') || (from === 'float' && to === 'number')
-    || (from === 'number' && (to === 'int' || to === 'float'));
-}
-
 function pinsCompatible(from: PinDefinition, to: PinDefinition): boolean {
   if (from.direction !== 'output' || to.direction !== 'input' || from.kind !== to.kind) return false;
-  return from.kind === 'exec' || compatibleTypes(from.type?.id, to.type?.id);
+  return from.kind === 'exec' || canConnect(from.type, to.type);
 }
 
 // Orders two pins into output → input and checks they can be wired. A drag may start on either
@@ -169,7 +164,7 @@ export function connectedNodeIds(graph: GraphContent, startId: string): Set<stri
 export function matchingPin(def: NodeDefinition, source: PinDefinition): PinDefinition | undefined {
   const candidates = source.direction === 'output' ? def.inputs : def.outputs;
   return candidates.find((p) => p.kind === source.kind && (source.kind === 'exec'
-    || (source.direction === 'output' ? compatibleTypes(source.type?.id, p.type?.id) : compatibleTypes(p.type?.id, source.type?.id))));
+    || (source.direction === 'output' ? canConnect(source.type, p.type) : canConnect(p.type, source.type))));
 }
 
 // Definitions that could accept a wire dragged from `source` (used to filter the action menu).

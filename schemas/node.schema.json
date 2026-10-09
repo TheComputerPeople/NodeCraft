@@ -3,48 +3,139 @@
   "$id": "https://example.invalid/blueprint-node.schema.json",
   "title": "Visual Node Definition",
   "type": "object",
-  "required": ["type", "version", "displayName", "category", "inputs", "outputs"],
+  "required": [
+    "type",
+    "version",
+    "displayName",
+    "category",
+    "inputs",
+    "outputs"
+  ],
   "properties": {
-    "type": { "type": "string" },
-    "version": { "type": "integer", "minimum": 1 },
-    "displayName": { "type": "string" },
-    "category": { "type": "string" },
-    "description": { "type": "string" },
-    "color": { "type": "string" },
-    "inputs": { "type": "array", "$ref": "#/$defs/pins" },
-    "outputs": { "type": "array", "$ref": "#/$defs/pins" },
-    "implementation": { "$ref": "#/$defs/implementation" }
+    "type": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "color": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "array",
+      "$ref": "#/$defs/pins"
+    },
+    "outputs": {
+      "type": "array",
+      "$ref": "#/$defs/pins"
+    },
+    "implementation": {
+      "$ref": "#/$defs/implementation"
+    }
   },
   "$defs": {
     "typeRef": {
       "type": "object",
-      "required": ["id"],
-      "properties": { "id": { "type": "string" }, "nullable": { "type": "boolean" } }
+      "description": "Canonical type: bool, int, float, string, any, wildcard, struct:<Name>, enum:<Name>, object:<Class> or native:<qualified name>. For a map, id is the key type.",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "container": {
+          "enum": [
+            "array",
+            "set",
+            "map"
+          ]
+        },
+        "valueType": {
+          "$ref": "#/$defs/typeRef",
+          "description": "Value type when container is \"map\"."
+        },
+        "nullable": {
+          "type": "boolean"
+        }
+      }
     },
     "pin": {
       "type": "object",
-      "required": ["id", "name", "kind", "direction"],
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "direction"
+      ],
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "kind": { "enum": ["exec", "data"] },
-        "direction": { "enum": ["input", "output"] },
-        "type": { "$ref": "#/$defs/typeRef" },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "exec",
+            "data"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "input",
+            "output"
+          ]
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        },
         "defaultValue": {}
       }
     },
     "pins": {
-      "items": { "$ref": "#/$defs/pin" }
+      "items": {
+        "$ref": "#/$defs/pin"
+      }
     },
     "implementation": {
       "type": "object",
-      "required": ["kind"],
+      "required": [
+        "kind"
+      ],
       "properties": {
-        "kind": { "enum": ["native", "code", "subgraph"] },
-        "operation": { "type": "string" },
-        "defaultLanguage": { "type": "string" },
-        "languages": { "type": "object", "additionalProperties": { "type": "string" } },
-        "graph": { "type": "string" }
+        "kind": {
+          "enum": [
+            "native",
+            "code",
+            "subgraph"
+          ]
+        },
+        "operation": {
+          "type": "string"
+        },
+        "defaultLanguage": {
+          "type": "string"
+        },
+        "languages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "graph": {
+          "type": "string"
+        }
       }
     }
   }

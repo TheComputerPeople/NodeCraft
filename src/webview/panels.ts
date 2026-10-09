@@ -1,6 +1,7 @@
 // The node palette (left) and the Details panel (right).
 import { definitionFor } from '../core/editing';
 import { NodeDefinition } from '../core/model';
+import { formatType } from '../core/types';
 import { addNode, deleteSelected } from './actions';
 import { lookupDefinition, markDirty } from './document';
 import { dom, escapeHtml } from './dom';
@@ -57,16 +58,21 @@ export function renderInspector(): void {
     const row = document.createElement('label');
     row.className = 'field';
     const text = document.createElement('span');
-    text.textContent = `${pin.name} (${typeId || 'any'})`;
+    text.textContent = `${pin.name} (${formatType(pin.type)})`;
     const input = document.createElement('input');
     // A connected input takes its value from the wire, so its default is not editable.
     input.disabled = graph.connections.some((c) => c.toNode === node.id && c.toPin === pin.id);
     const value = node.properties[key] ?? '';
-    if (typeId === 'bool') {
+    if (pin.type?.container) {
+      // Container defaults get a proper editor in Phase 2; until then they are read-only here.
+      input.type = 'text';
+      input.value = JSON.stringify(value);
+      input.disabled = true;
+    } else if (typeId === 'bool') {
       input.type = 'checkbox';
       input.checked = Boolean(value);
     } else {
-      input.type = typeId === 'number' || typeId === 'int' || typeId === 'float' ? 'number' : 'text';
+      input.type = typeId === 'int' || typeId === 'float' ? 'number' : 'text';
       input.value = String(value);
     }
     input.addEventListener('input', () => {

@@ -1,5 +1,6 @@
 import { definitionFor } from '../core/editing';
 import { GraphNode, PinDefinition } from '../core/model';
+import { formatType } from '../core/types';
 import { beginRewireFromConnection, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { lookupDefinition } from './document';
 import { dom, escapeHtml, pinElement } from './dom';
@@ -69,7 +70,7 @@ function renderPin(node: GraphNode, pin: PinDefinition): HTMLElement {
   handle.dataset.pin = pin.id;
   handle.dataset.kind = pin.kind;
   handle.dataset.direction = pin.direction;
-  handle.title = pin.kind === 'exec' ? 'Execution pin' : `${pin.name} (${pin.type?.id || 'any'})`;
+  handle.title = pin.kind === 'exec' ? 'Execution pin' : `${pin.name} (${formatType(pin.type)})`;
   handle.addEventListener('mousedown', (e) => onPinMouseDown(node, pin, e));
   handle.addEventListener('dragstart', (e) => e.preventDefault());
 

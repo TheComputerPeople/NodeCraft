@@ -1,5 +1,6 @@
-import { NodeDefinition } from './model';
 import { builtinNodeDefinitions } from './builtins';
+import { NodeDefinition, PinDefinition } from './model';
+import { normalizeTypeRef } from './types';
 
 export interface Disposable {
   dispose(): void;
@@ -14,7 +15,7 @@ export class NodeRegistry {
   }
 
   register(definition: NodeDefinition): void {
-    this.definitions.set(definition.type, definition);
+    this.definitions.set(definition.type, normalizeNodeDefinition(definition));
   }
 
   registerMany(definitions: NodeDefinition[]): void {
@@ -41,6 +42,12 @@ export class NodeRegistry {
   all(): NodeDefinition[] {
     return [...this.definitions.values()];
   }
+}
+
+// Rewrites legacy pin type ids (e.g. `number`) to canonical ones.
+export function normalizeNodeDefinition(def: NodeDefinition): NodeDefinition {
+  const pins = (list: PinDefinition[]): PinDefinition[] => list.map((p) => (p.type ? { ...p, type: normalizeTypeRef(p.type) } : p));
+  return { ...def, inputs: pins(def.inputs), outputs: pins(def.outputs) };
 }
 
 // Validates a parsed `*.node.json` document; returns undefined for anything that isn't a node definition.
