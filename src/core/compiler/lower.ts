@@ -1,0 +1,344 @@
+// Turns a graph document into Visual IR, reporting everything that stops it from compiling.
+// The rules implemented here are those of docs/semantics.md.
+import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from '../model';
+import { NodeRegistry } from '../registry';
+import { canConnect, formatType } from '../types';
+import { CompileDiagnostic, hasErrors } from './diagnostics';
+import { IrBlock, IrCodeHelper, IrExpr, IrMember, IrProgram, IrSlot, IrStatement, SourceRef, exprType } from './ir';
+
+export interface LowerOptions {
+  registry: NodeRegistry;
+  // Display name of the target language, for messages.
+  languageName: string;
+  // Keys of a code node's `languages` map the target can use, most preferred first.
+  snippetLanguages: string[];
+}
+
+export interface LowerResult {
+  // Absent when there are errors.
+  program?: IrProgram;
+  diagnostics: CompileDiagnostic[];
+}
+
+export function lowerDocument(doc: GraphDocument, options: LowerOptions): LowerResult {
+  return new Lowerer(doc, options).run();
+}
+
+interface PinRef {
+  node: string;
+  pin: string;
+}
+
+// What lowering needs to know about one event graph, gathered and validated up front.
+interface GraphInfo {
+  graph: Graph;
+  nodes: Map<string, GraphNode>;
+  definitions: Map<string, NodeDefinition>;
+  // Exec targets of each node's exec outputs, in connection order.
+  execTargets: Map<string, Map<string, string[]>>;
+  // Number of exec wires into each node.
+  execIndegree: Map<string, number>;
+  // The output wired into each data input, keyed by `inputKey`.
+  dataSources: Map<string, PinRef>;
+}
+
+const START = 'core:event.start';
+
+class Lowerer {
+  private readonly diagnostics: CompileDiagnostic[] = [];
+  private readonly members = new Map<string, IrMember>();
+  private readonly slots = new Map<string, IrSlot>();
+  private readonly helpers = new Map<string, IrCodeHelper>();
+  private readonly blocks = new Map<string, IrBlock>();
+
+  constructor(private readonly doc: GraphDocument, private readonly options: LowerOptions) {}
+
+  run(): LowerResult {
+    for (const variable of this.doc.variables) {
+      if (this.members.has(variable.name)) {
+        this.error('duplicate-variable', `Variable "${variable.name}" is declared more than once.`);
+        continue;
+      }
+      this.members.set(variable.name, {
+        id: variable.name,
+        name: variable.name,
+        type: variable.type,
+        initial: variable.defaultValue !== undefined ? { kind: 'literal', value: variable.defaultValue } : { kind: 'default', type: variable.type },
+        implicit: false
+      });
+    }
+
+    const eventGraphs: GraphInfo[] = [];
+    for (const graph of this.doc.graphs) {
+      if (graph.kind !== 'event') {
+        if (graph.nodes.length) this.warning('graph-not-compiled', `${graph.kind === 'function' ? 'Function' : 'Macro'} "${graph.name}" isn't compiled yet; calling functions and macros arrives in a later version.`, graph.id);
+        continue;
+      }
+      eventGraphs.push(this.analyze(graph));
+    }
+
+    const entries = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === START).map((start) => ({ info, start })));
+    if (!entries.length) this.warning('no-start', 'The graph has no Start event, so the generated start method does nothing.');
+
+    for (const info of eventGraphs) this.checkExecCycles(info);
+    if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
+
+    const start = entries.flatMap(({ info, start: node }) => this.lowerNode(info, node.id));
+    if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
+
+    return {
+      diagnostics: this.diagnostics,
+      program: {
+        className: this.doc.name,
+        members: [...this.members.values()],
+        slots: [...this.slots.values()],
+        helpers: [...this.helpers.values()],
+        blocks: [...this.blocks.values()],
+        start
+      }
+    };
+  }
+
+  // ---- Validation ----------------------------------------------------------------------------
+
+  private analyze(graph: Graph): GraphInfo {
+    const info: GraphInfo = { graph, nodes: new Map(), definitions: new Map(), execTargets: new Map(), execIndegree: new Map(), dataSources: new Map() };
+    for (const node of graph.nodes) {
+      if (info.nodes.has(node.id)) {
+        this.error('duplicate-node', `Two nodes share the id "${node.id}".`, graph.id, node.id);
+        continue;
+      }
+      info.nodes.set(node.id, node);
+      const def = this.options.registry.get(node.type);
+      if (def) info.definitions.set(node.id, def);
+      else this.error('unknown-node-type', `Unknown node type "${node.type}". Its node library may be missing.`, graph.id, node.id);
+    }
+
+    for (const c of graph.connections) {
+      const fromDef = info.definitions.get(c.fromNode);
+      const toDef = info.definitions.get(c.toNode);
+      if (!info.nodes.has(c.fromNode) || !info.nodes.has(c.toNode)) {
+        this.warning('dangling-connection', `Connection "${c.id}" refers to a node that doesn't exist; it is ignored.`, graph.id);
+        continue;
+      }
+      // Wires on unknown nodes were already reported with the node.
+      if (!fromDef || !toDef) continue;
+      const from = fromDef.outputs.find((p) => p.id === c.fromPin);
+      const to = toDef.inputs.find((p) => p.id === c.toPin);
+      if (!from || !to) {
+        this.error('missing-pin', `A wire uses pin "${!from ? c.fromPin : c.toPin}", which "${(!from ? fromDef : toDef).displayName}" doesn't have.`, graph.id, !from ? c.fromNode : c.toNode);
+        continue;
+      }
+      if (from.kind !== to.kind) {
+        this.error('pin-kind-mismatch', `An ${from.kind} pin is wired to a ${to.kind} pin.`, graph.id, c.toNode);
+        continue;
+      }
+      if (from.kind === 'exec') {
+        const outputs = info.execTargets.get(c.fromNode) ?? new Map<string, string[]>();
+        outputs.set(c.fromPin, [...(outputs.get(c.fromPin) ?? []), c.toNode]);
+        info.execTargets.set(c.fromNode, outputs);
+        info.execIndegree.set(c.toNode, (info.execIndegree.get(c.toNode) ?? 0) + 1);
+        continue;
+      }
+      if (!canConnect(from.type, to.type)) {
+        this.error('type-mismatch', `"${to.name || to.id}" expects ${formatType(to.type)} but is wired to ${formatType(from.type)}.`, graph.id, c.toNode);
+        continue;
+      }
+      const key = inputKey(c.toNode, c.toPin);
+      if (info.dataSources.has(key)) {
+        this.warning('multiple-inputs', `"${to.name || to.id}" has more than one wire; only the first is used.`, graph.id, c.toNode);
+        continue;
+      }
+      info.dataSources.set(key, { node: c.fromNode, pin: c.fromPin });
+    }
+    return info;
+  }
+
+  // Exec wires must not loop (docs/semantics.md, "Execution flow"). Reports each loop once.
+  private checkExecCycles(info: GraphInfo): void {
+    const state = new Map<string, 'visiting' | 'done'>();
+    const visit = (nodeId: string): void => {
+      state.set(nodeId, 'visiting');
+      for (const targets of info.execTargets.get(nodeId)?.values() ?? []) {
+        for (const target of targets) {
+          const seen = state.get(target);
+          if (seen === 'visiting') this.error('exec-cycle', 'Exec wires loop back to this node. Loops need a loop node (arriving in a later version).', info.graph.id, target);
+          else if (!seen) visit(target);
+        }
+      }
+      state.set(nodeId, 'done');
+    };
+    for (const node of info.graph.nodes) if (!state.has(node.id)) visit(node.id);
+  }
+
+  // ---- Statements ----------------------------------------------------------------------------
+
+  // Statements for `nodeId` and everything that runs after it. A node with several exec wires into
+  // it becomes a shared block, called from each path, so its code isn't duplicated.
+  private lowerNode(info: GraphInfo, nodeId: string, ownBlock?: string): IrStatement[] {
+    const node = info.nodes.get(nodeId);
+    const def = info.definitions.get(nodeId);
+    if (!node || !def) return [];
+    const source: SourceRef = { graphId: info.graph.id, nodeId, title: def.displayName };
+    const key = JSON.stringify([info.graph.id, nodeId]);
+    if ((info.execIndegree.get(nodeId) ?? 0) > 1 && ownBlock !== key) {
+      if (!this.blocks.has(key)) {
+        const block: IrBlock = { id: key, name: `run_${nodeId}`, body: [] };
+        this.blocks.set(key, block);
+        block.body = this.lowerNode(info, nodeId, key);
+      }
+      return [{ kind: 'callBlock', block: key, source }];
+    }
+
+    const next = (pin: string): IrStatement[] => (info.execTargets.get(nodeId)?.get(pin) ?? []).flatMap((target) => this.lowerNode(info, target));
+    const input = (pinId: string): IrExpr => this.inputExpr(info, node, def, pinId);
+
+    switch (nativeOperation(def)) {
+      case 'start':
+        return next('execOut');
+      case 'add':
+        return [
+          { kind: 'store', slot: this.slot(info, node, def, 'result'), value: { kind: 'add', left: { kind: 'toNumber', value: input('a') }, right: { kind: 'toNumber', value: input('b') } }, source },
+          ...next('execOut')
+        ];
+      case 'print':
+        return [{ kind: 'print', value: input('value'), source }, ...next('execOut')];
+      case 'branch':
+        return [{ kind: 'if', condition: { kind: 'toBoolean', value: input('condition') }, then: next('true'), else: next('false'), source }];
+      case 'sequence':
+        return ['then0', 'then1', 'then2'].flatMap(next);
+      case 'set-variable': {
+        const member = this.variableMember(info, node, def);
+        if (!member) return next('execOut');
+        const value = input('value');
+        const valueType = exprType(value, this.programView());
+        if (!canConnect(valueType, member.type)) {
+          this.error('variable-type-mismatch', `Set Variable assigns ${formatType(valueType)} to "${member.name}", which is ${formatType(member.type)}.`, info.graph.id, nodeId);
+        }
+        return [{ kind: 'setMember', member: member.id, value, source }, ...next('execOut')];
+      }
+      case 'end':
+        return [];
+    }
+
+    if (def.implementation?.kind !== 'code') {
+      this.error('no-codegen', `"${def.displayName}" can't be compiled to ${this.options.languageName}.`, info.graph.id, nodeId);
+      return [];
+    }
+    const helper = this.codeHelper(info, node, def);
+    if (!helper) return [];
+    const output = def.outputs.find((p) => p.kind === 'data');
+    if (def.outputs.filter((p) => p.kind === 'data').length > 1) {
+      this.warning('extra-outputs', `"${def.displayName}" has several data outputs; only "${output?.name || output?.id}" is produced.`, info.graph.id, nodeId);
+    }
+    return [
+      {
+        kind: 'callCode',
+        helper: helper.id,
+        args: helper.params.map((p) => this.inputExpr(info, node, def, p.pinId)),
+        ...(output ? { resultSlot: this.slot(info, node, def, output.id) } : {}),
+        source
+      },
+      ...next(def.outputs.find((p) => p.kind === 'exec')?.id ?? 'execOut')
+    ];
+  }
+
+  // ---- Expressions ---------------------------------------------------------------------------
+
+  private inputExpr(info: GraphInfo, node: GraphNode, def: NodeDefinition, pinId: string): IrExpr {
+    const pin = def.inputs.find((p) => p.id === pinId);
+    const source = info.dataSources.get(inputKey(node.id, pinId));
+    if (!source) return unconnectedExpr(node, pin, pinId);
+
+    const sourceNode = info.nodes.get(source.node);
+    const sourceDef = info.definitions.get(source.node);
+    if (!sourceNode || !sourceDef) return { kind: 'default', type: pin?.type };
+    // Get Variable is pure: read the member wherever the value is used.
+    if (nativeOperation(sourceDef) === 'get-variable') {
+      const member = this.variableMember(info, sourceNode, sourceDef);
+      return member ? { kind: 'member', member: member.id } : { kind: 'default', type: pin?.type };
+    }
+    return { kind: 'output', slot: this.slot(info, sourceNode, sourceDef, source.pin) };
+  }
+
+  // The member a Set/Get Variable node names. Its Name input must be typed on the node.
+  private variableMember(info: GraphInfo, node: GraphNode, def: NodeDefinition): IrMember | undefined {
+    if (info.dataSources.has(inputKey(node.id, 'name'))) {
+      this.error('variable-name-wired', 'The variable name must be typed on the node, not wired, so generated code can use a fixed member.', info.graph.id, node.id);
+      return undefined;
+    }
+    const literal = unconnectedExpr(node, def.inputs.find((p) => p.id === 'name'), 'name');
+    const name = literal.kind === 'literal' ? String(literal.value ?? '') : '';
+    if (!name) {
+      this.error('variable-name-empty', 'The variable name is empty.', info.graph.id, node.id);
+      return undefined;
+    }
+    let member = this.members.get(name);
+    if (!member) {
+      member = { id: name, name, initial: { kind: 'default' }, implicit: true };
+      this.members.set(name, member);
+      this.warning('undeclared-variable', `Variable "${name}" isn't declared, so it is created with type any.`, info.graph.id, node.id);
+    }
+    return member;
+  }
+
+  private slot(info: GraphInfo, node: GraphNode, def: NodeDefinition, pinId: string): string {
+    const id = JSON.stringify([info.graph.id, node.id, pinId]);
+    if (!this.slots.has(id)) {
+      const pin = def.outputs.find((p) => p.id === pinId);
+      this.slots.set(id, { id, name: `${node.id}_${pinId}`, type: pin?.type, source: { graphId: info.graph.id, nodeId: node.id, title: def.displayName } });
+    }
+    return id;
+  }
+
+  private codeHelper(info: GraphInfo, node: GraphNode, def: NodeDefinition): IrCodeHelper | undefined {
+    const existing = this.helpers.get(def.type);
+    if (existing) return existing;
+    if (def.implementation?.kind !== 'code') return undefined;
+    const sources = def.implementation.languages;
+    const language = this.options.snippetLanguages.find((key) => sources[key] !== undefined);
+    if (!language) {
+      const wanted = this.options.snippetLanguages.map((key) => `"${key}"`).join(' or ');
+      this.error('missing-snippet', `"${def.displayName}" has no ${this.options.languageName} implementation; add a ${wanted} entry to its languages.`, info.graph.id, node.id);
+      return undefined;
+    }
+    const helper: IrCodeHelper = {
+      id: def.type,
+      name: def.type,
+      params: def.inputs.filter((p) => p.kind === 'data').map((p) => ({ pinId: p.id, type: p.type })),
+      returns: def.outputs.find((p) => p.kind === 'data')?.type,
+      code: sources[language]
+    };
+    this.helpers.set(def.type, helper);
+    return helper;
+  }
+
+  private programView(): Pick<IrProgram, 'members' | 'slots'> {
+    return { members: [...this.members.values()], slots: [...this.slots.values()] };
+  }
+
+  private error(code: string, message: string, graphId?: string, nodeId?: string): void {
+    this.diagnostics.push({ severity: 'error', code, message, ...(graphId ? { graphId } : {}), ...(nodeId ? { nodeId } : {}) });
+  }
+
+  private warning(code: string, message: string, graphId?: string, nodeId?: string): void {
+    this.diagnostics.push({ severity: 'warning', code, message, ...(graphId ? { graphId } : {}), ...(nodeId ? { nodeId } : {}) });
+  }
+}
+
+// An unconnected input's value: stored on the node, else the pin's default, else the type default.
+function unconnectedExpr(node: GraphNode, pin: PinDefinition | undefined, pinId: string): IrExpr {
+  const stored = node.properties[`pin:${pinId}`];
+  if (stored !== undefined) return { kind: 'literal', value: stored };
+  if (pin?.defaultValue !== undefined) return { kind: 'literal', value: pin.defaultValue };
+  return { kind: 'default', type: pin?.type };
+}
+
+function inputKey(nodeId: string, pinId: string): string {
+  return JSON.stringify([nodeId, pinId]);
+}
+
+function nativeOperation(def: NodeDefinition): string {
+  return def.implementation?.kind === 'native' ? def.implementation.operation : '';
+}
+
