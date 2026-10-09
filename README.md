@@ -13,23 +13,21 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 - Node palette with search and categories.
 - Inspector for editing unconnected input defaults.
 - JSON persistence with VS Code text-document undo/save behavior.
-- Built-in Flow, Math, Debug, and Variable nodes.
-- Runtime demo: Start, Add, Branch, Print, Set/Get Variable, Sequence, End.
-- Workspace-loaded `*.node.json` user node libraries.
-- Example user library node implemented as JavaScript/TypeScript code: `Double`.
-- Extension architecture that separates the graph model from language adapters and code generation.
+- Built-in Flow, Math, Debug, and Variable nodes: Start, Add, Branch, Print, Set/Get Variable, Sequence, End.
+- Workspace-loaded `*.node.json` user node libraries, with code snippets per language. Example: `Double`.
+- **Code generation**: each graph compiles to readable source code in its target language, written next to the graph and meant to be committed. TypeScript, JavaScript and Python are supported.
+- Unreal-style **Compile** button and **Compiler Results**, with error and warning badges on nodes and entries in the Problems panel.
+- **Run** (generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter).
 
 ## Open and run
 
-1. Extract the project folder.
-2. Open the extracted folder in VS Code.
-3. Run `npm install`.
-4. Press `F5` or choose **Run Blueprint Visual Scripting Extension** from Run and Debug.
-5. A new Extension Development Host opens with the `sample` workspace.
-6. Open `sample/demo.vgraph`.
-7. Use the **▶ Run** button in the graph toolbar.
+1. Open this folder in VS Code and run `npm install`.
+2. Press `F5` (or choose **Run Blueprint Visual Scripting Extension** in Run and Debug). An Extension Development Host opens the `sample` workspace.
+3. Open `sample/demo.vgraph`.
+4. Click **Compile**. The graph's target language is JavaScript, so `demo.vgraph.js` appears next to it. Pick another language in the toolbar to generate TypeScript (`demo.vgraph.ts`) or Python (`demo_vgraph.py`) instead. Saving the graph also compiles it (setting: `blueprintVisualScripting.compileOnSave`).
+5. Click **▶ Run** to run the generated code with Node.js (22.18 or later, which runs TypeScript directly) or Python 3, or **Simulate** to run the graph inside the editor. Output appears in the `Blueprint Visual Scripting` Output channel.
 
-The sample graph will execute and write its Print output to the `Blueprint Visual Scripting` Output channel.
+How graphs behave when they run is specified in [docs/semantics.md](docs/semantics.md); every language's generated code is tested against it.
 
 ## Development
 
@@ -92,7 +90,7 @@ Example:
 }
 ```
 
-For the MVP runtime, JavaScript/TypeScript code nodes are executable only when the graph language is `javascript` or `typescript`. The language-adapter layer is where additional language-specific execution/code-generation support should be added.
+The `languages` map holds one snippet per target language (`typescript`, `javascript`, `python`). A snippet is a function body: its data inputs are parameters (`${pinId}` always works, and ids that are valid identifiers can be used directly) and its return value is the node's first data output. Compiling a graph to a language whose snippet is missing is a compile error. Simulate can run JavaScript snippets only; other languages run through generated code.
 
 ## Architecture
 

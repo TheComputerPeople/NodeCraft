@@ -35,9 +35,19 @@ A user-authored library node can be backed by:
 
 A production implementation should make subgraph-backed functions first-class assets, e.g. `*.vfunc`, and automatically expose their inputs/outputs as a node signature.
 
-## Runtime vs code generation
+## Compiler pipeline
 
-The MVP runtime is intentionally small. It demonstrates execution pins, data dependencies, branching, and runtime events. A production system should compile a graph into a language-neutral IR first and then either interpret the IR or pass it to a language adapter.
+Graphs compile to source code in their target language (roadmap decision 1):
+
+1. **Lowering** (`src/core/compiler/lower.ts`) validates a document and turns it into **Visual IR** (`src/core/compiler/ir.ts`): statements and expressions with no language in them. Problems become Compiler Results diagnostics tied to a graph and node. Exec wires become structured control flow; a node reached by several exec wires becomes a shared block instead of duplicated code; impure outputs become stored slots on the generated class; pure nodes are inlined at each use.
+2. **Generation** is each language pack's `generator` (`CodeGenerator` in `src/core/language-pack.ts`). It names things legally for its language (`src/core/compiler/names.ts`), writes one class per graph with a `start()` method, and marks each node's code with a comment that doubles as the node-to-line map.
+3. **Placement and running** happen in the extension host (`src/extension/compile-service.ts`, `placement.ts`, `runner.ts`): the file is written next to the graph, checked against the project's configuration, and run with the project's toolchain.
+
+`compileDocument` (`src/core/compiler/index.ts`) ties steps 1 and 2 together. Adding a language means adding a pack with a generator; the compiler, IR and runtime don't change.
+
+## Simulate vs generated code
+
+`GraphRuntime` (Simulate) is the reference semantics, written down in [semantics.md](semantics.md). Generated code in every language must behave the same way. The conformance suite (`test/conformance/`) runs every fixture graph in Simulate and as generated TypeScript, JavaScript and Python with the real toolchains, and requires identical output.
 
 ## Security
 

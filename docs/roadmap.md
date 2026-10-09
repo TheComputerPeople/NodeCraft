@@ -80,6 +80,8 @@ Exit: `npm test` passes (and runs in CI once the repo has a remote), the v1 samp
 
 ### Phase 1: Prove universality
 
+Status: complete (October 2026). The conformance suite runs every fixture graph in Simulate and as generated TypeScript, JavaScript (ES modules and CommonJS) and Python with identical output. JavaScript and Python were added as packs without changing the compiler, IR or runtime.
+
 Goal: the same graph compiles to two very different languages and behaves identically.
 
 - **Visual IR and compiler pipeline**: validation → IR (control flow from exec wires, expressions from pure nodes) → language pack → generated file and source map, written where the pack's output placement says (next to the graph for TypeScript and Python). Phase 1 also builds the output-plan contract, generated-file naming and rename/move/delete handling from [output-placement.md](output-placement.md).
@@ -226,7 +228,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Variables | Promote pin to variable | ⬜ | 2 |
 | Variables | Container types (array/set/map) | 🟡 (types and schema; no UI) | 2 |
 | Search | Find in Blueprint / Find in All Blueprints | ⬜ | 2 |
-| Compile | Compile button, Compiler Results, error badges on nodes | ⬜ | 1 |
+| Compile | Compile button, Compiler Results, error badges on nodes | ✅ | — |
 | Structure | Functions, macros, local variables | ⬜ | 4 |
 | Structure | Flow-control library (loops, Do Once, Gate, …) | 🟡 (Branch, Sequence) | 4 |
 | Structure | Structs, enums, Make/Break | ⬜ | 4 |
