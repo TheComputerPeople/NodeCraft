@@ -1,7 +1,7 @@
 import { after, afterEach, before, describe, test, TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { Browser } from 'playwright-core';
-import { EditorPage, launchBrowser, sampleDefinitions } from './harness';
+import { EditorPage, launchBrowser, sampleDefinitions, sampleDocument } from './harness';
 
 const WIRES = '.edge:not(.draft)';
 
@@ -155,17 +155,123 @@ describe('webview editor', () => {
     assert.equal(await e.count('.node.executing[data-node="start_1"]'), 0);
   });
 
-  test('disables Run in an untrusted workspace until trust is granted', async (t) => {
+  test('disables Run and Simulate in an untrusted workspace until trust is granted', async (t) => {
     const e = await openSample(t);
     if (!e) return;
     await e.send({ type: 'settings', trusted: false });
-    assert.equal(await e.page.isDisabled('#run'), true);
-    await e.page.locator('#run').click({ force: true });
-    assert.ok(!(await e.posted()).some((m) => m.type === 'simulate'), 'a disabled Run button sends nothing');
+    for (const button of ['#run', '#simulate']) {
+      assert.equal(await e.page.isDisabled(button), true, `${button} is disabled`);
+      await e.page.locator(button).click({ force: true });
+    }
+    assert.ok(!(await e.posted()).some((m) => m.type === 'run' || m.type === 'simulate'), 'disabled buttons send nothing');
+    assert.equal(await e.page.isDisabled('#compile'), false, 'compiling only writes text, so it stays available');
 
     await e.send({ type: 'settings', trusted: true });
-    assert.equal(await e.page.isDisabled('#run'), false);
     await e.page.click('#run');
-    assert.ok((await e.posted()).some((m) => m.type === 'simulate'));
+    await e.page.click('#simulate');
+    assert.deepEqual((await e.posted()).map((m) => m.type).filter((type) => type === 'run' || type === 'simulate'), ['run', 'simulate']);
+  });
+});
+
+describe('compiling from the editor', () => {
+  let browser: Browser | undefined;
+  let skipReason = '';
+  let editor: EditorPage | undefined;
+
+  before(async () => {
+    const result = await launchBrowser();
+    if (typeof result === 'string') skipReason = result;
+    else browser = result;
+  });
+  after(async () => {
+    await browser?.close();
+  });
+  afterEach(async () => {
+    if (!editor) return;
+    const errors = editor.errors;
+    await editor.close();
+    editor = undefined;
+    assert.deepEqual(errors, [], 'the page logged errors');
+  });
+
+  async function openSample(t: TestContext): Promise<EditorPage | undefined> {
+    if (!browser) {
+      t.skip(skipReason);
+      return undefined;
+    }
+    editor = await EditorPage.open(browser);
+    await editor.send({
+      type: 'init', document: sampleDocument(), definitions: sampleDefinitions(), saveDelay: 60000,
+      languages: [{ id: 'typescript', displayName: 'TypeScript' }, { id: 'python', displayName: 'Python' }, { id: 'javascript', displayName: 'JavaScript' }]
+    });
+    return editor;
+  }
+
+  const errorReport = {
+    status: 'errors' as const,
+    language: 'javascript',
+    diagnostics: [
+      { severity: 'error' as const, code: 'missing-snippet', message: 'Print has a problem.', graphId: 'EventGraph', nodeId: 'print_true' },
+      { severity: 'warning' as const, code: 'no-start', message: 'A graph-level warning.' }
+    ]
+  };
+
+  test('Compile sends pending edits first, then asks the host to compile', async (t) => {
+    const e = await openSample(t);
+    if (!e) return;
+    await e.page.click('.node[data-node="end_true"] .node-header');
+    await e.page.keyboard.press('Delete');
+    await e.page.click('#compile');
+    const types = (await e.posted()).map((m) => m.type);
+    assert.deepEqual(types.slice(-2), ['applyDocument', 'compile']);
+    assert.equal(await e.page.getAttribute('#compile', 'data-state'), 'compiling');
+  });
+
+  test('errors open Compiler Results and badge the node, and a result selects its node', async (t) => {
+    const e = await openSample(t);
+    if (!e) return;
+    await e.send({ type: 'compileResult', compile: errorReport });
+    assert.equal(await e.page.getAttribute('#compile', 'data-state'), 'errors');
+    assert.equal(await e.page.isVisible('#compiler-results'), true);
+    assert.equal(await e.page.textContent('#results-title'), 'Compiler Results: 1 error, 1 warning');
+    assert.equal(await e.page.textContent('.node[data-node="print_true"] .node-badge'), 'ERROR!');
+    assert.equal(await e.count('.node-badge'), 1, 'only the node the error is about gets a badge');
+    assert.equal(await e.page.textContent('#status'), 'Compile failed: 1 error');
+
+    await e.page.click('#results-list li.has-node');
+    assert.deepEqual(await e.page.$$eval('.node.selected', (els) => els.map((el) => (el as HTMLElement).dataset.node)), ['print_true']);
+  });
+
+  test('a clean compile hides Compiler Results; editing afterwards marks the graph as needing a compile', async (t) => {
+    const e = await openSample(t);
+    if (!e) return;
+    await e.send({ type: 'compileResult', compile: errorReport });
+    await e.send({ type: 'compileResult', compile: { status: 'ok', language: 'javascript', diagnostics: [], outputFile: 'demo.vgraph.js' } });
+    assert.equal(await e.page.isVisible('#compiler-results'), false);
+    assert.equal(await e.count('.node-badge'), 0);
+    assert.equal(await e.page.getAttribute('#compile', 'data-state'), 'ok');
+    assert.equal(await e.page.textContent('#status'), 'Compiled to demo.vgraph.js');
+
+    await e.page.click('.node[data-node="end_true"] .node-header');
+    await e.page.keyboard.press('Delete');
+    assert.equal(await e.page.getAttribute('#compile', 'data-state'), 'dirty');
+  });
+
+  test('the language picker shows the graph language and changing it saves the graph', async (t) => {
+    const e = await openSample(t);
+    if (!e) return;
+    assert.deepEqual(await e.page.$$eval('#language option', (els) => els.map((el) => el.textContent)), ['TypeScript', 'Python', 'JavaScript']);
+    assert.equal(await e.page.inputValue('#language'), 'javascript');
+    await e.page.selectOption('#language', 'python');
+    await e.page.click('#compile');
+    const saved = (await e.posted()).filter((m) => m.type === 'applyDocument').pop();
+    assert.equal(saved?.document?.language, 'python');
+  });
+
+  test('run status messages appear in the status bar', async (t) => {
+    const e = await openSample(t);
+    if (!e) return;
+    await e.send({ type: 'runStatus', run: { state: 'running', message: 'Running TypeScript…' } });
+    assert.equal(await e.page.textContent('#status'), 'Running TypeScript…');
   });
 });

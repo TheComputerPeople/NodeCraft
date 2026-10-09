@@ -16,7 +16,14 @@ export const dom = {
   status: element<HTMLSpanElement>('status'),
   graphName: element<HTMLSpanElement>('graph-name'),
   contextMenu: element<HTMLDivElement>('context-menu'),
+  compileButton: element<HTMLButtonElement>('compile'),
   runButton: element<HTMLButtonElement>('run'),
+  simulateButton: element<HTMLButtonElement>('simulate'),
+  languageSelect: element<HTMLSelectElement>('language'),
+  results: element<HTMLElement>('compiler-results'),
+  resultsTitle: element<HTMLSpanElement>('results-title'),
+  resultsList: element<HTMLUListElement>('results-list'),
+  resultsClose: element<HTMLButtonElement>('results-close'),
   fitButton: element<HTMLButtonElement>('fit')
 };
 

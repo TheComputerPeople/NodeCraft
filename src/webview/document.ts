@@ -2,6 +2,7 @@
 import { pinDefinition } from '../core/editing';
 import { GraphDocument, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
 import { primaryGraph } from '../core/serializer';
+import { markCompileDirty, renderLanguagePicker } from './compile-results';
 import { dom, setStatus } from './dom';
 import { postToHost } from './host';
 import { renderPalette } from './panels';
@@ -26,8 +27,11 @@ export function setDefinitions(definitions: NodeDefinition[]): void {
 export function applySettings(message: HostMessage): void {
   if (typeof message.saveDelay === 'number' && message.saveDelay >= 0) state.saveDelay = message.saveDelay;
   if (typeof message.trusted === 'boolean') {
+    const restricted = 'Running graphs is disabled in Restricted Mode. Trust this workspace to run graphs.';
     dom.runButton.disabled = !message.trusted;
-    dom.runButton.title = message.trusted ? 'Run Graph' : 'Running graphs is disabled in Restricted Mode. Trust this workspace to run graphs.';
+    dom.runButton.title = message.trusted ? 'Compile, then run the generated code' : restricted;
+    dom.simulateButton.disabled = !message.trusted;
+    dom.simulateButton.title = message.trusted ? 'Run the graph in the editor without compiling' : restricted;
   }
 }
 
@@ -37,6 +41,7 @@ export function loadDocument(doc: GraphDocument, preserveView = false): void {
   state.document = copyDocument(doc);
   state.graph = state.document.graphs.find((g) => g.id === previousGraphId) ?? primaryGraph(state.document);
   dom.graphName.textContent = `${state.document.name} › ${state.graph.name}`;
+  renderLanguagePicker();
   state.dirty = false;
   if (!preserveView) {
     state.pan = { x: 40, y: 40 };
@@ -64,6 +69,7 @@ function copyDocument(doc: GraphDocument): GraphDocument {
 export function markDirty(): void {
   state.dirty = true;
   setStatus('Unsaved changes');
+  markCompileDirty();
   clearTimeout(state.saveTimer);
   state.saveTimer = setTimeout(flushSave, state.saveDelay);
 }

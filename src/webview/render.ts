@@ -2,6 +2,7 @@ import { definitionFor } from '../core/editing';
 import { GraphNode, PinDefinition } from '../core/model';
 import { formatType } from '../core/types';
 import { beginRewireFromConnection, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
+import { nodeDiagnostics } from './compile-results';
 import { lookupDefinition } from './document';
 import { dom, escapeHtml, pinElement } from './dom';
 import { renderInspector } from './panels';
@@ -29,6 +30,18 @@ function renderNode(node: GraphNode): HTMLElement {
   el.style.left = `${node.position.x}px`;
   el.style.top = `${node.position.y}px`;
   el.style.setProperty('--node-color', def.color || '#6b7280');
+
+  // Unreal-style badge for compiler errors and warnings on this node.
+  const diagnostics = nodeDiagnostics(node.id);
+  const severity = diagnostics.some((d) => d.severity === 'error') ? 'error' : diagnostics.length ? 'warning' : undefined;
+  if (severity) {
+    el.classList.add(`has-${severity}`);
+    const badge = document.createElement('span');
+    badge.className = `node-badge ${severity}`;
+    badge.textContent = severity === 'error' ? 'ERROR!' : 'WARNING!';
+    badge.title = diagnostics.map((d) => d.message).join('\n');
+    el.appendChild(badge);
+  }
 
   const header = document.createElement('div');
   header.className = 'node-header';

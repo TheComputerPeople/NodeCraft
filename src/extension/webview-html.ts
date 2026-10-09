@@ -26,7 +26,10 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
   </aside>
   <main id="workspace">
     <div id="toolbar">
-      <button id="run" title="Run Graph">▶ Run</button>
+      <button id="compile" class="compile-button" data-state="unknown" title="Compile the graph to its target language"><span class="compile-icon" aria-hidden="true"></span>Compile</button>
+      <button id="run" title="Compile, then run the generated code">▶ Run</button>
+      <button id="simulate" title="Run the graph in the editor without compiling">Simulate</button>
+      <label class="language-picker" title="Target language for generated code"><span>Language</span><select id="language" aria-label="Target language"></select></label>
       <button id="fit" title="Fit graph">Fit</button>
       <span id="graph-name">Untitled</span>
       <span id="status">Ready</span>
@@ -37,6 +40,10 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
       <div id="selection-box" hidden></div>
       <div id="context-menu" hidden></div>
     </div>
+    <section id="compiler-results" hidden aria-label="Compiler Results">
+      <header><span id="results-title">Compiler Results</span><button id="results-close" title="Close">×</button></header>
+      <ul id="results-list"></ul>
+    </section>
     <div id="help">Drag pins to connect. Ctrl+click a wire/pin to rewire; release off a pin to remove. Alt+click breaks connections. Right-click opens a menu. Click-drag the background to box-select; middle-drag pans; wheel zooms.</div>
   </main>
   <aside id="inspector" class="panel">

@@ -1,5 +1,5 @@
 import { PinAddress } from '../core/editing';
-import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDirection, PinKind } from '../core/model';
+import { CompileReport, Graph, GraphDocument, GraphNode, LanguageOption, NodeDefinition, PinDirection, PinKind } from '../core/model';
 
 export interface Point {
   x: number;
@@ -77,6 +77,11 @@ export interface EditorState {
   runActive: boolean;
   runtimeClearTimer: ReturnType<typeof setTimeout> | undefined;
   runtimePaintPending: boolean;
+  // Target languages offered in the toolbar.
+  languages: LanguageOption[];
+  // The latest compile result, and whether the graph changed since (Unreal shows that as "?").
+  compile: CompileReport | null;
+  compileState: 'unknown' | 'dirty' | 'compiling' | CompileReport['status'];
 }
 
 export const state: EditorState = {
@@ -100,5 +105,8 @@ export const state: EditorState = {
   executedNodeIds: new Set(),
   runActive: false,
   runtimeClearTimer: undefined,
-  runtimePaintPending: false
+  runtimePaintPending: false,
+  languages: [],
+  compile: null,
+  compileState: 'unknown'
 };

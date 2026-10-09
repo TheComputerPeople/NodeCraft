@@ -1,6 +1,7 @@
 // Webview entry point: wires DOM and host events to the editor modules.
 import { HostMessage, RuntimeLogEvent } from '../core/model';
 import { compatibleDefinitionsForDraft, completeConnection, deleteSelected, finishRewire } from './actions';
+import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, setLanguage, showCompileResult } from './compile-results';
 import { applySettings, flushSave, loadDocument, markDirty, setDefinitions } from './document';
 import { dom, eventElement, nodeElement, setStatus } from './dom';
 import { postToHost } from './host';
@@ -13,8 +14,25 @@ import { applyTransform, fitGraph, screenToWorld, zoomAt } from './view';
 
 const RUN_TRAIL_MS = 1500;
 
-dom.runButton.addEventListener('click', () => postToHost({ type: 'simulate' }));
+// Each action first sends pending edits, so the host works on what is on screen.
+dom.compileButton.addEventListener('click', () => {
+  flushSave();
+  markCompiling();
+  postToHost({ type: 'compile' });
+});
+dom.runButton.addEventListener('click', () => {
+  flushSave();
+  setStatus('Compiling…');
+  postToHost({ type: 'run' });
+});
+dom.simulateButton.addEventListener('click', () => {
+  flushSave();
+  postToHost({ type: 'simulate' });
+});
+dom.languageSelect.addEventListener('change', () => setLanguage(dom.languageSelect.value));
+dom.resultsClose.addEventListener('click', hideResults);
 dom.fitButton.addEventListener('click', fitGraph);
+renderCompileButton();
 dom.search.addEventListener('input', renderPalette);
 
 window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
@@ -22,9 +40,18 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
   switch (message.type) {
     case 'init':
       applySettings(message);
+      state.languages = message.languages ?? [];
       setDefinitions(message.definitions ?? []);
       // No document means the file could not be parsed; editing stays disabled until it can.
       if (message.document) loadDocument(message.document);
+      else renderLanguagePicker();
+      if (message.compile) showCompileResult(message.compile);
+      break;
+    case 'compileResult':
+      if (message.compile) showCompileResult(message.compile);
+      break;
+    case 'runStatus':
+      if (message.run) setStatus(message.run.message);
       break;
     case 'documentChanged': {
       if (!message.document) break;
@@ -59,7 +86,7 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (eventElement(e)?.matches('input, textarea')) return;
+  if (eventElement(e)?.matches('input, textarea, select')) return;
   const mod = e.ctrlKey || e.metaKey;
   if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedNodeIds.size) {
     deleteSelected();
