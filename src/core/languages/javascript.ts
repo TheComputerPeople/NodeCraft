@@ -2,6 +2,7 @@
 // JavaScript runtime and can execute JavaScript snippets directly.
 import { CodeSimulator, LanguagePack } from '../language-pack';
 import { TypeRef, parseTypeId } from '../types';
+import { typescriptGenerator } from './typescript-codegen';
 
 const javascriptSimulator: CodeSimulator = {
   // TypeScript snippets often carry type annotations the host can't run, so plain JavaScript is
@@ -51,7 +52,8 @@ export const typescriptPack: LanguagePack = {
   workspaceMarkers: ['**/tsconfig.json'],
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true },
   mapType,
-  simulator: javascriptSimulator
+  simulator: javascriptSimulator,
+  generator: typescriptGenerator({ typed: true, mapType })
 };
 
 export const javascriptPack: LanguagePack = {
@@ -61,5 +63,6 @@ export const javascriptPack: LanguagePack = {
   workspaceMarkers: ['**/package.json', '**/jsconfig.json'],
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: false, generics: false, async: true, exceptions: true },
   mapType,
-  simulator: javascriptSimulator
+  simulator: javascriptSimulator,
+  generator: typescriptGenerator({ typed: false, mapType })
 };

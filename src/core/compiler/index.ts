@@ -1,0 +1,45 @@
+// Compiles a graph document to source code in its target language.
+import { GenerateOptions, GeneratedCode, LanguagePackRegistry } from '../language-pack';
+import { DEFAULT_LANGUAGE } from '../languages';
+import { GraphDocument } from '../model';
+import { NodeRegistry } from '../registry';
+import { CompileDiagnostic } from './diagnostics';
+import { lowerDocument } from './lower';
+
+export interface CompileOptions {
+  registry: NodeRegistry;
+  languages: LanguagePackRegistry;
+  generate: GenerateOptions;
+}
+
+export interface CompiledOutput extends GeneratedCode {
+  // Name of the generated file, to be placed next to the graph file.
+  fileName: string;
+  language: string;
+}
+
+export interface CompileResult {
+  diagnostics: CompileDiagnostic[];
+  // Absent when compilation failed.
+  output?: CompiledOutput;
+}
+
+export function compileDocument(doc: GraphDocument, options: CompileOptions): CompileResult {
+  const language = doc.language || DEFAULT_LANGUAGE;
+  const pack = options.languages.get(language);
+  if (!pack) return { diagnostics: [{ severity: 'error', code: 'unknown-language', message: `Unknown graph language "${language}".` }] };
+  const generator = pack.generator;
+  if (!generator) {
+    return { diagnostics: [{ severity: 'error', code: 'no-generator', message: `${pack.displayName} graphs can't be compiled yet.` }] };
+  }
+
+  const lowered = lowerDocument(doc, { registry: options.registry, languageName: pack.displayName, snippetLanguages: generator.snippetLanguages });
+  if (!lowered.program) return { diagnostics: lowered.diagnostics };
+  const code = generator.generate(lowered.program, options.generate);
+  return {
+    diagnostics: lowered.diagnostics,
+    output: { ...code, fileName: generator.outputFileName(options.generate.sourceFileName), language: pack.id }
+  };
+}
+
+export type { CompileDiagnostic } from './diagnostics';

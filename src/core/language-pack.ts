@@ -1,6 +1,8 @@
 // A language pack is the unit of language support: everything the extension knows about one
 // target language lives behind this interface, so the graph model and editor stay language-neutral.
-// Code generation, symbol import and debugging members arrive with Phases 1, 3 and 5.
+// Symbol import and debugging members arrive with Phases 3 and 5.
+import { IrProgram } from './compiler/ir';
+import { NodeLine } from './compiler/writer';
 import { TypeRef } from './types';
 
 // What the language can express. The editor hides features a graph's language can't support
@@ -25,6 +27,41 @@ export interface CodeSimulator {
   run(code: string, inputs: { id: string; value: unknown }[]): unknown;
 }
 
+export interface GenerateOptions {
+  // The graph file's name, e.g. "Inventory.vgraph", for the generated file's header.
+  sourceFileName: string;
+  // JavaScript only: the project's module system (from the nearest package.json).
+  moduleFormat?: 'esm' | 'commonjs';
+}
+
+export interface GeneratedCode {
+  text: string;
+  // The generated class's name, as the runner needs it.
+  className: string;
+  // Where each node's code starts, for jumping between graph and code (and debugging later).
+  nodeLines: NodeLine[];
+}
+
+// How to run generated code with the project's own toolchain.
+export interface CodeRunner {
+  // Candidate commands (an executable plus leading arguments), tried in order until one starts.
+  commands(platform: string): string[][];
+  // Arguments that load the generated file and call its start method.
+  args(file: { path: string; url: string }, className: string): string[];
+  // Shown when no candidate command could start.
+  missingToolMessage: string;
+}
+
+export interface CodeGenerator {
+  // Keys of a code node's `languages` map usable in generated code, most preferred first.
+  snippetLanguages: string[];
+  // Name of the generated file for a graph file, following the language's import rules
+  // (docs/output-placement.md): "Inventory.vgraph" → "Inventory.vgraph.ts" or "inventory_vgraph.py".
+  outputFileName(graphFileName: string): string;
+  generate(program: IrProgram, options: GenerateOptions): GeneratedCode;
+  runner?: CodeRunner;
+}
+
 export interface LanguagePack {
   // The value of a graph's `language` field, e.g. "typescript".
   id: string;
@@ -37,6 +74,7 @@ export interface LanguagePack {
   // The language's spelling of a canonical type.
   mapType(type: TypeRef): string;
   simulator?: CodeSimulator;
+  generator?: CodeGenerator;
 }
 
 export class LanguagePackRegistry {
