@@ -73,7 +73,7 @@ Goal: a codebase that can carry the rest of this roadmap.
 - Define the canonical type system and the language pack interface (in code, with the current JS behavior as the first implementation).
 - Workspace Trust: code generation and Simulate are disabled in untrusted workspaces.
 
-Exit: tests run in CI, the v1 sample graph migrates to v2 without loss, and the existing editor works on the new schema.
+Exit: `npm test` passes (and runs in CI once the repo has a remote), the v1 sample graph migrates to v2 without loss, and the existing editor works on the new schema.
 
 ### Phase 1: Prove universality
 
