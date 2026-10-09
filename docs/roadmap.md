@@ -24,9 +24,9 @@ We reproduce each one in a language-neutral way:
 | Blueprint debugger | Node breakpoints mapped onto generated code, driven through the language's existing **debugger (DAP)** |
 | Engine events (BeginPlay, Tick) | **Entry-point events** supplied by the language pack and optional framework packs (Main, test case, HTTP handler, …) |
 
-### Recommended execution model: code generation first
+### Execution model: code generation (decided)
 
-Every graph compiles to readable source code in the target language, written next to the graph (for example `Inventory.vgraph` → `Inventory.generated.ts`). This is the only model that scales to any language, because we never have to build or ship a runtime per language. It also means:
+Every graph compiles to readable source code in the target language, written next to the graph (for example `Inventory.vgraph` → `Inventory.vgraph.ts`). This is the only model that scales to any language, because we never have to build or ship a runtime per language. It also means:
 
 - Teammates without the extension can still build and run the project, since the generated code is ordinary source.
 - Performance matches hand-written code.
@@ -41,6 +41,7 @@ A language pack is the unit of language support. It provides:
 - **Detection**: recognizes the project's language from workspace markers (`package.json`/`tsconfig.json`, `pyproject.toml`, `*.csproj`, `CMakeLists.txt`, `Cargo.toml`, `go.mod`, …).
 - **Type mapping**: maps between canonical graph types and language types.
 - **Code generation**: emits source from Visual IR, along with a source map from graph nodes to generated lines.
+- **Output placement**: where generated files go (next to the graph by default) and any step needed to register them with the build, such as a CMake entry or a Rust `mod` declaration.
 - **Core node emitters**: how Branch, Sequence, For Each Loop, Delay, variables, etc. are written in this language.
 - **Symbol import**: turns the user's functions and types into node definitions.
 - **Run and debug**: the launch/task configuration for running generated code and attaching a debugger.
@@ -81,7 +82,7 @@ Exit: `npm test` passes (and runs in CI once the repo has a remote), the v1 samp
 
 Goal: the same graph compiles to two very different languages and behaves identically.
 
-- **Visual IR and compiler pipeline**: validation → IR (control flow from exec wires, expressions from pure nodes) → language pack → generated file and source map.
+- **Visual IR and compiler pipeline**: validation → IR (control flow from exec wires, expressions from pure nodes) → language pack → generated file and source map, written where the pack's output placement says (next to the graph for TypeScript and Python). Phase 1 also builds the output-plan contract, generated-file naming and rename/move/delete handling from [output-placement.md](output-placement.md).
 - Blueprint semantics are written down and tested, including the subtle ones (for example, pure nodes are re-evaluated each time a connected impure node executes).
 - **TypeScript/JavaScript pack** first (the current runtime and node templates are already JS).
 - **Python pack** second: different syntax, runtime and typing discipline, with low toolchain friction. It exposes JS-shaped assumptions early.
@@ -152,7 +153,7 @@ Exit: the debugging loop works in TypeScript, Python and C# without the user eve
 Goal: support for most languages without a hand-written adapter for each.
 
 - Declarative language pack format (templates plus a type map plus capabilities) for Tier 2 and Tier 3.
-- Tier 1 packs for C#, then C++, Rust, Go and Java, prioritized by demand.
+- Tier 1 packs beyond the first three, prioritized by demand. Candidates and their design implications are in [language-notes.md](language-notes.md): C++ first (closest to Unreal), then Rust and Java; C as a declarative Tier 2/3 pack. Go and others to be assessed the same way.
 - A public extension API so language packs and framework packs can ship as separate VS Code extensions.
 - Library versioning and dependency manifests for node libraries (building on `node-package.schema.json`).
 - The conformance suite is published, so pack authors can verify their adapter.
@@ -186,12 +187,14 @@ Exit: a written gap analysis with a recommendation per gap, then a decision on w
 - **Reproducing the Unreal engine.** Actors, components, levels, and the Tick loop are engine features. Framework packs can provide equivalents for specific frameworks, but the core stays engine-agnostic.
 - **Running every language inside the extension.** Execution happens in the project's own toolchain; Simulate covers core nodes only.
 
-## Decisions to confirm before Phase 0
+## Decisions
 
-1. **Code generation first** (recommended above) rather than building an interpreter per language.
-2. **First packs: TypeScript, then Python, then C#.** The aim is to cover dynamic, gradually typed and statically compiled languages before the architecture hardens.
-3. **Webview: TypeScript plus esbuild with the existing custom renderer**, rather than adopting React Flow.
-4. **Generated code is committed** next to its graph, so the project builds for people who don't have the extension. The alternative is generating at build time and keeping it out of version control.
+Confirmed on 2026-10-08:
+
+1. **Code generation.** Graphs compile to source code in the project's language and run through the project's own toolchain. No interpreter is built per language; the reference interpreter stays only as the semantic oracle and for Simulate mode.
+2. **First packs: TypeScript, then Python, then C#**, covering dynamic, gradually typed and statically compiled languages before the architecture hardens. Notes on C, C++, Rust, Java and JavaScript, including where they strain the design, are in [language-notes.md](language-notes.md).
+3. **Webview: TypeScript plus esbuild with the existing custom renderer**, rather than React Flow (implemented in Phase 0).
+4. **Generated code is committed next to its graph**, so the project builds for people who don't have the extension. Some languages can't follow this as-is (Java's package directories, build-file registration for C/C++, Rust `mod` declarations), so each language pack detects the project's structure and places and registers output accordingly. It keeps next-to-the-graph wherever the language allows, and edits user-owned build files only through a one-time, consented hook. See [output-placement.md](output-placement.md).
 
 ## Appendix: Blueprint parity checklist
 
