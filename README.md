@@ -83,7 +83,8 @@ Example:
     "defaultLanguage": "javascript",
     "languages": {
       "javascript": "return ${value} * 2;",
-      "typescript": "return ${value} * 2;"
+      "typescript": "return ${value} * 2;",
+      "python": "return ${value} * 2"
     }
   }
 }

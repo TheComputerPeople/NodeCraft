@@ -15,6 +15,10 @@ describe('LanguagePackRegistry.detect', () => {
     assert.equal(packs.detect((glob) => glob === '**/tsconfig.json' || glob === '**/package.json')?.id, 'typescript');
   });
 
+  test('prefers Python over JavaScript when a Python project also has a package.json', () => {
+    assert.equal(packs.detect((glob) => glob === '**/pyproject.toml' || glob === '**/package.json')?.id, 'python');
+  });
+
   test('falls back to JavaScript with only package.json', () => {
     assert.equal(packs.detect((glob) => glob === '**/package.json')?.id, 'javascript');
   });

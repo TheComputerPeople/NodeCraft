@@ -33,17 +33,41 @@ function matchesGolden(text: string, goldenName: string): void {
 const sample = () => parseDocument(readRepoFile('sample/demo.vgraph')).document;
 const features = () => parseDocument(readRepoFile('test/fixtures/graphs/features.vgraph')).document;
 
-describe('TypeScript and JavaScript generation', () => {
+describe('golden files', () => {
   for (const [label, load] of [['demo', sample], ['features', features]] as const) {
-    for (const [language, ext] of [['typescript', 'ts'], ['javascript', 'js']]) {
+    const expectedFile: Record<string, string> = { typescript: `${label}.vgraph.ts`, javascript: `${label}.vgraph.js`, python: `${label}_vgraph.py` };
+    for (const [language, fileName] of Object.entries(expectedFile)) {
       test(`${label} matches its ${language} golden file`, () => {
         const result = compileAs(load(), language, `${label}.vgraph`);
         assert.deepEqual(result.diagnostics.filter((d) => d.severity === 'error'), []);
-        assert.equal(result.output?.fileName, `${label}.vgraph.${ext}`);
-        matchesGolden(result.output!.text, `${label}.vgraph.${ext}`);
+        assert.equal(result.output?.fileName, fileName);
+        matchesGolden(result.output!.text, fileName);
       });
     }
   }
+});
+
+describe('Python generation', () => {
+  test('names the module so it can be imported', () => {
+    assert.equal(compileAs(sample(), 'python', 'BlueprintDemo.vgraph').output?.fileName, 'blueprint_demo_vgraph.py');
+  });
+
+  test('records node lines after the module header', () => {
+    const output = compileAs(sample(), 'python', 'demo.vgraph').output!;
+    const lines = output.text.split('\n');
+    for (const { nodeId, line } of output.nodeLines) assert.match(lines[line - 2], new RegExp(`# .+ \\(${nodeId}\\)$`));
+  });
+
+  test('writes pass for empty branches', () => {
+    const d = doc(
+      [node('s', 'core:event.start'), node('br', 'core:flow.branch'), node('p', 'core:console.print', { 'pin:value': 'no' })],
+      [wire('s', 'execOut', 'br', 'execIn'), wire('br', 'false', 'p', 'execIn')]
+    );
+    assert.match(compileAs(d, 'python').output!.text, /if True:\n {12}pass\n {8}else:\n/);
+  });
+});
+
+describe('TypeScript and JavaScript generation', () => {
 
   test('JavaScript for CommonJS projects exports with module.exports', () => {
     const text = compileAs(sample(), 'javascript', 'demo.vgraph', 'commonjs').output!.text;

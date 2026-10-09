@@ -186,7 +186,7 @@ describe('GraphRuntime: code nodes', () => {
   test('refuse to run when the graph targets a language without an in-process adapter', () => {
     const python = doc([node('s', 'core:event.start'), node('d', 't.double')], [wire('s', 'execOut', 'd', 'execIn')]);
     python.language = 'python';
-    assert.ok(run(python, registry).some((e) => e.kind === 'error' && /python/.test(e.message ?? '')));
+    assert.ok(run(python, registry).some((e) => e.kind === 'error' && /Python code can't run inside the editor/.test(e.message ?? '')));
   });
 });
 
