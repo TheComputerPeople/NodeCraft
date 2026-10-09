@@ -64,6 +64,8 @@ The order is deliberate. Universality is the first requirement, so the IR and th
 
 ### Phase 0: Foundations
 
+Status: complete (October 2026).
+
 Goal: a codebase that can carry the rest of this roadmap.
 
 - Put the project under version control (the folder isn't a git repository yet).
@@ -219,7 +221,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Panels | My Blueprint panel | ⬜ | 2 |
 | Variables | Ctrl-drag → Get, Alt-drag → Set | ⬜ | 2 |
 | Variables | Promote pin to variable | ⬜ | 2 |
-| Variables | Container types (array/set/map) | ⬜ | 0 (schema), 2 (UI) |
+| Variables | Container types (array/set/map) | 🟡 (types and schema; no UI) | 2 |
 | Search | Find in Blueprint / Find in All Blueprints | ⬜ | 2 |
 | Compile | Compile button, Compiler Results, error badges on nodes | ⬜ | 1 |
 | Structure | Functions, macros, local variables | ⬜ | 4 |

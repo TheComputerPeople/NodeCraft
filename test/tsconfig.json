@@ -3,7 +3,15 @@
   "compilerOptions": {
     "rootDir": "..",
     "outDir": "../out",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["unit", "webview", "../src/core", "../src/extension/webview-html.ts"]
+  "include": [
+    "unit",
+    "webview",
+    "integration",
+    "../src/core",
+    "../src/extension/webview-html.ts"
+  ]
 }
