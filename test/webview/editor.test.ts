@@ -43,7 +43,7 @@ describe('webview editor', () => {
     if (!e) return;
     assert.equal(await e.count('.node'), 7);
     assert.equal(await e.count(WIRES), 7);
-    assert.equal(await e.page.textContent('#graph-name'), 'BlueprintDemo');
+    assert.equal(await e.page.textContent('#graph-name'), 'BlueprintDemo › EventGraph');
     assert.equal((await e.posted())[0]?.type, 'ready');
   });
 
@@ -94,7 +94,7 @@ describe('webview editor', () => {
     if (!e) return;
     await e.drag(await e.pinCenter('start_1', 'execOut'), await e.pinCenter('print_false', 'value'));
     assert.equal(await e.count(WIRES), 7);
-    assert.ok(!(await e.posted()).some((m) => m.type === 'applyGraph'));
+    assert.ok(!(await e.posted()).some((m) => m.type === 'applyDocument'));
   });
 
   test('dropping a wire on empty canvas offers compatible nodes and wires up the choice', async (t) => {
@@ -134,7 +134,7 @@ describe('webview editor', () => {
     await editor.page.locator('.palette-node').first().dispatchEvent('mousedown');
     await editor.page.mouse.click(800, 400);
     assert.equal(await editor.count('.node'), 0);
-    assert.ok(!(await editor.posted()).some((m) => m.type === 'applyGraph'));
+    assert.ok(!(await editor.posted()).some((m) => m.type === 'applyDocument'));
     assert.equal(await editor.page.textContent('#status'), 'Cannot open graph: bad JSON');
   });
 

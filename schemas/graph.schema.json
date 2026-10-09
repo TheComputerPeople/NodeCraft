@@ -1,69 +1,132 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.invalid/blueprint-vgraph.schema.json",
-  "title": "Blueprint Visual Graph",
+  "title": "Blueprint Visual Graph (schema 2)",
+  "description": "A .vgraph file: a class, function library or macro library containing one or more graphs.",
   "type": "object",
-  "required": ["schemaVersion", "name", "variables", "nodes", "connections"],
+  "required": ["schemaVersion", "name", "kind", "variables", "graphs"],
   "properties": {
-    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "schemaVersion": { "const": 2 },
     "name": { "type": "string" },
-    "language": { "type": "string" },
+    "kind": { "enum": ["class", "functionLibrary", "macroLibrary"] },
+    "language": { "type": "string", "description": "Target language pack id, e.g. \"typescript\"." },
     "variables": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["id", "name", "type"],
-        "properties": {
-          "id": { "type": "string" },
-          "name": { "type": "string" },
-          "type": { "$ref": "#/$defs/typeRef" },
-          "defaultValue": {}
-        }
-      }
+      "description": "Member variables; must be empty for libraries.",
+      "items": { "$ref": "#/$defs/variable" }
     },
-    "nodes": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["id", "type", "position", "properties"],
-        "properties": {
-          "id": { "type": "string" },
-          "type": { "type": "string" },
-          "position": {
-            "type": "object",
-            "required": ["x", "y"],
-            "properties": {
-              "x": { "type": "number" },
-              "y": { "type": "number" }
-            }
-          },
-          "properties": { "type": "object" }
-        }
-      }
-    },
-    "connections": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["id", "fromNode", "fromPin", "toNode", "toPin"],
-        "properties": {
-          "id": { "type": "string" },
-          "fromNode": { "type": "string" },
-          "fromPin": { "type": "string" },
-          "toNode": { "type": "string" },
-          "toPin": { "type": "string" }
-        }
-      }
-    },
+    "graphs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/graph" } },
     "metadata": { "type": "object" }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "functionLibrary" } } },
+      "then": { "properties": { "variables": { "maxItems": 0 }, "graphs": { "items": { "properties": { "kind": { "const": "function" } } } } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "macroLibrary" } } },
+      "then": { "properties": { "variables": { "maxItems": 0 }, "graphs": { "items": { "properties": { "kind": { "const": "macro" } } } } } }
+    }
+  ],
   "$defs": {
     "typeRef": {
       "type": "object",
+      "description": "Canonical type: bool, int, float, string, any, wildcard, struct:<Name>, enum:<Name>, object:<Class> or native:<qualified name>. For a map, id is the key type.",
       "required": ["id"],
       "properties": {
         "id": { "type": "string" },
+        "container": { "enum": ["array", "set", "map"] },
+        "valueType": { "$ref": "#/$defs/typeRef", "description": "Value type when container is \"map\"." },
         "nullable": { "type": "boolean" }
+      }
+    },
+    "point": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+    },
+    "variable": {
+      "type": "object",
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "$ref": "#/$defs/typeRef" },
+        "defaultValue": {},
+        "category": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "graphPin": {
+      "type": "object",
+      "required": ["id", "name", "kind"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": { "enum": ["exec", "data"] },
+        "type": { "$ref": "#/$defs/typeRef" },
+        "defaultValue": {}
+      }
+    },
+    "graph": {
+      "type": "object",
+      "required": ["id", "name", "kind", "nodes", "connections"],
+      "properties": {
+        "id": { "type": "string", "description": "Unique within the document." },
+        "name": { "type": "string" },
+        "kind": { "enum": ["event", "function", "macro"] },
+        "signature": {
+          "type": "object",
+          "description": "Inputs and outputs of a function or macro graph; event graphs have none.",
+          "required": ["inputs", "outputs"],
+          "properties": {
+            "inputs": { "type": "array", "items": { "$ref": "#/$defs/graphPin" } },
+            "outputs": { "type": "array", "items": { "$ref": "#/$defs/graphPin" } },
+            "pure": { "type": "boolean" }
+          }
+        },
+        "localVariables": { "type": "array", "items": { "$ref": "#/$defs/variable" } },
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+        "connections": { "type": "array", "items": { "$ref": "#/$defs/connection" } },
+        "comments": { "type": "array", "items": { "$ref": "#/$defs/comment" } }
+      },
+      "if": { "properties": { "kind": { "const": "event" } } },
+      "then": { "not": { "required": ["signature"] } }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "type", "position", "properties"],
+      "properties": {
+        "id": { "type": "string", "description": "Unique within the graph." },
+        "type": { "type": "string" },
+        "position": { "$ref": "#/$defs/point" },
+        "properties": { "type": "object", "description": "Unconnected input defaults are stored as \"pin:<pinId>\"." }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "required": ["id", "fromNode", "fromPin", "toNode", "toPin"],
+      "properties": {
+        "id": { "type": "string" },
+        "fromNode": { "type": "string" },
+        "fromPin": { "type": "string" },
+        "toNode": { "type": "string" },
+        "toPin": { "type": "string" }
+      }
+    },
+    "comment": {
+      "type": "object",
+      "required": ["id", "text", "position", "size"],
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "position": { "$ref": "#/$defs/point" },
+        "size": {
+          "type": "object",
+          "required": ["width", "height"],
+          "properties": { "width": { "type": "number" }, "height": { "type": "number" } }
+        },
+        "color": { "type": "string" }
       }
     }
   }

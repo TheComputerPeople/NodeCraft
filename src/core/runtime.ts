@@ -1,10 +1,13 @@
 import { LanguagePackRegistry } from './language-pack';
 import { DEFAULT_LANGUAGE, builtinLanguagePacks } from './languages';
-import { GraphDefinition, GraphNode, NodeDefinition, RuntimeLogEvent } from './model';
+import { Graph, GraphDocument, GraphNode, NodeDefinition, RuntimeLogEvent } from './model';
 import { NodeRegistry } from './registry';
 
 interface RuntimeContext {
+  // Shared by every graph in the run, like a class's member variables.
   variables: Record<string, unknown>;
+  language: string;
+  graphId: string;
   // Nodes that have run at least once during this execution.
   visited: Set<string>;
   // Nodes currently on the execution call stack; re-entering one is a cycle.
@@ -18,27 +21,38 @@ export class GraphRuntime {
     private readonly languages: LanguagePackRegistry = builtinLanguagePacks()
   ) {}
 
-  run(graph: GraphDefinition): void {
-    const context: RuntimeContext = { variables: {}, visited: new Set(), executing: new Set() };
-    for (const variable of graph.variables) context.variables[variable.name] = variable.defaultValue;
+  // Runs every Start node in the document's event graphs. Function and macro graphs only run when
+  // called, which arrives with Phase 4.
+  run(doc: GraphDocument): void {
+    const variables: Record<string, unknown> = {};
+    for (const variable of doc.variables) variables[variable.name] = variable.defaultValue;
+    const language = doc.language || DEFAULT_LANGUAGE;
 
-    const starts = graph.nodes.filter((n) => n.type === 'core:event.start');
-    if (starts.length === 0) {
+    const entryGraphs = doc.graphs
+      .filter((g) => g.kind === 'event')
+      .map((graph) => ({ graph, starts: graph.nodes.filter((n) => n.type === 'core:event.start') }))
+      .filter((entry) => entry.starts.length > 0);
+    if (entryGraphs.length === 0) {
       this.emit({ kind: 'error', message: 'Graph has no Start node.' });
       return;
     }
 
-    for (const start of starts) {
-      this.executeNode(graph, start, context);
+    for (const { graph, starts } of entryGraphs) {
+      const context: RuntimeContext = { variables, language, graphId: graph.id, visited: new Set(), executing: new Set() };
+      for (const start of starts) this.executeNode(graph, start, context);
     }
     this.emit({ kind: 'graph.complete', message: 'Graph execution completed.' });
   }
 
-  private executeNode(graph: GraphDefinition, node: GraphNode, context: RuntimeContext): void {
+  private report(context: RuntimeContext, event: RuntimeLogEvent): void {
+    this.emit({ graphId: context.graphId, ...event });
+  }
+
+  private executeNode(graph: Graph, node: GraphNode, context: RuntimeContext): void {
     if (context.visited.has(node.id) && node.type !== 'core:flow.sequence') return;
     // Sequence nodes may run more than once, so they are the only way to loop back onto the stack.
     if (context.executing.has(node.id)) {
-      this.emit({ kind: 'error', nodeId: node.id, nodeType: node.type, message: `Execution cycle through ${node.id} was stopped.` });
+      this.report(context, { kind: 'error', nodeId: node.id, nodeType: node.type, message: `Execution cycle through ${node.id} was stopped.` });
       return;
     }
     context.visited.add(node.id);
@@ -50,20 +64,20 @@ export class GraphRuntime {
     }
   }
 
-  private runNode(graph: GraphDefinition, node: GraphNode, context: RuntimeContext): void {
+  private runNode(graph: Graph, node: GraphNode, context: RuntimeContext): void {
     const definition = this.registry.get(node.type);
     if (!definition) {
-      this.emit({ kind: 'error', nodeId: node.id, nodeType: node.type, message: `Unknown node type: ${node.type}` });
+      this.report(context, { kind: 'error', nodeId: node.id, nodeType: node.type, message: `Unknown node type: ${node.type}` });
       return;
     }
 
-    this.emit({ kind: 'node.enter', nodeId: node.id, nodeType: node.type });
+    this.report(context, { kind: 'node.enter', nodeId: node.id, nodeType: node.type });
 
     let exited = false;
     const exit = (values?: Record<string, unknown>): void => {
       if (exited) return;
       exited = true;
-      this.emit({ kind: 'node.exit', nodeId: node.id, nodeType: node.type, values });
+      this.report(context, { kind: 'node.exit', nodeId: node.id, nodeType: node.type, values });
     };
 
     const input = (pinId: string): unknown => this.inputValue(graph, node, pinId, context, new Set());
@@ -90,7 +104,7 @@ export class GraphRuntime {
       }
       case 'print': {
         const value = input('value');
-        this.emit({ kind: 'log', nodeId: node.id, nodeType: node.type, message: String(value ?? '') });
+        this.report(context, { kind: 'log', nodeId: node.id, nodeType: node.type, message: String(value ?? '') });
         exit();
         continueFrom('execOut');
         break;
@@ -112,8 +126,8 @@ export class GraphRuntime {
         break;
       default:
         if (definition.implementation?.kind === 'code') {
-          const fail = (message: string): void => this.emit({ kind: 'error', nodeId: node.id, nodeType: node.type, message });
-          const languageId = graph.language || DEFAULT_LANGUAGE;
+          const fail = (message: string): void => this.report(context, { kind: 'error', nodeId: node.id, nodeType: node.type, message });
+          const languageId = context.language;
           const pack = this.languages.get(languageId);
           if (!pack) {
             fail(`Unknown graph language "${languageId}".`);
@@ -137,10 +151,10 @@ export class GraphRuntime {
             exit(outputPins[0] ? { [outputPins[0].id]: result } : {});
             continueFrom(definition.outputs.find((p) => p.kind === 'exec')?.id ?? 'execOut');
           } catch (error) {
-            this.emit({ kind: 'error', nodeId: node.id, nodeType: node.type, message: error instanceof Error ? error.message : String(error) });
+            this.report(context, { kind: 'error', nodeId: node.id, nodeType: node.type, message: error instanceof Error ? error.message : String(error) });
           }
         } else {
-          this.emit({ kind: 'error', nodeId: node.id, nodeType: node.type, message: `No runtime implementation for ${node.type}.` });
+          this.report(context, { kind: 'error', nodeId: node.id, nodeType: node.type, message: `No runtime implementation for ${node.type}.` });
         }
         break;
     }
@@ -150,7 +164,7 @@ export class GraphRuntime {
 
   // `evaluating` guards against data-only cycles between pure nodes (e.g. two Get Variable
   // nodes feeding each other's Name pin).
-  private inputValue(graph: GraphDefinition, node: GraphNode, pinId: string, context: RuntimeContext, evaluating: Set<string>): unknown {
+  private inputValue(graph: Graph, node: GraphNode, pinId: string, context: RuntimeContext, evaluating: Set<string>): unknown {
     const connection = graph.connections.find((c) => c.toNode === node.id && c.toPin === pinId);
     if (!connection) return node.properties[`pin:${pinId}`];
     const source = graph.nodes.find((n) => n.id === connection.fromNode);
@@ -158,7 +172,7 @@ export class GraphRuntime {
     return this.outputValue(graph, source, connection.fromPin, context, evaluating);
   }
 
-  private outputValue(graph: GraphDefinition, node: GraphNode, pinId: string, context: RuntimeContext, evaluating: Set<string>): unknown {
+  private outputValue(graph: Graph, node: GraphNode, pinId: string, context: RuntimeContext, evaluating: Set<string>): unknown {
     const definition = this.registry.get(node.type);
     if (!definition) return undefined;
     switch (nativeOperation(definition)) {

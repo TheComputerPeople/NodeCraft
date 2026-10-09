@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
 import { NodeRegistry } from '../core/registry';
 import { watchWorkspaceNodeLibraries } from './node-libraries';
-import { createEmptyGraph, serializeGraph } from '../core/serializer';
+import { createEmptyDocument, serializeDocument } from '../core/serializer';
 import { builtinLanguagePacks } from '../core/languages';
 import { detectWorkspaceLanguage } from './languages';
 
@@ -31,8 +31,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const name = target.path.split('/').pop()?.replace(/\.vgraph$/i, '') || 'NewGraph';
       const language = await detectWorkspaceLanguage(languages);
-      const graph = createEmptyGraph(name, language?.id);
-      await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(serializeGraph(graph)));
+      const graphDocument = createEmptyDocument(name, language?.id);
+      await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(serializeDocument(graphDocument)));
       await vscode.commands.executeCommand('vscode.open', target);
     })
   );

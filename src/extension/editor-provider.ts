@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { NodeRegistry } from '../core/registry';
-import { HostMessage, UIMessage, GraphDefinition } from '../core/model';
-import { parseGraph, serializeGraph } from '../core/serializer';
+import { GraphDocument, HostMessage, UIMessage } from '../core/model';
+import { parseDocument, serializeDocument } from '../core/serializer';
 import { GraphRuntime } from '../core/runtime';
 import { createNonce, renderEditorHtml } from './webview-html';
 
@@ -59,20 +59,20 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
           case 'ready': {
             // Definitions are sent even for an unparsable document so the palette still works
             // once the text is fixed; without a graph the webview refuses edits.
-            let graph: GraphDefinition | undefined;
+            let graphDocument: GraphDocument | undefined;
             let parseError: string | undefined;
             try {
-              graph = parseGraph(document.getText(), this.getFallbackName(document));
+              graphDocument = parseDocument(document.getText(), this.getFallbackName(document)).document;
             } catch (error) {
               parseError = `Cannot open graph: ${describeError(error)}`;
             }
-            this.post(webviewPanel, { type: 'init', graph, definitions: this.registry.all(), saveDelay: getSaveDelay() });
+            this.post(webviewPanel, { type: 'init', document: graphDocument, definitions: this.registry.all(), saveDelay: getSaveDelay() });
             if (parseError) this.post(webviewPanel, { type: 'error', message: parseError });
             break;
           }
-          case 'applyGraph': {
-            if (!message.graph) return;
-            const text = serializeGraph(message.graph);
+          case 'applyDocument': {
+            if (!message.document) return;
+            const text = serializeDocument(message.document);
             if (normalizeEol(text) === normalizeEol(document.getText())) break;
             pendingEchoText = normalizeEol(text);
             await this.updateDocument(document, text);
@@ -96,8 +96,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       pendingEchoText = undefined;
       if (isEcho) return;
       try {
-        const parsed = parseGraph(text, this.getFallbackName(event.document));
-        this.post(webviewPanel, { type: 'graphChanged', graph: parsed });
+        const { document: parsed } = parseDocument(text, this.getFallbackName(event.document));
+        this.post(webviewPanel, { type: 'documentChanged', document: parsed });
       } catch (error) {
         // Typical while the file is being edited as text; keep the last good graph on screen.
         this.post(webviewPanel, { type: 'error', message: `Graph document is invalid: ${describeError(error)}` });
@@ -118,9 +118,9 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   private runGraph(document: vscode.TextDocument): void {
-    let graph: GraphDefinition;
+    let graphDocument: GraphDocument;
     try {
-      graph = parseGraph(document.getText(), this.getFallbackName(document));
+      graphDocument = parseDocument(document.getText(), this.getFallbackName(document)).document;
     } catch (error) {
       vscode.window.showErrorMessage(describeError(error));
       return;
@@ -134,7 +134,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       if (event.kind === 'log') output.appendLine(event.message ?? '');
       else if (event.kind === 'error') output.appendLine(`[error] ${event.message ?? ''}`);
     });
-    runtime.run(graph);
+    runtime.run(graphDocument);
   }
 
   private getHtml(webview: vscode.Webview): string {

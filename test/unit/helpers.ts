@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { GraphConnection, GraphDefinition, GraphNode, RuntimeLogEvent } from '../../src/core/model';
+import { Graph, GraphConnection, GraphDocument, GraphNode, GraphVariable, RuntimeLogEvent } from '../../src/core/model';
 import { NodeRegistry } from '../../src/core/registry';
 import { GraphRuntime } from '../../src/core/runtime';
 
@@ -11,8 +11,16 @@ export function readRepoFile(relativePath: string): string {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
-export function graph(nodes: GraphNode[], connections: GraphConnection[], variables: GraphDefinition['variables'] = []): GraphDefinition {
-  return { schemaVersion: 1, name: 'Test', language: 'javascript', variables, nodes, connections };
+// A class document whose event graph holds the given nodes and connections.
+export function doc(nodes: GraphNode[], connections: GraphConnection[], variables: GraphVariable[] = []): GraphDocument {
+  return {
+    schemaVersion: 2, name: 'Test', kind: 'class', language: 'javascript', variables,
+    graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', nodes, connections, comments: [] }]
+  };
+}
+
+export function graphOf(document: GraphDocument): Graph {
+  return document.graphs[0];
 }
 
 export function node(id: string, type: string, properties: Record<string, unknown> = {}): GraphNode {
@@ -23,7 +31,7 @@ export function wire(fromNode: string, fromPin: string, toNode: string, toPin: s
   return { id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin };
 }
 
-export function run(g: GraphDefinition, registry = new NodeRegistry()): RuntimeLogEvent[] {
+export function run(g: GraphDocument, registry = new NodeRegistry()): RuntimeLogEvent[] {
   const events: RuntimeLogEvent[] = [];
   new GraphRuntime(registry, (event) => events.push(event)).run(g);
   return events;

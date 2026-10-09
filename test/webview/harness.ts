@@ -4,9 +4,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Browser, Page, chromium } from 'playwright-core';
-import { GraphDefinition, HostMessage, UIMessage } from '../../src/core/model';
+import { Graph, GraphDocument, HostMessage, UIMessage } from '../../src/core/model';
 import { NodeRegistry, parseNodeDefinition } from '../../src/core/registry';
-import { parseGraph } from '../../src/core/serializer';
+import { parseDocument, primaryGraph } from '../../src/core/serializer';
 import { renderEditorHtml } from '../../src/extension/webview-html';
 
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -36,8 +36,8 @@ function harnessUrl(): string {
   return pathToFileURL(file).href;
 }
 
-export function sampleGraph(): GraphDefinition {
-  return parseGraph(fs.readFileSync(path.join(repoRoot, 'sample/demo.vgraph'), 'utf8'));
+export function sampleDocument(): GraphDocument {
+  return parseDocument(fs.readFileSync(path.join(repoRoot, 'sample/demo.vgraph'), 'utf8')).document;
 }
 
 export function sampleDefinitions() {
@@ -77,7 +77,7 @@ export class EditorPage {
   // Opens the sample graph the way the host does, with saves sent immediately.
   static async withSample(browser: Browser): Promise<EditorPage> {
     const editor = await EditorPage.open(browser);
-    await editor.send({ type: 'init', graph: sampleGraph(), definitions: sampleDefinitions(), saveDelay: 0 });
+    await editor.send({ type: 'init', document: sampleDocument(), definitions: sampleDefinitions(), saveDelay: 0 });
     return editor;
   }
 
@@ -90,11 +90,11 @@ export class EditorPage {
     return this.page.evaluate(() => (window as unknown as { __posted: UIMessage[] }).__posted);
   }
 
-  // The graph from the most recent save, waiting for one to arrive.
-  async lastSavedGraph(): Promise<GraphDefinition> {
-    await this.page.waitForFunction(() => (window as unknown as { __posted: UIMessage[] }).__posted.some((m) => m.type === 'applyGraph'));
-    const saves = (await this.posted()).filter((m) => m.type === 'applyGraph');
-    return saves[saves.length - 1].graph!;
+  // The event graph from the most recent save, waiting for one to arrive.
+  async lastSavedGraph(): Promise<Graph> {
+    await this.page.waitForFunction(() => (window as unknown as { __posted: UIMessage[] }).__posted.some((m) => m.type === 'applyDocument'));
+    const saves = (await this.posted()).filter((m) => m.type === 'applyDocument');
+    return primaryGraph(saves[saves.length - 1].document!);
   }
 
   async pinCenter(nodeId: string, pinId: string): Promise<Point> {

@@ -2,12 +2,12 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as editing from '../../src/core/editing';
 import { NodeRegistry } from '../../src/core/registry';
-import { parseGraph } from '../../src/core/serializer';
-import { graph, node, readRepoFile, wire } from './helpers';
+import { parseDocument, primaryGraph } from '../../src/core/serializer';
+import { doc, graphOf, node, readRepoFile, wire } from './helpers';
 
 const registry = new NodeRegistry();
 const lookup = (type: string) => registry.get(type);
-const sample = () => parseGraph(readRepoFile('sample/demo.vgraph'));
+const sample = () => primaryGraph(parseDocument(readRepoFile('sample/demo.vgraph')).document);
 let nextId = 0;
 const id = () => `id${nextId++}`;
 
@@ -29,7 +29,7 @@ describe('resolveConnection', () => {
   });
 
   test('rejects incompatible data types', () => {
-    const g = graph([node('get', 'core:variable.get'), node('branch', 'core:flow.branch'), node('add', 'core:math.add')], []);
+    const g = graphOf(doc([node('get', 'core:variable.get'), node('branch', 'core:flow.branch'), node('add', 'core:math.add')], []));
     // Branch.condition is bool; Add.result is number.
     assert.equal(editing.resolveConnection(g, lookup, { node: 'add', pin: 'result' }, { node: 'branch', pin: 'condition' }), undefined);
     // Get Variable's value is `any`, which connects to anything.
@@ -119,10 +119,10 @@ describe('deleteNodes / duplicateNodes', () => {
 
 describe('connectedNodeIds', () => {
   test('walks connections in both directions', () => {
-    const g = graph(
+    const g = graphOf(doc(
       [node('a', 'x'), node('b', 'x'), node('c', 'x'), node('lonely', 'x')],
       [wire('a', 'o', 'b', 'i'), wire('c', 'o', 'b', 'i2')]
-    );
+    ));
     assert.deepEqual([...editing.connectedNodeIds(g, 'a')].sort(), ['a', 'b', 'c']);
     assert.deepEqual([...editing.connectedNodeIds(g, 'lonely')], ['lonely']);
   });

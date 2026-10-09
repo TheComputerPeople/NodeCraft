@@ -1,5 +1,5 @@
 import { PinAddress } from '../core/editing';
-import { GraphDefinition, GraphNode, NodeDefinition, PinDirection, PinKind } from '../core/model';
+import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDirection, PinKind } from '../core/model';
 
 export interface Point {
   x: number;
@@ -52,7 +52,9 @@ export type MenuContext =
 
 export interface EditorState {
   // Null until the host sends a parsable document; editing is disabled while null.
-  graph: GraphDefinition | null;
+  document: GraphDocument | null;
+  // The graph on the canvas: one of document.graphs, or null when there is no document.
+  graph: Graph | null;
   definitions: NodeDefinition[];
   defByType: Map<string, NodeDefinition>;
   selectedNodeIds: Set<string>;
@@ -78,6 +80,7 @@ export interface EditorState {
 }
 
 export const state: EditorState = {
+  document: null,
   graph: null,
   definitions: [],
   defByType: new Map(),

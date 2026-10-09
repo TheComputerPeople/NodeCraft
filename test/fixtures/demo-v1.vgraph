@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "name": "BlueprintDemo",
+  "language": "javascript",
+  "variables": [],
+  "nodes": [
+    {
+      "id": "start_1",
+      "type": "core:event.start",
+      "position": { "x": 90, "y": 180 },
+      "properties": {}
+    },
+    {
+      "id": "add_1",
+      "type": "core:math.add",
+      "position": { "x": 390, "y": 145 },
+      "properties": {
+        "pin:a": 10,
+        "pin:b": 20
+      }
+    },
+    {
+      "id": "branch_1",
+      "type": "core:flow.branch",
+      "position": { "x": 700, "y": 145 },
+      "properties": {
+        "pin:condition": true
+      }
+    },
+    {
+      "id": "print_true",
+      "type": "core:console.print",
+      "position": { "x": 1010, "y": 80 },
+      "properties": {
+        "pin:value": "True branch: graph executed."
+      }
+    },
+    {
+      "id": "print_false",
+      "type": "core:console.print",
+      "position": { "x": 1010, "y": 250 },
+      "properties": {
+        "pin:value": "False branch: graph did not execute."
+      }
+    },
+    {
+      "id": "end_true",
+      "type": "core:flow.end",
+      "position": { "x": 1300, "y": 80 },
+      "properties": {}
+    },
+    {
+      "id": "end_false",
+      "type": "core:flow.end",
+      "position": { "x": 1300, "y": 250 },
+      "properties": {}
+    }
+  ],
+  "connections": [
+    { "id": "c1", "fromNode": "start_1", "fromPin": "execOut", "toNode": "add_1", "toPin": "execIn" },
+    { "id": "c2", "fromNode": "add_1", "fromPin": "execOut", "toNode": "branch_1", "toPin": "execIn" },
+    { "id": "c3", "fromNode": "branch_1", "fromPin": "true", "toNode": "print_true", "toPin": "execIn" },
+    { "id": "c4", "fromNode": "branch_1", "fromPin": "false", "toNode": "print_false", "toPin": "execIn" },
+    { "id": "c5", "fromNode": "print_true", "fromPin": "execOut", "toNode": "end_true", "toPin": "execIn" },
+    { "id": "c6", "fromNode": "print_false", "fromPin": "execOut", "toNode": "end_false", "toPin": "execIn" },
+    { "id": "c7", "fromNode": "add_1", "fromPin": "result", "toNode": "print_true", "toPin": "value" }
+  ],
+  "metadata": {
+    "description": "A small Blueprint-style execution/data-flow demo."
+  }
+}

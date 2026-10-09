@@ -1,7 +1,7 @@
 // Webview entry point: wires DOM and host events to the editor modules.
 import { HostMessage, RuntimeLogEvent } from '../core/model';
 import { compatibleDefinitionsForDraft, completeConnection, deleteSelected, finishRewire } from './actions';
-import { applySettings, flushSave, loadGraph, markDirty, setDefinitions } from './document';
+import { applySettings, flushSave, loadDocument, markDirty, setDefinitions } from './document';
 import { dom, eventElement, nodeElement, setStatus } from './dom';
 import { postToHost } from './host';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showNodeContextMenu } from './menus';
@@ -23,14 +23,15 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
     case 'init':
       applySettings(message);
       setDefinitions(message.definitions ?? []);
-      // No graph means the document could not be parsed; editing stays disabled until it can.
-      if (message.graph) loadGraph(message.graph);
+      // No document means the file could not be parsed; editing stays disabled until it can.
+      if (message.document) loadDocument(message.document);
       break;
-    case 'graphChanged': {
+    case 'documentChanged': {
+      if (!message.document) break;
       const hadGraph = !!state.graph;
       const selected = new Set(state.selectedNodeIds);
       const primary = state.selectedNodeId;
-      loadGraph(message.graph, hadGraph);
+      loadDocument(message.document, hadGraph);
       const graph = state.graph;
       if (hadGraph && graph) {
         const exists = (id: string | null): boolean => graph.nodes.some((n) => n.id === id);
@@ -192,7 +193,8 @@ function handleRuntimeEvent(event: RuntimeLogEvent): void {
     clearTimeout(state.runtimeClearTimer);
     state.executedNodeIds.clear();
   }
-  if (event.kind === 'node.enter' && event.nodeId) state.executedNodeIds.add(event.nodeId);
+  // Node ids are only unique within a graph, so only highlight events from the graph on screen.
+  if (event.kind === 'node.enter' && event.nodeId && (!event.graphId || event.graphId === state.graph?.id)) state.executedNodeIds.add(event.nodeId);
   // A graph-level error (no nodeId) ends the run without a graph.complete event.
   if (event.kind === 'graph.complete' || (event.kind === 'error' && !event.nodeId)) {
     state.runActive = false;

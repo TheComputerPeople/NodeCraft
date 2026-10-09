@@ -6,7 +6,7 @@ import { javascriptPack, typescriptPack } from '../../src/core/languages/javascr
 import { NodeRegistry } from '../../src/core/registry';
 import { GraphRuntime } from '../../src/core/runtime';
 import { TypeRef } from '../../src/core/types';
-import { graph, node, run, wire } from './helpers';
+import { doc, node, run, wire } from './helpers';
 
 describe('LanguagePackRegistry.detect', () => {
   const packs = builtinLanguagePacks();
@@ -69,7 +69,7 @@ describe('GraphRuntime language handling', () => {
     return registry;
   };
   const codeGraph = (language: string) => {
-    const g = graph([node('s', 'core:event.start'), node('c', 't.code')], [wire('s', 'execOut', 'c', 'execIn')]);
+    const g = doc([node('s', 'core:event.start'), node('c', 't.code')], [wire('s', 'execOut', 'c', 'execIn')]);
     g.language = language;
     return g;
   };
