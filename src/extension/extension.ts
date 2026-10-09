@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
-import { NodeRegistry, watchWorkspaceNodeLibraries } from './graph/registry';
-import { createEmptyGraph, serializeGraph } from './graph/serializer';
+import { NodeRegistry } from '../core/registry';
+import { watchWorkspaceNodeLibraries } from './node-libraries';
+import { createEmptyGraph, serializeGraph } from '../core/serializer';
 
 export function activate(context: vscode.ExtensionContext): void {
   // Libraries load in the background; open editors receive the updated definitions when ready.
   const registry = new NodeRegistry();
-  context.subscriptions.push(registry, watchWorkspaceNodeLibraries(registry));
+  context.subscriptions.push(watchWorkspaceNodeLibraries(registry));
 
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(

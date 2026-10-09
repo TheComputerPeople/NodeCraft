@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { NodeRegistry } from './graph/registry';
-import { HostMessage, UIMessage, GraphDefinition } from './graph/model';
-import { parseGraph, serializeGraph } from './graph/serializer';
-import { GraphRuntime } from './graph/runtime';
+import { NodeRegistry } from '../core/registry';
+import { HostMessage, UIMessage, GraphDefinition } from '../core/model';
+import { parseGraph, serializeGraph } from '../core/serializer';
+import { GraphRuntime } from '../core/runtime';
 
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
 

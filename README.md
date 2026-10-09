@@ -40,6 +40,16 @@ The TypeScript configuration includes the DOM library definitions because VS Cod
 
 `npm run watch` runs TypeScript in watch mode.
 
+`npm run check` type-checks the extension and the tests without emitting output.
+
+`npm test` runs the unit tests with Node's built-in test runner.
+
+Source layout:
+
+- `src/core/`: the graph model, serializer, node registry and reference runtime. It must not import `vscode` or Node built-ins, so it can be shared with the webview and tested in plain Node (a unit test enforces this).
+- `src/extension/`: VS Code integration (activation, the custom editor, workspace node-library loading).
+- `test/unit/`: unit tests for `src/core`.
+
 The webview editor is intentionally dependency-free in this first project so the repository can be extracted and run without a separate frontend build system.
 
 ## Custom node libraries

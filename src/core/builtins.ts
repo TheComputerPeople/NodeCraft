@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { NodeDefinition, PinDefinition, TypeRef } from './model';
 
 const t = (id: string): TypeRef => ({ id });
@@ -10,99 +9,6 @@ const dataOutput = (id: string, name: string, type: string): PinDefinition => ({
 });
 const execInput = (id = 'execIn'): PinDefinition => ({ id, name: '', kind: 'exec', direction: 'input' });
 const execOutput = (id = 'execOut', name = ''): PinDefinition => ({ id, name, kind: 'exec', direction: 'output' });
-
-const NODE_LIBRARY_GLOB = '**/*.node.json';
-const RELOAD_DEBOUNCE_MS = 200;
-
-export class NodeRegistry implements vscode.Disposable {
-  private readonly definitions = new Map<string, NodeDefinition>();
-  private readonly changeEmitter = new vscode.EventEmitter<void>();
-  readonly onDidChange = this.changeEmitter.event;
-
-  constructor() {
-    this.registerMany(builtinNodeDefinitions());
-  }
-
-  register(definition: NodeDefinition): void {
-    this.definitions.set(definition.type, definition);
-  }
-
-  registerMany(definitions: NodeDefinition[]): void {
-    definitions.forEach((d) => this.register(d));
-  }
-
-  // Replaces every workspace-provided definition; builtins are kept unless a library overrides them.
-  replaceWorkspaceDefinitions(definitions: NodeDefinition[]): void {
-    this.definitions.clear();
-    this.registerMany(builtinNodeDefinitions());
-    this.registerMany(definitions);
-    this.changeEmitter.fire();
-  }
-
-  get(type: string): NodeDefinition | undefined {
-    return this.definitions.get(type);
-  }
-
-  all(): NodeDefinition[] {
-    return [...this.definitions.values()];
-  }
-
-  dispose(): void {
-    this.changeEmitter.dispose();
-  }
-}
-
-export async function readWorkspaceNodeLibraries(): Promise<NodeDefinition[]> {
-  const files = await vscode.workspace.findFiles(NODE_LIBRARY_GLOB, '**/node_modules/**', 500);
-  const definitions: NodeDefinition[] = [];
-  for (const file of files) {
-    try {
-      const bytes = await vscode.workspace.fs.readFile(file);
-      const text = new TextDecoder().decode(bytes);
-      const def = JSON.parse(text) as NodeDefinition;
-      if (def?.type && Array.isArray(def.inputs) && Array.isArray(def.outputs)) {
-        definitions.push(def);
-      }
-    } catch {
-      // Invalid library files are ignored; the editor remains usable.
-    }
-  }
-  return definitions;
-}
-
-// Loads workspace node libraries now and reloads them whenever a library file or the set of
-// workspace folders changes.
-export function watchWorkspaceNodeLibraries(registry: NodeRegistry): vscode.Disposable {
-  let generation = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  const reload = async (): Promise<void> => {
-    const current = ++generation;
-    const definitions = await readWorkspaceNodeLibraries();
-    // A newer reload started while this one was reading; its result wins.
-    if (current === generation) registry.replaceWorkspaceDefinitions(definitions);
-  };
-  const scheduleReload = (): void => {
-    clearTimeout(timer);
-    timer = setTimeout(() => void reload(), RELOAD_DEBOUNCE_MS);
-  };
-
-  const watcher = vscode.workspace.createFileSystemWatcher(NODE_LIBRARY_GLOB);
-  const subscriptions = [
-    watcher,
-    watcher.onDidCreate(scheduleReload),
-    watcher.onDidChange(scheduleReload),
-    watcher.onDidDelete(scheduleReload),
-    vscode.workspace.onDidChangeWorkspaceFolders(scheduleReload)
-  ];
-  void reload();
-
-  return new vscode.Disposable(() => {
-    clearTimeout(timer);
-    generation++;
-    subscriptions.forEach((s) => s.dispose());
-  });
-}
 
 export function builtinNodeDefinitions(): NodeDefinition[] {
   return [
