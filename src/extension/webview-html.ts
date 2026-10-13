@@ -44,11 +44,11 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
       <header><span id="results-title">Compiler Results</span><button id="results-close" title="Close">×</button></header>
       <ul id="results-list"></ul>
     </section>
-    <div id="help">Drag pins to connect. Ctrl+click a wire/pin to rewire; release off a pin to remove. Alt+click breaks connections. Right-click opens a menu. Click-drag the background to box-select; middle-drag pans; wheel zooms.</div>
+    <div id="help">Drag pins to connect · Alt+click a pin breaks its links · Ctrl+drag a pin moves them · Right-click for menus, right-drag to pan · Hold B, S or P and click to place · F7 compiles</div>
   </main>
   <aside id="inspector" class="panel">
-    <div class="panel-title">Inspector</div>
-    <div id="inspector-content" class="muted">Select a node to edit defaults.</div>
+    <div class="panel-title">Details</div>
+    <div id="inspector-content" class="muted">Select a node to see its details.</div>
   </aside>
 </div>
 <script nonce="${nonce}" src="${scriptUri}"></script>

@@ -3,11 +3,12 @@ import { GraphNode, PinDefinition } from '../core/model';
 import { formatType } from '../core/types';
 import { beginRewireFromConnection, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { nodeDiagnostics } from './compile-results';
-import { lookupDefinition } from './document';
-import { dom, escapeHtml, pinElement } from './dom';
+import { lookupDefinition, markDirty, pinDef } from './document';
+import { dom, pinElement } from './dom';
 import { renderInspector } from './panels';
 import { Point, state } from './state';
 import { applyTransform, centerOf, screenPointToWorld } from './view';
+import { headerColor, nodeKind, pinColor } from './style';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -23,13 +24,17 @@ export function render(): void {
 
 function renderNode(node: GraphNode): HTMLElement {
   const def = definitionFor(node, lookupDefinition);
+  const kind = nodeKind(def);
   const el = document.createElement('div');
-  el.className = 'node' + (state.selectedNodeIds.has(node.id) ? ' selected' : '') + (state.executedNodeIds.has(node.id) ? ' executing' : '');
+  el.className = 'node' + (state.selectedNodeIds.has(node.id) ? ' selected' : '') + (state.executedNodeIds.has(node.id) ? ' executing' : '') + (def.compact ? ' compact' : '');
   el.dataset.node = node.id;
+  el.dataset.kind = kind;
   el.draggable = false;
   el.style.left = `${node.position.x}px`;
   el.style.top = `${node.position.y}px`;
-  el.style.setProperty('--node-color', def.color || '#6b7280');
+  el.style.setProperty('--node-color', headerColor(def));
+  // Unreal shows a node's description as a tooltip rather than on the node.
+  if (def.description) el.title = def.description;
 
   // Unreal-style badge for compiler errors and warnings on this node.
   const diagnostics = nodeDiagnostics(node.id);
@@ -43,26 +48,36 @@ function renderNode(node: GraphNode): HTMLElement {
     el.appendChild(badge);
   }
 
-  const header = document.createElement('div');
-  header.className = 'node-header';
-  header.innerHTML = `<span class="node-title">${escapeHtml(def.displayName)}</span><span class="node-type">${escapeHtml(def.category)}</span>`;
-  el.appendChild(header);
+  if (def.compact) {
+    // Variable getters: the variable's name beside its output pin, no title bar.
+    const body = document.createElement('div');
+    body.className = 'compact-body';
+    const title = document.createElement('span');
+    title.className = 'node-title';
+    title.textContent = def.displayName;
+    body.appendChild(title);
+    def.outputs.forEach((pin) => body.appendChild(renderPin(node, pin, false)));
+    el.appendChild(body);
+  } else {
+    const header = document.createElement('div');
+    header.className = 'node-header';
+    const title = document.createElement('span');
+    title.className = 'node-title';
+    title.textContent = def.displayName;
+    header.appendChild(title);
+    el.appendChild(header);
 
-  const body = document.createElement('div');
-  body.className = 'node-body';
-  const left = document.createElement('div');
-  left.className = 'pin-column left';
-  const right = document.createElement('div');
-  right.className = 'pin-column right';
-  def.inputs.forEach((pin) => left.appendChild(renderPin(node, pin)));
-  def.outputs.forEach((pin) => right.appendChild(renderPin(node, pin)));
-  body.append(left, right);
-  el.appendChild(body);
-
-  const footer = document.createElement('div');
-  footer.className = 'node-footer';
-  if (def.description) footer.textContent = def.description;
-  el.appendChild(footer);
+    const body = document.createElement('div');
+    body.className = 'node-body';
+    const left = document.createElement('div');
+    left.className = 'pin-column left';
+    const right = document.createElement('div');
+    right.className = 'pin-column right';
+    def.inputs.forEach((pin) => left.appendChild(renderPin(node, pin, true)));
+    def.outputs.forEach((pin) => right.appendChild(renderPin(node, pin, true)));
+    body.append(left, right);
+    el.appendChild(body);
+  }
 
   // The whole node body is draggable. Pin mousedown stops propagation and therefore
   // remains exclusively responsible for drawing a connection.
@@ -70,20 +85,27 @@ function renderNode(node: GraphNode): HTMLElement {
   return el;
 }
 
-function renderPin(node: GraphNode, pin: PinDefinition): HTMLElement {
+function isConnected(nodeId: string, pinId: string): boolean {
+  return !!state.graph?.connections.some((c) => (c.fromNode === nodeId && c.fromPin === pinId) || (c.toNode === nodeId && c.toPin === pinId));
+}
+
+function renderPin(node: GraphNode, pin: PinDefinition, showLabel: boolean): HTMLElement {
   const row = document.createElement('div');
   row.className = `pin-row ${pin.kind} ${pin.direction}`;
+  const connected = isConnected(node.id, pin.id);
   const label = document.createElement('span');
   label.className = 'pin-label';
-  label.textContent = pin.name || (pin.kind === 'exec' ? '' : pin.id);
+  label.textContent = showLabel ? pin.name || (pin.kind === 'exec' ? '' : pin.id) : '';
 
   const handle = document.createElement('span');
-  handle.className = `pin ${pin.kind}`;
+  handle.className = `pin ${pin.kind}${connected ? ' connected' : ''}`;
   handle.dataset.node = node.id;
   handle.dataset.pin = pin.id;
   handle.dataset.kind = pin.kind;
   handle.dataset.direction = pin.direction;
-  handle.title = pin.kind === 'exec' ? 'Execution pin' : `${pin.name} (${formatType(pin.type)})`;
+  if (pin.type?.container) handle.dataset.container = pin.type.container;
+  handle.style.setProperty('--pin-color', pinColor(pin));
+  handle.title = pin.kind === 'exec' ? 'Execution pin' : `${pin.name || pin.id} (${formatType(pin.type)})`;
   handle.addEventListener('mousedown', (e) => onPinMouseDown(node, pin, e));
   handle.addEventListener('dragstart', (e) => e.preventDefault());
   // Hovering a pin highlights its wires, as in Unreal.
@@ -96,9 +118,45 @@ function renderPin(node: GraphNode, pin: PinDefinition): HTMLElement {
     renderEdges();
   });
 
-  if (pin.direction === 'input') row.append(handle, label);
-  else row.append(label, handle);
+  if (pin.direction === 'input') {
+    row.append(handle, label);
+    const editor = !connected && pin.kind === 'data' ? defaultEditor(node, pin) : undefined;
+    if (editor) row.appendChild(editor);
+  } else {
+    row.append(label, handle);
+  }
   return row;
+}
+
+// Unreal edits an unconnected input's value right on the node: a checkbox for bool, a field for
+// numbers and text. Containers get an editor in a later version.
+function defaultEditor(node: GraphNode, pin: PinDefinition): HTMLInputElement | undefined {
+  const type = pin.type;
+  if (type?.container) return undefined;
+  const key = `pin:${pin.id}`;
+  const value = node.properties[key] ?? pin.defaultValue;
+  const input = document.createElement('input');
+  input.className = 'pin-default';
+  input.dataset.pin = pin.id;
+  input.setAttribute('aria-label', pin.name || pin.id);
+  if (type?.id === 'bool') {
+    input.type = 'checkbox';
+    input.checked = Boolean(value);
+  } else if (type?.id === 'int' || type?.id === 'float') {
+    input.type = 'number';
+    input.step = type.id === 'int' ? '1' : 'any';
+    input.value = value === undefined || value === null ? '0' : String(value);
+  } else {
+    input.type = 'text';
+    input.value = value === undefined || value === null ? '' : String(value);
+  }
+  input.addEventListener('input', () => {
+    node.properties[key] = input.type === 'checkbox' ? input.checked
+      : input.type === 'number' ? (type?.id === 'int' ? Math.trunc(Number(input.value)) : Number(input.value))
+      : input.value;
+    markDirty();
+  });
+  return input;
 }
 
 // `pointer` is the cursor position (client coordinates) while a wire is being dragged.
@@ -116,7 +174,7 @@ export function renderEdges(pointer: Point | null = null): void {
     if (!source || !target) continue;
     const ran = state.executedNodeIds.has(c.fromNode) && state.executedNodeIds.has(c.toNode);
     const hovered = !!hover && ((c.fromNode === hover.node && c.fromPin === hover.pin) || (c.toNode === hover.node && c.toPin === hover.pin));
-    addPath(centerOf(source, rect), centerOf(target, rect), [ran ? 'active' : '', hovered ? 'hover' : ''].join(' ').trim(), c.id);
+    addPath(centerOf(source, rect), centerOf(target, rect), [ran ? 'active' : '', hovered ? 'hover' : ''].join(' ').trim(), wireStyle(c.fromNode, c.fromPin), c.id);
   }
 
   const draft = state.draftConnection;
@@ -124,7 +182,7 @@ export function renderEdges(pointer: Point | null = null): void {
     const source = pinElement(draft.node, draft.pin);
     if (source) {
       const end = screenPointToWorld(pointer ?? { x: draft.startX, y: draft.startY }, rect);
-      addPath(centerOf(source, rect), end, 'draft');
+      addPath(centerOf(source, rect), end, 'draft', wireStyle(draft.node, draft.pin));
     }
   }
 
@@ -135,13 +193,25 @@ export function renderEdges(pointer: Point | null = null): void {
       // The end that stays put: the far pin of each wire being moved.
       const fixed = rewire.side === 'from' ? pinElement(c.toNode, c.toPin) : pinElement(c.fromNode, c.fromPin);
       if (!fixed) continue;
-      if (rewire.side === 'from') addPath(end, centerOf(fixed, rect), 'draft');
-      else addPath(centerOf(fixed, rect), end, 'draft');
+      const style = wireStyle(c.fromNode, c.fromPin);
+      if (rewire.side === 'from') addPath(end, centerOf(fixed, rect), 'draft', style);
+      else addPath(centerOf(fixed, rect), end, 'draft', style);
     }
   }
 }
 
-function addPath(a: Point, b: Point, className = '', connectionId: string | null = null): void {
+interface WireStyle {
+  color: string;
+  exec: boolean;
+}
+
+// A wire takes the color of the pin it leaves, as in Unreal; exec wires are drawn thicker.
+function wireStyle(nodeId: string, pinId: string): WireStyle {
+  const pin = pinDef(nodeId, pinId);
+  return { color: pinColor(pin), exec: pin?.kind === 'exec' };
+}
+
+function addPath(a: Point, b: Point, className: string, style: WireStyle, connectionId: string | null = null): void {
   const d = bezierPath(a, b);
   if (connectionId) {
     // A wide invisible stroke under the visible wire, so wires are easy to click.
@@ -161,7 +231,8 @@ function addPath(a: Point, b: Point, className = '', connectionId: string | null
   }
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('d', d);
-  path.setAttribute('class', `edge ${className}`.trim());
+  path.setAttribute('class', `edge ${style.exec ? 'exec ' : ''}${className}`.trim());
+  path.style.setProperty('--wire-color', style.color);
   path.setAttribute('pointer-events', 'none');
   dom.edges.appendChild(path);
 }

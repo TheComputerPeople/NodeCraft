@@ -223,13 +223,13 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Nodes | Arrow keys move the selection; F2 renames | 🟡 (arrow keys; F2 with comments) | 2 |
 | Nodes | C wraps the selection in a comment | ⬜ | 2 |
 | Nodes | Collapse to function/macro | ⬜ | 4 (needs callable functions) |
-| Nodes | Inline default values on pins | ⬜ (Details only) | 2 |
+| Nodes | Inline default values on pins | ✅ | — |
 | Nodes | Add-pin (+) on Sequence | ⬜ | 2 |
 | Nodes | Make Array, wildcard pins, split struct pins | ⬜ | 4 (needs container and struct operations) |
 | Nodes | Automatic conversion nodes | ⬜ | 2 |
-| Visuals | Exec pins white arrows, data pins and wires colored by type | 🟡 | 2 |
-| Visuals | Title styles for event/function/pure/macro | ⬜ | 2 |
-| Panels | Details panel | 🟡 (named Inspector) | 2 |
+| Visuals | Exec pins white arrows, data pins and wires colored by type | ✅ | — |
+| Visuals | Title styles for event/function/pure/macro; compact variable getters | ✅ | — |
+| Panels | Details panel | 🟡 (node details; variable settings come with My Blueprint) | 2 |
 | Panels | My Blueprint panel, graph tabs | ⬜ | 2 |
 | Variables | Get/Set nodes bound to a variable | ✅ | — |
 | Variables | Ctrl-drag → Get, Alt-drag → Set, drag onto a pin | ⬜ | 2 |

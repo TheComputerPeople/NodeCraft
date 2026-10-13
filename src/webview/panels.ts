@@ -1,9 +1,10 @@
 // The node palette (left) and the Details panel (right).
 import { definitionFor } from '../core/editing';
 import { formatType } from '../core/types';
-import { addNode, deleteSelected } from './actions';
-import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText } from './document';
+import { addNode } from './actions';
+import { PaletteEntry, lookupDefinition, paletteEntries, searchText } from './document';
 import { dom, escapeHtml } from './dom';
+import { headerColor } from './style';
 import { state } from './state';
 import { screenToWorld } from './view';
 
@@ -27,7 +28,7 @@ export function renderPalette(): void {
       const def = entry.definition;
       const button = document.createElement('button');
       button.className = 'palette-node';
-      button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(def.color || '#6b7280')}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.description || '')}</small></span>`;
+      button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(headerColor(def))}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.description || '')}</small></span>`;
       button.addEventListener('mousedown', (e) => {
         e.preventDefault();
         const rect = dom.canvasWrap.getBoundingClientRect();
@@ -39,56 +40,32 @@ export function renderPalette(): void {
   });
 }
 
+// The Details panel: what the selected node is. Pin values are edited on the node itself, as in
+// Unreal; variable settings appear here with the My Blueprint panel.
 export function renderInspector(): void {
   const graph = state.graph;
   const node = graph?.nodes.find((n) => n.id === state.selectedNodeId);
   if (!graph || !node) {
     dom.inspector.innerHTML = state.selectedNodeIds.size > 1
-      ? `<div class="muted">${state.selectedNodeIds.size} nodes selected.</div>`
-      : '<div class="muted">Select a node to edit defaults.</div>';
+      ? `<div class="muted details-empty">${state.selectedNodeIds.size} nodes selected.</div>`
+      : '<div class="muted details-empty">Select a node to see its details.</div>';
     return;
   }
   const def = definitionFor(node, lookupDefinition);
   const wrapper = document.createElement('div');
-  wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(def.displayName)}</div><div class="muted inspector-type">${escapeHtml(node.type)}</div>`;
-  const group = document.createElement('div');
-  group.className = 'inspector-fields';
-  for (const pin of def.inputs.filter((p) => p.kind === 'data')) {
-    const key = `pin:${pin.id}`;
-    const typeId = pin.type?.id;
-    const row = document.createElement('label');
-    row.className = 'field';
-    const text = document.createElement('span');
-    text.textContent = `${pin.name} (${formatType(pin.type)})`;
-    const input = document.createElement('input');
-    // A connected input takes its value from the wire, so its default is not editable.
-    input.disabled = graph.connections.some((c) => c.toNode === node.id && c.toPin === pin.id);
-    const value = node.properties[key] ?? '';
-    if (pin.type?.container) {
-      // Container defaults get a proper editor in Phase 2; until then they are read-only here.
-      input.type = 'text';
-      input.value = JSON.stringify(value);
-      input.disabled = true;
-    } else if (typeId === 'bool') {
-      input.type = 'checkbox';
-      input.checked = Boolean(value);
-    } else {
-      input.type = typeId === 'int' || typeId === 'float' ? 'number' : 'text';
-      input.value = String(value);
+  wrapper.className = 'details';
+  wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(def.displayName)}</div>`
+    + `<div class="muted inspector-type">${escapeHtml(def.category)} · ${escapeHtml(node.type)}</div>`
+    + (def.description ? `<p class="details-description">${escapeHtml(def.description)}</p>` : '');
+  const pins = [...def.inputs, ...def.outputs].filter((p) => p.kind === 'data');
+  if (pins.length) {
+    const list = document.createElement('dl');
+    list.className = 'details-pins';
+    for (const pin of pins) {
+      list.insertAdjacentHTML('beforeend', `<dt>${escapeHtml(pin.name || pin.id)}</dt><dd>${pin.direction === 'input' ? 'Input' : 'Output'} · ${escapeHtml(formatType(pin.type))}</dd>`);
     }
-    input.addEventListener('input', () => {
-      node.properties[key] = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
-      markDirty();
-    });
-    row.append(text, input);
-    group.appendChild(row);
+    wrapper.appendChild(list);
   }
-  wrapper.appendChild(group);
-  const deleteButton = document.createElement('button');
-  deleteButton.className = 'danger';
-  deleteButton.textContent = state.selectedNodeIds.size > 1 ? `Delete ${state.selectedNodeIds.size} Nodes` : 'Delete Node';
-  deleteButton.addEventListener('click', deleteSelected);
-  wrapper.appendChild(deleteButton);
   dom.inspector.innerHTML = '';
   dom.inspector.appendChild(wrapper);
 }

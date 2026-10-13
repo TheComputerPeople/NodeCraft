@@ -4,6 +4,7 @@ import { PinKind } from '../core/model';
 import { addNode, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected } from './actions';
 import { PaletteEntry, lookupDefinition, searchText } from './document';
 import { dom, escapeHtml } from './dom';
+import { headerColor } from './style';
 import { selectConnected } from './selection';
 import { Point, state } from './state';
 import { centerOnNode } from './view';
@@ -50,7 +51,7 @@ function renderContextNodeResults(query: string): void {
     const def = entry.definition;
     const button = document.createElement('button');
     button.className = 'context-node';
-    button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(def.color || '#6b7280')}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.category)}</small></span>`;
+    button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(headerColor(def))}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.category)}</small></span>`;
     button.addEventListener('mousedown', (e) => {
       e.preventDefault();
       const id = addNode(entry.type, context.position, entry.properties);
