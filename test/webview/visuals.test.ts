@@ -99,7 +99,7 @@ describe('Unreal visual language', () => {
     const e = await open(t);
     if (!e) return;
     await e.page.click('.node[data-node="add_1"] .node-header');
-    assert.equal(await e.page.textContent('.panel-title >> nth=1'), 'Details');
+    assert.equal(await e.page.textContent('#inspector .panel-title'), 'Details');
     assert.equal(await e.page.textContent('.inspector-name'), 'Add');
     assert.match(await e.page.textContent('.details-description') ?? '', /Add two numbers/);
     assert.deepEqual(await e.page.$$eval('.details-pins dt', (els) => els.map((el) => el.textContent)), ['A', 'B', 'Result']);

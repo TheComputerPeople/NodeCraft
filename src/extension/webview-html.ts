@@ -19,11 +19,19 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
 </head>
 <body>
 <div id="app">
-  <aside id="palette" class="panel">
-    <div class="panel-title">Nodes</div>
-    <input id="search" class="search" placeholder="Search nodes…" aria-label="Search nodes">
-    <div id="categories"></div>
+  <aside id="left" class="panel">
+    <section id="my-blueprint" aria-label="My Blueprint">
+      <div class="panel-title">My Blueprint</div>
+      <div id="mb-sections"></div>
+    </section>
+    <section id="palette" aria-label="Palette">
+      <div class="panel-title">Palette</div>
+      <input id="search" class="search" placeholder="Search nodes…" aria-label="Search nodes">
+      <div id="categories"></div>
+    </section>
   </aside>
+  <div id="floating-menu" class="floating-menu" hidden></div>
+  <div id="drag-ghost" hidden></div>
   <main id="workspace">
     <div id="toolbar">
       <button id="compile" class="compile-button" data-state="unknown" title="Compile the graph to its target language"><span class="compile-icon" aria-hidden="true"></span>Compile</button>

@@ -13,7 +13,7 @@ body.vscode-light { --exec-color: #2b2b2b; --node-bg: color-mix(in srgb, var(--v
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; color: var(--fg); background: var(--bg); font-family: var(--vscode-font-family); font-size: 12px; }
 button, input { font: inherit; color: inherit; }
-#app { display: grid; grid-template-columns: 230px 1fr 250px; height: 100vh; }
+#app { display: grid; grid-template-columns: 240px 1fr 260px; height: 100vh; }
 .panel { background: var(--panel); border-right: 1px solid var(--panel-border); overflow: auto; }
 #inspector { border-right: 0; border-left: 1px solid var(--panel-border); }
 .panel-title { padding: 11px 12px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; font-size: 11px; }
@@ -89,7 +89,7 @@ button, input { font: inherit; color: inherit; }
 .context-separator { height: 1px; background: var(--panel-border); margin: 5px 0; }
 .context-danger { color: var(--vscode-errorForeground); }
 .muted { color: var(--muted); }
-.inspector-type { font-size: 10px; margin-top: 3px; word-break: break-all; }
+.inspector-type { font-size: 10px; margin-top: 3px; padding: 0 12px; word-break: break-all; }
 .inspector-name { padding: 0 12px; font-weight: 700; font-size: 14px; }
 .details-empty { padding: 0 12px; }
 .details-description { padding: 0 12px; margin: 10px 0; line-height: 1.4; }
@@ -134,3 +134,34 @@ button, input { font: inherit; color: inherit; }
 .node-badge { position: absolute; top: -11px; right: 8px; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 800; letter-spacing: .04em; color: #fff; }
 .node-badge.error { background: var(--vscode-errorForeground); }
 .node-badge.warning { background: var(--vscode-editorWarning-foreground); color: #000; }
+
+/* Left column: My Blueprint above the Palette, as in Unreal's default layout. */
+#left { display: grid; grid-template-rows: minmax(140px, 46%) minmax(0, 1fr); overflow: hidden; padding: 0; }
+#my-blueprint, #palette { overflow: auto; min-height: 0; }
+#palette { border-top: 1px solid var(--panel-border); }
+.mb-section { margin-bottom: 6px; }
+.mb-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 4px 12px; color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+.mb-header button { border: 0; background: transparent; color: var(--fg); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; border-radius: 3px; }
+.mb-header button:hover { background: var(--vscode-list-hoverBackground); }
+.mb-header button:disabled { opacity: .4; cursor: default; }
+.mb-item { display: flex; align-items: center; gap: 7px; padding: 3px 12px 3px 20px; cursor: pointer; user-select: none; }
+.mb-item:hover { background: var(--vscode-list-hoverBackground); }
+.mb-item.active, .mb-item.selected { background: var(--vscode-list-activeSelectionBackground, color-mix(in srgb, var(--accent) 35%, transparent)); color: var(--vscode-list-activeSelectionForeground, var(--fg)); }
+.mb-item .mb-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-item .mb-type { color: var(--muted); font-size: 10px; }
+.mb-item .mb-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pin-color); flex: 0 0 auto; }
+.mb-item .mb-dot[data-container="array"] { border-radius: 2px; }
+.mb-item input { flex: 1 1 auto; min-width: 0; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--accent); padding: 0 3px; }
+.mb-empty { padding: 2px 12px 2px 20px; color: var(--muted); font-style: italic; }
+.floating-menu { position: fixed; z-index: 30; min-width: 150px; padding: 4px; background: var(--vscode-menu-background, var(--vscode-quickInput-background)); color: var(--vscode-menu-foreground, var(--fg)); border: 1px solid var(--panel-border); border-radius: 5px; box-shadow: 0 8px 26px rgba(0,0,0,.35); }
+.floating-menu[hidden] { display: none; }
+.floating-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
+.floating-menu button:hover { background: var(--vscode-list-hoverBackground); }
+.floating-menu .danger-item { color: var(--vscode-errorForeground); }
+#drag-ghost { position: fixed; z-index: 40; pointer-events: none; padding: 2px 8px; border-radius: 10px; background: var(--node-bg); border: 1px solid var(--pin-color, var(--fg)); color: var(--fg); font-size: 11px; transform: translate(10px, 10px); }
+#drag-ghost[hidden] { display: none; }
+/* Variable settings in the Details panel. */
+.details-fields { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.details-fields .field select, .details-fields .field textarea { width: 100%; padding: 5px 6px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--panel-border)); border-radius: 3px; font: inherit; }
+.details-fields .type-row { display: flex; gap: 6px; }
+.details-fields .field input[type="checkbox"] { width: auto; }

@@ -99,6 +99,12 @@ export interface EditorState {
   hoverPin: PinAddress | null;
   // A placement key held down (B, S, P, ...): clicking the canvas places that node.
   heldKey: string | null;
+  // The variable selected in My Blueprint (its settings show in Details), if any.
+  selectedVariableId: string | null;
+  // A variable being dragged from My Blueprint onto the canvas.
+  variableDrag: { variableId: string; startX: number; startY: number; moved: boolean } | null;
+  // The view (pan and zoom) last used for each graph, restored when switching back.
+  viewByGraph: Map<string, { pan: Point; zoom: number }>;
 }
 
 export const state: EditorState = {
@@ -127,5 +133,8 @@ export const state: EditorState = {
   compile: null,
   compileState: 'unknown',
   hoverPin: null,
-  heldKey: null
+  heldKey: null,
+  selectedVariableId: null,
+  variableDrag: null,
+  viewByGraph: new Map()
 };

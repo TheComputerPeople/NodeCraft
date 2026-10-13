@@ -5,6 +5,7 @@ import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, 
 import { applySettings, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
 import { dom, eventElement, nodeElement, setStatus } from './dom';
 import { postToHost } from './host';
+import { finishVariableDrag, removeVariable, startRename, updateVariableDrag } from './my-blueprint';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showNodeContextMenu } from './menus';
 import { renderPalette } from './panels';
 import { render, renderEdges, scheduleRuntimePaint } from './render';
@@ -101,6 +102,12 @@ document.addEventListener('keydown', (e) => {
   if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedNodeIds.size) {
     deleteSelected();
     e.preventDefault();
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedVariableId) {
+    removeVariable(state.selectedVariableId);
+    e.preventDefault();
+  } else if (e.key === 'F2' && state.selectedVariableId) {
+    startRename('variable', state.selectedVariableId);
+    e.preventDefault();
   } else if (mod && key === 'a') {
     selectAllNodes();
     e.preventDefault();
@@ -174,6 +181,10 @@ dom.canvasWrap.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mouseup', (e) => {
+  if (state.variableDrag) {
+    finishVariableDrag(e);
+    return;
+  }
   const panning = state.panning;
   if (panning) {
     state.panning = null;
@@ -211,6 +222,10 @@ window.addEventListener('mouseup', (e) => {
 });
 
 window.addEventListener('mousemove', (e) => {
+  if (state.variableDrag) {
+    updateVariableDrag(e);
+    return;
+  }
   const panning = state.panning;
   if (panning) {
     const dx = e.clientX - panning.startX;

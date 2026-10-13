@@ -229,12 +229,12 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Nodes | Automatic conversion nodes | ⬜ | 2 |
 | Visuals | Exec pins white arrows, data pins and wires colored by type | ✅ | — |
 | Visuals | Title styles for event/function/pure/macro; compact variable getters | ✅ | — |
-| Panels | Details panel | 🟡 (node details; variable settings come with My Blueprint) | 2 |
-| Panels | My Blueprint panel, graph tabs | ⬜ | 2 |
+| Panels | Details panel (node details, variable settings) | ✅ | — |
+| Panels | My Blueprint panel: graphs, functions, macros, variables | ✅ (event dispatchers and local variables need Phase 4) | — |
 | Variables | Get/Set nodes bound to a variable | ✅ | — |
-| Variables | Ctrl-drag → Get, Alt-drag → Set, drag onto a pin | ⬜ | 2 |
+| Variables | Ctrl-drag → Get, Alt-drag → Set, drag onto a pin | ✅ | — |
 | Variables | Promote pin to variable | ⬜ | 2 |
-| Variables | Container types (array/set/map) | 🟡 (types and schema; no UI) | 2 |
+| Variables | Container types (array/set/map) | 🟡 (type picker; container defaults and operations need Phase 4) | 4 |
 | Search | Find in Blueprint (Ctrl+F) / Find in All Blueprints (Ctrl+Shift+F) | ⬜ | 2 |
 | Compile | Compile button, Compiler Results, error badges on nodes | ✅ | — |
 | Compile | F7 compiles | ✅ | — |

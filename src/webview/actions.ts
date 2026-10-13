@@ -5,6 +5,7 @@ import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } fro
 import { dom, eventElement, pinElement, setStatus } from './dom';
 import { newConnectionId } from './host';
 import { hideContextMenu } from './menus';
+import { renderMyBlueprint } from './my-blueprint';
 import { renderInspector } from './panels';
 import { render, renderEdges, syncSelectionClasses } from './render';
 import { selectNode } from './selection';
@@ -107,6 +108,10 @@ export function onNodeMouseDown(node: GraphNode, e: MouseEvent): void {
   const target = eventElement(e);
   if (target?.closest('.pin') || target?.closest('input, select, textarea')) return;
   hideContextMenu();
+  if (state.selectedVariableId) {
+    state.selectedVariableId = null;
+    renderMyBlueprint();
+  }
   const toggle = e.ctrlKey || e.metaKey;
   if (toggle && state.selectedNodeIds.has(node.id)) {
     selectNode(node.id, true);

@@ -6,6 +6,7 @@ import { primaryGraph } from '../core/serializer';
 import { markCompileDirty, renderLanguagePicker } from './compile-results';
 import { dom, setStatus } from './dom';
 import { postToHost } from './host';
+import { renderMyBlueprint } from './my-blueprint';
 import { renderPalette } from './panels';
 import { render } from './render';
 import { state } from './state';
@@ -75,6 +76,7 @@ export function loadDocument(doc: GraphDocument, preserveView = false): void {
   renderLanguagePicker();
   // Variables may have changed, and the palette lists one Get and Set entry per variable.
   renderPalette();
+  renderMyBlueprint();
   state.dirty = false;
   if (!preserveView) {
     state.pan = { x: 40, y: 40 };
@@ -112,5 +114,6 @@ export function flushSave(): void {
   clearTimeout(state.saveTimer);
   state.dirty = false;
   postToHost({ type: 'applyDocument', document: state.document });
-  setStatus('Saved');
+  // Don't hide a message an action just showed (e.g. "Deleted Health and 2 nodes").
+  if (dom.status.textContent === 'Unsaved changes') setStatus('Saved');
 }
