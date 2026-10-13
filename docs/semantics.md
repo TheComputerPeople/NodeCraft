@@ -37,8 +37,8 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 ## Variables
 
 - Member variables start at their declared default, else their type's default.
-- Set Variable and Get Variable name the variable with their `Name` input. For code generation the name must be typed on the node, not wired, because generated code reads and writes a fixed member. (Unreal binds variable nodes to a variable in the editor; dedicated variable nodes arrive with the My Blueprint panel in Phase 2.)
-- Using a variable that isn't declared creates it with type `any` and a null starting value. The compiler warns when this happens.
+- Get and Set nodes are bound to one declared variable, as in Unreal, and take its name and type. Get is pure: it reads the variable wherever its value is used. Set assigns its input and outputs the variable's new value.
+- Nodes refer to the variable by id, so renaming a variable keeps its nodes bound. A node whose variable is missing (deleted, or never bound) is a compile error, and Simulate stops with an error when it reaches one.
 
 ## Code nodes
 

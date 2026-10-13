@@ -1,7 +1,7 @@
 // User actions that change the graph, plus the pointer gestures that lead to them.
 import * as editing from '../core/editing';
 import { GraphNode, PinDefinition } from '../core/model';
-import { lookupDefinition, markDirty, pinDef } from './document';
+import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } from './document';
 import { dom, eventElement, pinElement, setStatus } from './dom';
 import { newConnectionId } from './host';
 import { hideContextMenu } from './menus';
@@ -11,9 +11,11 @@ import { selectNode } from './selection';
 import { Point, state } from './state';
 import { centerOf, screenPointToWorld, screenToWorld } from './view';
 
-export function addNode(type: string, position: Point): string | null {
+// `properties` presets the node, e.g. the variable a Get/Set node is bound to.
+export function addNode(type: string, position: Point, properties: Record<string, unknown> = {}): string | null {
   if (!state.graph) return null;
-  const node = editing.createNode(type, lookupDefinition(type), position, editing.nodeIdFor(type));
+  const definition = lookupDefinition({ id: '', type, position, properties });
+  const node = editing.createNode(type, definition, position, editing.nodeIdFor(type), properties);
   state.graph.nodes.push(node);
   state.selectedNodeIds = new Set([node.id]);
   state.selectedNodeId = node.id;
@@ -82,10 +84,11 @@ export function connectNewNode(newNodeId: string, source: editing.PinAddress): v
   render();
 }
 
-export function compatibleDefinitionsForDraft(): ReturnType<typeof editing.compatibleDefinitions> {
+// Palette entries that could take a wire dragged out of the draft's pin.
+export function compatibleEntriesForDraft(): PaletteEntry[] {
   const draft = state.draftConnection;
   const source = draft && pinDef(draft.node, draft.pin);
-  return source ? editing.compatibleDefinitions(state.definitions, source) : [];
+  return source ? paletteEntries().filter((entry) => editing.matchingPin(entry.definition, source)) : [];
 }
 
 export function completeConnection(targetNodeId: string, targetPinId: string): void {

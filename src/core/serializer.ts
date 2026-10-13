@@ -1,8 +1,8 @@
 import { DEFAULT_LANGUAGE } from './languages';
-import { DEFAULT_EVENT_GRAPH_ID, isV1Document, migrateV1ToV2 } from './migrations';
+import { DEFAULT_EVENT_GRAPH_ID, isV1Document, migrateV1ToV2, migrateV2ToV3 } from './migrations';
 import { DocumentKind, Graph, GraphDocument, GraphKind } from './model';
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export interface ParsedDocument {
   document: GraphDocument;
@@ -44,11 +44,15 @@ export function parseDocument(text: string, fallbackName = 'NewGraph'): ParsedDo
   if (version > CURRENT_SCHEMA_VERSION) {
     throw new Error(`This graph uses schema version ${version}, which is newer than this extension supports (${CURRENT_SCHEMA_VERSION}). Update the extension to open it.`);
   }
+  // Each migration step upgrades by one version, so older files pass through every step.
+  let raw: Record<string, unknown> = parsed;
   if (version === 1) {
     if (!isV1Document(parsed)) throw new Error('Invalid .vgraph document: expected nodes and connections arrays.');
-    return { document: normalizeDocument(migrateV1ToV2(parsed, fallbackName), fallbackName), migratedFrom: 1 };
+    raw = migrateV1ToV2(parsed, fallbackName);
   }
-  return { document: normalizeDocument(parsed, fallbackName) };
+  const document = normalizeDocument(raw, fallbackName);
+  if (version < 3) return { document: migrateV2ToV3(document), migratedFrom: version };
+  return { document };
 }
 
 const DOCUMENT_KINDS: DocumentKind[] = ['class', 'functionLibrary', 'macroLibrary'];

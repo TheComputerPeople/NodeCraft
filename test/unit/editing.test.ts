@@ -1,12 +1,13 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as editing from '../../src/core/editing';
+import { GraphNode } from '../../src/core/model';
 import { NodeRegistry } from '../../src/core/registry';
 import { parseDocument, primaryGraph } from '../../src/core/serializer';
 import { doc, graphOf, node, readRepoFile, wire } from './helpers';
 
 const registry = new NodeRegistry();
-const lookup = (type: string) => registry.get(type);
+const lookup = (n: GraphNode) => registry.get(n.type);
 const sample = () => primaryGraph(parseDocument(readRepoFile('sample/demo.vgraph')).document);
 let nextId = 0;
 const id = () => `id${nextId++}`;

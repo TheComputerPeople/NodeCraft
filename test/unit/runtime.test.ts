@@ -90,43 +90,53 @@ describe('GraphRuntime: control flow', () => {
 });
 
 describe('GraphRuntime: variables', () => {
-  test('Get Variable follows a wired Name pin', () => {
+  const score = { id: 'v_score', name: 'Score', type: { id: 'int' }, defaultValue: 0 };
+
+  test('Set and Get nodes read and write the variable they are bound to', () => {
     const events = run(doc(
-      [node('s', 'core:event.start'), node('set', 'core:variable.set', { 'pin:name': 'Score', 'pin:value': 42 }),
-        node('key', 'core:variable.get', { 'pin:name': 'Key' }), node('get', 'core:variable.get', { 'pin:name': 'Wrong' }),
-        node('p', 'core:console.print')],
-      [wire('s', 'execOut', 'set', 'execIn'), wire('set', 'execOut', 'p', 'execIn'),
-        wire('key', 'value', 'get', 'name'), wire('get', 'value', 'p', 'value')],
-      [{ id: 'v1', name: 'Key', type: { id: 'string' }, defaultValue: 'Score' }]
+      [node('s', 'core:event.start'), node('set', 'core:variable.set', { variable: 'v_score', 'pin:value': 42 }),
+        node('get', 'core:variable.get', { variable: 'v_score' }), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'set', 'execIn'), wire('set', 'execOut', 'p', 'execIn'), wire('get', 'value', 'p', 'value')],
+      [score]
     ));
     assert.deepEqual(logs(events), ['42']);
   });
 
-  test('a data cycle between Get Variable nodes is reported and stops the run', () => {
+  test("a Set node's output is the variable's new value", () => {
     const events = run(doc(
-      [node('s', 'core:event.start'), node('a', 'core:variable.get'), node('b', 'core:variable.get'), node('p', 'core:console.print')],
-      [wire('s', 'execOut', 'p', 'execIn'), wire('a', 'value', 'b', 'name'), wire('b', 'value', 'a', 'name'), wire('a', 'value', 'p', 'value')]
+      [node('s', 'core:event.start'), node('set', 'core:variable.set', { variable: 'v_score', 'pin:value': 7 }), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'set', 'execIn'), wire('set', 'execOut', 'p', 'execIn'), wire('set', 'value', 'p', 'value')],
+      [score]
     ));
-    assert.ok(events.some((e) => e.kind === 'error' && /Data cycle/.test(e.message ?? '')));
-    assert.deepEqual(logs(events), []);
+    assert.deepEqual(logs(events), ['7']);
   });
 
-  test('an undeclared variable reads as null until set', () => {
-    const events = run(doc(
-      [node('s', 'core:event.start'), node('get', 'core:variable.get', { 'pin:name': 'Missing' }), node('p', 'core:console.print')],
-      [wire('s', 'execOut', 'p', 'execIn'), wire('get', 'value', 'p', 'value')]
-    ));
-    assert.deepEqual(logs(events), ['']);
+  test('nodes stay bound when the variable is renamed', () => {
+    const d = doc(
+      [node('s', 'core:event.start'), node('get', 'core:variable.get', { variable: 'v_score' }), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'p', 'execIn'), wire('get', 'value', 'p', 'value')],
+      [{ ...score, name: 'Points', defaultValue: 5 }]
+    );
+    assert.deepEqual(logs(run(d)), ['5']);
   });
 
   test('declared variables start at their default, else their type default', () => {
     const events = run(doc(
-      [node('s', 'core:event.start'), node('g1', 'core:variable.get', { 'pin:name': 'Lives' }), node('g2', 'core:variable.get', { 'pin:name': 'Alive' }),
+      [node('s', 'core:event.start'), node('g1', 'core:variable.get', { variable: 'v1' }), node('g2', 'core:variable.get', { variable: 'v2' }),
         node('p1', 'core:console.print'), node('p2', 'core:console.print')],
       [wire('s', 'execOut', 'p1', 'execIn'), wire('p1', 'execOut', 'p2', 'execIn'), wire('g1', 'value', 'p1', 'value'), wire('g2', 'value', 'p2', 'value')],
       [{ id: 'v1', name: 'Lives', type: { id: 'int' }, defaultValue: 3 }, { id: 'v2', name: 'Alive', type: { id: 'bool' } }]
     ));
     assert.deepEqual(logs(events), ['3', 'false']);
+  });
+
+  test('a variable node without a variable stops the run with an error', () => {
+    const events = run(doc(
+      [node('s', 'core:event.start'), node('get', 'core:variable.get'), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'p', 'execIn'), wire('get', 'value', 'p', 'value')]
+    ));
+    assert.ok(events.some((e) => e.kind === 'error' && /has no variable/.test(e.message ?? '')));
+    assert.deepEqual(logs(events), []);
   });
 });
 
@@ -215,10 +225,11 @@ describe('GraphRuntime: documents', () => {
   });
 
   test('member variables are shared across event graphs', () => {
-    const d = doc([node('s', 'core:event.start'), node('set', 'core:variable.set', { 'pin:name': 'Score', 'pin:value': 7 })], [wire('s', 'execOut', 'set', 'execIn')]);
+    const d = doc([node('s', 'core:event.start'), node('set', 'core:variable.set', { variable: 'v_score', 'pin:value': 7 })], [wire('s', 'execOut', 'set', 'execIn')],
+      [{ id: 'v_score', name: 'Score', type: { id: 'int' } }]);
     d.graphs.push({
       id: 'Reader', name: 'Reader', kind: 'event', comments: [],
-      nodes: [node('s', 'core:event.start'), node('get', 'core:variable.get', { 'pin:name': 'Score' }), node('p', 'core:console.print')],
+      nodes: [node('s', 'core:event.start'), node('get', 'core:variable.get', { variable: 'v_score' }), node('p', 'core:console.print')],
       connections: [wire('s', 'execOut', 'p', 'execIn'), wire('get', 'value', 'p', 'value')]
     });
     assert.deepEqual(logs(run(d)), ['7']);

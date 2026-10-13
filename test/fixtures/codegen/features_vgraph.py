@@ -15,7 +15,7 @@ class Features:
         self._double_result: float = 0
 
     def start(self) -> None:
-        # Set Variable (set_score)
+        # Set Score (set_score)
         self.Score = 5
         # Print (print_score)
         print(_format_value(self.Score))

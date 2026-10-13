@@ -1,8 +1,8 @@
 // Webview entry point: wires DOM and host events to the editor modules.
 import { HostMessage, RuntimeLogEvent } from '../core/model';
-import { addNode, compatibleDefinitionsForDraft, completeConnection, deleteSelected, duplicateSelected, finishRewire, moveSelection } from './actions';
+import { addNode, compatibleEntriesForDraft, completeConnection, deleteSelected, duplicateSelected, finishRewire, moveSelection } from './actions';
 import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, setLanguage, showCompileResult } from './compile-results';
-import { applySettings, flushSave, loadDocument, markDirty, setDefinitions } from './document';
+import { applySettings, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
 import { dom, eventElement, nodeElement, setStatus } from './dom';
 import { postToHost } from './host';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showNodeContextMenu } from './menus';
@@ -148,7 +148,7 @@ function openContextMenu(nodeId: string | null, clientX: number, clientY: number
     else setPrimarySelection(nodeId);
     showNodeContextMenu(nodeId, clientX, clientY);
   } else {
-    showAddNodeMenu(screenToWorld(clientX, clientY), clientX, clientY, state.definitions, 'Add Node');
+    showAddNodeMenu(screenToWorld(clientX, clientY), clientX, clientY, paletteEntries(), 'Add Node');
   }
 }
 
@@ -202,7 +202,7 @@ window.addEventListener('mouseup', (e) => {
       completeConnection(targetPin.dataset.node ?? '', targetPin.dataset.pin ?? '');
     } else {
       // Released on empty space: offer nodes that can connect to the dragged pin.
-      showAddNodeMenu(screenToWorld(e.clientX, e.clientY), e.clientX, e.clientY, compatibleDefinitionsForDraft(),
+      showAddNodeMenu(screenToWorld(e.clientX, e.clientY), e.clientX, e.clientY, compatibleEntriesForDraft(),
         'Add Connected Node', { node: draft.node, pin: draft.pin, kind: draft.kind });
     }
     state.draftConnection = null;

@@ -1,9 +1,8 @@
 // The node palette (left) and the Details panel (right).
 import { definitionFor } from '../core/editing';
-import { NodeDefinition } from '../core/model';
 import { formatType } from '../core/types';
 import { addNode, deleteSelected } from './actions';
-import { lookupDefinition, markDirty } from './document';
+import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText } from './document';
 import { dom, escapeHtml } from './dom';
 import { state } from './state';
 import { screenToWorld } from './view';
@@ -11,26 +10,28 @@ import { screenToWorld } from './view';
 export function renderPalette(): void {
   dom.categories.innerHTML = '';
   const q = dom.search.value.trim().toLowerCase();
-  const grouped = new Map<string, NodeDefinition[]>();
-  for (const d of state.definitions) {
-    if (!`${d.displayName} ${d.category} ${d.description || ''}`.toLowerCase().includes(q)) continue;
-    if (!grouped.has(d.category)) grouped.set(d.category, []);
-    grouped.get(d.category)!.push(d);
+  const grouped = new Map<string, PaletteEntry[]>();
+  for (const entry of paletteEntries()) {
+    const category = entry.definition.category;
+    if (!searchText(entry.definition).includes(q)) continue;
+    if (!grouped.has(category)) grouped.set(category, []);
+    grouped.get(category)!.push(entry);
   }
-  [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b)).forEach(([category, defs]) => {
+  [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b)).forEach(([category, entries]) => {
     const section = document.createElement('section');
     const title = document.createElement('div');
     title.className = 'category-title';
     title.textContent = category;
     section.appendChild(title);
-    for (const def of defs) {
+    for (const entry of entries) {
+      const def = entry.definition;
       const button = document.createElement('button');
       button.className = 'palette-node';
       button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(def.color || '#6b7280')}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.description || '')}</small></span>`;
       button.addEventListener('mousedown', (e) => {
         e.preventDefault();
         const rect = dom.canvasWrap.getBoundingClientRect();
-        addNode(def.type, screenToWorld(rect.left + dom.canvasWrap.clientWidth / 2, rect.top + 120));
+        addNode(entry.type, screenToWorld(rect.left + dom.canvasWrap.clientWidth / 2, rect.top + 120), entry.properties);
       });
       section.appendChild(button);
     }

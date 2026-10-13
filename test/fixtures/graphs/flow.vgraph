@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "name": "Flow",
   "kind": "class",
   "language": "typescript",
@@ -10,34 +10,195 @@
       "name": "EventGraph",
       "kind": "event",
       "nodes": [
-        { "id": "start", "type": "core:event.start", "position": { "x": 0, "y": 0 }, "properties": {} },
-        { "id": "seq", "type": "core:flow.sequence", "position": { "x": 200, "y": 0 }, "properties": {} },
-        { "id": "twice", "type": "core:console.print", "position": { "x": 400, "y": 0 }, "properties": { "pin:value": "twice" } },
-        { "id": "fan", "type": "core:console.print", "position": { "x": 400, "y": 200 }, "properties": { "pin:value": "fan" } },
-        { "id": "fan_b", "type": "core:console.print", "position": { "x": 650, "y": 150 }, "properties": { "pin:value": "b" } },
-        { "id": "fan_a", "type": "core:console.print", "position": { "x": 650, "y": 300 }, "properties": { "pin:value": "a" } },
-        { "id": "branch_zero", "type": "core:flow.branch", "position": { "x": 900, "y": 300 }, "properties": { "pin:condition": 0 } },
-        { "id": "zero_true", "type": "core:console.print", "position": { "x": 1150, "y": 250 }, "properties": { "pin:value": "0 is true" } },
-        { "id": "zero_false", "type": "core:console.print", "position": { "x": 1150, "y": 400 }, "properties": { "pin:value": "0 is false" } },
-        { "id": "end", "type": "core:flow.end", "position": { "x": 1400, "y": 400 }, "properties": {} }
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "seq",
+          "type": "core:flow.sequence",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "twice",
+          "type": "core:console.print",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "twice"
+          }
+        },
+        {
+          "id": "fan",
+          "type": "core:console.print",
+          "position": {
+            "x": 400,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": "fan"
+          }
+        },
+        {
+          "id": "fan_b",
+          "type": "core:console.print",
+          "position": {
+            "x": 650,
+            "y": 150
+          },
+          "properties": {
+            "pin:value": "b"
+          }
+        },
+        {
+          "id": "fan_a",
+          "type": "core:console.print",
+          "position": {
+            "x": 650,
+            "y": 300
+          },
+          "properties": {
+            "pin:value": "a"
+          }
+        },
+        {
+          "id": "branch_zero",
+          "type": "core:flow.branch",
+          "position": {
+            "x": 900,
+            "y": 300
+          },
+          "properties": {
+            "pin:condition": 0
+          }
+        },
+        {
+          "id": "zero_true",
+          "type": "core:console.print",
+          "position": {
+            "x": 1150,
+            "y": 250
+          },
+          "properties": {
+            "pin:value": "0 is true"
+          }
+        },
+        {
+          "id": "zero_false",
+          "type": "core:console.print",
+          "position": {
+            "x": 1150,
+            "y": 400
+          },
+          "properties": {
+            "pin:value": "0 is false"
+          }
+        },
+        {
+          "id": "end",
+          "type": "core:flow.end",
+          "position": {
+            "x": 1400,
+            "y": 400
+          },
+          "properties": {}
+        }
       ],
       "connections": [
-        { "id": "c1", "fromNode": "start", "fromPin": "execOut", "toNode": "seq", "toPin": "execIn" },
-        { "id": "c2", "fromNode": "seq", "fromPin": "then0", "toNode": "twice", "toPin": "execIn" },
-        { "id": "c3", "fromNode": "seq", "fromPin": "then1", "toNode": "twice", "toPin": "execIn" },
-        { "id": "c4", "fromNode": "seq", "fromPin": "then2", "toNode": "fan", "toPin": "execIn" },
-        { "id": "c5", "fromNode": "fan", "fromPin": "execOut", "toNode": "fan_b", "toPin": "execIn" },
-        { "id": "c6", "fromNode": "fan", "fromPin": "execOut", "toNode": "fan_a", "toPin": "execIn" },
-        { "id": "c7", "fromNode": "fan_a", "fromPin": "execOut", "toNode": "branch_zero", "toPin": "execIn" },
-        { "id": "c8", "fromNode": "branch_zero", "fromPin": "true", "toNode": "zero_true", "toPin": "execIn" },
-        { "id": "c9", "fromNode": "branch_zero", "fromPin": "false", "toNode": "zero_false", "toPin": "execIn" },
-        { "id": "c10", "fromNode": "zero_false", "fromPin": "execOut", "toNode": "end", "toPin": "execIn" }
+        {
+          "id": "c1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "seq",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c2",
+          "fromNode": "seq",
+          "fromPin": "then0",
+          "toNode": "twice",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c3",
+          "fromNode": "seq",
+          "fromPin": "then1",
+          "toNode": "twice",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c4",
+          "fromNode": "seq",
+          "fromPin": "then2",
+          "toNode": "fan",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c5",
+          "fromNode": "fan",
+          "fromPin": "execOut",
+          "toNode": "fan_b",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c6",
+          "fromNode": "fan",
+          "fromPin": "execOut",
+          "toNode": "fan_a",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c7",
+          "fromNode": "fan_a",
+          "fromPin": "execOut",
+          "toNode": "branch_zero",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c8",
+          "fromNode": "branch_zero",
+          "fromPin": "true",
+          "toNode": "zero_true",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c9",
+          "fromNode": "branch_zero",
+          "fromPin": "false",
+          "toNode": "zero_false",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c10",
+          "fromNode": "zero_false",
+          "fromPin": "execOut",
+          "toNode": "end",
+          "toPin": "execIn"
+        }
       ],
       "comments": []
     }
   ],
   "metadata": {
     "description": "Conformance fixture: a node reached twice runs twice, fan-out runs in connection order, Branch treats 0 as false.",
-    "expectedOutput": ["twice", "twice", "fan", "b", "a", "0 is false"]
+    "expectedOutput": [
+      "twice",
+      "twice",
+      "fan",
+      "b",
+      "a",
+      "0 is false"
+    ]
   }
 }

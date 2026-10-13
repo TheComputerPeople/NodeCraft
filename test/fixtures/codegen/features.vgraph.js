@@ -12,7 +12,7 @@ export class Features {
   _double_result = 0;
 
   start() {
-    // Set Variable (set_score)
+    // Set Score (set_score)
     this.Score = 5;
     // Print (print_score)
     console.log(formatValue(this.Score));

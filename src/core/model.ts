@@ -25,6 +25,10 @@ export interface NodeDefinition {
   inputs: PinDefinition[];
   outputs: PinDefinition[];
   implementation?: NodeImplementation;
+  // Drawn without a title bar, like Unreal's variable getters.
+  compact?: boolean;
+  // Extra words the action menu matches when searching, as in Unreal (e.g. "if" for Branch).
+  keywords?: string[];
 }
 
 export type NodeImplementation =

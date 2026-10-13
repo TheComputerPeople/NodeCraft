@@ -1,4 +1,5 @@
 import { PinAddress } from '../core/editing';
+import type { PaletteEntry } from './document';
 import { CompileReport, Graph, GraphDocument, GraphNode, LanguageOption, NodeDefinition, PinDirection, PinKind } from '../core/model';
 
 export interface Point {
@@ -59,7 +60,7 @@ export interface GroupSelection {
 }
 
 export type MenuContext =
-  | { kind: 'add-node'; position: Point; definitions: NodeDefinition[]; title: string; source: (PinAddress & { kind: PinKind }) | null }
+  | { kind: 'add-node'; position: Point; entries: PaletteEntry[]; title: string; source: (PinAddress & { kind: PinKind }) | null }
   | { kind: 'node'; nodeId: string };
 
 export interface EditorState {

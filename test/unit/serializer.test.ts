@@ -121,7 +121,7 @@ describe('serializeDocument', () => {
     const text = serializeDocument(createEmptyDocument('Format'));
     assert.ok(text.endsWith('}\n'));
     assert.ok(!text.includes('\r'));
-    assert.match(text, /^\{\n  "schemaVersion": 2,/);
+    assert.match(text, /^\{\n  "schemaVersion": 3,/);
   });
 });
 

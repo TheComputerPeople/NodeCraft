@@ -21,7 +21,8 @@ export interface Endpoints {
   toPin: string;
 }
 
-export type DefinitionLookup = (type: string) => NodeDefinition | undefined;
+// A node's definition in context (src/core/resolve.ts); undefined for unregistered node types.
+export type DefinitionLookup = (node: GraphNode) => NodeDefinition | undefined;
 
 // Shown for nodes whose type isn't registered (e.g. a library file was deleted) so the graph still loads.
 export function fallbackDefinition(node: GraphNode): NodeDefinition {
@@ -29,7 +30,7 @@ export function fallbackDefinition(node: GraphNode): NodeDefinition {
 }
 
 export function definitionFor(node: GraphNode, lookup: DefinitionLookup): NodeDefinition {
-  return lookup(node.type) ?? fallbackDefinition(node);
+  return lookup(node) ?? fallbackDefinition(node);
 }
 
 export function pinDefinition(graph: GraphContent, lookup: DefinitionLookup, nodeId: string, pinId: string): PinDefinition | undefined {
@@ -119,8 +120,9 @@ function removeConnections(graph: GraphContent, shouldRemove: (c: GraphConnectio
 }
 
 // Creates a node with its data-input defaults filled in. `def` is undefined for unregistered types.
-export function createNode(type: string, def: NodeDefinition | undefined, position: { x: number; y: number }, id: string): GraphNode {
-  const node: GraphNode = { id, type, position: { x: position.x, y: position.y }, properties: {} };
+// `properties` presets the node, e.g. the variable a Get/Set node is bound to.
+export function createNode(type: string, def: NodeDefinition | undefined, position: { x: number; y: number }, id: string, properties: Record<string, unknown> = {}): GraphNode {
+  const node: GraphNode = { id, type, position: { x: position.x, y: position.y }, properties: { ...properties } };
   for (const pin of def?.inputs ?? []) {
     if (pin.kind === 'data' && pin.defaultValue !== undefined) node.properties[`pin:${pin.id}`] = pin.defaultValue;
   }

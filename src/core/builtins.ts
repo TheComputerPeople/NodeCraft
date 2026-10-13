@@ -13,13 +13,13 @@ const execOutput = (id = 'execOut', name = ''): PinDefinition => ({ id, name, ki
 export function builtinNodeDefinitions(): NodeDefinition[] {
   return [
     {
-      type: 'core:event.start', version: 1, displayName: 'Start', category: 'Flow',
+      type: 'core:event.start', version: 1, displayName: 'Start', category: 'Flow', keywords: ['begin play', 'beginplay', 'event', 'main', 'entry'],
       description: 'Entry point for a graph.', color: '#7bd88f', inputs: [],
       outputs: [execOutput('execOut')], implementation: { kind: 'native', operation: 'start' }
     },
     {
       type: 'core:flow.branch', version: 1, displayName: 'Branch', category: 'Flow',
-      description: 'Choose one execution path from a boolean value.', color: '#e6b450',
+      description: 'Choose one execution path from a boolean value.', color: '#e6b450', keywords: ['if', 'else', 'condition'],
       inputs: [execInput(), dataInput('condition', 'Condition', 'bool', true)],
       outputs: [execOutput('true', 'True'), execOutput('false', 'False')],
       implementation: { kind: 'native', operation: 'branch' }
@@ -32,21 +32,22 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
       implementation: { kind: 'native', operation: 'add' }
     },
     {
-      type: 'core:console.print', version: 1, displayName: 'Print', category: 'Debug',
+      type: 'core:console.print', version: 1, displayName: 'Print', category: 'Debug', keywords: ['print string', 'log', 'output', 'debug'],
       description: 'Write a value to the VS Code Output panel.', color: '#bb86fc',
       inputs: [execInput(), dataInput('value', 'Value', 'any', 'Hello from Visual Scripting')],
       outputs: [execOutput()], implementation: { kind: 'native', operation: 'print' }
     },
     {
+      // Bound to a declared variable through the node's `variable` property; the resolver gives
+      // the pins the variable's name and type (src/core/resolve.ts).
       type: 'core:variable.set', version: 1, displayName: 'Set Variable', category: 'Variables',
-      description: 'Set a graph variable.', color: '#ff8b7b',
-      inputs: [execInput(), dataInput('name', 'Name', 'string', 'Score'), dataInput('value', 'Value', 'float', 0)],
-      outputs: [execOutput()], implementation: { kind: 'native', operation: 'set-variable' }
+      description: 'Set a variable.', color: '#ff8b7b',
+      inputs: [execInput(), dataInput('value', 'Value', 'any')],
+      outputs: [execOutput(), dataOutput('value', 'Value', 'any')], implementation: { kind: 'native', operation: 'set-variable' }
     },
     {
       type: 'core:variable.get', version: 1, displayName: 'Get Variable', category: 'Variables',
-      description: 'Read a graph variable.', color: '#ff8b7b',
-      inputs: [dataInput('name', 'Name', 'string', 'Score')],
+      description: 'Read a variable.', color: '#ff8b7b', inputs: [],
       outputs: [dataOutput('value', 'Value', 'any')], implementation: { kind: 'native', operation: 'get-variable' }
     },
     {

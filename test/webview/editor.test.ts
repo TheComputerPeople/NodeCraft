@@ -138,6 +138,29 @@ describe('webview editor', () => {
     assert.equal(await editor.page.textContent('#status'), 'Cannot open graph: bad JSON');
   });
 
+  test('the palette offers Get and Set for each variable, and places bound nodes', async (t) => {
+    if (!browser) return t.skip(skipReason);
+    editor = await EditorPage.open(browser);
+    const document = sampleDocument();
+    document.variables.push({ id: 'v_health', name: 'Health', type: { id: 'float' }, defaultValue: 100 });
+    await editor.send({ type: 'init', document, definitions: sampleDefinitions(), saveDelay: 0 });
+    const names = await editor.page.$$eval('.palette-node strong', (els) => els.map((el) => el.textContent));
+    assert.ok(names.includes('Health') && names.includes('Set Health'), 'Get and Set entries for the variable');
+    assert.ok(!names.includes('Get Variable') && !names.includes('Set Variable'), 'no unbound variable nodes');
+
+    await editor.page.locator('.palette-node', { hasText: 'Set Health' }).dispatchEvent('mousedown');
+    const placed = (await editor.lastSavedGraph()).nodes.find((n) => n.type === 'core:variable.set');
+    assert.equal(placed?.properties.variable, 'v_health');
+    assert.equal(await editor.page.textContent(`.node[data-node="${placed!.id}"] .node-title`), 'Set Health');
+  });
+
+  test('searching matches keywords, as Unreal does', async (t) => {
+    const e = await openSample(t);
+    if (!e) return;
+    await e.page.fill('#search', 'if');
+    assert.deepEqual(await e.page.$$eval('.palette-node strong', (els) => els.map((el) => el.textContent)), ['Branch']);
+  });
+
   test('highlights nodes reached by a run', async (t) => {
     const e = await openSample(t);
     if (!e) return;

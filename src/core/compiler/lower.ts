@@ -2,6 +2,7 @@
 // The rules implemented here are those of docs/semantics.md.
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from '../model';
 import { NodeRegistry } from '../registry';
+import { NodeResolver, createResolver } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCodeHelper, IrExpr, IrMember, IrProgram, IrSlot, IrStatement, SourceRef, exprType } from './ir';
@@ -51,20 +52,25 @@ class Lowerer {
   private readonly helpers = new Map<string, IrCodeHelper>();
   private readonly blocks = new Map<string, IrBlock>();
 
-  constructor(private readonly doc: GraphDocument, private readonly options: LowerOptions) {}
+  private readonly resolve: NodeResolver;
+
+  constructor(private readonly doc: GraphDocument, private readonly options: LowerOptions) {
+    this.resolve = createResolver(options.registry, doc.variables);
+  }
 
   run(): LowerResult {
+    const names = new Set<string>();
     for (const variable of this.doc.variables) {
-      if (this.members.has(variable.name)) {
+      if (this.members.has(variable.id) || names.has(variable.name)) {
         this.error('duplicate-variable', `Variable "${variable.name}" is declared more than once.`);
         continue;
       }
-      this.members.set(variable.name, {
-        id: variable.name,
+      names.add(variable.name);
+      this.members.set(variable.id, {
+        id: variable.id,
         name: variable.name,
         type: variable.type,
-        initial: variable.defaultValue !== undefined ? { kind: 'literal', value: variable.defaultValue } : { kind: 'default', type: variable.type },
-        implicit: false
+        initial: variable.defaultValue !== undefined ? { kind: 'literal', value: variable.defaultValue } : { kind: 'default', type: variable.type }
       });
     }
 
@@ -109,7 +115,7 @@ class Lowerer {
         continue;
       }
       info.nodes.set(node.id, node);
-      const def = this.options.registry.get(node.type);
+      const def = this.resolve(node);
       if (def) info.definitions.set(node.id, def);
       else this.error('unknown-node-type', `Unknown node type "${node.type}". Its node library may be missing.`, graph.id, node.id);
     }
@@ -213,7 +219,7 @@ class Lowerer {
         const value = input('value');
         const valueType = exprType(value, this.programView());
         if (!canConnect(valueType, member.type)) {
-          this.error('variable-type-mismatch', `Set Variable assigns ${formatType(valueType)} to "${member.name}", which is ${formatType(member.type)}.`, info.graph.id, nodeId);
+          this.error('variable-type-mismatch', `Set ${member.name} assigns ${formatType(valueType)} to a variable of type ${formatType(member.type)}.`, info.graph.id, nodeId);
         }
         return [{ kind: 'setMember', member: member.id, value, source }, ...next('execOut')];
       }
@@ -253,32 +259,24 @@ class Lowerer {
     const sourceNode = info.nodes.get(source.node);
     const sourceDef = info.definitions.get(source.node);
     if (!sourceNode || !sourceDef) return { kind: 'default', type: pin?.type };
-    // Get Variable is pure: read the member wherever the value is used.
-    if (nativeOperation(sourceDef) === 'get-variable') {
+    // Get is pure, and Set's output is the variable's new value: both read the member where used.
+    const operation = nativeOperation(sourceDef);
+    if (operation === 'get-variable' || operation === 'set-variable') {
       const member = this.variableMember(info, sourceNode, sourceDef);
       return member ? { kind: 'member', member: member.id } : { kind: 'default', type: pin?.type };
     }
     return { kind: 'output', slot: this.slot(info, sourceNode, sourceDef, source.pin) };
   }
 
-  // The member a Set/Get Variable node names. Its Name input must be typed on the node.
-  private variableMember(info: GraphInfo, node: GraphNode, def: NodeDefinition): IrMember | undefined {
-    if (info.dataSources.has(inputKey(node.id, 'name'))) {
-      this.error('variable-name-wired', 'The variable name must be typed on the node, not wired, so generated code can use a fixed member.', info.graph.id, node.id);
+  // The member a Get/Set node is bound to (src/core/resolve.ts).
+  private variableMember(info: GraphInfo, node: GraphNode, _def: NodeDefinition): IrMember | undefined {
+    const id = node.properties.variable;
+    if (typeof id !== 'string' || !id) {
+      this.error('variable-unbound', 'This variable node has no variable. Delete it and drag a variable in from My Blueprint.', info.graph.id, node.id);
       return undefined;
     }
-    const literal = unconnectedExpr(node, def.inputs.find((p) => p.id === 'name'), 'name');
-    const name = literal.kind === 'literal' ? String(literal.value ?? '') : '';
-    if (!name) {
-      this.error('variable-name-empty', 'The variable name is empty.', info.graph.id, node.id);
-      return undefined;
-    }
-    let member = this.members.get(name);
-    if (!member) {
-      member = { id: name, name, initial: { kind: 'default' }, implicit: true };
-      this.members.set(name, member);
-      this.warning('undeclared-variable', `Variable "${name}" isn't declared, so it is created with type any.`, info.graph.id, node.id);
-    }
+    const member = this.members.get(id);
+    if (!member) this.error('unknown-variable', 'This node uses a variable that no longer exists.', info.graph.id, node.id);
     return member;
   }
 

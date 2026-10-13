@@ -91,8 +91,9 @@ describe('TypeScript and JavaScript generation', () => {
 
   test('makes class and member names legal and unique', () => {
     const d = doc(
-      [node('s', 'core:event.start'), node('set', 'core:variable.set', { 'pin:name': 'class', 'pin:value': 1 })],
-      [wire('s', 'execOut', 'set', 'execIn')]
+      [node('s', 'core:event.start'), node('set', 'core:variable.set', { variable: 'v', 'pin:value': 1 })],
+      [wire('s', 'execOut', 'set', 'execIn')],
+      [{ id: 'v', name: 'class', type: { id: 'any' } }]
     );
     d.name = 'my cool-graph';
     const text = compileAs(d, 'typescript').output!.text;

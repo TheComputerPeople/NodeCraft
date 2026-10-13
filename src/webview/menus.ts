@@ -1,8 +1,8 @@
 // The floating context menu: the node-search "action menu" and per-node actions.
 import { PinAddress, definitionFor } from '../core/editing';
-import { NodeDefinition, PinKind } from '../core/model';
+import { PinKind } from '../core/model';
 import { addNode, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected } from './actions';
-import { lookupDefinition } from './document';
+import { PaletteEntry, lookupDefinition, searchText } from './document';
 import { dom, escapeHtml } from './dom';
 import { selectConnected } from './selection';
 import { Point, state } from './state';
@@ -14,14 +14,14 @@ export function showAddNodeMenu(
   position: Point,
   clientX: number,
   clientY: number,
-  definitions: NodeDefinition[],
+  entries: PaletteEntry[],
   title: string,
   source: (PinAddress & { kind: PinKind }) | null = null
 ): void {
   if (!state.graph) return;
-  const unique = [...new Map(definitions.map((def) => [def.type, def])).values()];
+  const unique = [...new Map(entries.map((entry) => [entry.key, entry])).values()];
   if (!unique.length) return;
-  state.context = { kind: 'add-node', position, definitions: unique, title, source };
+  state.context = { kind: 'add-node', position, entries: unique, title, source };
   dom.contextMenu.innerHTML = `
       <div class="context-title">${escapeHtml(title)}</div>
       <input id="context-search" class="context-search" placeholder="Search nodes…" aria-label="Search nodes">
@@ -40,21 +40,20 @@ function renderContextNodeResults(query: string): void {
   const result = dom.contextMenu.querySelector<HTMLDivElement>('#context-results');
   if (!result) return;
   const q = query.trim().toLowerCase();
-  const defs = context.definitions
-    .filter((def) => `${def.displayName} ${def.category} ${def.description || ''}`.toLowerCase().includes(q))
-    .slice(0, MAX_RESULTS);
+  const entries = context.entries.filter((entry) => searchText(entry.definition).includes(q)).slice(0, MAX_RESULTS);
   result.innerHTML = '';
-  if (!defs.length) {
+  if (!entries.length) {
     result.innerHTML = '<div class="context-empty">No matching nodes</div>';
     return;
   }
-  for (const def of defs) {
+  for (const entry of entries) {
+    const def = entry.definition;
     const button = document.createElement('button');
     button.className = 'context-node';
     button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(def.color || '#6b7280')}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.category)}</small></span>`;
     button.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      const id = addNode(def.type, context.position);
+      const id = addNode(entry.type, context.position, entry.properties);
       if (id && context.source) connectNewNode(id, context.source);
       hideContextMenu();
     });

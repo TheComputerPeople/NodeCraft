@@ -8,7 +8,7 @@ export class Features {
   private double_result: number = 0;
 
   start(): void {
-    // Set Variable (set_score)
+    // Set Score (set_score)
     this.Score = 5;
     // Print (print_score)
     console.log(formatValue(this.Score));

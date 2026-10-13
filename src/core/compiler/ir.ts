@@ -40,8 +40,6 @@ export interface IrMember {
   name: string;
   type?: TypeRef;
   initial: IrExpr;
-  // Created because a node used an undeclared variable.
-  implicit: boolean;
 }
 
 // Storage for one output pin of an impure node.

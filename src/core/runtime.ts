@@ -4,11 +4,13 @@ import { LanguagePackRegistry } from './language-pack';
 import { DEFAULT_LANGUAGE, builtinLanguagePacks } from './languages';
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent } from './model';
 import { NodeRegistry } from './registry';
+import { NodeResolver, createResolver } from './resolve';
 import { defaultValue, formatValue, toBoolean, toNumber } from './values';
 
 interface RunState {
-  // Shared by every graph in the run, like a class's member variables.
+  // Member variables by id, shared by every graph in the run.
   variables: Map<string, unknown>;
+  resolve: NodeResolver;
   // Latest output values of impure nodes, keyed by graph, node and pin.
   outputs: Map<string, unknown>;
   language: string;
@@ -34,8 +36,8 @@ export class GraphRuntime {
   // Runs every Start node in the document's event graphs. Function and macro graphs only run when
   // called, which arrives with Phase 4.
   run(doc: GraphDocument): void {
-    const run: RunState = { variables: new Map(), outputs: new Map(), language: doc.language || DEFAULT_LANGUAGE };
-    for (const variable of doc.variables) run.variables.set(variable.name, variable.defaultValue ?? defaultValue(variable.type));
+    const run: RunState = { variables: new Map(), outputs: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc.variables) };
+    for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue ?? defaultValue(variable.type));
 
     const entries = doc.graphs
       .filter((g) => g.kind === 'event')
@@ -76,7 +78,7 @@ export class GraphRuntime {
 
   private runNode(context: GraphContext, node: GraphNode): void {
     const { graph } = context;
-    const definition = this.registry.get(node.type) ?? this.fail(context, node, `Unknown node type: ${node.type}`);
+    const definition = context.run.resolve(node) ?? this.fail(context, node, `Unknown node type: ${node.type}`);
     this.report(context, { kind: 'node.enter', nodeId: node.id, nodeType: node.type });
 
     let exited = false;
@@ -85,7 +87,7 @@ export class GraphRuntime {
       exited = true;
       this.report(context, { kind: 'node.exit', nodeId: node.id, nodeType: node.type, values });
     };
-    const input = (pinId: string): unknown => this.inputValue(context, node, definition, pinId, new Set());
+    const input = (pinId: string): unknown => this.inputValue(context, node, definition, pinId);
     const setOutput = (pinId: string, value: unknown): void => {
       context.run.outputs.set(outputKey(graph, node, pinId), value);
     };
@@ -120,10 +122,10 @@ export class GraphRuntime {
         ['then0', 'then1', 'then2'].forEach((pin) => continueFrom(pin));
         break;
       case 'set-variable': {
-        const name = String(input('name') ?? '');
+        const id = this.variableId(context, node);
         const value = input('value');
-        context.run.variables.set(name, value);
-        exit({ [name]: value });
+        context.run.variables.set(id, value);
+        exit({ [definition.inputs.find((p) => p.id === 'value')?.name ?? id]: value });
         continueFrom('execOut');
         break;
       }
@@ -164,33 +166,33 @@ export class GraphRuntime {
     if (output) setOutput(output.id, result);
   }
 
-  // `evaluating` holds the pure nodes being evaluated for this input, to detect data cycles.
-  private inputValue(context: GraphContext, node: GraphNode, definition: NodeDefinition, pinId: string, evaluating: Set<string>): unknown {
+  private inputValue(context: GraphContext, node: GraphNode, definition: NodeDefinition, pinId: string): unknown {
     const { graph } = context;
     const pin = definition.inputs.find((p) => p.id === pinId);
     const connection = graph.connections.find((c) => c.toNode === node.id && c.toPin === pinId);
     const source = connection && graph.nodes.find((n) => n.id === connection.fromNode);
     if (!connection || !source) return unconnectedValue(node, pin, pinId);
-    return this.outputValue(context, source, connection.fromPin, evaluating);
+    return this.outputValue(context, source, connection.fromPin);
   }
 
-  private outputValue(context: GraphContext, node: GraphNode, pinId: string, evaluating: Set<string>): unknown {
-    const definition = this.registry.get(node.type);
-    if (!definition) this.fail(context, node, `Unknown node type: ${node.type}`);
-    const pin = definition.outputs.find((p) => p.id === pinId);
-
-    if (nativeOperation(definition) === 'get-variable') {
-      // Pure: evaluated on every read.
-      if (evaluating.has(node.id)) this.fail(context, node, `Data cycle through ${node.id}: its inputs depend on its own output.`);
-      evaluating.add(node.id);
-      const name = String(this.inputValue(context, node, definition, 'name', evaluating) ?? '');
-      evaluating.delete(node.id);
-      return context.run.variables.get(name) ?? null;
-    }
+  private outputValue(context: GraphContext, node: GraphNode, pinId: string): unknown {
+    const definition = context.run.resolve(node) ?? this.fail(context, node, `Unknown node type: ${node.type}`);
+    const operation = nativeOperation(definition);
+    // Get is pure and read on every use; Set's output is the variable's current value.
+    if (operation === 'get-variable' || operation === 'set-variable') return context.run.variables.get(this.variableId(context, node)) ?? null;
 
     // Impure: the value from the node's latest run, or the type default before it has run.
+    const pin = definition.outputs.find((p) => p.id === pinId);
     const key = outputKey(context.graph, node, pinId);
     return context.run.outputs.has(key) ? context.run.outputs.get(key) : defaultValue(pin?.type);
+  }
+
+  // The id of the variable a Get/Set node is bound to (src/core/resolve.ts).
+  private variableId(context: GraphContext, node: GraphNode): string {
+    const id = node.properties.variable;
+    if (typeof id !== 'string' || !id) this.fail(context, node, 'This variable node has no variable.');
+    if (!context.run.variables.has(id)) this.fail(context, node, 'This node uses a variable that no longer exists.');
+    return id;
   }
 }
 

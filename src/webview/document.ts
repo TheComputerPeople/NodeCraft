@@ -1,6 +1,7 @@
 // The document being edited, the node definitions it uses, and syncing changes back to the host.
 import { pinDefinition } from '../core/editing';
-import { GraphDocument, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
+import { GraphDocument, GraphNode, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
+import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
 import { primaryGraph } from '../core/serializer';
 import { markCompileDirty, renderLanguagePicker } from './compile-results';
 import { dom, setStatus } from './dom';
@@ -10,8 +11,38 @@ import { render } from './render';
 import { state } from './state';
 import { applyTransform } from './view';
 
-export function lookupDefinition(type: string): NodeDefinition | undefined {
-  return state.defByType.get(type);
+// A node's definition in the open document (variable nodes take their variable's name and type).
+export function lookupDefinition(node: GraphNode): NodeDefinition | undefined {
+  return createResolver({ get: (type) => state.defByType.get(type) }, state.document?.variables ?? [])(node);
+}
+
+// Something the palette and action menu can place: a node type, plus preset properties.
+export interface PaletteEntry {
+  key: string;
+  type: string;
+  properties: Record<string, unknown>;
+  definition: NodeDefinition;
+}
+
+// Every node type, except that variable Get/Set nodes are offered once per declared variable
+// ("Get Score", "Set Score"), as in Unreal's action menu.
+export function paletteEntries(): PaletteEntry[] {
+  const entries: PaletteEntry[] = state.definitions
+    .filter((d) => d.type !== VARIABLE_GET && d.type !== VARIABLE_SET)
+    .map((d) => ({ key: d.type, type: d.type, properties: {}, definition: d }));
+  for (const variable of state.document?.variables ?? []) {
+    for (const type of [VARIABLE_GET, VARIABLE_SET]) {
+      const properties = { variable: variable.id };
+      const definition = lookupDefinition({ id: '', type, position: { x: 0, y: 0 }, properties });
+      if (definition) entries.push({ key: `${type}:${variable.id}`, type, properties, definition });
+    }
+  }
+  return entries;
+}
+
+// Text an entry matches in searches: its name, category, description and keywords.
+export function searchText(definition: NodeDefinition): string {
+  return [definition.displayName, definition.category, definition.description ?? '', ...(definition.keywords ?? [])].join(' ').toLowerCase();
 }
 
 export function pinDef(nodeId: string, pinId: string): PinDefinition | undefined {
@@ -42,6 +73,8 @@ export function loadDocument(doc: GraphDocument, preserveView = false): void {
   state.graph = state.document.graphs.find((g) => g.id === previousGraphId) ?? primaryGraph(state.document);
   dom.graphName.textContent = `${state.document.name} › ${state.graph.name}`;
   renderLanguagePicker();
+  // Variables may have changed, and the palette lists one Get and Set entry per variable.
+  renderPalette();
   state.dirty = false;
   if (!preserveView) {
     state.pan = { x: 40, y: 40 };

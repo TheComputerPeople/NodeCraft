@@ -1,11 +1,32 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "name": "Features",
   "kind": "class",
   "language": "typescript",
   "variables": [
-    { "id": "v_lives", "name": "Lives", "type": { "id": "int" }, "defaultValue": 3 },
-    { "id": "v_hero", "name": "Hero", "type": { "id": "string" }, "defaultValue": "Ada" }
+    {
+      "id": "v_lives",
+      "name": "Lives",
+      "type": {
+        "id": "int"
+      },
+      "defaultValue": 3
+    },
+    {
+      "id": "v_hero",
+      "name": "Hero",
+      "type": {
+        "id": "string"
+      },
+      "defaultValue": "Ada"
+    },
+    {
+      "id": "var_Score",
+      "name": "Score",
+      "type": {
+        "id": "any"
+      }
+    }
   ],
   "graphs": [
     {
@@ -13,37 +34,214 @@
       "name": "EventGraph",
       "kind": "event",
       "nodes": [
-        { "id": "start", "type": "core:event.start", "position": { "x": 0, "y": 0 }, "properties": {} },
-        { "id": "seq", "type": "core:flow.sequence", "position": { "x": 200, "y": 0 }, "properties": {} },
-        { "id": "set_score", "type": "core:variable.set", "position": { "x": 400, "y": 0 }, "properties": { "pin:name": "Score", "pin:value": 5 } },
-        { "id": "get_score", "type": "core:variable.get", "position": { "x": 400, "y": 150 }, "properties": { "pin:name": "Score" } },
-        { "id": "print_score", "type": "core:console.print", "position": { "x": 650, "y": 0 }, "properties": {} },
-        { "id": "get_lives", "type": "core:variable.get", "position": { "x": 650, "y": 150 }, "properties": { "pin:name": "Lives" } },
-        { "id": "double", "type": "user.math.double", "position": { "x": 900, "y": 0 }, "properties": {} },
-        { "id": "print_double", "type": "core:console.print", "position": { "x": 1150, "y": 0 }, "properties": {} },
-        { "id": "get_hero", "type": "core:variable.get", "position": { "x": 1150, "y": 150 }, "properties": { "pin:name": "Hero" } },
-        { "id": "print_hero", "type": "core:console.print", "position": { "x": 1400, "y": 0 }, "properties": {} },
-        { "id": "shared", "type": "core:console.print", "position": { "x": 400, "y": 300 }, "properties": { "pin:value": "shared" } }
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "seq",
+          "type": "core:flow.sequence",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "set_score",
+          "type": "core:variable.set",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": 5,
+            "variable": "var_Score"
+          }
+        },
+        {
+          "id": "get_score",
+          "type": "core:variable.get",
+          "position": {
+            "x": 400,
+            "y": 150
+          },
+          "properties": {
+            "variable": "var_Score"
+          }
+        },
+        {
+          "id": "print_score",
+          "type": "core:console.print",
+          "position": {
+            "x": 650,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "get_lives",
+          "type": "core:variable.get",
+          "position": {
+            "x": 650,
+            "y": 150
+          },
+          "properties": {
+            "variable": "v_lives"
+          }
+        },
+        {
+          "id": "double",
+          "type": "user.math.double",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "print_double",
+          "type": "core:console.print",
+          "position": {
+            "x": 1150,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "get_hero",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1150,
+            "y": 150
+          },
+          "properties": {
+            "variable": "v_hero"
+          }
+        },
+        {
+          "id": "print_hero",
+          "type": "core:console.print",
+          "position": {
+            "x": 1400,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "shared",
+          "type": "core:console.print",
+          "position": {
+            "x": 400,
+            "y": 300
+          },
+          "properties": {
+            "pin:value": "shared"
+          }
+        }
       ],
       "connections": [
-        { "id": "c1", "fromNode": "start", "fromPin": "execOut", "toNode": "seq", "toPin": "execIn" },
-        { "id": "c2", "fromNode": "seq", "fromPin": "then0", "toNode": "set_score", "toPin": "execIn" },
-        { "id": "c3", "fromNode": "set_score", "fromPin": "execOut", "toNode": "print_score", "toPin": "execIn" },
-        { "id": "c4", "fromNode": "get_score", "fromPin": "value", "toNode": "print_score", "toPin": "value" },
-        { "id": "c5", "fromNode": "print_score", "fromPin": "execOut", "toNode": "double", "toPin": "execIn" },
-        { "id": "c6", "fromNode": "get_lives", "fromPin": "value", "toNode": "double", "toPin": "value" },
-        { "id": "c7", "fromNode": "double", "fromPin": "execOut", "toNode": "print_double", "toPin": "execIn" },
-        { "id": "c8", "fromNode": "double", "fromPin": "result", "toNode": "print_double", "toPin": "value" },
-        { "id": "c9", "fromNode": "print_double", "fromPin": "execOut", "toNode": "print_hero", "toPin": "execIn" },
-        { "id": "c10", "fromNode": "get_hero", "fromPin": "value", "toNode": "print_hero", "toPin": "value" },
-        { "id": "c11", "fromNode": "seq", "fromPin": "then1", "toNode": "shared", "toPin": "execIn" },
-        { "id": "c12", "fromNode": "seq", "fromPin": "then2", "toNode": "shared", "toPin": "execIn" }
+        {
+          "id": "c1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "seq",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c2",
+          "fromNode": "seq",
+          "fromPin": "then0",
+          "toNode": "set_score",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c3",
+          "fromNode": "set_score",
+          "fromPin": "execOut",
+          "toNode": "print_score",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c4",
+          "fromNode": "get_score",
+          "fromPin": "value",
+          "toNode": "print_score",
+          "toPin": "value"
+        },
+        {
+          "id": "c5",
+          "fromNode": "print_score",
+          "fromPin": "execOut",
+          "toNode": "double",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c6",
+          "fromNode": "get_lives",
+          "fromPin": "value",
+          "toNode": "double",
+          "toPin": "value"
+        },
+        {
+          "id": "c7",
+          "fromNode": "double",
+          "fromPin": "execOut",
+          "toNode": "print_double",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c8",
+          "fromNode": "double",
+          "fromPin": "result",
+          "toNode": "print_double",
+          "toPin": "value"
+        },
+        {
+          "id": "c9",
+          "fromNode": "print_double",
+          "fromPin": "execOut",
+          "toNode": "print_hero",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c10",
+          "fromNode": "get_hero",
+          "fromPin": "value",
+          "toNode": "print_hero",
+          "toPin": "value"
+        },
+        {
+          "id": "c11",
+          "fromNode": "seq",
+          "fromPin": "then1",
+          "toNode": "shared",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c12",
+          "fromNode": "seq",
+          "fromPin": "then2",
+          "toNode": "shared",
+          "toPin": "execIn"
+        }
       ],
       "comments": []
     }
   ],
   "metadata": {
     "description": "Conformance fixture: variables (declared and undeclared), a code node, a shared node and values of unknown type.",
-    "expectedOutput": ["5", "6", "Ada", "shared", "shared"]
+    "expectedOutput": [
+      "5",
+      "6",
+      "Ada",
+      "shared",
+      "shared"
+    ]
   }
 }

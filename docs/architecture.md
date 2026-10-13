@@ -13,7 +13,7 @@ The graph is the source of truth. It is not a JavaScript AST and it is not a C++
 - `LanguagePack` (`src/core/language-pack.ts`): everything the extension knows about one target language (detection markers, capabilities, type mapping, and optionally an in-process simulator for code nodes). Built-in packs live in `src/core/languages/`. Code generation, symbol import and debugging join the interface in later phases (see `docs/roadmap.md`).
 - `GraphRuntime`: reference interpreter. It is language-neutral; code nodes run only through the graph language's pack simulator.
 
-## File format (`.vgraph`, schema 2)
+## File format (`.vgraph`, schema 3)
 
 A `.vgraph` file is a `GraphDocument`, mirroring Unreal's Blueprint assets:
 
@@ -23,7 +23,9 @@ A `.vgraph` file is a `GraphDocument`, mirroring Unreal's Blueprint assets:
 
 `schemas/graph.schema.json` is the published schema; a unit test validates the samples against it. Reroute nodes are ordinary nodes, so they need no schema support.
 
-Migration: `parseDocument` upgrades older schemas in memory (`src/core/migrations.ts`), losslessly and keeping unknown fields. The file is rewritten in the new schema only when the document is next edited, so opening a file never marks it modified. Files from a newer schema are refused with a message asking for an extension update.
+Nodes store unconnected input values as `pin:<pinId>` properties. Variable Get/Set nodes store their variable's id as `variable`; their pins come from that variable through the node resolver (`src/core/resolve.ts`), which every consumer uses to get a node's definition.
+
+Migration: `parseDocument` upgrades older schemas in memory (`src/core/migrations.ts`), one version at a time (1 → 2 makes the single graph an event graph; 2 → 3 binds variable nodes to declared variables, declaring missing ones as `any`), keeping unknown fields. The file is rewritten in the new schema only when the document is next edited, so opening a file never marks it modified. Files from a newer schema are refused with a message asking for an extension update.
 
 ## Function Library model
 

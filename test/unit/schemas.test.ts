@@ -13,7 +13,7 @@ function validator(schemaPath: string) {
   };
 }
 
-describe('graph.schema.json (schema 2)', () => {
+describe('graph.schema.json (schema 3)', () => {
   const check = validator('schemas/graph.schema.json');
 
   test('accepts the sample graph', () => check(JSON.parse(readRepoFile('sample/demo.vgraph'))));

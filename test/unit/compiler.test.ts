@@ -140,30 +140,34 @@ describe('lowerDocument: data flow', () => {
 describe('lowerDocument: variables', () => {
   test('declared variables become members with their defaults', () => {
     const d = doc([], [], [{ id: 'v', name: 'Lives', type: { id: 'int' }, defaultValue: 3 }]);
-    assert.deepEqual(lower(d).program!.members, [{ id: 'Lives', name: 'Lives', type: { id: 'int' }, initial: { kind: 'literal', value: 3 }, implicit: false }]);
+    assert.deepEqual(lower(d).program!.members, [{ id: 'v', name: 'Lives', type: { id: 'int' }, initial: { kind: 'literal', value: 3 } }]);
   });
 
-  test('undeclared variables become implicit any members, with a warning', () => {
+  test('Get and Set nodes use the member they are bound to', () => {
     const result = lower(doc(
-      [node('s', 'core:event.start'), node('set', 'core:variable.set', { 'pin:name': 'Score', 'pin:value': 1 })],
-      [wire('s', 'execOut', 'set', 'execIn')]
+      [node('s', 'core:event.start'), node('set', 'core:variable.set', { variable: 'v', 'pin:value': 2 }), node('get', 'core:variable.get', { variable: 'v' }), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'set', 'execIn'), wire('set', 'execOut', 'p', 'execIn'), wire('get', 'value', 'p', 'value')],
+      [{ id: 'v', name: 'Lives', type: { id: 'int' } }]
     ));
-    assert.deepEqual(codes(result.diagnostics, 'warning'), ['undeclared-variable']);
-    assert.deepEqual(result.program!.members.map((m) => [m.name, m.implicit, m.type]), [['Score', true, undefined]]);
+    assert.deepEqual(result.diagnostics, []);
+    const [set, print] = result.program!.start;
+    assert.ok(set.kind === 'setMember' && set.member === 'v');
+    assert.ok(print.kind === 'print' && print.value.kind === 'member' && print.value.member === 'v');
   });
 
-  test('a wired variable name is an error', () => {
-    const result = lower(doc(
-      [node('s', 'core:event.start'), node('key', 'core:variable.get', { 'pin:name': 'Key' }), node('get', 'core:variable.get'), node('p', 'core:console.print')],
-      [wire('s', 'execOut', 'p', 'execIn'), wire('key', 'value', 'get', 'name'), wire('get', 'value', 'p', 'value')],
-      [{ id: 'k', name: 'Key', type: { id: 'string' } }]
-    ));
-    assert.deepEqual(codes(result.diagnostics, 'error'), ['variable-name-wired']);
+  test('a variable node without a variable is an error', () => {
+    const result = lower(doc([node('s', 'core:event.start'), node('set', 'core:variable.set')], [wire('s', 'execOut', 'set', 'execIn')]));
+    assert.deepEqual(codes(result.diagnostics, 'error'), ['variable-unbound']);
+  });
+
+  test('a variable node whose variable was deleted is an error', () => {
+    const result = lower(doc([node('s', 'core:event.start'), node('set', 'core:variable.set', { variable: 'gone' })], [wire('s', 'execOut', 'set', 'execIn')]));
+    assert.deepEqual(codes(result.diagnostics, 'error'), ['unknown-variable']);
   });
 
   test('assigning an incompatible value is an error', () => {
     const result = lower(doc(
-      [node('s', 'core:event.start'), node('set', 'core:variable.set', { 'pin:name': 'Alive', 'pin:value': 1 })],
+      [node('s', 'core:event.start'), node('set', 'core:variable.set', { variable: 'a', 'pin:value': 1 })],
       [wire('s', 'execOut', 'set', 'execIn')],
       [{ id: 'a', name: 'Alive', type: { id: 'bool' } }]
     ));
