@@ -2,6 +2,7 @@ import { definitionFor } from '../core/editing';
 import { GraphNode, PinDefinition } from '../core/model';
 import { formatType } from '../core/types';
 import { beginRewireFromConnection, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
+import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
 import { lookupDefinition, markDirty, pinDef } from './document';
 import { dom, pinElement } from './dom';
@@ -15,6 +16,8 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 export function render(): void {
   dom.world.innerHTML = '';
   if (!state.graph) return;
+  // Comments first, so nodes draw on top of them.
+  renderComments();
   state.graph.nodes.forEach((node) => dom.world.appendChild(renderNode(node)));
   applyTransform();
   renderEdges();

@@ -1,4 +1,5 @@
 import { connectedNodeIds } from '../core/editing';
+import { clearCommentSelection } from './comments';
 import { dom, nodeElement, setStatus } from './dom';
 import { renderInspector } from './panels';
 import { syncSelectionClasses } from './render';
@@ -45,6 +46,7 @@ export function selectConnected(startNodeId: string): void {
 
 export function beginGroupSelection(e: MouseEvent): void {
   if (!state.graph) return;
+  if (!e.shiftKey && !e.ctrlKey && !e.metaKey) clearCommentSelection();
   state.draftConnection = null;
   state.rewire = null;
   // Unreal: drag replaces the selection, Shift+drag adds to it, Ctrl+drag removes from it.

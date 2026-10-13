@@ -1,6 +1,7 @@
 // Webview entry point: wires DOM and host events to the editor modules.
 import { HostMessage, RuntimeLogEvent } from '../core/model';
-import { addNode, compatibleEntriesForDraft, completeConnection, deleteSelected, duplicateSelected, finishRewire, moveSelection } from './actions';
+import { addNode, compatibleEntriesForDraft, completeConnection, copySelection, deleteSelected, duplicateSelected, finishRewire, moveSelection, pasteText } from './actions';
+import { deleteSelectedComments, finishCommentDrag, isDraggingComment, placeComment, selectedCommentIds, startCommentRename, updateCommentDrag, wrapSelectionInComment } from './comments';
 import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, setLanguage, showCompileResult } from './compile-results';
 import { applySettings, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
 import { dom, eventElement, nodeElement, setStatus } from './dom';
@@ -99,8 +100,12 @@ document.addEventListener('keydown', (e) => {
   if (eventElement(e)?.matches('input, textarea, select')) return;
   const mod = e.ctrlKey || e.metaKey;
   const key = e.key.toLowerCase();
-  if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedNodeIds.size) {
-    deleteSelected();
+  if ((e.key === 'Delete' || e.key === 'Backspace') && (state.selectedNodeIds.size || selectedCommentIds.size)) {
+    if (state.selectedNodeIds.size) deleteSelected();
+    deleteSelectedComments();
+    e.preventDefault();
+  } else if (e.key === 'F2' && selectedCommentIds.size === 1) {
+    startCommentRename([...selectedCommentIds][0]);
     e.preventDefault();
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedVariableId) {
     removeVariable(state.selectedVariableId);
@@ -134,7 +139,12 @@ document.addEventListener('keydown', (e) => {
     state.selection = null;
     hideSelectionBox();
     renderEdges();
-  } else if (!mod && !e.altKey && PLACEMENT_KEYS[key]) {
+  } else if (!mod && !e.altKey && !e.shiftKey && key === 'c') {
+    // C wraps the selection in a comment; with nothing selected, hold C and click to place one.
+    if (state.selectedNodeIds.size) wrapSelectionInComment();
+    else state.heldKey = key;
+    e.preventDefault();
+  } else if (!mod && !e.altKey && !e.shiftKey && PLACEMENT_KEYS[key]) {
     state.heldKey = key;
   }
 });
@@ -144,6 +154,42 @@ document.addEventListener('keyup', (e) => {
 });
 window.addEventListener('blur', () => {
   state.heldKey = null;
+});
+
+// Ctrl+C / Ctrl+X / Ctrl+V. VS Code routes these to the webview as clipboard events; nodes are
+// copied as text, so they also paste into other graphs, other files, or a chat.
+let lastPointer: { x: number; y: number } | null = null;
+
+function pastePosition(): { x: number; y: number } {
+  const rect = dom.canvasWrap.getBoundingClientRect();
+  const inside = lastPointer && lastPointer.x >= rect.left && lastPointer.x <= rect.right && lastPointer.y >= rect.top && lastPointer.y <= rect.bottom;
+  const at = inside && lastPointer ? lastPointer : { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  return screenToWorld(at.x, at.y);
+}
+
+function clipboardTargetIsField(e: Event): boolean {
+  return !!eventElement(e)?.matches('input, textarea, select');
+}
+
+document.addEventListener('copy', (e) => {
+  if (clipboardTargetIsField(e)) return;
+  const text = copySelection();
+  if (!text) return;
+  e.clipboardData?.setData('text/plain', text);
+  e.preventDefault();
+});
+document.addEventListener('cut', (e) => {
+  if (clipboardTargetIsField(e)) return;
+  const text = copySelection();
+  if (!text) return;
+  e.clipboardData?.setData('text/plain', text);
+  e.preventDefault();
+  deleteSelected();
+});
+document.addEventListener('paste', (e) => {
+  if (clipboardTargetIsField(e)) return;
+  const text = e.clipboardData?.getData('text/plain');
+  if (text && pasteText(text, pastePosition())) e.preventDefault();
 });
 
 // Right-click menus open on release, so a right-drag can pan instead (as in Unreal).
@@ -171,6 +217,11 @@ dom.canvasWrap.addEventListener('mousedown', (e) => {
     return;
   }
   if (e.button !== 0 || target?.closest('.node, .pin, .edge-hit')) return;
+  if (state.heldKey === 'c') {
+    placeComment(e.clientX, e.clientY);
+    e.preventDefault();
+    return;
+  }
   const placed = state.heldKey && PLACEMENT_KEYS[state.heldKey];
   if (placed) {
     addNode(placed, screenToWorld(e.clientX, e.clientY));
@@ -181,6 +232,10 @@ dom.canvasWrap.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mouseup', (e) => {
+  if (isDraggingComment()) {
+    finishCommentDrag();
+    return;
+  }
   if (state.variableDrag) {
     finishVariableDrag(e);
     return;
@@ -222,6 +277,11 @@ window.addEventListener('mouseup', (e) => {
 });
 
 window.addEventListener('mousemove', (e) => {
+  lastPointer = { x: e.clientX, y: e.clientY };
+  if (isDraggingComment()) {
+    updateCommentDrag(e);
+    return;
+  }
   if (state.variableDrag) {
     updateVariableDrag(e);
     return;

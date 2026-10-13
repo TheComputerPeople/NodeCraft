@@ -1,12 +1,14 @@
 // User actions that change the graph, plus the pointer gestures that lead to them.
+import { copyNodes, pasteNodes } from '../core/clipboard';
 import * as editing from '../core/editing';
 import { GraphNode, PinDefinition } from '../core/model';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } from './document';
 import { dom, eventElement, pinElement, setStatus } from './dom';
 import { newConnectionId } from './host';
+import { clearCommentSelection } from './comments';
 import { hideContextMenu } from './menus';
 import { renderMyBlueprint } from './my-blueprint';
-import { renderInspector } from './panels';
+import { renderInspector, renderPalette } from './panels';
 import { render, renderEdges, syncSelectionClasses } from './render';
 import { selectNode } from './selection';
 import { Point, state } from './state';
@@ -108,6 +110,7 @@ export function onNodeMouseDown(node: GraphNode, e: MouseEvent): void {
   const target = eventElement(e);
   if (target?.closest('.pin') || target?.closest('input, select, textarea')) return;
   hideContextMenu();
+  if (!e.shiftKey && !e.ctrlKey && !e.metaKey) clearCommentSelection();
   if (state.selectedVariableId) {
     state.selectedVariableId = null;
     renderMyBlueprint();
@@ -143,6 +146,30 @@ function beginNodeDrag(node: GraphNode, e: MouseEvent): void {
       .map((n) => ({ node: n, startX: n.position.x, startY: n.position.y })),
     moved: false
   };
+}
+
+// Ctrl+C / Ctrl+X: the selection as text (src/core/clipboard.ts).
+export function copySelection(): string | undefined {
+  if (!state.document || !state.graph) return undefined;
+  return copyNodes(state.document, state.graph, state.selectedNodeIds);
+}
+
+// Ctrl+V: pastes copied nodes with their top-left corner at `at`. False when the text isn't nodes.
+export function pasteText(text: string, at: Point): boolean {
+  if (!state.document || !state.graph) return false;
+  const variablesBefore = state.document.variables.length;
+  const ids = pasteNodes(state.document, state.graph, text, at, { node: (type) => editing.nodeIdFor(type), connection: newConnectionId });
+  if (!ids) return false;
+  state.selectedNodeIds = new Set(ids);
+  state.selectedNodeId = ids[0] ?? null;
+  markDirty();
+  render();
+  if (state.document.variables.length !== variablesBefore) {
+    renderMyBlueprint();
+    renderPalette();
+  }
+  setStatus(`Pasted ${ids.length} node${ids.length === 1 ? '' : 's'}.`);
+  return true;
 }
 
 // Arrow keys move the selection, as in Unreal.

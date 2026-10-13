@@ -217,11 +217,11 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Wiring | Double-click a wire adds a reroute node (community) | ⬜ | 2 |
 | Wiring | Alignment menu; Q straightens, Shift+W/A/S/D align (community) | ⬜ | 2 |
 | Nodes | Right-click action menu with "Context Sensitive" toggle; keyword search | 🟡 (menu and keywords, no toggle) | 2 |
-| Nodes | Hold-key + click placement: B, S, C, P | 🟡 (B, S, P; C with comments) | 2 |
+| Nodes | Hold-key + click placement: B, S, C, P | ✅ | — |
 | Nodes | Hold-key + click placement: D, G, F, M, N, O (need Phase 4 nodes) | ⬜ | 4 |
-| Nodes | Cut/copy/paste (also between graphs), Ctrl+D duplicate | 🟡 (Ctrl+D) | 2 |
-| Nodes | Arrow keys move the selection; F2 renames | 🟡 (arrow keys; F2 with comments) | 2 |
-| Nodes | C wraps the selection in a comment | ⬜ | 2 |
+| Nodes | Cut/copy/paste (also between graphs and files, as text), Ctrl+D duplicate | ✅ | — |
+| Nodes | Arrow keys move the selection; F2 renames comments, variables and graphs | ✅ | — |
+| Nodes | C wraps the selection in a comment; comments move their nodes, resize, rename | ✅ | — |
 | Nodes | Collapse to function/macro | ⬜ | 4 (needs callable functions) |
 | Nodes | Inline default values on pins | ✅ | — |
 | Nodes | Add-pin (+) on Sequence | ⬜ | 2 |

@@ -165,3 +165,12 @@ button, input { font: inherit; color: inherit; }
 .details-fields .field select, .details-fields .field textarea { width: 100%; padding: 5px 6px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--panel-border)); border-radius: 3px; font: inherit; }
 .details-fields .type-row { display: flex; gap: 6px; }
 .details-fields .field input[type="checkbox"] { width: auto; }
+
+/* Comment boxes: drawn under nodes; only the title bar and resize corner take the pointer, so
+   marquee selection works inside them. */
+.comment { position: absolute; pointer-events: none; --comment-color: #c8c8c8; background: color-mix(in srgb, var(--comment-color) 9%, transparent); border: 1px solid color-mix(in srgb, var(--comment-color) 30%, transparent); border-radius: 4px; }
+.comment.selected { outline: 2px solid #f5a623; outline-offset: 1px; }
+.comment-title { pointer-events: auto; cursor: grab; height: 28px; display: flex; align-items: center; padding: 0 10px; font-size: 15px; font-weight: 600; color: var(--fg); background: color-mix(in srgb, var(--comment-color) 22%, transparent); border-radius: 3px 3px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.comment-title:active { cursor: grabbing; }
+.comment-rename { width: 100%; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--accent); padding: 0 4px; }
+.comment-resize { pointer-events: auto; position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, color-mix(in srgb, var(--comment-color) 45%, transparent) 50%); border-radius: 0 0 3px 0; }
