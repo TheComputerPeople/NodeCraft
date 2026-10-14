@@ -12,6 +12,11 @@ export class NameScope {
     for (const name of taken) this.used.add(name);
   }
 
+  // Marks a name as used, as an ancestor class's member is.
+  take(name: string): void {
+    this.used.add(name);
+  }
+
   claim(raw: string, style: NameStyle = 'keep', prefix = ''): string {
     let base = prefix + toIdentifier(raw, style);
     if (this.reserved.has(base)) base += '_';
@@ -79,9 +84,25 @@ export interface ClassMemberStyles {
   dispatchers: NameStyle;
 }
 
-export function claimClassMembers(scope: NameScope, spec: ClassMemberSpec, styles: ClassMemberStyles): ClassMemberNames {
+// An ancestor class's member names, and its functions (by graph id and name), nearest first.
+export interface InheritedMembers {
+  names: ClassMemberNames;
+  functions: { id: string; name: string }[];
+}
+
+// `inherited`: the class's ancestors. Their names are taken, and a function named like one of
+// theirs overrides it, so it takes that function's name.
+export function claimClassMembers(scope: NameScope, spec: ClassMemberSpec, styles: ClassMemberStyles, inherited: InheritedMembers[] = []): ClassMemberNames {
+  for (const ancestor of inherited) for (const names of Object.values(ancestor.names) as Map<string, string>[]) for (const name of names.values()) scope.take(name);
+  const overridden = (name: string): string | undefined => {
+    for (const ancestor of inherited) {
+      const fn = ancestor.functions.find((f) => f.name === name);
+      if (fn) return ancestor.names.functions.get(fn.id);
+    }
+    return undefined;
+  };
   const claim = (items: { id: string; name: string }[], style: NameStyle) => new Map(items.map((item) => [item.id, scope.claim(item.name, style)]));
-  const functions = claim(spec.functions, styles.functions);
+  const functions = new Map(spec.functions.map((f) => [f.id, overridden(f.name) ?? scope.claim(f.name, styles.functions)]));
   const events = claim(spec.events, styles.functions);
   const variables = claim(spec.variables, styles.variables);
   const dispatchers = claim(spec.dispatchers, styles.dispatchers);

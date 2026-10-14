@@ -21,6 +21,8 @@ export interface ClassInfo {
   name: string;
   language?: string;
   source?: TypeSource;
+  // The parent class ("object:<Name>"): its members are this class's too.
+  parent?: string;
   // In the order generated code names them (see each language's class member names).
   functions: (ClassMember & { inputs: GraphPin[]; outputs: GraphPin[]; pure: boolean })[];
   events: (ClassMember & { inputs: GraphPin[] })[];
@@ -37,6 +39,7 @@ export function declaredClass(doc: GraphDocument, source?: TypeSource): ClassInf
   if (doc.kind !== 'class') return undefined;
   return {
     kind: 'class', id: classTypeId(doc.name), name: doc.name, ...(doc.language ? { language: doc.language } : {}), ...(source ? { source } : {}),
+    ...(doc.parent ? { parent: doc.parent } : {}),
     functions: doc.graphs.filter((g) => g.kind === 'function').map((g) => ({
       id: g.id, name: g.name, inputs: g.signature?.inputs ?? [], outputs: g.signature?.outputs ?? [], pure: !!g.signature?.pure
     })),
@@ -55,6 +58,9 @@ export const OBJECT_SET = 'core:object.set';
 export const OBJECT_CALL = 'core:object.call';
 export const OBJECT_EVENT = 'core:object.event';
 export const OBJECT_DISPATCHER = 'core:object.dispatcher';
+// Unreal's "Parent: <Function>" (and "Parent: BeginPlay"): runs the parent class's version.
+export const PARENT_CALL = 'core:object.parent';
+export const PARENT_START = 'Start';
 
 // What an object dispatcher node does with the dispatcher.
 export type DispatcherAction = 'call' | 'bind' | 'unbind' | 'unbind-all';
@@ -86,7 +92,8 @@ export function objectDefinitions(): NodeDefinition[] {
     member(OBJECT_SET, 'Set', 'object-set', "Sets a variable of the Target object."),
     member(OBJECT_CALL, 'Call Function', 'object-call', 'Calls a function of the Target object.'),
     member(OBJECT_EVENT, 'Call Event', 'object-event', 'Runs a custom event of the Target object.'),
-    member(OBJECT_DISPATCHER, 'Event Dispatcher', 'object-dispatcher', "Calls, binds or unbinds the Target object's event dispatcher.")
+    member(OBJECT_DISPATCHER, 'Event Dispatcher', 'object-dispatcher', "Calls, binds or unbinds the Target object's event dispatcher."),
+    member(PARENT_CALL, 'Parent', 'parent-call', "Runs the parent class's version of this function (or of Start).")
   ];
 }
 
@@ -117,6 +124,15 @@ const data = (pin: GraphPin, direction: PinDefinition['direction']): PinDefiniti
 // Self, and the member nodes, with the pins of the member they use on the Target object.
 export function objectNodeDefinition(base: NodeDefinition, node: GraphNode, own: ClassInfo | undefined, definition: (type: string) => NodeDefinition | undefined): NodeDefinition {
   if (node.type === SELF) return own ? { ...base, outputs: [{ ...base.outputs[0], type: { id: own.id } }] } : base;
+  if (node.type === PARENT_CALL) {
+    const name = String(node.properties.function ?? PARENT_START);
+    if (name === PARENT_START) return { ...base, displayName: 'Parent: Start', inputs: [execIn], outputs: [execOut] };
+    const inherited = own && parentFunction(own, name, definition);
+    if (!inherited) return { ...base, displayName: `Parent: ${name} (missing)`, inputs: [execIn], outputs: [execOut] };
+    const ins = inherited.inputs.filter((p) => p.kind === 'data').map((p) => data(p, 'input'));
+    const outs = inherited.outputs.filter((p) => p.kind === 'data').map((p) => data(p, 'output'));
+    return { ...base, displayName: `Parent: ${name}`, inputs: [...(inherited.pure ? [] : [execIn]), ...ins], outputs: [...(inherited.pure ? [] : [execOut]), ...outs] };
+  }
   const type = nodeClass(node, own, definition);
   const target: PinDefinition = { id: 'target', name: 'Target', kind: 'data', direction: 'input', type: { id: type?.id ?? String(node.properties.class ?? 'object:') } };
   // A missing class or member keeps the node's exec pins, so its wires stay and the error says why.
@@ -166,7 +182,46 @@ export function dispatcherAction(node: GraphNode): DispatcherAction {
 }
 
 export function isObjectNode(type: string): boolean {
-  return [SELF, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER].includes(type);
+  return [SELF, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL].includes(type);
+}
+
+// ---- Inheritance ----------------------------------------------------------------------------------
+
+// A workspace class by type id, from its Construct node's definition.
+export function classById(id: string, definition: (type: string) => NodeDefinition | undefined): ClassInfo | undefined {
+  const implementation = definition(`${id}.construct`)?.implementation;
+  return implementation?.kind === 'class' ? implementation.type : undefined;
+}
+
+// A class's ancestors, nearest first (stopping at a missing class or a loop).
+export function ancestors(type: ClassInfo, definition: (type: string) => NodeDefinition | undefined): ClassInfo[] {
+  const chain: ClassInfo[] = [];
+  const seen = new Set([type.id]);
+  for (let parent = type.parent; parent && !seen.has(parent);) {
+    seen.add(parent);
+    const info = classById(parent, definition);
+    if (!info) break;
+    chain.push(info);
+    parent = info.parent;
+  }
+  return chain;
+}
+
+// The nearest ancestor's function of that name: what an override replaces, and Parent calls.
+export function parentFunction(type: ClassInfo, name: string, definition: (type: string) => NodeDefinition | undefined): (ClassInfo['functions'][number] & { owner: ClassInfo }) | undefined {
+  for (const ancestor of ancestors(type, definition)) {
+    const fn = ancestor.functions.find((f) => f.name === name);
+    if (fn) return { ...fn, owner: ancestor };
+  }
+  return undefined;
+}
+
+// The class hierarchy test for types.ts: whether `from` is `to` or one of its subclasses.
+export function subclassTest(definition: (type: string) => NodeDefinition | undefined, own?: ClassInfo): (from: string, to: string) => boolean {
+  return (from, to) => {
+    const type = own?.id === from ? own : classById(from, definition);
+    return !!type && (type.id === to || ancestors(type, definition).some((a) => a.id === to));
+  };
 }
 
 // ---- Values (Simulate) --------------------------------------------------------------------------

@@ -1,7 +1,8 @@
 // C# pack: generates a C# class per graph from Visual IR, and runs it through a small console
 // project (docs/program-structure.md, "C# language pack").
 import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, exprType, userTypes, classInfo, programClassSpec } from '../compiler/ir';
-import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent } from '../compiler/names';
+import type { ClassInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { scanCSharp } from '../importing/csharp-scanner';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
@@ -360,7 +361,7 @@ class CSharpEmitter {
     // exactly as csharpLibraryExports claims them.
     this.names = this.library ? new NameScope(RESERVED, [this.className, ...HELPER_NAMES, 'EventDispatcher']) : classScope(this.className);
     // Public members first, as every file that uses the class names them.
-    const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES);
+    const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
     this.classNames.set(`object:${program.className}`, own);
     for (const f of program.functions) {
       this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
@@ -384,7 +385,10 @@ class CSharpEmitter {
     for (const d of dispatchers) body.line(`public readonly EventDispatcher<${this.actionType(d.params)}> ${this.dispatcherNames.get(d.id)} = new();`);
     for (const x of slots) body.line(`private ${this.typeName(x.type)} ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
     if (members.length || slots.length || dispatchers.length) body.line();
-    if (!this.library) this.method('public', 'Start', [], undefined, () => this.statements(this.program.start));
+    // Every class can be inherited from, so its methods are virtual, and a subclass overrides them.
+    // A subclass without Start nodes keeps its parent's Start, as Unreal keeps BeginPlay.
+    const parent = this.program.classInfo?.parent;
+    if (!this.library && (!parent || this.program.hasStart)) this.method(parent ? 'public override' : 'public virtual', 'Start', [], undefined, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const block of this.program.blocks) this.method('private', this.blockNames.get(block.id)!, [], undefined, () => this.statements(block.body));
     for (const helper of this.program.helpers) this.helperMethod(helper);
@@ -420,7 +424,8 @@ class CSharpEmitter {
       header.line(`namespace ${this.options.namespace};`);
       header.line();
     }
-    header.line(`public ${this.library ? 'static ' : ''}class ${this.className}`);
+    const parentClass = this.program.classInfo?.parent;
+    header.line(`public ${this.library ? 'static ' : ''}class ${this.className}${parentClass ? ` : ${this.userTypeName(parentClass)}` : ''}`);
     header.line('{');
     return this.finish(header, body);
   }
@@ -516,7 +521,8 @@ class CSharpEmitter {
     const fields = this.outputFields.get(fn.id)!;
     const returns = fn.outputs.length > 1 ? `(${fn.outputs.map((o) => `${this.typeName(o.type)} ${fields.get(o.id)}`).join(', ')})` : fn.outputs[0]?.type ?? (fn.outputs.length ? { id: 'any' } : undefined);
     if (fn.description) this.out.line(`/// <summary>${fn.description.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\s+/g, ' ')}</summary>`);
-    this.method('public', this.functionNames.get(fn.id)!, params, returns, () => {
+    const access = this.library ? 'public' : fn.overrides ? 'public override' : 'public virtual';
+    this.method(access, this.functionNames.get(fn.id)!, params, returns, () => {
       // A custom event keeps the inputs other flows read, as Unreal keeps an event's outputs.
       for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotNames.get(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)};`);
       for (const m of locals) this.out.line(`${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
@@ -653,6 +659,20 @@ class CSharpEmitter {
         out.line(`foreach (var handler in ${this.dispatcherRef(s)}.Handlers) handler(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
         break;
       }
+      case 'parentCall': {
+        if (s.start) {
+          out.line('base.Start();');
+          break;
+        }
+        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === s.function);
+        const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
+        const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `base.${this.parentFunctionName(s.function!)}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        if (!s.results.length) out.line(`${call};`);
+        else if (outputs.length === 1) out.line(`${this.slotNames.get(s.results[0].slot)} = ${call};`);
+        else out.line(`(${s.results.map((r) => this.slotNames.get(r.slot)).join(', ')}) = ${call};`);
+        break;
+      }
       case 'construct':
         out.line(`${this.slotNames.get(s.slot)} = new ${this.userTypeName(s.type)}();`);
         out.line(`${this.slotNames.get(s.slot)}.Start();`);
@@ -753,6 +773,12 @@ class CSharpEmitter {
       }
       case 'self':
         return 'this';
+      case 'parentCall': {
+        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `base.${this.parentFunctionName(e.function)}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        return e.output ? `${call}.${resultFields(fn?.outputs.filter((p) => p.kind === 'data') ?? []).get(e.output)}` : call;
+      }
       case 'isValid':
         return `${this.operand(e.value)} != null`;
       case 'objectVariable':
@@ -862,13 +888,38 @@ class CSharpEmitter {
     return params.length ? `Action<${params.map((p) => this.typeName(p.type)).join(', ')}>` : 'Action';
   }
 
+
+  // The class's ancestors' member names, nearest first (src/core/compiler/names.ts).
+  private inheritedMembers(info: ClassInfo | undefined): InheritedMembers[] {
+    const chain: InheritedMembers[] = [];
+    const seen = new Set<string>();
+    for (let parent = info?.parent; parent && !seen.has(parent);) {
+      seen.add(parent);
+      const ancestor = classInfo(this.program, parent);
+      const names = ancestor && this.membersOf(parent);
+      if (!ancestor || !names) break;
+      chain.push({ names, functions: ancestor.functions });
+      parent = ancestor.parent;
+    }
+    return chain;
+  }
+
+  // The generated name of the nearest ancestor's function called `name` (what Parent calls).
+  private parentFunctionName(name: string): string | undefined {
+    for (const ancestor of this.program.ancestors ?? []) {
+      const fn = ancestor.functions.find((f) => f.name === name);
+      if (fn) return this.membersOf(ancestor.id)?.functions.get(fn.id);
+    }
+    return undefined;
+  }
+
   // The member names another class's generated file gives its public members.
   private membersOf(id: string): ClassMemberNames | undefined {
     const existing = this.classNames.get(id);
     if (existing) return existing;
     const info = classInfo(this.program, id);
     if (!info) return undefined;
-    const names = claimClassMembers(classScope(new NameScope(RESERVED).claim(info.name, 'pascal')), info, CLASS_STYLES);
+    const names = claimClassMembers(classScope(new NameScope(RESERVED).claim(info.name, 'pascal')), info, CLASS_STYLES, this.inheritedMembers(info));
     this.classNames.set(id, names);
     return names;
   }

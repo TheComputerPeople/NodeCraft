@@ -1,7 +1,8 @@
 // Generates TypeScript, or JavaScript with JSDoc types, from Visual IR.
 import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, classInfo, exprType, programClassSpec, userTypes } from '../compiler/ir';
 import { relativeSpecifier, typescriptSpecifier } from '../compiler/module-paths';
-import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import type { ClassInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode } from '../language-pack';
 import { TypeRef } from '../types';
@@ -123,7 +124,7 @@ class TypeScriptEmitter {
     // A library's functions are claimed first, exactly as typescriptExportNames claims them.
     this.names = this.library ? new NameScope(RESERVED, [FORMAT_HELPER]) : new NameScope(RESERVED, ['start']);
     // Public members first, as every file that uses the class names them.
-    const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES);
+    const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
     this.classNames.set(`object:${program.className}`, own);
     for (const f of program.functions) {
       this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
@@ -134,7 +135,9 @@ class TypeScriptEmitter {
     const moduleScope = this.library ? this.names : new NameScope(RESERVED, [this.className, FORMAT_HELPER, DISPATCHER_CLASS]);
     for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
     // Member variables keep their names; internal fields are private (TypeScript) or underscored (JavaScript).
-    const internal = flavor.typed || this.library ? '' : '_';
+    // A subclass's internal fields and methods carry its name: its parent's private ones may share theirs.
+    const base = flavor.typed || this.library ? '' : '_';
+    const internal = program.ancestors?.length ? `${base}${toIdentifier(program.className, 'camel')}_` : base;
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'keep', internal));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', internal));
@@ -149,7 +152,8 @@ class TypeScriptEmitter {
     this.imports(esm);
     if (this.program.declaration) return this.emitDeclaration();
     if (this.library) return this.emitLibrary();
-    out.line(`${esm ? 'export ' : ''}class ${this.className} {`);
+    const parent = this.program.classInfo?.parent;
+    out.line(`${esm ? 'export ' : ''}class ${this.className}${parent ? ` extends ${this.userTypeName(parent)}` : ''} {`);
     out.indent();
 
     const members = this.program.members.filter((m) => !m.function);
@@ -167,7 +171,8 @@ class TypeScriptEmitter {
     for (const x of slots) this.field(this.slotNames.get(x.id)!, x.type, this.defaultFor(x.type), true);
     if (members.length || slots.length || dispatchers.length) out.line();
 
-    this.method('start', [], undefined, false, () => this.statements(this.program.start));
+    // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay.
+    if (!parent || this.program.hasStart) this.method('start', [], undefined, false, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const block of this.program.blocks) this.blockMethod(block);
     for (const helper of this.program.helpers) this.helperMethod(helper);
@@ -243,7 +248,7 @@ class TypeScriptEmitter {
   // CommonJS: classes this one uses are required after it is exported, so two classes that use each
   // other both load completely.
   private lateRequires(): void {
-    const classes = sortImports(this.program.imports.filter((i) => i.userType?.kind === 'class'));
+    const classes = sortImports(this.program.imports.filter((i) => i.userType?.kind === 'class' && i.id !== this.program.classInfo?.parent));
     if (!classes.length) return;
     this.out.line('// Classes are required last: they may use this one.');
     for (const i of classes) {
@@ -252,13 +257,38 @@ class TypeScriptEmitter {
     }
   }
 
+
+  // The class's ancestors' member names, nearest first (src/core/compiler/names.ts).
+  private inheritedMembers(info: ClassInfo | undefined): InheritedMembers[] {
+    const chain: InheritedMembers[] = [];
+    const seen = new Set<string>();
+    for (let parent = info?.parent; parent && !seen.has(parent);) {
+      seen.add(parent);
+      const ancestor = classInfo(this.program, parent);
+      const names = ancestor && this.membersOf(parent);
+      if (!ancestor || !names) break;
+      chain.push({ names, functions: ancestor.functions });
+      parent = ancestor.parent;
+    }
+    return chain;
+  }
+
+  // The generated name of the nearest ancestor's function called `name` (what Parent calls).
+  private parentFunctionName(name: string): string | undefined {
+    for (const ancestor of this.program.ancestors ?? []) {
+      const fn = ancestor.functions.find((f) => f.name === name);
+      if (fn) return this.membersOf(ancestor.id)?.functions.get(fn.id);
+    }
+    return undefined;
+  }
+
   // The member names another class's generated file gives its public members.
   private membersOf(id: string): ClassMemberNames | undefined {
     const existing = this.classNames.get(id);
     if (existing) return existing;
     const info = classInfo(this.program, id);
     if (!info) return undefined;
-    const names = claimClassMembers(new NameScope(RESERVED, ['start']), info, CLASS_STYLES);
+    const names = claimClassMembers(new NameScope(RESERVED, ['start']), info, CLASS_STYLES, this.inheritedMembers(info));
     this.classNames.set(id, names);
     return names;
   }
@@ -374,7 +404,7 @@ class TypeScriptEmitter {
   private imports(esm: boolean): void {
     const byModule = new Map<string, IrImport[]>();
     for (const i of sortImports(this.program.imports)) {
-      if (!esm && i.userType?.kind === 'class') continue;
+      if (!esm && i.userType?.kind === 'class' && i.id !== this.program.classInfo?.parent) continue;
       const specifier = this.flavor.typed
         ? typescriptSpecifier(this.options.outputDir ?? '', i.path, this.options.importExtension ?? 'ts')
         : relativeSpecifier(this.options.outputDir ?? '', i.path);
@@ -603,6 +633,23 @@ class TypeScriptEmitter {
         }
         break;
       }
+      case 'parentCall': {
+        if (s.start) {
+          out.line('super.start();');
+          break;
+        }
+        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === s.function);
+        const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
+        const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `super.${this.parentFunctionName(s.function!)}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        if (!s.results.length) out.line(`${call};`);
+        else if (outputs.length === 1) out.line(`${this.slotRef(s.results[0].slot)} = ${call};`);
+        else {
+          const fields = resultFields(outputs);
+          out.line(`({ ${s.results.map((r) => `${fields.get(r.output)}: ${this.slotRef(r.slot)}`).join(', ')} } = ${call});`);
+        }
+        break;
+      }
       case 'construct':
         out.line(`${this.slotRef(s.slot)} = new ${this.userTypeName(s.type)}();`);
         out.line(`${this.slotRef(s.slot)}.start();`);
@@ -703,6 +750,12 @@ class TypeScriptEmitter {
       }
       case 'self':
         return 'this';
+      case 'parentCall': {
+        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `super.${this.parentFunctionName(e.function)}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        return e.output ? `${call}.${resultFields(fn?.outputs.filter((p) => p.kind === 'data') ?? []).get(e.output)}` : call;
+      }
       case 'isValid':
         return `${this.operand(e.value)} != null`;
       case 'objectVariable':

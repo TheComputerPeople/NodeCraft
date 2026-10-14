@@ -804,6 +804,152 @@ describe('objects', () => {
   }
 });
 
+// Inheritance (docs/program-structure.md, "Classes"): Dog extends Animal, overrides Speak (calling
+// the parent's version) and Start (calling Parent: Start); a Game holds the Dog in an Animal
+// variable and calls its functions and reads its inherited variable through it.
+describe('inheritance', () => {
+  const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin });
+  const ANIMAL = 'object:Animal';
+  const speak = (id: string) => ({ id, name: 'Speak', kind: 'function' as const, comments: [], signature: { inputs: [], outputs: [] } });
+
+  function animal(language: string): GraphDocument {
+    return {
+      schemaVersion: 3, name: 'Animal', kind: 'class', language, variables: [{ id: 'name', name: 'Name', type: { id: 'string' }, defaultValue: 'animal' }],
+      graphs: [
+        {
+          id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+          nodes: [n('s', 'core:event.start'), n('p', 'core:console.print', { 'pin:value': 'animal start' })], connections: [w('s', 'execOut', 'p', 'execIn')]
+        },
+        {
+          ...speak('Speak'),
+          nodes: [n('entry', 'core:function.entry', { graph: 'Speak' }), n('name', 'core:variable.get', { variable: 'name' }), n('say', 'core:string.append', { 'pin:b': ' makes a sound' }), n('p', 'core:console.print')],
+          connections: [w('entry', 'execOut', 'p', 'execIn'), w('name', 'value', 'say', 'a'), w('say', 'returnValue', 'p', 'value')]
+        },
+        {
+          id: 'Legs', name: 'Legs', kind: 'function', comments: [], signature: { pure: true, inputs: [], outputs: [{ id: 'legs', name: 'Legs', kind: 'data', type: { id: 'int' } }] },
+          nodes: [n('entry', 'core:function.entry', { graph: 'Legs' }), n('ret', 'core:function.return', { graph: 'Legs', 'pin:legs': 4 })], connections: [w('entry', 'execOut', 'ret', 'execIn')]
+        }
+      ]
+    };
+  }
+
+  function dog(language: string): GraphDocument {
+    return {
+      schemaVersion: 3, name: 'Dog', kind: 'class', language, parent: ANIMAL, variables: [],
+      graphs: [
+        {
+          id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+          nodes: [n('s', 'core:event.start'), n('p', 'core:console.print', { 'pin:value': 'dog start' }), n('parent', 'core:object.parent', { function: 'Start' })],
+          connections: [w('s', 'execOut', 'p', 'execIn'), w('p', 'execOut', 'parent', 'execIn')]
+        },
+        {
+          ...speak('DogSpeak'),
+          nodes: [n('entry', 'core:function.entry', { graph: 'DogSpeak' }), n('p', 'core:console.print', { 'pin:value': 'woof' }), n('parent', 'core:object.parent', { function: 'Speak' })],
+          connections: [w('entry', 'execOut', 'p', 'execIn'), w('p', 'execOut', 'parent', 'execIn')]
+        }
+      ]
+    };
+  }
+
+  function game(language: string): GraphDocument {
+    const pet = (id: string) => n(id, 'core:variable.get', { variable: 'pet' });
+    return {
+      schemaVersion: 3, name: 'Game', kind: 'class', language, variables: [{ id: 'pet', name: 'Pet', type: { id: ANIMAL } }],
+      graphs: [{
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [
+          n('s', 'core:event.start'), n('make', 'object:Dog.construct'), n('set', 'core:variable.set', { variable: 'pet' }),
+          n('speak', 'core:object.call', { class: ANIMAL, function: 'Speak' }), n('legs', 'core:object.call', { class: ANIMAL, function: 'Legs' }), n('p1', 'core:console.print'),
+          n('name', 'core:object.get', { class: ANIMAL, variable: 'name' }), n('p2', 'core:console.print'), pet('a'), pet('b'), pet('c')
+        ],
+        connections: [
+          w('s', 'execOut', 'make', 'execIn'), w('make', 'execOut', 'set', 'execIn'), w('make', 'object', 'set', 'value'),
+          w('set', 'execOut', 'speak', 'execIn'), w('a', 'value', 'speak', 'target'), w('speak', 'execOut', 'p1', 'execIn'),
+          w('b', 'value', 'legs', 'target'), w('legs', 'legs', 'p1', 'value'), w('p1', 'execOut', 'p2', 'execIn'), w('c', 'value', 'name', 'target'), w('name', 'value', 'p2', 'value')
+        ]
+      }]
+    };
+  }
+
+  const EXPECTED = ['dog start', 'animal start', 'woof', 'animal makes a sound', '4', 'animal'];
+  const DOCS = [['Animal', animal], ['Dog', dog]] as const;
+
+  function registryFor(language: string): NodeRegistry {
+    const r = registry();
+    const generator = languages.get(language)!.generator!;
+    for (const [name, make] of DOCS) {
+      const module = language === 'python' ? generator.outputFileName(`${name}.vgraph`).replace(/\.py$/, '') : language === 'csharp' ? 'Animals' : undefined;
+      r.registerMany(classDefinitions(declaredClass(make(language), { document: `animals/${name}.vgraph`, generatedPath: `animals/${generator.outputFileName(`${name}.vgraph`)}`, ...(module ? { module } : {}) })!));
+    }
+    return r;
+  }
+
+  test('Simulate', () => {
+    const events: RuntimeLogEvent[] = [];
+    const load = (file: string) => DOCS.find(([name]) => file === `animals/${name}.vgraph`)?.[1]('typescript');
+    new GraphRuntime(registryFor('typescript'), (e) => events.push(e), languages, load).run(game('typescript'));
+    assert.deepEqual(events.filter((e) => e.kind === 'error'), []);
+    assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), EXPECTED);
+  });
+
+  function build(key: string, language: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; classFiles: string[]; importRoots?: string[] } {
+    const dir = path.join(workDir, `inheritance-${key}`);
+    fs.mkdirSync(path.join(dir, 'animals'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'game'), { recursive: true });
+    const r = registryFor(language);
+    const classFiles = DOCS.map(([name, make]) => {
+      const result = compileDocument(make(language), { registry: r, languages, generate: { sourceFileName: `${name}.vgraph`, outputDir: 'animals', namespace: 'Animals', ...generate } });
+      assert.deepEqual(result.diagnostics, [], name);
+      const file = path.join(dir, 'animals', result.output!.fileName);
+      fs.writeFileSync(file, result.output!.text);
+      return file;
+    });
+    const result = compileDocument(game(language), { registry: r, languages, generate: { sourceFileName: 'Game.vgraph', outputDir: 'game', namespace: 'App', ...generate } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    return { file, className: result.output!.className, dir, classFiles, importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)) };
+  }
+
+  for (const target of [
+    { label: 'TypeScript', key: 'typescript', language: 'typescript' },
+    { label: 'JavaScript (ES modules)', key: 'javascript-esm', language: 'javascript', moduleFormat: 'esm' as const },
+    { label: 'JavaScript (CommonJS)', key: 'javascript-commonjs', language: 'javascript', moduleFormat: 'commonjs' as const },
+    { label: 'Python', key: 'python', language: 'python' },
+    { label: 'C#', key: 'csharp', language: 'csharp' }
+  ]) {
+    test(target.label, async (t) => {
+      const { file, className, dir, classFiles, importRoots } = build(target.key, target.language, { moduleFormat: target.moduleFormat });
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? classFiles : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'game'), importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), EXPECTED, `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  for (const { language, flags } of [
+    { language: 'typescript', flags: { allowImportingTsExtensions: true } },
+    { language: 'javascript', flags: { allowJs: true, checkJs: true } }
+  ]) {
+    test(`${language} subclasses type-check under --strict`, () => {
+      const { file, dir, classFiles } = build(`typecheck-${language}`, language);
+      fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
+        files: [...classFiles, file].map((f) => path.relative(dir, f))
+      }));
+      const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+      const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    });
+  }
+});
+
 // Save String to File then Load File to String, in a scratch folder, on every target.
 describe('file nodes', () => {
   function fileGraph(file: string, language: string): GraphDocument {

@@ -13,7 +13,7 @@ public class BlueprintDemo
 {
     private double _add_1_result = 0;
 
-    public void Start()
+    public virtual void Start()
     {
         // Add (add_1)
         _add_1_result = (double)10 + (double)20;

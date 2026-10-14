@@ -3,6 +3,7 @@
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables } from './functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from './macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, CUSTOM_EVENT, DELEGATE_PIN, Dispatcher, UNBIND_EVENT, customEvents, documentDispatchers, eventName, isDispatcherNode } from './events';
+import { PARENT_CALL } from './objects';
 import { DocumentKind, Graph, GraphConnection, GraphDocument, GraphKind, GraphNode, GraphPin, GraphVariable, NodeDefinition } from './model';
 import { VARIABLE_GET, VARIABLE_SET } from './resolve';
 import { createEmptyDocument, createGraph } from './serializer';
@@ -672,4 +673,31 @@ export function assignDispatcher(doc: GraphDocument, graph: Graph, dispatcherId:
   graph.nodes.push(bind, event);
   graph.connections.push({ id: connectionId(), fromNode: event.id, fromPin: DELEGATE_PIN, toNode: bind.id, toPin: 'event' });
   return { bind, event };
+}
+
+// ---- Inheritance (src/core/objects.ts) -----------------------------------------------------------
+
+// Unreal's Override: a function with the parent function's name and signature, which calls the
+// parent's version and returns what it returns (as Unreal wires a new override).
+export function overrideFunction(doc: GraphDocument, inherited: { name: string; inputs: GraphPin[]; outputs: GraphPin[]; pure: boolean }, connectionId: () => string): Graph {
+  const graph = addGraph(doc, 'function');
+  graph.name = inherited.name;
+  graph.signature = { inputs: inherited.inputs.map((p) => ({ ...p })), outputs: inherited.outputs.map((p) => ({ ...p })), ...(inherited.pure ? { pure: true } : {}) };
+  for (const node of graph.nodes) node.properties.graph = graph.id;
+  const entry = graph.nodes[0];
+  const parent: GraphNode = { id: 'parent', type: PARENT_CALL, position: { x: 300, y: 0 }, properties: { function: inherited.name } };
+  graph.nodes.push(parent);
+  const wire = (fromNode: string, fromPin: string, toNode: string, toPin: string) => graph.connections.push({ id: connectionId(), fromNode, fromPin, toNode, toPin });
+  wire(entry.id, 'execOut', parent.id, 'execIn');
+  for (const p of inherited.inputs.filter((x) => x.kind === 'data')) wire(entry.id, p.id, parent.id, p.id);
+  const outputs = inherited.outputs.filter((x) => x.kind === 'data');
+  if (outputs.length) {
+    const ret: GraphNode = { id: 'return', type: FUNCTION_RETURN, position: { x: 600, y: 0 }, properties: { graph: graph.id } };
+    graph.nodes.push(ret);
+    // A pure parent function has no exec pins: the Return Node follows the entry.
+    wire(inherited.pure ? entry.id : parent.id, 'execOut', ret.id, 'execIn');
+    for (const p of outputs) wire(parent.id, p.id, ret.id, p.id);
+    if (inherited.pure) graph.connections = graph.connections.filter((c) => !(c.toNode === parent.id && c.toPin === 'execIn'));
+  }
+  return graph;
 }

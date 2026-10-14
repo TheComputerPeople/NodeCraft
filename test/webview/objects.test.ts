@@ -79,4 +79,19 @@ describe('objects', () => {
     const doc = await saved(e, (d) => d.variables.some((v) => v.type.id === 'object:Enemy'));
     assert.ok(doc);
   });
+
+  test('Class Settings picks a parent class; Override makes a function that calls the parent\'s', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    await e.page.selectOption('#inspector-content select[aria-label="Parent Class"]', 'object:Enemy');
+    await e.page.click('.mb-override');
+    await e.page.locator('#floating-menu button', { hasText: 'Hit' }).click();
+    const doc = await saved(e, (d) => d.graphs.some((g) => g.name === 'Hit'));
+    assert.equal(doc.parent, 'object:Enemy');
+    const hit = doc.graphs.find((g) => g.name === 'Hit')!;
+    assert.deepEqual(hit.signature?.inputs.map((p) => p.name), ['Amount']);
+    assert.deepEqual(hit.nodes.map((n) => n.type), ['core:function.entry', 'core:object.parent']);
+    assert.ok(hit.connections.some((c) => c.fromPin === 'amount' && c.toPin === 'amount'));
+    assert.equal(await e.count('.mb-override'), 0, 'nothing left to override');
+  });
 });

@@ -7,7 +7,7 @@ import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs } from './events';
-import { ClassInfo, ObjectValue, declaredClass, dispatcherAction, nodeClass } from './objects';
+import { ClassInfo, ObjectValue, PARENT_START, classById, declaredClass, dispatcherAction, nodeClass } from './objects';
 import { expandDocument, isExpandedNode, macroProblemKey, visibleNodeId } from './macros';
 import { StructValue, TypeLookup, expandSplitPins, typeLookup } from './user-types';
 import { NodeResolver, createResolver, createUnsplitResolver, isPure } from './resolve';
@@ -30,9 +30,12 @@ interface RunState {
   // The events bound to each event dispatcher, in the order they were bound (each with the object
   // it belongs to).
   bindings: Map<string, BoundEvent[]>;
-  // The object this run is (src/core/objects.ts), and its class.
+  // The object this run is part of (src/core/objects.ts), and its class. An object of a subclass
+  // has a run per class in its chain (`layers`, most derived first), sharing Self; each runs its own
+  // class's graphs with its own class's variables.
   self: ObjectValue;
   ownClass?: ClassInfo;
+  layers: RunState[];
   // How many custom events are running inside one another.
   eventDepth: number;
 }
@@ -93,8 +96,13 @@ export class GraphRuntime {
 
   // Runs every Start node in the document's event graphs. Function graphs only run when called.
   run(doc: GraphDocument): void {
-    const run = this.runState(doc);
-    if (!this.startEntries(run).length) {
+    const layers = this.instantiate(doc);
+    if (typeof layers === 'string') {
+      this.emit({ kind: 'error', message: layers });
+      return;
+    }
+    const run = layers[0];
+    if (!layers.some((l) => this.startEntries(l).length)) {
       this.emit({ kind: 'error', message: 'Graph has no Start node.' });
       return;
     }
@@ -199,6 +207,18 @@ export class GraphRuntime {
       }
       case 'self':
         return;
+      case 'parent-call': {
+        const name = String(node.properties.function ?? PARENT_START);
+        exit();
+        if (name === PARENT_START) {
+          this.start(context.run, context.run.layers.indexOf(context.run) + 1);
+        } else {
+          const fn = this.parentFunction(context, node);
+          for (const [pin, value] of this.runFunction(context, node, fn.run, fn.graph, input)) setOutput(pin, value);
+        }
+        continueFrom('execOut');
+        return;
+      }
       case 'object-set':
       case 'object-call':
       case 'object-event':
@@ -210,8 +230,8 @@ export class GraphRuntime {
           target.variables.set(String(node.properties.variable), value);
           exit({ value });
         } else if (operation === 'object-call') {
-          const graph = target.doc.graphs.find((g) => g.id === node.properties.function && g.kind === 'function') ?? this.fail(context, node, `${type.name} no longer has this function.`);
-          const outputs = this.runFunction(context, node, target, graph, input);
+          const fn = this.objectFunction(context, node, type, target);
+          const outputs = this.runFunction(context, node, fn.run, fn.graph, input);
           for (const [pin, value] of outputs) setOutput(pin, value);
           exit(Object.fromEntries(outputs));
         } else if (operation === 'object-event') {
@@ -456,9 +476,11 @@ export class GraphRuntime {
 
   // Runs the function a call node calls, in a new frame, and returns its outputs by pin id. Reaching
   // the end without a Return Node returns the outputs' defaults.
+  // Calls are virtual, as in Unreal: a subclass's function of the same name runs instead.
   private callFunction(context: GraphContext, node: GraphNode, input: (pinId: string) => unknown): Map<string, unknown> {
     const graph = functionGraph(node, context.run.doc.graphs) ?? this.fail(context, node, 'This node calls a function that no longer exists.');
-    return this.runFunction(context, node, context.run, graph, input);
+    const target = this.virtualFunction(context.run, graph.name) ?? { run: context.run, graph };
+    return this.runFunction(context, node, target.run, target.graph, input);
   }
 
   // A function of a graph library (another .vgraph file), run from that file.
@@ -474,9 +496,42 @@ export class GraphRuntime {
     return run.doc.graphs.filter((g) => g.kind === 'event').flatMap((graph) => graph.nodes.filter((n) => n.type === 'core:event.start').map((start) => ({ graph, start })));
   }
 
-  // Runs an object's Start events (a constructed object's too, as spawning runs BeginPlay).
-  private start(run: RunState): void {
-    for (const { graph, start } of this.startEntries(run)) this.executeNode({ run, graph, frame: run.objectFrame, executing: new Set() }, start);
+  // Runs an object's Start events (a constructed object's too, as spawning runs BeginPlay): those of
+  // the most derived class that has any, at or above `from` (Parent: Start runs the next ones up).
+  private start(run: RunState, from = 0): void {
+    const layer = run.layers.slice(from).find((l) => this.startEntries(l).length);
+    if (!layer) return;
+    for (const { graph, start } of this.startEntries(layer)) this.executeNode({ run: layer, graph, frame: layer.objectFrame, executing: new Set() }, start);
+  }
+
+  // An object of `doc`'s class: a run per class in its chain, most derived first, or why it can't be
+  // made (a parent class Simulate can't read).
+  private instantiate(doc: GraphDocument, document?: string): RunState[] | string {
+    const docs: { doc: GraphDocument; document?: string }[] = [{ doc, document }];
+    const seen = new Set([doc.name]);
+    for (let parent = doc.parent; parent;) {
+      const type = classById(parent, (t) => this.registry.get(t));
+      const parentDoc = type?.source && this.loadDocument?.(type.source.document);
+      if (!type || !parentDoc) return `Simulate can't read the parent class ${parent.replace(/^object:/, '')}.`;
+      if (seen.has(parentDoc.name)) return `${doc.name} inherits from itself.`;
+      seen.add(parentDoc.name);
+      docs.push({ doc: parentDoc, document: type.source!.document });
+      parent = parentDoc.parent;
+    }
+    const layers = docs.map((d) => this.runState(d.doc, d.document));
+    const self = new ObjectValue(doc.name, layers[0]);
+    for (const layer of layers) Object.assign(layer, { self, layers });
+    return layers;
+  }
+
+  // A function of the object by name, as virtual calls find it: the most derived class's at or
+  // above layer `from`.
+  private virtualFunction(run: RunState, name: string, from = 0): { run: RunState; graph: Graph } | undefined {
+    for (const layer of run.layers.slice(from)) {
+      const graph = layer.doc.graphs.find((g) => g.kind === 'function' && g.name === name);
+      if (graph) return { run: layer, graph };
+    }
+    return undefined;
   }
 
   // A run of `doc`, with the macros it uses expanded (each use is a copy of the macro's nodes), and
@@ -492,9 +547,10 @@ export class GraphRuntime {
     const ownClass = declaredClass(original);
     const run: RunState = {
       doc, variables: new Map(), language, resolve: createResolver(this.registry, doc), macroProblems: problems, types: typeLookup(this.registry.all(), language),
-      objectFrame, bindings: new Map(), eventDepth: 0, self: undefined as unknown as ObjectValue, ...(ownClass ? { ownClass } : {}), ...(document ? { document } : {})
+      objectFrame, bindings: new Map(), eventDepth: 0, self: undefined as unknown as ObjectValue, layers: [], ...(ownClass ? { ownClass } : {}), ...(document ? { document } : {})
     };
-    (run as { self: ObjectValue }).self = new ObjectValue(doc.name, run);
+    // On its own: an object of one class. instantiate() links the runs of a class chain.
+    Object.assign(run, { self: new ObjectValue(doc.name, run), layers: [run] });
     for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue !== undefined ? fromStored(variable.defaultValue, variable.type, run.types) : defaultValue(variable.type, run.types));
     return run;
   }
@@ -577,7 +633,9 @@ export class GraphRuntime {
     const own = context.run.ownClass?.id === type.id;
     const doc = own ? context.run.doc : type.source && this.loadDocument?.(type.source.document);
     if (!doc) this.fail(context, node, `Simulate can't read ${type.name}'s file${type.source ? ` (${type.source.document})` : ''}.`);
-    const run = this.runState(doc, own ? context.run.document : type.source?.document);
+    const layers = this.instantiate(doc, own ? context.run.document : type.source?.document);
+    if (typeof layers === 'string') this.fail(context, node, layers);
+    const run = layers[0];
     try {
       this.start(run);
     } catch (error) {
@@ -592,10 +650,25 @@ export class GraphRuntime {
   private target(context: GraphContext, node: GraphNode, definition: NodeDefinition, input: (pinId: string) => unknown): { type: ClassInfo; target: RunState } {
     const type = nodeClass(node, context.run.ownClass, (t) => this.registry.get(t)) ?? this.fail(context, node, `There is no class ${String(node.properties.class ?? '').replace(/^object:/, '')}.`);
     const wired = context.graph.connections.some((c) => c.toNode === node.id && c.toPin === 'target');
-    const value = wired ? input('target') : type.id === context.run.ownClass?.id ? context.run.self : undefined;
+    const own = context.run.layers.some((l) => l.ownClass?.id === type.id);
+    const value = wired ? input('target') : own ? context.run.self : undefined;
     if (!(value instanceof ObjectValue)) this.fail(context, node, `Accessed None: Target has no ${type.name}.`);
     void definition;
-    return { type, target: value.state as RunState };
+    // The run of the class that declares the member (an ancestor's, for an inherited one).
+    const layers = (value.state as RunState).layers;
+    return { type, target: layers.find((l) => l.ownClass?.id === type.id) ?? layers[0] };
+  }
+
+  // A function of a Target object, by the name its class gives it: the object's most derived version.
+  private objectFunction(context: GraphContext, node: GraphNode, type: ClassInfo, target: RunState): { run: RunState; graph: Graph } {
+    const name = type.functions.find((f) => f.id === node.properties.function)?.name;
+    return (name && this.virtualFunction(target, name)) || this.fail(context, node, `${type.name} no longer has this function.`);
+  }
+
+  // The parent class's version of the function a Parent node names.
+  private parentFunction(context: GraphContext, node: GraphNode): { run: RunState; graph: Graph } {
+    const name = String(node.properties.function);
+    return this.virtualFunction(context.run, name, context.run.layers.indexOf(context.run) + 1) ?? this.fail(context, node, `The parent class has no function "${name}".`);
   }
 
   // The custom event wired into a Bind or Unbind node's Event pin (through reroutes).
@@ -666,8 +739,13 @@ export class GraphRuntime {
     }
     if (operation === 'object-call' && isPure(definition)) {
       const { type, target } = this.target(context, node, definition, (id) => this.inputValue(context, node, definition, id, following));
-      const graph = target.doc.graphs.find((g) => g.id === node.properties.function && g.kind === 'function') ?? this.fail(context, node, `${type.name} no longer has this function.`);
-      return this.runFunction(context, node, target, graph, (id) => this.inputValue(context, node, definition, id, following)).get(pinId);
+      const fn = this.objectFunction(context, node, type, target);
+      return this.runFunction(context, node, fn.run, fn.graph, (id) => this.inputValue(context, node, definition, id, following)).get(pinId);
+    }
+    // A pure parent function: called on every read.
+    if (operation === 'parent-call' && isPure(definition)) {
+      const fn = this.parentFunction(context, node);
+      return this.runFunction(context, node, fn.run, fn.graph, (id) => this.inputValue(context, node, definition, id, following)).get(pinId);
     }
     // A function's inputs, read from its entry node.
     if (operation === 'function-entry') return context.frame.params.get(pinId) ?? defaultValue(definition.outputs.find((p) => p.id === pinId)?.type, context.run.types);

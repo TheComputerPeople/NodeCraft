@@ -53,7 +53,9 @@ export type IrExpr =
   // A variable of the Target object, of class `type` ("object:<Name>").
   | { kind: 'objectVariable'; target: IrExpr; type: string; variable: string }
   // A pure function of the Target object, reading one of its outputs when it has several.
-  | { kind: 'objectCall'; target: IrExpr; type: string; function: string; args: IrExpr[]; output?: string };
+  | { kind: 'objectCall'; target: IrExpr; type: string; function: string; args: IrExpr[]; output?: string }
+  // The parent class's version of a pure function (by name), reading one of its outputs.
+  | { kind: 'parentCall'; function: string; args: IrExpr[]; output?: string };
 
 // `+` and `-` are integer arithmetic on counters; the rest give booleans.
 export type BinaryOp = '<' | '<=' | '>=' | '==' | '!=' | '&&' | '||' | '+' | '-';
@@ -91,6 +93,8 @@ export type IrStatement =
   // A new object of class `type` into `slot`, its Start events run.
   | { kind: 'construct'; type: string; slot: string; source: SourceRef }
   | { kind: 'setObjectVariable'; target: IrExpr; type: string; variable: string; value: IrExpr; source: SourceRef }
+  // Runs the parent class's version of a function (by name; each output into a slot), or its start.
+  | { kind: 'parentCall'; function?: string; start?: boolean; args: IrExpr[]; results: { output: string; slot: string }[]; source: SourceRef }
   // Calls a function (each output into a slot) or runs a custom event (by name) of the Target object.
   | { kind: 'objectCall'; target: IrExpr; type: string; function?: string; event?: string; args: IrExpr[]; results: { output: string; slot: string }[]; source: SourceRef };
 
@@ -125,6 +129,8 @@ export interface IrFunction {
   pure: boolean;
   description?: string;
   body: IrStatement[];
+  // Replaces the parent class's function of the same name (C# needs `override`).
+  overrides?: boolean;
   // A custom event (docs/program-structure.md, "Custom events and event dispatchers"): its inputs
   // read outside its own flow are kept in these slots when it runs, as Unreal keeps an event's
   // outputs.
@@ -197,11 +203,17 @@ export interface IrProgram {
   dispatchers?: IrDispatcher[];
   // A class: its public members, as other files see them (src/core/objects.ts).
   classInfo?: ClassInfo;
+  // Its ancestors, nearest first, when it has a parent class.
+  ancestors?: ClassInfo[];
+  // Whether the graph has Start nodes: a subclass without any keeps its parent's start.
+  hasStart?: boolean;
 }
 
 // The class an "object:<Name>" type names: the program's own, or one it imports.
-export function classInfo(program: Pick<IrProgram, 'imports' | 'classInfo'>, id: string): ClassInfo | undefined {
+export function classInfo(program: Pick<IrProgram, 'imports' | 'classInfo'> & { ancestors?: ClassInfo[] }, id: string): ClassInfo | undefined {
   if (program.classInfo?.id === id) return program.classInfo;
+  const ancestor = program.ancestors?.find((a) => a.id === id);
+  if (ancestor) return ancestor;
   const type = program.imports.find((i) => i.id === id)?.userType;
   return type?.kind === 'class' ? type : undefined;
 }
@@ -212,7 +224,7 @@ export function userTypes(program: Pick<IrProgram, 'imports'>): Map<string, User
 }
 
 // Static type of an expression, as far as it is known.
-export type ProgramTypes = Pick<IrProgram, 'members' | 'slots' | 'helpers' | 'imports' | 'functions' | 'className' | 'classInfo'>;
+export type ProgramTypes = Pick<IrProgram, 'members' | 'slots' | 'helpers' | 'imports' | 'functions' | 'className' | 'classInfo' | 'ancestors'>;
 
 export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefined {
   switch (expr.kind) {
@@ -261,6 +273,11 @@ export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefin
       return classInfo(program, expr.type)?.variables.find((v) => v.id === expr.variable)?.type;
     case 'objectCall': {
       const outputs = classInfo(program, expr.type)?.functions.find((f) => f.id === expr.function)?.outputs.filter((p) => p.kind === 'data') ?? [];
+      return (expr.output ? outputs.find((p) => p.id === expr.output) : outputs[0])?.type;
+    }
+    case 'parentCall': {
+      const fn = program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === expr.function);
+      const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
       return (expr.output ? outputs.find((p) => p.id === expr.output) : outputs[0])?.type;
     }
   }

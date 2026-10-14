@@ -67,7 +67,8 @@ describe('project function nodes', () => {
   }
 
   const pins = (e: EditorPage) => e.page.$$eval('.pin[data-node="f"][data-direction="input"]', (els) => els.map((el) => (el as HTMLElement).dataset.pin));
-  const badge = (e: EditorPage) => e.page.getAttribute('.node[data-node="f"] .node-badge', 'class').catch(() => null);
+  // Read now, not waited for: a missing badge is an answer.
+  const badge = async (e: EditorPage) => (await e.page.$('.node[data-node="f"] .node-badge'))?.getAttribute('class') ?? null;
   const menu = async (e: EditorPage) => {
     const box = (await e.page.locator('.node[data-node="f"] .node-header').boundingBox())!;
     await e.page.mouse.click(box.x + 30, box.y + 8, { button: 'right' });

@@ -50,6 +50,7 @@ button, input { font: inherit; color: inherit; }
 .type-actions { display: flex; gap: 4px; }
 .type-actions button, .type-add { border: 1px solid var(--panel-border); background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 3px 8px; border-radius: 4px; cursor: pointer; }
 .type-actions button:disabled { opacity: .4; cursor: default; }
+.mb-override { margin-left: auto; margin-right: 4px; border: 1px solid var(--panel-border); background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border-radius: 3px; padding: 0 5px; font-size: 11px; cursor: pointer; }
 #type-editor .container-default button { border: 1px solid var(--panel-border); background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 3px 8px; border-radius: 4px; cursor: pointer; }
 #edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; transform-origin: 0 0; z-index: 0; }
 /* Wires take their source pin's color (docs/unreal-conventions.md); exec wires are thicker. */

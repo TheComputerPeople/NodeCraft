@@ -2,7 +2,8 @@
 import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, programClassSpec, userTypes } from '../compiler/ir';
 import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
-import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import type { ClassInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
 import { TypeRef, parseTypeId } from '../types';
@@ -253,16 +254,18 @@ class PythonEmitter {
     // A library's functions are claimed first, exactly as pythonExportNames claims them.
     this.names = this.library ? new NameScope(RESERVED, MODULE_NAMES) : new NameScope(RESERVED, ['start']);
     // Public members first, as every module that uses the class names them.
-    const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES);
+    const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
     this.classNames.set(`object:${program.className}`, own);
     for (const f of program.functions) this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
     for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     const moduleScope = this.library ? this.names : new NameScope(RESERVED, [this.className, ...MODULE_NAMES]);
     for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
-    for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
-    for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'snake', '_'));
-    for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', '_'));
+    // A subclass's internal attributes and methods carry its name: its parent's may share theirs.
+    const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'snake')}_` : '_';
+    for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
+    for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'snake', internal));
+    for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', internal));
   }
 
   emit(): GeneratedCode {
@@ -276,7 +279,8 @@ class PythonEmitter {
       body.trimTrailingBlank();
       return this.finish(false);
     }
-    body.line(`class ${this.className}:`);
+    const parent = this.program.classInfo?.parent;
+    body.line(`class ${this.className}${parent ? `(${this.userTypeName(parent)})` : ''}:`);
     body.indent();
     const fields = [
       ...this.program.members.filter((m) => !m.function).map((m) => ({ name: this.memberNames.get(m.id)!, type: m.type, initial: this.value(m.initial, m.type) })),
@@ -285,10 +289,12 @@ class PythonEmitter {
     ];
     if (fields.length) {
       this.method('__init__', [], undefined, () => {
+        if (parent) body.line('super().__init__()');
         for (const f of fields) body.line(`self.${f.name}: ${f.type === 'dispatcher' ? '_EventDispatcher' : this.typeName(f.type)} = ${f.initial}`);
       });
     }
-    this.method('start', [], undefined, () => this.statements(this.program.start));
+    // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay.
+    if (!parent || this.program.hasStart) this.method('start', [], undefined, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const block of this.program.blocks) this.blockMethod(block);
     for (const helper of this.program.helpers) this.helperMethod(helper);
@@ -335,13 +341,38 @@ class PythonEmitter {
     return `self.${this.dispatcherNames.get(s.dispatcher)}`;
   }
 
+
+  // The class's ancestors' member names, nearest first (src/core/compiler/names.ts).
+  private inheritedMembers(info: ClassInfo | undefined): InheritedMembers[] {
+    const chain: InheritedMembers[] = [];
+    const seen = new Set<string>();
+    for (let parent = info?.parent; parent && !seen.has(parent);) {
+      seen.add(parent);
+      const ancestor = classInfo(this.program, parent);
+      const names = ancestor && this.membersOf(parent);
+      if (!ancestor || !names) break;
+      chain.push({ names, functions: ancestor.functions });
+      parent = ancestor.parent;
+    }
+    return chain;
+  }
+
+  // The generated name of the nearest ancestor's function called `name` (what Parent calls).
+  private parentFunctionName(name: string): string | undefined {
+    for (const ancestor of this.program.ancestors ?? []) {
+      const fn = ancestor.functions.find((f) => f.name === name);
+      if (fn) return this.membersOf(ancestor.id)?.functions.get(fn.id);
+    }
+    return undefined;
+  }
+
   // The member names another class's generated module gives its public members.
   private membersOf(id: string): ClassMemberNames | undefined {
     const existing = this.classNames.get(id);
     if (existing) return existing;
     const info = classInfo(this.program, id);
     if (!info) return undefined;
-    const names = claimClassMembers(new NameScope(RESERVED, ['start']), info, CLASS_STYLES);
+    const names = claimClassMembers(new NameScope(RESERVED, ['start']), info, CLASS_STYLES, this.inheritedMembers(info));
     this.classNames.set(id, names);
     return names;
   }
@@ -391,9 +422,10 @@ class PythonEmitter {
       }
       return [...byModule].sort(([a], [b]) => compare(a, b)).map(([module, names]) => `from ${module} import ${names.join(', ')}`);
     };
-    const early = fromImports(this.program.imports.filter((i) => i.userType?.kind !== 'class'));
-    // Classes are imported at the end: two classes that use each other then both load.
-    const late = fromImports(this.program.imports.filter((i) => i.userType?.kind === 'class'));
+    const parentClass = this.program.classInfo?.parent;
+    const early = fromImports(this.program.imports.filter((i) => i.userType?.kind !== 'class' || i.id === parentClass));
+    // Other classes are imported at the end: two classes that use each other then both load.
+    const late = fromImports(this.program.imports.filter((i) => i.userType?.kind === 'class' && i.id !== parentClass));
     if (early.length) {
       for (const line of early) header.line(line);
       header.line();
@@ -594,6 +626,15 @@ class PythonEmitter {
       case 'broadcast':
         out.line(`${this.dispatcherRef(s)}.broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
         break;
+      case 'parentCall': {
+        if (s.start) {
+          out.line('super().start()');
+          break;
+        }
+        const call = `super().${this.parentFunctionName(s.function!)}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        out.line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
+        break;
+      }
       case 'construct':
         out.line(`${this.slotRef(s.slot)} = ${this.userTypeName(s.type)}()`);
         out.line(`${this.slotRef(s.slot)}.start()`);
@@ -676,6 +717,12 @@ class PythonEmitter {
       }
       case 'self':
         return 'self';
+      case 'parentCall': {
+        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `super().${this.parentFunctionName(e.function)}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
+      }
       case 'isValid':
         return `${this.operand(e.value)} is not None`;
       case 'objectVariable':

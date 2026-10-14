@@ -5,7 +5,8 @@ import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, UNBIND_ALL, UNBIND_EVENT, customEvents, documentDispatchers, eventName } from '../core/events';
-import { OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, classTypeId } from '../core/objects';
+import { OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, PARENT_START, ancestors, classTypeId, declaredClass, subclassTest } from '../core/objects';
+import { setClassHierarchy } from '../core/types';
 import { listUserTypes } from '../core/user-types';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
 import { primaryGraph } from '../core/serializer';
@@ -42,7 +43,7 @@ export function paletteEntries(): PaletteEntry[] {
     // A function has one entry node and a macro one pair of tunnels; calls and macros are offered
     // one by one; Return Nodes only fit in functions, and events only in event graphs (as in
     // Unreal's action menu).
-    .filter((d) => ![FUNCTION_ENTRY, FUNCTION_CALL, MACRO_INPUTS, MACRO_OUTPUTS, MACRO_INSTANCE, CALL_EVENT, CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER].includes(d.type))
+    .filter((d) => ![FUNCTION_ENTRY, FUNCTION_CALL, MACRO_INPUTS, MACRO_OUTPUTS, MACRO_INSTANCE, CALL_EVENT, CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL].includes(d.type))
     .filter((d) => (kind === 'event' || !kind ? d.type !== FUNCTION_RETURN : !d.type.startsWith('core:event.') && (kind === 'function' || d.type !== FUNCTION_RETURN)))
     // A macro library's macro can't use itself.
     .filter((d) => !(d.implementation?.kind === 'macro' && kind === 'macro' && d.implementation.source.graph === state.graph?.id && state.document?.kind === 'macroLibrary'))
@@ -64,6 +65,14 @@ export function paletteEntries(): PaletteEntry[] {
   for (const { node } of customEvents(state.document?.graphs)) offer(CALL_EVENT, { event: eventName(node) }, `${CALL_EVENT}:${eventName(node)}`);
   for (const d of documentDispatchers(state.document ?? undefined)) {
     for (const type of [CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL]) offer(type, { dispatcher: d.id }, `${type}:${d.id}`);
+  }
+  // Parent: Start in event graphs, and Parent: <Function> in a function that overrides one.
+  const parents = documentAncestors();
+  if (parents.length) {
+    const name = kind === 'event' ? PARENT_START : kind === 'function' && parents.some((a) => a.functions.some((f) => f.name === state.graph?.name)) ? state.graph?.name : undefined;
+    const properties = { function: name };
+    const definition = name && lookupDefinition({ id: '', type: PARENT_CALL, position: { x: 0, y: 0 }, properties });
+    if (definition) entries.push({ key: `${PARENT_CALL}:${name}`, type: PARENT_CALL, properties, definition });
   }
   // Other classes' members, each with a Target pin, under the class's name (src/core/objects.ts).
   const own = state.document ? classTypeId(state.document.name) : '';
@@ -130,7 +139,20 @@ export function pinDef(nodeId: string, pinId: string): PinDefinition | undefined
 export function setDefinitions(definitions: NodeDefinition[]): void {
   state.definitions = definitions;
   state.defByType = new Map(definitions.map((d) => [d.type, d]));
+  updateClassHierarchy();
   renderPalette();
+}
+
+// An object of a subclass wires where its parent class is expected (src/core/objects.ts).
+export function updateClassHierarchy(): void {
+  const own = state.document ? declaredClass(state.document) : undefined;
+  setClassHierarchy(subclassTest((type) => state.defByType.get(type), own));
+}
+
+// The document's class's ancestors, nearest first.
+export function documentAncestors(): ReturnType<typeof ancestors> {
+  const own = state.document ? declaredClass(state.document) : undefined;
+  return own ? ancestors(own, (type) => state.defByType.get(type)) : [];
 }
 
 export function applySettings(message: HostMessage): void {
@@ -148,6 +170,7 @@ export function applySettings(message: HostMessage): void {
 export function loadDocument(doc: GraphDocument, preserveView = false): void {
   const previousGraphId = state.graph?.id;
   state.document = copyDocument(doc);
+  updateClassHierarchy();
   state.graph = state.document.graphs.find((g) => g.id === previousGraphId) ?? primaryGraph(state.document) ?? null;
   dom.graphName.textContent = state.graph ? `${state.document.name} › ${state.graph.name}` : state.document.name;
   // A structure or enumeration has no graphs: its fields or values are edited instead.

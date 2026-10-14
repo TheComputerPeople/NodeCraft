@@ -31,6 +31,11 @@
       "type": "string",
       "description": "Target language pack id, e.g. \"typescript\"."
     },
+    "parent": {
+      "type": "string",
+      "pattern": "^object:",
+      "description": "A class's parent class, as object:<Name>."
+    },
     "variables": {
       "type": "array",
       "description": "Member variables, or a structure's fields; must be empty for libraries and enumerations.",
@@ -238,6 +243,24 @@
         "not": {
           "required": [
             "dispatchers"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "not": {
+              "const": "class"
+            }
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "parent"
           ]
         }
       }

@@ -11,7 +11,7 @@ import { ContainerKind, TypeRef } from '../core/types';
 import { defaultValue } from '../core/values';
 import { formatType } from '../core/types';
 import { addNode, addPin } from './actions';
-import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText } from './document';
+import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText, updateClassHierarchy } from './document';
 import { dom, escapeHtml, setStatus } from './dom';
 import { renderMyBlueprint } from './my-blueprint';
 import { render } from './render';
@@ -20,6 +20,7 @@ import { state } from './state';
 import { screenToWorld } from './view';
 import { UserType, listUserTypes } from '../core/user-types';
 import { CUSTOM_EVENT } from '../core/events';
+import { ClassInfo, ancestors, classTypeId } from '../core/objects';
 import { renderDispatcherDetails, renderEventDetails } from './event-details';
 
 export function renderPalette(): void {
@@ -72,6 +73,11 @@ export function renderInspector(): void {
     renderFunctionDetails(graph);
     return;
   }
+  // Unreal's Class Settings: shown for an event graph with nothing selected.
+  if (graph?.kind === 'event' && !node && state.selectedNodeIds.size === 0 && state.document?.kind === 'class') {
+    renderClassSettings();
+    return;
+  }
   if (!graph || !node) {
     dom.inspector.innerHTML = state.selectedNodeIds.size > 1
       ? `<div class="muted details-empty">${state.selectedNodeIds.size} nodes selected.</div>`
@@ -97,6 +103,34 @@ export function renderInspector(): void {
   if (user?.kind === 'struct' && user.operation === 'set-members') wrapper.appendChild(membersEditor(node, user.type.fields));
   if (node.type === SWITCH_STRING) wrapper.appendChild(switchCasesEditor(node));
   if (node.type === SWITCH_INT) wrapper.appendChild(switchStartEditor(node));
+  dom.inspector.innerHTML = '';
+  dom.inspector.appendChild(wrapper);
+}
+
+// Class Settings: the Parent Class, from the workspace's classes in the same language (not this
+// one, nor one that inherits from it).
+function renderClassSettings(): void {
+  const doc = state.document!;
+  const own = classTypeId(doc.name);
+  const candidates = workspaceTypes().filter((t) => t.kind === 'class' && t.id !== own && !ancestors(t as ClassInfo, (type) => state.defByType.get(type)).some((a) => a.id === own));
+  const wrapper = document.createElement('div');
+  wrapper.className = 'details';
+  wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(doc.name)}</div><div class="muted inspector-type">Class Settings</div>`;
+  const fields = document.createElement('div');
+  fields.className = 'details-fields';
+  const parent = select([{ id: '', label: 'None' }, ...candidates.map((t) => ({ id: t.id, label: t.name }))], doc.parent ?? '', 'Parent Class');
+  parent.addEventListener('change', () => {
+    if (parent.value) doc.parent = parent.value;
+    else delete doc.parent;
+    updateClassHierarchy();
+    markDirty();
+    render();
+    renderMyBlueprint();
+    renderPalette();
+  });
+  fields.appendChild(field('Parent Class', parent));
+  fields.insertAdjacentHTML('beforeend', '<div class="muted">Select a node to see its details.</div>');
+  wrapper.appendChild(fields);
   dom.inspector.innerHTML = '';
   dom.inspector.appendChild(wrapper);
 }

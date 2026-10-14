@@ -164,6 +164,8 @@ export interface GraphDocument {
   enumerators?: Enumerator[];
   // A class's event dispatchers (src/core/events.ts).
   dispatchers?: Dispatcher[];
+  // A class's parent class ("object:<Name>"), as Unreal's Parent Class in Class Settings.
+  parent?: string;
   // The signature of each project function the graphs call, by node type, as it was when its
   // nodes were made or last refreshed (docs/code-as-nodes.md, "When the code changes").
   importedFunctions?: Record<string, NodeDefinition>;

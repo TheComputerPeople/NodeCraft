@@ -11,10 +11,10 @@ import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
-import { ClassInfo, declaredClass, dispatcherAction, isObjectNode, nodeClass } from '../objects';
+import { ClassInfo, PARENT_START, ancestors, declaredClass, dispatcherAction, isObjectNode, nodeClass, parentFunction, subclassTest } from '../objects';
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup } from '../user-types';
-import { TypeRef } from '../types';
+import { TypeRef, setClassHierarchy } from '../types';
 import { toIdentifier } from './names';
 
 export interface LowerOptions {
@@ -74,8 +74,10 @@ class Lowerer {
   private readonly macros: MacroLookup;
   // The workspace's structs and enums (src/core/user-types.ts).
   private readonly types: TypeLookup;
-  // The class this document declares, as other objects see it (src/core/objects.ts).
+  // The class this document declares, as other objects see it (src/core/objects.ts), and its
+  // ancestors, nearest first.
   private readonly ownClass: ClassInfo | undefined;
+  private readonly ancestors: ClassInfo[];
   // Reroute and pure nodes being followed for the current input, to catch data loops.
   private readonly following = new Set<string>();
   // While checking a graph with macros expanded in it: problems with the macros' own nodes were
@@ -90,6 +92,10 @@ class Lowerer {
     this.macros = macroLookup(doc.graphs, (type) => options.registry.get(type));
     this.types = typeLookup(options.registry.all(), doc.language);
     this.ownClass = declaredClass(doc);
+    const definition = (type: string) => options.registry.get(type);
+    this.ancestors = this.ownClass ? ancestors(this.ownClass, definition) : [];
+    // An object of a subclass connects where its parent class is expected.
+    setClassHierarchy(subclassTest(definition, this.ownClass));
   }
 
   run(): LowerResult {
@@ -148,6 +154,7 @@ class Lowerer {
     for (const info of functionGraphs) this.lowerFunction(info);
     for (const { info, node, fn } of events) this.lowerEvent(info, node, fn);
     const start = entries.flatMap(({ info, start: node }) => this.lowerNode(info, node.id));
+    this.checkInheritance();
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
 
     const program: IrProgram = {
@@ -161,6 +168,8 @@ class Lowerer {
       functions: this.functions,
       start,
       ...(this.ownClass ? { classInfo: this.ownClass } : {}),
+      ...(this.ancestors.length ? { ancestors: this.ancestors } : {}),
+      hasStart: entries.length > 0,
       dispatchers: documentDispatchers(this.doc).map((d): IrDispatcher => ({ id: d.id, name: d.name, params: d.inputs.filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type })) }))
     };
     this.importTypes(program);
@@ -206,6 +215,8 @@ class Lowerer {
           used.set(value, type);
           // A struct's fields may hold other structs and enums the generated code then refers to.
           if (type.kind === 'struct') for (const f of type.fields) visit(f.type);
+          // A class's ancestors: generated code names its members after theirs.
+          if (type.kind === 'class' && type.parent) visit(type.parent);
         }
         return;
       }
@@ -298,6 +309,7 @@ class Lowerer {
       outputs: signature.outputs.filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type })),
       pure: !!signature.pure,
       ...(signature.description ? { description: signature.description } : {}),
+      ...(this.ownClass && parentFunction(this.ownClass, graph.name, (t) => this.options.registry.get(t)) ? { overrides: true } : {}),
       body: []
     };
     // Registered before the body, so calls inside it (recursion) can find it.
@@ -362,10 +374,41 @@ class Lowerer {
     return type;
   }
 
+  // Whether a member of `type` is this object's own (its class's or an ancestor's).
+  private isOwn(type: ClassInfo): boolean {
+    return type.id === this.ownClass?.id || this.ancestors.some((a) => a.id === type.id);
+  }
+
+  // The parent class must exist and not loop; a subclass's members must not take its ancestors'
+  // names, except functions that override with the same signature.
+  private checkInheritance(): void {
+    const own = this.ownClass;
+    if (!own?.parent) return;
+    const parentName = own.parent.replace(/^object:/, '');
+    if (!this.ancestors.length) {
+      this.error('parent-missing', `There is no class ${parentName} in the workspace to inherit from.`);
+      return;
+    }
+    // ancestors() stops where the chain loops back: the last one's parent is already in it.
+    const last = this.ancestors[this.ancestors.length - 1].parent;
+    if (last && (last === own.id || this.ancestors.some((a) => a.id === last))) this.error('parent-loop', `${own.name} can't inherit from itself, directly or through ${parentName}.`);
+    const inherited = this.ancestors.flatMap((a) => [...a.variables.map((v) => v.name), ...a.events.map((e) => e.name), ...a.dispatchers.map((d) => d.name)]);
+    for (const name of [...own.variables.map((v) => v.name), ...own.events.map((e) => e.name), ...own.dispatchers.map((d) => d.name)]) {
+      if (inherited.includes(name)) this.error('inherited-name', `${parentName} already has a member named "${name}".`);
+    }
+    const signature = (pins: { kind: string; type?: TypeRef }[]) => JSON.stringify(pins.filter((p) => p.kind === 'data').map((p) => p.type?.id ?? 'any'));
+    for (const fn of own.functions) {
+      const base = parentFunction(own, fn.name, (t) => this.options.registry.get(t));
+      if (base && (signature(base.inputs) !== signature(fn.inputs) || signature(base.outputs) !== signature(fn.outputs) || base.pure !== fn.pure)) {
+        this.error('override-mismatch', `"${fn.name}" overrides ${base.owner.name}'s function, so it needs the same inputs, outputs and Pure setting.`, fn.id);
+      }
+    }
+  }
+
   // The object a member node acts on: its Target pin, else (for its own class) Self.
   private targetExpr(info: GraphInfo, node: GraphNode, def: NodeDefinition, type: ClassInfo): IrExpr {
     if (info.dataSources.has(inputKey(node.id, 'target'))) return this.inputExpr(info, node, def, 'target');
-    if (type.id === this.ownClass?.id) return { kind: 'self' };
+    if (this.isOwn(type)) return { kind: 'self' };
     this.error('target-missing', `Connect a ${type.name} to Target.`, info.graph.id, node.id);
     return { kind: 'default', type: { id: type.id } };
   }
@@ -376,6 +419,20 @@ class Lowerer {
     if (implementation?.kind === 'class') {
       const slot = this.slot(info, node, def, 'object');
       return [{ kind: 'construct', type: implementation.type.id, slot, source }, ...next('execOut')];
+    }
+    if (operation === 'parent-call') {
+      const name = String(node.properties.function ?? PARENT_START);
+      if (!this.ancestors.length) {
+        this.error('parent-missing', 'Only a class with a parent class can call its parent.', info.graph.id, node.id);
+        return next('execOut');
+      }
+      if (name === PARENT_START) return [{ kind: 'parentCall', start: true, args: [], results: [], source }, ...next('execOut')];
+      if (!parentFunction(this.ownClass!, name, (t) => this.options.registry.get(t))) {
+        this.error('parent-missing', `The parent class has no function "${name}".`, info.graph.id, node.id);
+        return next('execOut');
+      }
+      const results = def.outputs.filter((p) => p.kind === 'data').map((p) => ({ output: p.id, slot: this.slot(info, node, def, p.id) }));
+      return [{ kind: 'parentCall', function: name, args: dataInputs(def).map((p) => input(p.id)), results, source }, ...next('execOut')];
     }
     if (!['object-set', 'object-call', 'object-event', 'object-dispatcher'].includes(operation)) return undefined;
     const type = this.memberClass(info, node);
@@ -706,6 +763,13 @@ class Lowerer {
       return { kind: 'toText', value };
     }
     if (operation === 'self') return { kind: 'self' };
+    // A pure parent function: called where its value is used.
+    if (operation === 'parent-call' && isPure(sourceDef)) {
+      return {
+        kind: 'parentCall', function: String(sourceNode.properties.function), args: dataInputs(sourceDef).map((p) => this.inputExpr(info, sourceNode, sourceDef, p.id)),
+        ...(sourceDef.outputs.filter((p) => p.kind === 'data').length > 1 ? { output: source.pin } : {})
+      };
+    }
     if (operation === 'is-valid') return { kind: 'isValid', value: this.inputExpr(info, sourceNode, sourceDef, 'object') };
     if (operation === 'object-get' || operation === 'object-set' || (operation === 'object-call' && isPure(sourceDef))) {
       const type = this.memberClass(info, sourceNode);

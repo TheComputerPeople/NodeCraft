@@ -291,7 +291,8 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | For Each Loop (with Break) | ✅ | — |
 | Structure | Structs, enums, Make/Break, Set Members, Switch on Enum, the structure and enumeration editors | ✅ (sets and map keys of structs or enums later) | — |
 | Structure | Object references: Construct, Self, Is Valid, Target pins on variables, functions, events and dispatchers | ✅ | — |
-| Structure | Inheritance, overrides and Parent calls, interfaces, Cast To | ⬜ | 4 |
+| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents later) | — |
+| Structure | Interfaces, Cast To | ⬜ | 4 |
 | Structure | Custom events (Call), event dispatchers (Call, Bind, Unbind, Unbind all, Assign), on this object or another | ✅ | — |
 | Structure | Latent actions (Delay) | ⬜ | 4 |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python; methods with Phase 4 classes) | — |

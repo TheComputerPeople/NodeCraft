@@ -8,6 +8,8 @@ import { GraphDocument, GraphNode } from '../../src/core/model';
 import { classDefinitions, declaredClass } from '../../src/core/objects';
 import { NodeRegistry } from '../../src/core/registry';
 import { createResolver } from '../../src/core/resolve';
+import { GraphRuntime } from '../../src/core/runtime';
+import { RuntimeLogEvent } from '../../src/core/model';
 import { logs, node, run, wire } from './helpers';
 
 const other: GraphDocument = {
@@ -74,5 +76,58 @@ describe('objects', () => {
     const r = registry();
     r.registerMany(classDefinitions(declaredClass(d)!));
     assert.deepEqual(logs(run(d, r)), ['false']);
+  });
+});
+
+describe('inheritance', () => {
+  const base: GraphDocument = {
+    schemaVersion: 3, name: 'Base', kind: 'class', language: 'javascript', variables: [{ id: 'hp', name: 'HP', type: { id: 'int' } }],
+    graphs: [
+      // Start calls Greet: the subclass's Greet runs, as calls are virtual.
+      { id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [node('s', 'core:event.start'), node('g', 'core:function.call', { graph: 'Greet' })], connections: [wire('s', 'execOut', 'g', 'execIn')] },
+      {
+        id: 'Greet', name: 'Greet', kind: 'function', comments: [], signature: { inputs: [], outputs: [] },
+        nodes: [node('entry', 'core:function.entry', { graph: 'Greet' }), node('p', 'core:console.print', { 'pin:value': 'base' })], connections: [wire('entry', 'execOut', 'p', 'execIn')]
+      }
+    ]
+  };
+  const child = (graphs: GraphDocument['graphs'], variables: GraphDocument['variables'] = []): GraphDocument => ({
+    schemaVersion: 3, name: 'Child', kind: 'class', language: 'javascript', parent: 'object:Base', variables, graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [], connections: [] }, ...graphs]
+  });
+  const withBase = (): NodeRegistry => {
+    const r = new NodeRegistry();
+    r.registerMany(classDefinitions(declaredClass(base, { document: 'Base.vgraph', generatedPath: 'Base.vgraph.js' })!));
+    return r;
+  };
+  const errorsOf = (d: GraphDocument, r = withBase()) => compileDocument(d, { registry: r, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Child.vgraph' } }).diagnostics
+    .filter((x) => x.severity === 'error').map((x) => x.code);
+
+  test('the parent must exist; members must not take its names; overrides keep its signature', () => {
+    assert.deepEqual(errorsOf(child([]), new NodeRegistry()), ['parent-missing']);
+    assert.deepEqual(errorsOf(child([], [{ id: 'hp2', name: 'HP', type: { id: 'int' } }])), ['inherited-name']);
+    const greet = (inputs: GraphDocument['graphs'][number]['signature']) => ({ id: 'Greet2', name: 'Greet', kind: 'function' as const, comments: [], signature: inputs, nodes: [node('entry', 'core:function.entry', { graph: 'Greet2' })], connections: [] });
+    assert.deepEqual(errorsOf(child([greet({ inputs: [], outputs: [] })])), []);
+    assert.deepEqual(errorsOf(child([greet({ inputs: [{ id: 'x', name: 'X', kind: 'data', type: { id: 'int' } }], outputs: [] })])), ['override-mismatch']);
+  });
+
+  test('a class can\'t inherit from itself', () => {
+    const r = new NodeRegistry();
+    const a = { ...base, name: 'A', parent: 'object:B' };
+    const b = { ...base, name: 'B', parent: 'object:A' };
+    r.registerMany([...classDefinitions(declaredClass(a)!), ...classDefinitions(declaredClass(b)!)]);
+    assert.ok(errorsOf(a, r).includes('parent-loop'));
+  });
+
+  test('the parent\'s own calls run the override; Parent runs the parent\'s version', () => {
+    const r = withBase();
+    const d = child([{
+      id: 'Greet2', name: 'Greet', kind: 'function', comments: [], signature: { inputs: [], outputs: [] },
+      nodes: [node('entry', 'core:function.entry', { graph: 'Greet2' }), node('p', 'core:console.print', { 'pin:value': 'child' }), node('parent', 'core:object.parent', { function: 'Greet' })],
+      connections: [wire('entry', 'execOut', 'p', 'execIn'), wire('p', 'execOut', 'parent', 'execIn')]
+    }]);
+    const events: RuntimeLogEvent[] = [];
+    new GraphRuntime(r, (e) => events.push(e), undefined, (file) => (file === 'Base.vgraph' ? base : undefined)).run(d);
+    assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), ['child', 'base']);
+    assert.match(compileDocument(d, { registry: r, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Child.vgraph' } }).output!.text, /class Child extends Base \{[\s\S]*greet\(\) \{[\s\S]*super\.greet\(\);/);
   });
 });

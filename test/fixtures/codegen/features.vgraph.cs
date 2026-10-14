@@ -16,7 +16,7 @@ public class Features
     public object? Score = null;
     private double _double_result = 0;
 
-    public void Start()
+    public virtual void Start()
     {
         // Set Score (set_score)
         Score = 5;
