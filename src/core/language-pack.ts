@@ -47,6 +47,9 @@ export interface GeneratedCode {
   className: string;
   // Where each node's code starts, for jumping between graph and code (and debugging later).
   nodeLines: NodeLine[];
+  // Folders (relative to the workspace folder) the runtime must search for the project modules the
+  // code imports, for languages that import by module name (Python's sys.path).
+  importRoots?: string[];
 }
 
 // How to run generated code with the project's own toolchain.
@@ -54,7 +57,8 @@ export interface CodeRunner {
   // Candidate commands (an executable plus leading arguments), tried in order until one starts.
   commands(platform: string): string[][];
   // Arguments that load the generated file and call its start method.
-  args(file: { path: string; url: string }, className: string): string[];
+  // `importRoots` are absolute folders for GeneratedCode.importRoots.
+  args(file: { path: string; url: string }, className: string, context?: { importRoots?: string[] }): string[];
   // Shown when no candidate command could start.
   missingToolMessage: string;
 }

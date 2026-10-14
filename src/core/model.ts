@@ -162,6 +162,8 @@ export interface RunStatus {
 export interface LanguageOption {
   id: string;
   displayName: string;
+  // Languages of project functions a graph in this language can call (docs/code-as-nodes.md).
+  callable: string[];
 }
 
 // A Find in All Blueprints hit: a search hit plus the file it is in.

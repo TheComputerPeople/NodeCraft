@@ -8,6 +8,7 @@ import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
 import { detectWorkspaceLanguage } from './languages';
 import { watchWorkspaceNodeLibraries } from './node-libraries';
 import { isGeneratedFrom } from './placement';
+import { ProjectFunctions } from './project-functions';
 
 export function activate(context: vscode.ExtensionContext): void {
   // Libraries load in the background; open editors receive the updated definitions when ready.
@@ -23,6 +24,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     return outputChannel;
   };
+
+  // The project's own functions, exposed as nodes (docs/code-as-nodes.md).
+  context.subscriptions.push(new ProjectFunctions(registry, languages, output));
 
   const compiler = new CompileService(registry, languages, output);
   const provider = new GraphEditorProvider(context, registry, languages, compiler, output);

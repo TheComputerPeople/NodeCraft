@@ -24,9 +24,26 @@ export interface TypeScriptFlavor {
   mapType(type: TypeRef): string;
 }
 
+// Generated TypeScript imports project modules the way the project's tsconfig.json expects
+// (".js" or no extension; docs/code-as-nodes.md). Node.js only finds ".ts" files by their own
+// name, so Run adds a resolve hook that tries the TypeScript file when the import isn't found.
+const RESOLVE_TYPESCRIPT = [
+  'const m = process.getBuiltinModule?.("node:module");',
+  'if (m?.registerHooks) m.registerHooks({ resolve(specifier, context, next) {',
+  '  try { return next(specifier, context); } catch (error) {',
+  '    if (!/^\\.\\.?\\//.test(specifier)) throw error;',
+  '    for (const candidate of [specifier.replace(/\\.([mc]?)js$/, ".$1ts"), specifier + ".ts", specifier + "/index.ts"]) {',
+  '      if (candidate === specifier) continue;',
+  '      try { return next(candidate, context); } catch {}',
+  '    }',
+  '    throw error;',
+  '  }',
+  '} });'
+].join('\n');
+
 const nodeRunner: CodeRunner = {
   commands: () => [['node']],
-  args: (file, className) => ['-e', `import(${JSON.stringify(file.url)}).then((m) => new m.${className}().start())`],
+  args: (file, className) => ['-e', `${RESOLVE_TYPESCRIPT}\nimport(${JSON.stringify(file.url)}).then((m) => new m.${className}().start())`],
   missingToolMessage: 'Node.js was not found. Install Node.js 22.18 or later (it runs TypeScript directly) and make sure `node` is on the PATH.'
 };
 

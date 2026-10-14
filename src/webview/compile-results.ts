@@ -5,6 +5,7 @@ import { definitionFor } from '../core/editing';
 import { CompileReport } from '../core/model';
 import { lookupDefinition, markDirty } from './document';
 import { dom, setStatus } from './dom';
+import { renderPalette } from './panels';
 import { render } from './render';
 import { selectNode } from './selection';
 import { state } from './state';
@@ -96,7 +97,7 @@ export function renderLanguagePicker(): void {
   const current = state.document?.language ?? '';
   select.innerHTML = '';
   const options = [...state.languages];
-  if (current && !options.some((o) => o.id === current)) options.push({ id: current, displayName: `${current} (not available)` });
+  if (current && !options.some((o) => o.id === current)) options.push({ id: current, displayName: `${current} (not available)`, callable: [] });
   for (const option of options) {
     const el = document.createElement('option');
     el.value = option.id;
@@ -111,6 +112,8 @@ export function setLanguage(language: string): void {
   if (!state.document || state.document.language === language) return;
   state.document.language = language;
   markDirty();
+  // The palette offers the project functions this language can call.
+  renderPalette();
 }
 
 function count(n: number, noun: string): string {

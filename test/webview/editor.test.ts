@@ -225,7 +225,11 @@ describe('compiling from the editor', () => {
     editor = await EditorPage.open(browser);
     await editor.send({
       type: 'init', document: sampleDocument(), definitions: sampleDefinitions(), saveDelay: 60000,
-      languages: [{ id: 'typescript', displayName: 'TypeScript' }, { id: 'python', displayName: 'Python' }, { id: 'javascript', displayName: 'JavaScript' }]
+      languages: [
+        { id: 'typescript', displayName: 'TypeScript', callable: ['typescript', 'javascript'] },
+        { id: 'python', displayName: 'Python', callable: ['python'] },
+        { id: 'javascript', displayName: 'JavaScript', callable: ['javascript'] }
+      ]
     });
     return editor;
   }
@@ -289,6 +293,22 @@ describe('compiling from the editor', () => {
     await e.page.click('#compile');
     const saved = (await e.posted()).filter((m) => m.type === 'applyDocument').pop();
     assert.equal(saved?.document?.language, 'python');
+  });
+
+  test('the palette offers only project functions the graph language can call', async (t) => {
+    const e = await openSample(t);
+    if (!e) return;
+    const fn = (language: string, path: string, name: string) => ({
+      type: `fn:${language}:${path}#${name}`, version: 1, displayName: name, category: 'Project / lib',
+      inputs: [], outputs: [], implementation: { kind: 'function' as const, language, path, name }
+    });
+    await e.send({ type: 'definitions', definitions: [...sampleDefinitions(), fn('typescript', 'lib.ts', 'Tsf'), fn('javascript', 'lib.js', 'Jsf'), fn('python', 'lib.py', 'Pyf')] });
+    const offered = () => e.page.$$eval('.palette-node strong', (els) => els.map((el) => el.textContent).filter((t) => t === 'Tsf' || t === 'Jsf' || t === 'Pyf'));
+    assert.deepEqual(await offered(), ['Jsf'], 'a JavaScript graph calls JavaScript');
+    await e.page.selectOption('#language', 'typescript');
+    assert.deepEqual((await offered()).sort(), ['Jsf', 'Tsf'], 'TypeScript also imports JavaScript');
+    await e.page.selectOption('#language', 'python');
+    assert.deepEqual(await offered(), ['Pyf']);
   });
 
   test('run status messages appear in the status bar', async (t) => {

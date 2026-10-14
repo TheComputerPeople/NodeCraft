@@ -26,10 +26,11 @@ export interface PaletteEntry {
 }
 
 // Every node type, except that variable Get/Set nodes are offered once per declared variable
-// ("Get Score", "Set Score"), as in Unreal's action menu.
+// ("Get Score", "Set Score"), as in Unreal's action menu, and project functions only when the
+// graph's language can call them.
 export function paletteEntries(): PaletteEntry[] {
   const entries: PaletteEntry[] = state.definitions
-    .filter((d) => d.type !== VARIABLE_GET && d.type !== VARIABLE_SET)
+    .filter((d) => d.type !== VARIABLE_GET && d.type !== VARIABLE_SET && callable(d))
     .map((d) => ({ key: d.type, type: d.type, properties: {}, definition: d }));
   for (const variable of state.document?.variables ?? []) {
     for (const type of [VARIABLE_GET, VARIABLE_SET]) {
@@ -39,6 +40,13 @@ export function paletteEntries(): PaletteEntry[] {
     }
   }
   return entries;
+}
+
+function callable(definition: NodeDefinition): boolean {
+  const implementation = definition.implementation;
+  if (implementation?.kind !== 'function') return true;
+  const language = state.languages.find((l) => l.id === state.document?.language);
+  return !language || language.callable.includes(implementation.language);
 }
 
 // Text an entry matches in searches: its name, category, description and keywords.

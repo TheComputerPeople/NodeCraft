@@ -16,10 +16,10 @@ describe('NodeRegistry', () => {
     }
   });
 
-  test('replaceWorkspaceDefinitions swaps library nodes but keeps builtins', () => {
+  test("setSource swaps a source's nodes but keeps builtins", () => {
     const registry = new NodeRegistry();
-    registry.replaceWorkspaceDefinitions([custom('lib.a')]);
-    registry.replaceWorkspaceDefinitions([custom('lib.b')]);
+    registry.setSource('libraries', [custom('lib.a')]);
+    registry.setSource('libraries', [custom('lib.b')]);
     assert.equal(registry.get('lib.a'), undefined);
     assert.ok(registry.get('lib.b'));
     assert.ok(registry.get('core:event.start'));
@@ -27,19 +27,28 @@ describe('NodeRegistry', () => {
 
   test('a library can override a builtin, and the override is dropped on reload', () => {
     const registry = new NodeRegistry();
-    registry.replaceWorkspaceDefinitions([custom('core:math.add', 'Custom Add')]);
+    registry.setSource('libraries', [custom('core:math.add', 'Custom Add')]);
     assert.equal(registry.get('core:math.add')?.displayName, 'Custom Add');
-    registry.replaceWorkspaceDefinitions([]);
+    registry.setSource('libraries', []);
     assert.equal(registry.get('core:math.add')?.displayName, 'Add');
+  });
+
+  test('sources are independent: reloading one keeps the others', () => {
+    const registry = new NodeRegistry();
+    registry.setSource('libraries', [custom('lib.a')]);
+    registry.setSource('functions', [custom('fn.a')]);
+    registry.setSource('libraries', []);
+    assert.equal(registry.get('lib.a'), undefined);
+    assert.ok(registry.get('fn.a'));
   });
 
   test('notifies listeners on reload until disposed', () => {
     const registry = new NodeRegistry();
     let calls = 0;
     const subscription = registry.onDidChange(() => calls++);
-    registry.replaceWorkspaceDefinitions([]);
+    registry.setSource('libraries', []);
     subscription.dispose();
-    registry.replaceWorkspaceDefinitions([]);
+    registry.setSource('libraries', []);
     assert.equal(calls, 1);
   });
 });

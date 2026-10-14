@@ -160,9 +160,9 @@ describe('project functions', () => {
     typescript: { path: 'lib/score.ts', text: jsModule('esm', true) },
     'javascript-esm': { path: 'lib/score.mjs', text: jsModule('esm', false) },
     'javascript-commonjs': { path: 'lib/score.cjs', text: jsModule('commonjs', false) },
-    // Next to the generated file: its folder is the working directory, so it is on sys.path.
+    // In a package in another folder: Run must put the package's root (lib) on sys.path.
     python: {
-      path: 'graphs/score.py',
+      path: 'lib/game/score.py',
       text: [
         'total = 0', '', '',
         'def add_to_total(amount: float) -> float:', '    """@blueprint"""', '    global total', '    total += amount', '    return total', '', '',
@@ -174,7 +174,7 @@ describe('project functions', () => {
   // Node definitions for the module, as the workspace importer makes them: scanned from the code.
   function definitions(language: string, key: string): NodeDefinition[] {
     const importer = languages.get(language)!.importer!;
-    const module = language === 'python' ? 'score' : undefined;
+    const module = language === 'python' ? 'game.score' : undefined;
     return exposeFunctions(importer.scan(MODULES[key].text), { language, path: MODULES[key].path, module, exposeAll: false }).definitions;
   }
 
@@ -205,18 +205,19 @@ describe('project functions', () => {
   }
 
   // Writes the module and the generated file into a fresh project folder.
-  function build(language: string, key: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string } {
+  function build(language: string, key: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; importRoots?: string[] } {
     const { registry: r, document } = project(language, key);
     const dir = path.join(workDir, `project-${key}`);
     const module = MODULES[key];
     fs.mkdirSync(path.join(dir, path.dirname(module.path)), { recursive: true });
     fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
     fs.writeFileSync(path.join(dir, module.path), module.text);
+    if (language === 'python') fs.writeFileSync(path.join(dir, path.dirname(module.path), '__init__.py'), '');
     const result = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'score.vgraph', outputDir: 'graphs', ...generate } });
     assert.deepEqual(result.diagnostics, []);
     const file = path.join(dir, 'graphs', result.output!.fileName);
     fs.writeFileSync(file, result.output!.text);
-    return { file, className: result.output!.className, dir };
+    return { file, className: result.output!.className, dir, importRoots: result.output!.importRoots?.map((r) => path.join(dir, r)) };
   }
 
   test('Simulate stops at the first project function', () => {
@@ -228,15 +229,18 @@ describe('project functions', () => {
 
   for (const target of [
     { label: 'TypeScript', language: 'typescript', key: 'typescript' },
+    // Imports spelled for node16/nodenext and bundler projects: Run's resolve hook finds the .ts file.
+    { label: 'TypeScript (".js" imports)', language: 'typescript', key: 'typescript', importExtension: 'js' as const },
+    { label: 'TypeScript (extensionless imports)', language: 'typescript', key: 'typescript', importExtension: 'none' as const },
     { label: 'JavaScript (ES modules)', language: 'javascript', key: 'javascript-esm', moduleFormat: 'esm' as const },
     { label: 'JavaScript (CommonJS)', language: 'javascript', key: 'javascript-commonjs', moduleFormat: 'commonjs' as const },
     { label: 'Python', language: 'python', key: 'python' }
   ]) {
     test(`${target.label} imports and calls them`, async (t) => {
-      const { file, className, dir } = build(target.language, target.key, { moduleFormat: target.moduleFormat });
+      const { file, className, dir, importRoots } = build(target.language, target.key, { moduleFormat: target.moduleFormat, importExtension: target.importExtension });
       let outcome;
       try {
-        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), timeoutMs: 30000 });
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), importRoots, timeoutMs: 30000 });
       } catch (error) {
         if (error instanceof ToolNotFoundError) return t.skip(error.message);
         throw error;

@@ -1,6 +1,6 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
 import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrProgram, IrStatement, exprType } from '../compiler/ir';
-import { pythonModuleName } from '../compiler/module-paths';
+import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
 import { NameScope, dedent, toIdentifier } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
@@ -99,9 +99,13 @@ const pythonGenerator: CodeGenerator = {
   generate: (program, options) => new PythonEmitter(program, options).emit(),
   runner: {
     commands: (platform) => (platform === 'win32' ? [['py', '-3'], ['python'], ['python3']] : [['python3'], ['python']]),
-    args: (file, className) => [
+    // Puts the import roots of project modules on sys.path, as running the project would.
+    args: (file, className, context) => [
       '-c',
-      `import importlib.util as u; s = u.spec_from_file_location("vgraph_module", ${JSON.stringify(file.path)}); m = u.module_from_spec(s); s.loader.exec_module(m); m.${className}().start()`
+      [
+        ...(context?.importRoots?.length ? [`import sys; sys.path[:0] = ${JSON.stringify(context.importRoots)}`] : []),
+        `import importlib.util as u; s = u.spec_from_file_location("vgraph_module", ${JSON.stringify(file.path)}); m = u.module_from_spec(s); s.loader.exec_module(m); m.${className}().start()`
+      ].join('; ')
     ],
     missingToolMessage: 'Python 3 was not found. Install Python 3.8 or later and make sure it is on the PATH.'
   }
@@ -191,12 +195,14 @@ class PythonEmitter {
     }
     footer.push('', '', 'if __name__ == "__main__":', `    ${this.className}().start()`);
 
+    const roots = [...new Set(this.program.imports.map((i) => pythonImportRoot(i.path, i.module ?? pythonModuleName(i.path))))].sort();
     const headerText = header.toString();
     const offset = headerText.split('\n').length - 1;
     return {
       text: headerText + body.toString() + footer.join('\n') + '\n',
       className: this.className,
-      nodeLines: body.nodeLines.map((n) => ({ ...n, line: n.line + offset }))
+      nodeLines: body.nodeLines.map((n) => ({ ...n, line: n.line + offset })),
+      ...(roots.length ? { importRoots: roots } : {})
     };
   }
 

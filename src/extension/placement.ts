@@ -51,6 +51,45 @@ export function detectModuleFormat(graphDir: string, stopDir: string): 'esm' | '
   return pkg?.type === 'module' ? 'esm' : 'commonjs';
 }
 
+// How generated TypeScript imports the project's TypeScript modules (docs/code-as-nodes.md,
+// "Generated imports"), from the nearest tsconfig.json and the configs it extends: ".ts" when the
+// project imports TypeScript extensions (or has no tsconfig.json, as Node.js runs it), ".js" for
+// node16/nodenext resolution, otherwise no extension.
+export function detectImportExtension(graphDir: string, stopDir: string): 'ts' | 'js' | 'none' {
+  const config = findUp(graphDir, 'tsconfig.json', stopDir);
+  if (!config) return 'ts';
+  const options = compilerOptions(config);
+  if (options.allowImportingTsExtensions === true || options.rewriteRelativeImportExtensions === true) return 'ts';
+  const resolution = String(options.moduleResolution ?? options.module ?? '').toLowerCase();
+  return resolution === 'node16' || resolution === 'nodenext' ? 'js' : 'none';
+}
+
+// Compiler options of a tsconfig.json, merged over those of the relative configs it extends.
+function compilerOptions(configFile: string, depth = 0): Record<string, unknown> {
+  const config = readJson(configFile) as { extends?: unknown; compilerOptions?: Record<string, unknown> } | undefined;
+  if (!config) return {};
+  const bases = (Array.isArray(config.extends) ? config.extends : [config.extends]).filter((e): e is string => typeof e === 'string' && e.startsWith('.'));
+  const inherited = depth < 8 ? bases.reduce<Record<string, unknown>>((merged, base) => {
+    const file = path.resolve(path.dirname(configFile), base.endsWith('.json') ? base : `${base}.json`);
+    return { ...merged, ...compilerOptions(file, depth + 1) };
+  }, {}) : {};
+  return { ...inherited, ...(config.compilerOptions ?? {}) };
+}
+
+// A Python module's import name and import root (docs/code-as-nodes.md, "Generated imports"): the
+// root is the folder above its outermost package, or its own folder outside packages.
+export function pythonModule(file: string, stopDir: string): { module: string; root: string } {
+  const stem = path.basename(file, '.py');
+  const parts = stem === '__init__' ? [] : [stem];
+  let dir = path.dirname(file);
+  const stop = path.resolve(stopDir);
+  while (fs.existsSync(path.join(dir, '__init__.py')) && /^[A-Za-z_]\w*$/.test(path.basename(dir)) && path.resolve(dir) !== stop && isInside(dir, stop)) {
+    parts.unshift(path.basename(dir));
+    dir = path.dirname(dir);
+  }
+  return { module: parts.join('.') || stem, root: dir };
+}
+
 // Placement warnings for a generated file (docs/output-placement.md, "Verification").
 export function verifyPlacement(language: string, outputFile: string, stopDir: string): CompileDiagnostic[] {
   const dir = path.dirname(outputFile);

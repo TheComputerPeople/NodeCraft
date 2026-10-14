@@ -30,7 +30,7 @@ export function watchWorkspaceNodeLibraries(registry: NodeRegistry): vscode.Disp
     const current = ++generation;
     const definitions = await readWorkspaceNodeLibraries();
     // A newer reload started while this one was reading; its result wins.
-    if (current === generation) registry.replaceWorkspaceDefinitions(definitions);
+    if (current === generation) registry.setSource('libraries', definitions);
   };
   const scheduleReload = (): void => {
     clearTimeout(timer);

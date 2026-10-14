@@ -29,7 +29,6 @@ describe('building the sample graph with Unreal gestures', () => {
     const e = await EditorPage.open(browser);
     try {
       await e.send({ type: 'init', document: createEmptyDocument('Demo', 'typescript'), definitions: sampleDefinitions(), saveDelay: 0 });
-      const nodeOfType = async (type: string) => (await saved(e)).graphs[0].nodes.filter((n) => n.type === type).map((n) => n.id).pop()!;
 
       // Hold P and click: a Start event (Unreal's BeginPlay shortcut).
       await e.page.keyboard.down('p');
@@ -57,7 +56,7 @@ describe('building the sample graph with Unreal gestures', () => {
       await e.drag(trueOut, { x: trueOut.x + 150, y: trueOut.y - 60 });
       await e.page.fill('#context-search', 'print');
       await e.page.locator('#context-results .context-node', { hasText: 'Print' }).first().dispatchEvent('mousedown');
-      const printTrue = await nodeOfType('core:console.print');
+      const [printTrue] = await waitForNodes(e, 'core:console.print', 1);
       await e.drag(await e.pinCenter(add, 'result'), await e.pinCenter(printTrue, 'value'));
 
       // False → another Print, its text typed on the node.
@@ -65,8 +64,7 @@ describe('building the sample graph with Unreal gestures', () => {
       await e.drag(falseOut, { x: falseOut.x + 150, y: falseOut.y + 120 });
       await e.page.fill('#context-search', 'print');
       await e.page.locator('#context-results .context-node', { hasText: 'Print' }).first().dispatchEvent('mousedown');
-      const prints = (await saved(e)).graphs[0].nodes.filter((n) => n.type === 'core:console.print').map((n) => n.id);
-      const printFalse = prints.find((id) => id !== printTrue)!;
+      const printFalse = (await waitForNodes(e, 'core:console.print', 2)).find((id) => id !== printTrue)!;
       await e.page.fill(`.node[data-node="${printFalse}"] .pin-default[data-pin="value"]`, 'False branch');
 
       // Clicking the canvas ends the inline edit, then F7 compiles, as in Unreal.
@@ -95,13 +93,18 @@ async function saved(e: EditorPage): Promise<GraphDocument> {
 
 // The id of the newest node of `type`, once a save containing it has arrived.
 async function waitForNode(e: EditorPage, type: string): Promise<string> {
+  return (await waitForNodes(e, type, 1)).pop()!;
+}
+
+// The ids of the nodes of `type`, once a save containing at least `count` of them has arrived.
+async function waitForNodes(e: EditorPage, type: string, count: number): Promise<string[]> {
   const deadline = Date.now() + 3000;
   for (;;) {
     const posted = await e.posted();
     const doc = posted.filter((m) => m.type === 'applyDocument').pop()?.document;
-    const id = doc?.graphs[0].nodes.filter((n) => n.type === type).map((n) => n.id).pop();
-    if (id) return id;
-    if (Date.now() > deadline) throw new Error(`No ${type} node was saved`);
+    const ids = doc?.graphs[0].nodes.filter((n) => n.type === type).map((n) => n.id) ?? [];
+    if (ids.length >= count) return ids;
+    if (Date.now() > deadline) throw new Error(`No save with ${count} ${type} node(s) arrived`);
     await e.page.waitForTimeout(25);
   }
 }

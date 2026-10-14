@@ -86,6 +86,11 @@
           "default": true,
           "description": "Compile a graph to its target language whenever it is saved, keeping the generated file next to it up to date."
         },
+        "blueprintVisualScripting.exposeAllFunctions": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show every exported TypeScript or JavaScript function, and every public top-level Python function, as a node. When off, only functions whose documentation comment contains `@blueprint` become nodes, as Unreal requires `BlueprintCallable`."
+        },
         "blueprintVisualScripting.runCommands": {
           "type": "object",
           "default": {},

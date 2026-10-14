@@ -32,3 +32,11 @@ export function pythonModuleName(path: string): string {
 function segments(path: string): string[] {
   return path.split('/').filter((s) => s && s !== '.');
 }
+
+// The folder Python must have on sys.path to import `module` from `path` (both as in
+// FunctionImplementation): "src/game/combat.py" as "game.combat" needs "src".
+export function pythonImportRoot(path: string, module: string): string {
+  const parts = segments(path.replace(/\.py$/i, ''));
+  if (parts[parts.length - 1] === '__init__') parts.pop();
+  return parts.slice(0, Math.max(0, parts.length - module.split('.').length)).join('/');
+}

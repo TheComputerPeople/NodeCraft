@@ -159,6 +159,54 @@ test('compile errors appear in the Problems panel', async () => {
   assert.match(problems[0].message, /can't be read/);
 });
 
+// A graph calling one project function: Start → Double(4) → Print.
+function projectGraph(name: string, language: string, type: string): string {
+  const node = (id: string, nodeType: string, properties: Record<string, unknown> = {}) => ({ id, type: nodeType, position: { x: 0, y: 0 }, properties });
+  return JSON.stringify({
+    schemaVersion: 3, name, kind: 'class', language, variables: [],
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('d', type, { 'pin:value': 4 }), node('p', 'core:console.print')],
+      connections: [
+        { id: 'c1', fromNode: 's', fromPin: 'execOut', toNode: 'p', toPin: 'execIn' },
+        { id: 'c2', fromNode: 'd', fromPin: 'returnValue', toNode: 'p', toPin: 'value' }
+      ]
+    }]
+  }, null, 2);
+}
+
+// Compiles until the project's functions have been found (they load in the background).
+async function compileOnceFound(graph: vscode.Uri): Promise<void> {
+  const deadline = Date.now() + 15000;
+  for (;;) {
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    const problems = vscode.languages.getDiagnostics(graph);
+    if (!problems.some((p) => p.code === 'unknown-node-type')) {
+      assert.deepEqual(problems.map((p) => p.message), []);
+      return;
+    }
+    if (Date.now() > deadline) throw new Error(`The project function was never found: ${problems.map((p) => p.message).join('; ')}`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
+test('functions marked @blueprint become nodes that generated code imports', async () => {
+  const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
+  await write('lib/score.ts', '/** @blueprint pure */\nexport function double(value: number): number {\n  return value * 2;\n}\n');
+  await write('game/__init__.py', '');
+  await write('game/score.py', 'def double(value: float) -> float:\n    """@blueprint pure"""\n    return value * 2\n');
+
+  const tsGraph = workspaceFile('uses-ts.vgraph');
+  await write('uses-ts.vgraph', projectGraph('UsesTs', 'typescript', 'fn:typescript:lib/score.ts#double'));
+  await compileOnceFound(tsGraph);
+  assert.match(await readText(workspaceFile('uses-ts.vgraph.ts')), /^import \{ double \} from "\.\/lib\/score\.ts";$/m);
+
+  const pyGraph = workspaceFile('uses-py.vgraph');
+  await write('uses-py.vgraph', projectGraph('UsesPy', 'python', 'fn:python:game/score.py#double'));
+  await compileOnceFound(pyGraph);
+  assert.match(await readText(workspaceFile('uses_py_vgraph.py')), /^from game\.score import double$/m);
+});
+
 export async function run(): Promise<void> {
   const failures: string[] = [];
   for (const { name, run: body } of tests) {

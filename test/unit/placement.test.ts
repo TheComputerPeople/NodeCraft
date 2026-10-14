@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { configCovers, detectModuleFormat, generatedFrom, globToRegExp, isGeneratedFrom, parseJsonc, verifyPlacement } from '../../src/extension/placement';
+import { configCovers, detectImportExtension, detectModuleFormat, generatedFrom, globToRegExp, isGeneratedFrom, parseJsonc, pythonModule, verifyPlacement } from '../../src/extension/placement';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-placement-'));
 after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -44,6 +44,34 @@ describe('detectModuleFormat', () => {
   test('uses ES modules when there is no package.json', () => {
     const dir = project({ 'graphs/x.vgraph': '' });
     assert.equal(detectModuleFormat(path.join(dir, 'graphs'), dir), 'esm');
+  });
+});
+
+describe('imports of project code', () => {
+  test('TypeScript import extensions follow tsconfig.json', () => {
+    const graphs = (config?: unknown, base?: unknown) => {
+      const files: Record<string, string> = { 'graphs/x.vgraph': '' };
+      if (config) files['tsconfig.json'] = JSON.stringify(config);
+      if (base) files['tsconfig.base.json'] = JSON.stringify(base);
+      const dir = project(files);
+      return detectImportExtension(path.join(dir, 'graphs'), dir);
+    };
+    assert.equal(graphs(), 'ts', 'no tsconfig.json: Node.js runs .ts imports');
+    assert.equal(graphs({ compilerOptions: { allowImportingTsExtensions: true } }), 'ts');
+    assert.equal(graphs({ compilerOptions: { rewriteRelativeImportExtensions: true } }), 'ts');
+    assert.equal(graphs({ compilerOptions: { module: 'nodenext' } }), 'js');
+    assert.equal(graphs({ compilerOptions: { moduleResolution: 'Node16' } }), 'js');
+    assert.equal(graphs({ compilerOptions: { moduleResolution: 'bundler' } }), 'none');
+    assert.equal(graphs({ extends: './tsconfig.base.json' }, { compilerOptions: { module: 'NodeNext' } }), 'js', 'follows extends');
+    assert.equal(graphs({ extends: './tsconfig.base', compilerOptions: { moduleResolution: 'bundler' } }, { compilerOptions: { module: 'nodenext' } }), 'none', 'own options win');
+  });
+
+  test('Python module names and import roots follow packages', () => {
+    const dir = project({ 'src/game/__init__.py': '', 'src/game/combat.py': '', 'src/game/ai/__init__.py': '', 'src/game/ai/brain.py': '', 'scripts/tools.py': '' });
+    assert.deepEqual(pythonModule(path.join(dir, 'src/game/combat.py'), dir), { module: 'game.combat', root: path.join(dir, 'src') });
+    assert.deepEqual(pythonModule(path.join(dir, 'src/game/ai/brain.py'), dir), { module: 'game.ai.brain', root: path.join(dir, 'src') });
+    assert.deepEqual(pythonModule(path.join(dir, 'src/game/__init__.py'), dir), { module: 'game', root: path.join(dir, 'src') });
+    assert.deepEqual(pythonModule(path.join(dir, 'scripts/tools.py'), dir), { module: 'tools', root: path.join(dir, 'scripts') });
   });
 });
 

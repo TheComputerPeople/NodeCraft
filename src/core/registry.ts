@@ -8,6 +8,8 @@ export interface Disposable {
 
 export class NodeRegistry {
   private readonly definitions = new Map<string, NodeDefinition>();
+  // Definitions from the workspace, by source: node libraries, the project's functions.
+  private readonly sources = new Map<string, NodeDefinition[]>();
   private readonly listeners = new Set<() => void>();
 
   constructor() {
@@ -22,11 +24,13 @@ export class NodeRegistry {
     definitions.forEach((d) => this.register(d));
   }
 
-  // Replaces every workspace-provided definition; builtins are kept unless a library overrides them.
-  replaceWorkspaceDefinitions(definitions: NodeDefinition[]): void {
+  // Replaces the definitions from one workspace source. Builtins are kept unless a source
+  // overrides them; later sources win over earlier ones.
+  setSource(source: string, definitions: NodeDefinition[]): void {
+    this.sources.set(source, definitions);
     this.definitions.clear();
     this.registerMany(builtinNodeDefinitions());
-    this.registerMany(definitions);
+    for (const list of this.sources.values()) this.registerMany(list);
     this.listeners.forEach((listener) => listener());
   }
 

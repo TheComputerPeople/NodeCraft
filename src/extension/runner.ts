@@ -19,6 +19,8 @@ export class ToolNotFoundError extends Error {}
 
 export interface RunOptions {
   cwd: string;
+  // Absolute folders where the runtime finds imported project modules (GeneratedCode.importRoots).
+  importRoots?: string[];
   // Used instead of the runner's candidates, e.g. from a setting.
   command?: string[];
   timeoutMs?: number;
@@ -29,7 +31,7 @@ export interface RunOptions {
 }
 
 export async function runGeneratedCode(runner: CodeRunner, filePath: string, className: string, options: RunOptions): Promise<RunOutcome> {
-  const args = runner.args({ path: filePath, url: pathToFileURL(filePath).href }, className);
+  const args = runner.args({ path: filePath, url: pathToFileURL(filePath).href }, className, { importRoots: options.importRoots });
   const candidates = options.command?.length ? [options.command] : runner.commands(process.platform);
   for (const candidate of candidates) {
     const outcome = await runCommand([...candidate, ...args], options);

@@ -71,10 +71,11 @@ export function functionNodeType(language: string, path: string, name: string): 
 }
 
 export function exposeFunctions(scan: ModuleScan, options: ExposeOptions): ExposedFunctions {
+  // With exposeAll, names starting with "_" stay private unless marked.
   const definitions = scan.functions
-    .filter((fn) => options.exposeAll || isMarked(fn.doc))
+    .filter((fn) => isMarked(fn.doc) || (options.exposeAll && !fn.name.startsWith('_')))
     .map((fn) => definitionFor(fn, options));
-  const skipped = scan.skipped.filter((s) => options.exposeAll || s.marked);
+  const skipped = scan.skipped.filter((s) => s.marked || (options.exposeAll && !s.name.startsWith('_')));
   return { definitions, skipped };
 }
 
