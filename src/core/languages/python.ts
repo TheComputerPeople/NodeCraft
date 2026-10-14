@@ -1,6 +1,7 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
 import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrProgram, IrStatement, exprType } from '../compiler/ir';
 import { pythonModuleName } from '../compiler/module-paths';
+import { scanPython } from '../importing/python-scanner';
 import { NameScope, dedent, toIdentifier } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
@@ -113,7 +114,8 @@ export const pythonPack: LanguagePack = {
   workspaceMarkers: ['**/pyproject.toml', '**/setup.py', '**/setup.cfg', '**/requirements.txt', '**/Pipfile'],
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true },
   mapType,
-  generator: pythonGenerator
+  generator: pythonGenerator,
+  importer: { extensions: ['.py'], scan: scanPython }
 };
 
 class PythonEmitter {

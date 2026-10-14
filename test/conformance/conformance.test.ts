@@ -172,24 +172,10 @@ describe('project functions', () => {
   };
 
   // Node definitions for the module, as the workspace importer makes them: scanned from the code.
-  // (Python is written out until its scanner arrives.)
   function definitions(language: string, key: string): NodeDefinition[] {
-    const modulePath = MODULES[key].path;
-    const importer = languages.get(language)?.importer;
-    if (importer) return exposeFunctions(importer.scan(MODULES[key].text), { language, path: modulePath, exposeAll: false }).definitions;
-    const fn = (name: string, pin: string, pure: boolean): NodeDefinition => ({
-      type: `fn:${language}:${modulePath}#${name}`, version: 1, displayName: name, category: 'Project',
-      inputs: [
-        ...(pure ? [] : [{ id: 'execIn', name: '', kind: 'exec' as const, direction: 'input' as const }]),
-        { id: pin, name: pin, kind: 'data', direction: 'input', type: { id: 'float' } }
-      ],
-      outputs: [
-        ...(pure ? [] : [{ id: 'execOut', name: '', kind: 'exec' as const, direction: 'output' as const }]),
-        { id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', type: { id: 'float' } }
-      ],
-      implementation: { kind: 'function', language, path: modulePath, name, module: 'score' }
-    });
-    return [fn('add_to_total', 'amount', false), fn('double', 'value', true)];
+    const importer = languages.get(language)!.importer!;
+    const module = language === 'python' ? 'score' : undefined;
+    return exposeFunctions(importer.scan(MODULES[key].text), { language, path: MODULES[key].path, module, exposeAll: false }).definitions;
   }
 
   function project(language: string, key: string): { registry: NodeRegistry; document: GraphDocument } {

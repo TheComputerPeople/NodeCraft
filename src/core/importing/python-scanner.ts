@@ -1,0 +1,434 @@
+// Reads the top-level functions of a Python module: names, parameters, type hints, defaults and
+// docstrings (docs/code-as-nodes.md, "How declarations are read"). It works on logical lines, so it
+// needs no Python interpreter.
+import { TypeRef } from '../types';
+import { DocComment, ModuleScan, NO_DOC, ScannedParam, isMarked, parseDocText } from './symbols';
+
+interface LogicalLine {
+  // Columns of leading whitespace (a tab counts as one).
+  indent: number;
+  // 1-based line where it starts.
+  line: number;
+  // The source text, with continuation lines joined and comments removed.
+  text: string;
+  // The same text with every string literal's contents removed, for finding keywords.
+  code: string;
+}
+
+// ---- Logical lines -------------------------------------------------------------------------------
+
+export function logicalLines(source: string): LogicalLine[] {
+  const lines: LogicalLine[] = [];
+  let i = 0;
+  let line = 1;
+  while (i < source.length) {
+    // Indentation of a new logical line.
+    let indent = 0;
+    while (source[i] === ' ' || source[i] === '\t') {
+      indent++;
+      i++;
+    }
+    const startLine = line;
+    let text = '';
+    let code = '';
+    let depth = 0;
+    while (i < source.length) {
+      const ch = source[i];
+      if (ch === '\n' || (ch === '\r' && source[i + 1] === '\n')) {
+        const width = ch === '\r' ? 2 : 1;
+        if (depth > 0) {
+          text += ' ';
+          code += ' ';
+          i += width;
+          line++;
+          continue;
+        }
+        i += width;
+        line++;
+        break;
+      }
+      if (ch === '\\' && (source[i + 1] === '\n' || source[i + 1] === '\r')) {
+        i += source[i + 1] === '\r' ? 3 : 2;
+        line++;
+        text += ' ';
+        code += ' ';
+        continue;
+      }
+      if (ch === '#') {
+        while (i < source.length && source[i] !== '\n' && source[i] !== '\r') i++;
+        continue;
+      }
+      const literal = stringAt(source, i);
+      if (literal) {
+        const value = source.slice(i, literal.end);
+        for (const c of value) if (c === '\n') line++;
+        text += value;
+        code += `${literal.prefix}${literal.quote}${literal.quote}`;
+        i = literal.end;
+        continue;
+      }
+      if ('([{'.includes(ch)) depth++;
+      else if (')]}'.includes(ch)) depth = Math.max(0, depth - 1);
+      text += ch;
+      code += ch;
+      i++;
+    }
+    if (text.trim()) lines.push({ indent, line: startLine, text: text.trim(), code: code.trim() });
+  }
+  return lines;
+}
+
+// A string literal starting at `i` (with an optional prefix such as r, b or f), if there is one.
+function stringAt(source: string, i: number): { end: number; prefix: string; quote: string } | undefined {
+  const prefixMatch = /^[rRbBuUfF]{0,2}(?=['"])/.exec(source.slice(i, i + 3));
+  if (!prefixMatch) return undefined;
+  // A prefix must start a word: "br" in "abr'x'" is not one.
+  if (prefixMatch[0] && /[\w]/.test(source[i - 1] ?? '')) return undefined;
+  const prefix = prefixMatch[0];
+  let j = i + prefix.length;
+  const q = source[j];
+  const triple = source.startsWith(q.repeat(3), j);
+  const quote = triple ? q.repeat(3) : q;
+  j += quote.length;
+  while (j < source.length) {
+    // A backslash keeps the next character in the string, raw strings included.
+    if (source[j] === '\\') {
+      j += 2;
+      continue;
+    }
+    if (source.startsWith(quote, j)) return { end: j + quote.length, prefix, quote };
+    if (!triple && source[j] === '\n') return { end: j, prefix, quote };
+    j++;
+  }
+  return { end: source.length, prefix, quote };
+}
+
+// ---- Functions -------------------------------------------------------------------------------------
+
+export function scanPython(source: string): ModuleScan {
+  const lines = logicalLines(source);
+  const result: ModuleScan = { functions: [], skipped: [] };
+  for (let i = 0; i < lines.length; i++) {
+    const header = lines[i];
+    if (header.indent !== 0) continue;
+    const match = /^(async\s+)?def\s+([A-Za-z_]\w*)\s*(\[)?/.exec(header.text);
+    if (!match) continue;
+    // The body: the following lines indented under the header (or the rest of a one-line def).
+    const body: LogicalLine[] = [];
+    for (let j = i + 1; j < lines.length && lines[j].indent > 0; j++) body.push(lines[j]);
+    const name = match[2];
+    const doc = body.length ? docstring(body[0]) : NO_DOC;
+    const skip = (reason: string): void => {
+      result.skipped.push({ name, line: header.line, reason, marked: isMarked(doc) });
+    };
+    const parsed = parseHeader(header.text, match[0].length);
+    if (match[1]) skip('async functions become latent nodes with Phase 4\'s latent actions');
+    else if (match[3]) skip('generic functions can\'t be nodes yet');
+    else if (!parsed) skip('its parameters couldn\'t be read');
+    else {
+      const inline = parsed.rest ? [{ indent: 1, line: header.line, text: parsed.rest, code: parsed.rest }] : [];
+      const statements = [...inline, ...body];
+      const params = parseParams(parsed.params);
+      const returns = parsed.returns !== undefined ? mapReturn(parsed.returns) : { type: returnsValue(statements) ? undefined : null };
+      if ('reason' in params) skip(params.reason);
+      else if ('reason' in returns) skip(returns.reason);
+      else if (yields(statements)) skip('generator functions can\'t be nodes');
+      else result.functions.push({ name, line: header.line, params, returns: returns.type, doc });
+    }
+  }
+  return result;
+}
+
+// `def name(params) -> returns: rest`, from just after the name.
+function parseHeader(text: string, from: number): { params: string; returns?: string; rest: string } | undefined {
+  let i = from;
+  while (text[i] === ' ') i++;
+  if (text[i] !== '(') return undefined;
+  const close = matching(text, i);
+  if (close < 0) return undefined;
+  const params = text.slice(i + 1, close);
+  const after = text.slice(close + 1);
+  const colon = topLevelIndex(after, ':');
+  if (colon < 0) return undefined;
+  const between = after.slice(0, colon).trim();
+  const rest = after.slice(colon + 1).trim();
+  if (!between) return { params, rest };
+  if (!between.startsWith('->')) return undefined;
+  return { params, returns: between.slice(2).trim(), rest };
+}
+
+function parseParams(text: string): ScannedParam[] | { reason: string } {
+  const params: ScannedParam[] = [];
+  let keywordOnly = false;
+  for (const raw of splitTop(text, ',')) {
+    const part = raw.trim();
+    if (!part || part === '/') continue;
+    if (part === '*') {
+      keywordOnly = true;
+      continue;
+    }
+    if (part.startsWith('**') || part.startsWith('*')) return { reason: 'variadic parameters (*args, **kwargs) can\'t be pins' };
+    const eq = topLevelIndex(part, '=');
+    const declaration = (eq < 0 ? part : part.slice(0, eq)).trim();
+    const defaultText = eq < 0 ? undefined : part.slice(eq + 1).trim();
+    const colon = declaration.indexOf(':');
+    const name = (colon < 0 ? declaration : declaration.slice(0, colon)).trim();
+    if (!/^[A-Za-z_]\w*$/.test(name)) return { reason: 'its parameters couldn\'t be read' };
+    // Keyword-only parameters with defaults keep their defaults; without one, a call would fail.
+    if (keywordOnly) {
+      if (defaultText === undefined) return { reason: 'keyword-only parameters without defaults can\'t be pins yet' };
+      continue;
+    }
+    const type = colon < 0 ? undefined : mapPythonType(declaration.slice(colon + 1));
+    const param: ScannedParam = { name, ...(type ? { type } : {}) };
+    if (defaultText !== undefined) {
+      const value = literalValue(defaultText);
+      if (value !== undefined) param.defaultValue = value;
+    }
+    params.push(param);
+  }
+  return params;
+}
+
+// The docstring: a body whose first statement is a string literal.
+function docstring(first: LogicalLine): DocComment {
+  const literal = stringAt(first.text, 0);
+  if (!literal || literal.end !== first.text.length || /[bBfF]/.test(literal.prefix)) return NO_DOC;
+  const body = first.text.slice(literal.prefix.length + literal.quote.length, literal.end - literal.quote.length);
+  return parseDocText(cleandoc(/[rR]/.test(literal.prefix) ? body : unescape(body)));
+}
+
+// inspect.cleandoc: trims the first line and removes the common indentation of the rest.
+function cleandoc(text: string): string[] {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const rest = lines.slice(1);
+  const indents = rest.filter((l) => l.trim()).map((l) => l.match(/^\s*/)![0].length);
+  const margin = indents.length ? Math.min(...indents) : 0;
+  const cleaned = [lines[0].trim(), ...rest.map((l) => l.slice(margin))];
+  while (cleaned.length && !cleaned[0].trim()) cleaned.shift();
+  while (cleaned.length && !cleaned[cleaned.length - 1].trim()) cleaned.pop();
+  return cleaned;
+}
+
+// Statements of the function itself: nested functions and classes are left out.
+function ownStatements(statements: LogicalLine[]): LogicalLine[] {
+  const own: LogicalLine[] = [];
+  let nested: number | undefined;
+  for (const s of statements) {
+    if (nested !== undefined && s.indent > nested) continue;
+    nested = undefined;
+    if (/^(async\s+def|def|class)\b/.test(s.code)) nested = s.indent;
+    else own.push(s);
+  }
+  return own;
+}
+
+function returnsValue(statements: LogicalLine[]): boolean {
+  return ownStatements(statements).some((s) => /(^|[:;]\s*)return\s+[^\s;]/.test(s.code));
+}
+
+function yields(statements: LogicalLine[]): boolean {
+  return ownStatements(statements).some((s) => /\byield\b/.test(s.code.replace(/lambda[^:]*:.*$/, '')));
+}
+
+// ---- Types -------------------------------------------------------------------------------------
+
+const SIMPLE: Record<string, TypeRef | undefined> = {
+  int: { id: 'int' },
+  float: { id: 'float' },
+  str: { id: 'string' },
+  bool: { id: 'bool' },
+  Any: undefined,
+  object: undefined
+};
+
+function mapReturn(text: string): { type: TypeRef | null | undefined } | { reason: string } {
+  const t = normalize(text);
+  if (t === 'None' || t === 'NoReturn' || t === 'Never') return { type: null };
+  if (/^(Awaitable|Coroutine|Generator|Iterator|Iterable|AsyncGenerator|AsyncIterator)\b/.test(t)) {
+    return { reason: /^(Awaitable|Coroutine|Async)/.test(t) ? 'async functions become latent nodes with Phase 4\'s latent actions' : 'generator functions can\'t be nodes' };
+  }
+  if (/^TypeGuard\[|^TypeIs\[/.test(t)) return { type: { id: 'bool' } };
+  return { type: mapPythonType(t) };
+}
+
+// A Python type hint, as text, in canonical form (docs/code-as-nodes.md, "What becomes a node").
+export function mapPythonType(text: string): TypeRef | undefined {
+  let t = normalize(text);
+  // Forward references are strings.
+  if (/^(['"]).*\1$/.test(t)) t = normalize(t.slice(1, -1));
+  const union = splitTop(t, '|').map((m) => m.trim());
+  if (union.length > 1) return unionOf(union, t);
+  const generic = /^([\w.]+)\[(.*)\]$/.exec(t);
+  if (generic) {
+    const name = generic[1];
+    const args = splitTop(generic[2], ',').map((a) => a.trim());
+    switch (name) {
+      case 'Optional':
+        return args.length === 1 ? unionOf([args[0], 'None'], t) : native(t);
+      case 'Union':
+        return unionOf(args, t);
+      case 'Literal':
+        if (args.every((a) => /^(['"]).*\1$/.test(a))) return { id: 'string' };
+        if (args.every((a) => /^-?\d+$/.test(a))) return { id: 'int' };
+        return native(t);
+      case 'list':
+      case 'List':
+      case 'Sequence':
+      case 'MutableSequence':
+        return args.length === 1 ? container('array', args[0], t) : native(t);
+      case 'set':
+      case 'Set':
+      case 'MutableSet':
+        return args.length === 1 ? container('set', args[0], t) : native(t);
+      case 'dict':
+      case 'Dict':
+      case 'Mapping':
+      case 'MutableMapping': {
+        if (args.length !== 2) return native(t);
+        const key = mapPythonType(args[0]);
+        const value = mapPythonType(args[1]);
+        if (!key || key.container || key.nullable || key.id.startsWith('native:') || (value && (value.container || value.id.startsWith('native:')))) return native(t);
+        return { id: key.id, container: 'map', valueType: value ?? { id: 'any' } };
+      }
+    }
+    return native(t);
+  }
+  if (t in SIMPLE) return SIMPLE[t];
+  if (t === 'list' || t === 'List') return { id: 'any', container: 'array' };
+  if (t === 'set' || t === 'Set') return { id: 'any', container: 'set' };
+  if (t === 'dict' || t === 'Dict') return { id: 'any', container: 'map', valueType: { id: 'any' } };
+  return native(t);
+}
+
+// `T | None` is a nullable T; a union of string or int literals is that type; anything else is native.
+function unionOf(members: string[], whole: string): TypeRef {
+  const rest = members.filter((m) => m !== 'None');
+  if (rest.length === members.length - 1 && rest.length === 1) {
+    const inner = mapPythonType(rest[0]);
+    if (!inner) return { id: 'any' };
+    if (!inner.nullable && !inner.id.startsWith('native:')) return { ...inner, nullable: true };
+  }
+  return native(whole);
+}
+
+function container(kind: 'array' | 'set', elementText: string, whole: string): TypeRef {
+  const element = mapPythonType(elementText);
+  if (!element) return { id: 'any', container: kind };
+  if (element.container || element.nullable || element.id.startsWith('native:')) return native(whole);
+  return { id: element.id, container: kind };
+}
+
+function native(text: string): TypeRef {
+  return { id: `native:${text}` };
+}
+
+// One spelling per hint: without "typing." prefixes, single spaces, none inside [...].
+function normalize(text: string): string {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/\b(typing|t|collections\.abc)\./g, '')
+    .replace(/\s*([[\]])\s*/g, '$1')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/\s*\|\s*/g, ' | ')
+    .trim();
+}
+
+// ---- Text helpers ------------------------------------------------------------------------------
+
+// Index of the bracket that closes the one at `open`, skipping strings.
+function matching(text: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    const literal = stringAt(text, i);
+    if (literal) {
+      i = literal.end - 1;
+      continue;
+    }
+    if ('([{'.includes(text[i])) depth++;
+    else if (')]}'.includes(text[i]) && --depth === 0) return i;
+  }
+  return -1;
+}
+
+// Index of `ch` outside brackets and strings, or -1.
+function topLevelIndex(text: string, ch: string): number {
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const literal = stringAt(text, i);
+    if (literal) {
+      i = literal.end - 1;
+      continue;
+    }
+    const c = text[i];
+    if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    // "==", "<=", ">=", "!=" and "->" are not the "=" or ":" being looked for.
+    else if (c === ch && depth === 0 && !(ch === '=' && (text[i + 1] === '=' || '<>!='.includes(text[i - 1] ?? '')))) return i;
+  }
+  return -1;
+}
+
+function splitTop(text: string, separator: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let from = 0;
+  for (let i = 0; i < text.length; i++) {
+    const literal = stringAt(text, i);
+    if (literal) {
+      i = literal.end - 1;
+      continue;
+    }
+    const c = text[i];
+    if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    else if (c === separator && depth === 0) {
+      parts.push(text.slice(from, i));
+      from = i + 1;
+    }
+  }
+  parts.push(text.slice(from));
+  return parts.filter((p) => p.trim());
+}
+
+// A literal default value (number, string, True, False or None), or undefined for anything else.
+function literalValue(text: string): unknown {
+  const t = text.trim();
+  if (t === 'True') return true;
+  if (t === 'False') return false;
+  if (t === 'None') return null;
+  if (/^-?(\d[\d_]*\.?[\d_]*([eE][+-]?\d+)?|\.\d[\d_]*([eE][+-]?\d+)?)$/.test(t)) {
+    const n = Number(t.replace(/_/g, ''));
+    return Number.isFinite(n) ? n : undefined;
+  }
+  const literal = stringAt(t, 0);
+  if (literal && literal.end === t.length && !/[bBfF]/.test(literal.prefix)) {
+    const body = t.slice(literal.prefix.length + literal.quote.length, -literal.quote.length);
+    return /[rR]/.test(literal.prefix) ? body : unescape(body);
+  }
+  return undefined;
+}
+
+function unescape(body: string): string {
+  return body.replace(/\\(\n|N\{[^}]*\}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|x[0-9a-fA-F]{2}|[0-7]{1,3}|.)/g, (_m, esc: string) => {
+    switch (esc[0]) {
+      case '\n': return '';
+      case 'n': return '\n';
+      case 't': return '\t';
+      case 'r': return '\r';
+      case 'b': return '\b';
+      case 'f': return '\f';
+      case 'v': return '\v';
+      case 'a': return '\x07';
+      case 'u':
+      case 'U':
+        return String.fromCodePoint(parseInt(esc.slice(1), 16));
+      case 'x':
+        return String.fromCharCode(parseInt(esc.slice(1), 16));
+      case 'N':
+        return `\\${esc}`;
+      default:
+        return /[0-7]/.test(esc[0]) ? String.fromCharCode(parseInt(esc, 8)) : ['\\', "'", '"'].includes(esc) ? esc : `\\${esc}`;
+    }
+  });
+}

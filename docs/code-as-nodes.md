@@ -58,7 +58,7 @@ The setting `blueprintVisualScripting.exposeAllFunctions` exposes every exported
 | `native:<name>` | any other type, by its text | any other type, by its text |
 
   `T | null`, `T | undefined`, `Optional[T]` and `T | None` are T, nullable. A `native` type connects only to the same type (or `any`) and passes through untouched.
-- **Not exposed, with the reason shown in the output channel:** `async` functions (they become latent nodes with Phase 4's latent actions), generators, rest and keyword-only parameters, destructured parameters, and generic functions.
+- **Not exposed, with the reason shown in the output channel:** `async` functions and functions returning a `Promise` or `Awaitable` (they become latent nodes with Phase 4's latent actions), generators, rest parameters (`...args`, `*args`, `**kwargs`), destructured parameters, generic functions, TypeScript overloads, and marked TypeScript or JavaScript functions that aren't exported. Python keyword-only parameters with defaults are left off the node, so they keep their defaults; one without a default makes the function unexposable.
 
 ### How declarations are read
 
