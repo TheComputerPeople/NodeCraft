@@ -129,6 +129,19 @@ Goal: the equivalent of `BlueprintCallable`. The user's existing code shows up i
 
 Exit: in a TypeScript and a Python project, a function written by hand appears as a node, can be called from a graph, and refactors are detected.
 
+Design: [code-as-nodes.md](code-as-nodes.md). Steps, one commit each:
+
+1. Design and plan (this list).
+2. Pure nodes and function calls in the core: the IR, the compiler, Simulate and both generators, including generated imports.
+3. TypeScript and JavaScript declaration scanner: markers, parameters, defaults, type mapping.
+4. Python declaration scanner.
+5. Workspace import: scanning and watching the project, the palette, the "expose all" setting, import specifiers and Run.
+6. Refactor detection: stored signatures, badges and diagnostics, Refresh Node, Refresh All Nodes, Replace with ….
+7. Standard library nodes (math, string, utilities, file).
+8. Documentation and an end-to-end test in a TypeScript and a Python project.
+
+Deliberate changes from the original plan: declarations are read by scanners in `src/core`, not the TypeScript compiler API or Python's `ast` (see the design for why). Tier 2 import through a language server moves to Phase 6, with the declarative packs it serves: every language that can generate code before then has a precise importer.
+
 ### Phase 4: Program structure
 
 Goal: the full set of Blueprint authoring concepts, each enabled per language through its pack's capabilities.
