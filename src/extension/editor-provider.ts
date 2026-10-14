@@ -7,6 +7,7 @@ import { NodeRegistry } from '../core/registry';
 import { GraphRuntime } from '../core/runtime';
 import { parseDocument, serializeDocument } from '../core/serializer';
 import { CompileService } from './compile-service';
+import { loadGraphDocument } from './graph-libraries';
 import { createNonce, renderEditorHtml } from './webview-html';
 
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
@@ -250,10 +251,11 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     output.show(true);
     output.appendLine('Simulating in the editor');
     const runtime = new GraphRuntime(this.registry, (event) => {
-      this.broadcast(document.uri.toString(), { type: 'runtimeEvent', event });
+      // Nodes of a function library's graph aren't in this editor.
+      if (!event.document) this.broadcast(document.uri.toString(), { type: 'runtimeEvent', event });
       if (event.kind === 'log') output.appendLine(event.message ?? '');
-      else if (event.kind === 'error') output.appendLine(`[error] ${event.message ?? ''}`);
-    }, this.languages);
+      else if (event.kind === 'error') output.appendLine(`[error] ${event.document ? `${event.document}: ` : ''}${event.message ?? ''}`);
+    }, this.languages, (path) => loadGraphDocument(document.uri, path));
     runtime.run(graphDocument);
   }
 

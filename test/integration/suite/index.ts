@@ -231,6 +231,32 @@ test('functions marked @blueprint become nodes that generated code imports', asy
   }
 });
 
+test('the functions of a function library graph become nodes that other graphs import', async () => {
+  const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const library = workspaceFile('mathlib/Helpers.vgraph');
+  await write('mathlib/Helpers.vgraph', JSON.stringify({
+    schemaVersion: 3, name: 'Helpers', kind: 'functionLibrary', language: 'typescript', variables: [],
+    graphs: [{
+      id: 'DoubleIt', name: 'Double It', kind: 'function', comments: [],
+      signature: { pure: true, inputs: [{ id: 'value', name: 'Value', kind: 'data', type: { id: 'float' } }], outputs: [{ id: 'returnValue', name: 'Result', kind: 'data', type: { id: 'float' } }] },
+      nodes: [node('entry', 'core:function.entry', { graph: 'DoubleIt' }), node('mul', 'core:math.multiply', { 'pin:b': 2 }), node('return', 'core:function.return', { graph: 'DoubleIt' })],
+      connections: [
+        { id: 'c1', fromNode: 'entry', fromPin: 'execOut', toNode: 'return', toPin: 'execIn' },
+        { id: 'c2', fromNode: 'entry', fromPin: 'value', toNode: 'mul', toPin: 'a' },
+        { id: 'c3', fromNode: 'mul', fromPin: 'returnValue', toNode: 'return', toPin: 'returnValue' }
+      ]
+    }]
+  }, null, 2));
+  await vscode.commands.executeCommand('blueprintVisualScripting.compile', library);
+  assert.match(await readText(workspaceFile('mathlib/Helpers.vgraph.ts')), /^export function doubleIt\(value: number\): number \{$/m);
+
+  const caller = workspaceFile('uses-lib.vgraph');
+  await write('uses-lib.vgraph', projectGraph('UsesLib', 'typescript', 'fn:typescript:mathlib/Helpers.vgraph.ts#doubleIt'));
+  await compileOnceFound(caller);
+  assert.match(await readText(workspaceFile('uses-lib.vgraph.ts')), /^import \{ doubleIt \} from "\.\/mathlib\/Helpers\.vgraph\.ts";$/m);
+});
+
 export async function run(): Promise<void> {
   const failures: string[] = [];
   for (const { name, run: body } of tests) {

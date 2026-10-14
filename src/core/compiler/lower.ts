@@ -112,7 +112,7 @@ class Lowerer {
     }
 
     const entries = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === START).map((start) => ({ info, start })));
-    if (!entries.length) this.warning('no-start', 'The graph has no Start event, so the generated start method does nothing.');
+    if (!entries.length && this.doc.kind === 'class') this.warning('no-start', 'The graph has no Start event, so the generated start method does nothing.');
 
     for (const info of [...eventGraphs, ...functionGraphs]) this.checkExecCycles(info);
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
@@ -125,6 +125,7 @@ class Lowerer {
       diagnostics: this.diagnostics,
       program: {
         className: this.doc.name,
+        ...(this.doc.kind === 'functionLibrary' ? { library: true } : {}),
         members: [...this.members.values()],
         slots: [...this.slots.values()],
         helpers: [...this.helpers.values()],
@@ -352,19 +353,16 @@ class Lowerer {
     // Keep going after an error, so every node on the path is checked.
     if (!callee) return next(execOut);
     const output = def.outputs.find((p) => p.kind === 'data');
+    const args = dataInputs(def).map((p) => this.inputExpr(info, node, def, p.id));
+    // An imported function with several outputs (a graph library's) fills a slot per output.
+    if (callee.kind === 'import' && this.imports.get(callee.id)?.outputs) {
+      const results = def.outputs.filter((p) => p.kind === 'data').map((p) => ({ output: p.id, slot: this.slot(info, node, def, p.id) }));
+      return [{ kind: 'call', callee, args, results, source }, ...next(execOut)];
+    }
     if (def.outputs.filter((p) => p.kind === 'data').length > 1) {
       this.warning('extra-outputs', `"${def.displayName}" has several data outputs; only "${output?.name || output?.id}" is produced.`, info.graph.id, nodeId);
     }
-    return [
-      {
-        kind: 'call',
-        callee,
-        args: dataInputs(def).map((p) => this.inputExpr(info, node, def, p.id)),
-        ...(output ? { resultSlot: this.slot(info, node, def, output.id) } : {}),
-        source
-      },
-      ...next(execOut)
-    ];
+    return [{ kind: 'call', callee, args, ...(output ? { resultSlot: this.slot(info, node, def, output.id) } : {}), source }, ...next(execOut)];
   }
 
   // ---- Expressions ---------------------------------------------------------------------------
@@ -398,7 +396,8 @@ class Lowerer {
       return this.follow(info, sourceNode, 'Pure nodes are wired in a loop.', pin, () => {
         const callee = this.callee(info, sourceNode, sourceDef);
         if (!callee) return { kind: 'default', type: pin?.type };
-        return { kind: 'call', callee, args: dataInputs(sourceDef).map((p) => this.inputExpr(info, sourceNode, sourceDef, p.id)) };
+        const several = callee.kind === 'import' && !!this.imports.get(callee.id)?.outputs;
+        return { kind: 'call', callee, args: dataInputs(sourceDef).map((p) => this.inputExpr(info, sourceNode, sourceDef, p.id)), ...(several ? { output: source.pin } : {}) };
       });
     }
     if (operation === 'get-variable' || operation === 'set-variable') {
@@ -622,6 +621,8 @@ class Lowerer {
       params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
       returns: def.outputs.find((p) => p.kind === 'data')?.type
     };
+    const outputs = def.outputs.filter((p) => p.kind === 'data');
+    if (outputs.length > 1) imported.outputs = outputs.map((p) => ({ id: p.id, name: p.name, type: p.type }));
     this.imports.set(def.type, imported);
     return imported;
   }

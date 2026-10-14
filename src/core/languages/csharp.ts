@@ -211,7 +211,22 @@ export function csharpRunProject(targetFramework: string, sources: string[]): Re
   };
 }
 
+// A function library's static class and the names its functions are defined as (PascalCase,
+// unique in the class). The library's own generated file and every file that calls it use these.
+export function csharpLibraryExports(libraryName: string, functions: { id: string; name: string }[]): { names: Map<string, string>; container: string } {
+  const container = new NameScope(RESERVED).claim(libraryName, 'pascal');
+  const scope = new NameScope(RESERVED, [container, ...HELPER_NAMES]);
+  return { names: new Map(functions.map((f) => [f.id, scope.claim(f.name, 'pascal')])), container };
+}
+
+// Element names of the tuple a function with several outputs returns.
+function resultFields(outputs: { id: string; name: string }[]): Map<string, string> {
+  const fields = new NameScope(RESERVED);
+  return new Map(outputs.map((o) => [o.id, fields.claim(o.name, 'pascal')]));
+}
+
 const csharpGenerator: CodeGenerator = {
+  libraryExports: csharpLibraryExports,
   snippetLanguages: ['csharp'],
   importLanguages: ['csharp'],
   outputFileName: (graphFileName) => `${graphFileName}.cs`,
@@ -258,18 +273,21 @@ class CSharpEmitter {
   private readonly outputFields = new Map<string, Map<string, string>>();
   private readonly className: string;
   private readonly helpersUsed = new Set<keyof typeof HELPERS>();
+  // A function library: a static class of static methods.
+  private readonly library: boolean;
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions) {
+    this.library = !!program.library;
     this.className = new NameScope(RESERVED).claim(program.className, 'pascal');
-    // A member can't share its class's name in C#.
-    this.names = new NameScope(RESERVED, ['Start', this.className, ...HELPER_NAMES]);
-    for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
-    for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
+    // A member can't share its class's name in C#. A library's functions are claimed first,
+    // exactly as csharpLibraryExports claims them.
+    this.names = new NameScope(RESERVED, [...(this.library ? [] : ['Start']), this.className, ...HELPER_NAMES]);
     for (const f of program.functions) {
       this.functionNames.set(f.id, this.names.claim(f.name, 'pascal'));
-      const fields = new NameScope(RESERVED);
-      this.outputFields.set(f.id, new Map(f.outputs.map((o) => [o.id, fields.claim(o.name, 'pascal')])));
+      this.outputFields.set(f.id, resultFields(f.outputs));
     }
+    for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
+    for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'pascal'));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'pascal'));
   }
@@ -282,7 +300,7 @@ class CSharpEmitter {
     for (const m of members) body.line(`public ${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
     for (const x of slots) body.line(`private ${this.typeName(x.type)} ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
     if (members.length || slots.length) body.line();
-    this.method('public', 'Start', [], undefined, () => this.statements(this.program.start));
+    if (!this.library) this.method('public', 'Start', [], undefined, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const block of this.program.blocks) this.method('private', this.blockNames.get(block.id)!, [], undefined, () => this.statements(block.body));
     for (const helper of this.program.helpers) this.helperMethod(helper);
@@ -312,7 +330,7 @@ class CSharpEmitter {
       header.line(`namespace ${this.options.namespace};`);
       header.line();
     }
-    header.line(`public class ${this.className}`);
+    header.line(`public ${this.library ? 'static ' : ''}class ${this.className}`);
     header.line('{');
     const headerText = header.toString();
     const offset = headerText.split('\n').length - 1;
@@ -331,7 +349,7 @@ class CSharpEmitter {
   private method(access: string, name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | string | undefined, body: () => void): void {
     this.out.endNode();
     const list = params.map((p) => `${this.typeName(p.type)} ${p.name}`).join(', ');
-    this.out.line(`${access} ${typeof returns === 'string' ? returns : returns ? this.typeName(returns) : 'void'} ${name}(${list})`);
+    this.out.line(`${access}${this.library ? ' static' : ''} ${typeof returns === 'string' ? returns : returns ? this.typeName(returns) : 'void'} ${name}(${list})`);
     this.out.line('{');
     this.out.indent();
     body();
@@ -452,6 +470,11 @@ class CSharpEmitter {
       }
       case 'call': {
         const call = this.call(s.callee, s.args);
+        if (s.results) {
+          // A library function with several outputs returns a named tuple, deconstructed into the slots.
+          out.line(`(${s.results.map((r) => this.slotNames.get(r.slot)).join(', ')}) = ${call};`);
+          break;
+        }
         if (!s.resultSlot) {
           out.line(`${call};`);
           break;
@@ -516,8 +539,12 @@ class CSharpEmitter {
         this.helpersUsed.add('boolean');
         return `ToBoolean(${this.expr(e.value)})`;
       }
-      case 'call':
-        return this.call(e.callee, e.args);
+      case 'call': {
+        const call = this.call(e.callee, e.args);
+        if (!e.output) return call;
+        const imported = this.program.imports.find((i) => i.id === e.callee.id);
+        return `${call}.${resultFields(imported?.outputs ?? []).get(e.output)}`;
+      }
       case 'binary': {
         // Both sides need one type in C#: the one either side has (an int counter, a string
         // selection), with the other side converted to it.

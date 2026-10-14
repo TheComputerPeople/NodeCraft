@@ -285,6 +285,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Compile | Compile button, Compiler Results, error badges on nodes | ✅ | — |
 | Compile | F7 compiles | ✅ | — |
 | Structure | Functions: entry and return nodes, inputs and outputs, pure functions, local variables, recursion | ✅ | — |
+| Structure | Function libraries, called from any graph in the same language | ✅ | — |
 | Structure | Macros | ⬜ | 4 |
 | Structure | Flow-control library: For Loop (with Break), While Loop, Do Once, Do N, Gate, MultiGate, Flip Flop, Switch on Int/String | ✅ (MultiGate's Is Random later) | — |
 | Structure | For Each Loop (with Break) | ✅ | — |

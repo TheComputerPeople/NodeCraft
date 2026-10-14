@@ -10,6 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { compileDocument } from '../../src/core/compiler';
 import { exposeFunctions } from '../../src/core/importing/symbols';
+import { libraryDefinitions } from '../../src/core/libraries';
 import { GenerateOptions } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { GraphDocument, NodeDefinition, RuntimeLogEvent } from '../../src/core/model';
@@ -320,6 +321,168 @@ describe('project functions', () => {
       fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
         compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
         files: [path.relative(dir, file)]
+      }));
+      const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+      const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    });
+  }
+});
+
+// A function library made of graphs (docs/program-structure.md, "Functions"), called from a graph
+// in another folder: its generated file is imported like project code, and Simulate runs the
+// library's graphs.
+describe('function libraries', () => {
+  const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin });
+  const pin = (id: string, name: string, defaultValue?: number) => ({ id, name, kind: 'data' as const, type: { id: 'float' }, ...(defaultValue !== undefined ? { defaultValue } : {}) });
+
+  // Difference And Product(A, B) prints "computing" and returns both; Scale(Value, Factor = 2) is pure.
+  function library(language: string): GraphDocument {
+    return {
+      schemaVersion: 3, name: 'MathTools', kind: 'functionLibrary', language, variables: [],
+      graphs: [
+        {
+          id: 'DiffProduct', name: 'Difference And Product', kind: 'function', comments: [],
+          signature: { inputs: [pin('a', 'A'), pin('b', 'B')], outputs: [pin('difference', 'Difference'), pin('product', 'Product')] },
+          nodes: [
+            n('entry', 'core:function.entry', { graph: 'DiffProduct' }), n('print', 'core:console.print', { 'pin:value': 'computing' }),
+            n('sub', 'core:math.subtract'), n('mul', 'core:math.multiply'), n('return', 'core:function.return', { graph: 'DiffProduct' })
+          ],
+          connections: [
+            w('entry', 'execOut', 'print', 'execIn'), w('print', 'execOut', 'return', 'execIn'),
+            w('entry', 'a', 'sub', 'a'), w('entry', 'b', 'sub', 'b'), w('entry', 'a', 'mul', 'a'), w('entry', 'b', 'mul', 'b'),
+            w('sub', 'returnValue', 'return', 'difference'), w('mul', 'returnValue', 'return', 'product')
+          ]
+        },
+        {
+          id: 'Scale', name: 'Scale', kind: 'function', comments: [],
+          signature: { pure: true, inputs: [pin('value', 'Value'), pin('factor', 'Factor', 2)], outputs: [pin('result', 'Result')] },
+          nodes: [n('entry', 'core:function.entry', { graph: 'Scale' }), n('mul', 'core:math.multiply'), n('return', 'core:function.return', { graph: 'Scale' })],
+          connections: [w('entry', 'execOut', 'return', 'execIn'), w('entry', 'value', 'mul', 'a'), w('entry', 'factor', 'mul', 'b'), w('mul', 'returnValue', 'return', 'result')]
+        }
+      ]
+    };
+  }
+
+  // The library's nodes as the workspace service makes them, for a library compiled into lib/.
+  function definitions(language: string): NodeDefinition[] {
+    const lib = library(language);
+    const generator = languages.get(language)!.generator!;
+    const generated = `lib/${generator.outputFileName('MathTools.vgraph')}`;
+    return libraryDefinitions(lib, {
+      documentPath: 'lib/MathTools.vgraph',
+      generatedPath: generated,
+      exports: generator.libraryExports(lib.name, lib.graphs.map((g) => ({ id: g.id, name: g.name }))),
+      module: language === 'python' ? 'math_tools_vgraph' : language === 'csharp' ? 'Lib' : undefined
+    });
+  }
+
+  // Start → Difference And Product(10, 4) → Print(Difference) → Print(Scale(Product)).
+  function caller(language: string): { registry: NodeRegistry; document: GraphDocument } {
+    const defs = definitions(language);
+    const diff = defs.find((d) => d.displayName === 'Difference And Product')!;
+    const scale = defs.find((d) => d.displayName === 'Scale')!;
+    const r = registry();
+    r.registerMany(defs);
+    const document: GraphDocument = {
+      schemaVersion: 3, name: 'Caller', kind: 'class', language, variables: [],
+      graphs: [{
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [
+          n('s', 'core:event.start'), n('d', diff.type, { 'pin:a': 10, 'pin:b': 4 }), n('p1', 'core:console.print'),
+          n('scale', scale.type), n('p2', 'core:console.print')
+        ],
+        connections: [
+          w('s', 'execOut', 'd', 'execIn'), w('d', 'execOut', 'p1', 'execIn'), w('p1', 'execOut', 'p2', 'execIn'),
+          w('d', 'difference', 'p1', 'value'), w('d', 'product', 'scale', 'value'), w('scale', 'result', 'p2', 'value')
+        ]
+      }]
+    };
+    return { registry: r, document };
+  }
+
+  test('the library makes a node per function', () => {
+    const defs = definitions('typescript');
+    assert.deepEqual(defs.map((d) => [d.type, d.displayName, d.category]), [
+      ['fn:typescript:lib/MathTools.vgraph.ts#differenceAndProduct', 'Difference And Product', 'MathTools'],
+      ['fn:typescript:lib/MathTools.vgraph.ts#scale', 'Scale', 'MathTools']
+    ]);
+    assert.deepEqual(defs[1].inputs.map((p) => [p.id, p.defaultValue]), [['value', undefined], ['factor', 2]]);
+    assert.ok(defs[0].inputs.some((p) => p.kind === 'exec') && !defs[1].inputs.some((p) => p.kind === 'exec'));
+    assert.deepEqual(definitions('csharp').map((d) => d.type), [
+      'fn:csharp:lib/MathTools.vgraph.cs#Lib.MathTools.DifferenceAndProduct',
+      'fn:csharp:lib/MathTools.vgraph.cs#Lib.MathTools.Scale'
+    ]);
+  });
+
+  test('Simulate runs the library\'s graphs', () => {
+    const { registry: r, document } = caller('typescript');
+    const events: RuntimeLogEvent[] = [];
+    const loaded: string[] = [];
+    new GraphRuntime(r, (e) => events.push(e), languages, (file) => (loaded.push(file), library('typescript'))).run(document);
+    assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), ['computing', '6', '80']);
+    assert.ok(loaded.every((f) => f === 'lib/MathTools.vgraph'));
+    // Nodes inside the library are reported with its file.
+    assert.ok(events.some((e) => e.kind === 'node.enter' && e.document === 'lib/MathTools.vgraph'));
+  });
+
+  test('Simulate reports a library it can\'t read', () => {
+    const { registry: r, document } = caller('typescript');
+    const events: RuntimeLogEvent[] = [];
+    new GraphRuntime(r, (e) => events.push(e), languages, () => undefined).run(document);
+    const error = events.find((e) => e.kind === 'error');
+    assert.equal(error?.nodeId, 'd');
+    assert.match(error?.message ?? '', /lib\/MathTools\.vgraph/);
+  });
+
+  // Compiles the library into lib/ and the caller into graphs/.
+  function build(key: string, language: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; libFile: string; importRoots?: string[] } {
+    const dir = path.join(workDir, `library-${key}`);
+    fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
+    const lib = compileDocument(library(language), { registry: registry(), languages, generate: { sourceFileName: 'MathTools.vgraph', outputDir: 'lib', namespace: 'Lib', ...generate } });
+    assert.deepEqual(lib.diagnostics, []);
+    const libFile = path.join(dir, 'lib', lib.output!.fileName);
+    fs.writeFileSync(libFile, lib.output!.text);
+    const { registry: r, document } = caller(language);
+    const result = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'Caller.vgraph', outputDir: 'graphs', namespace: 'Game', ...generate } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'graphs', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    return { file, className: result.output!.className, dir, libFile, importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)) };
+  }
+
+  for (const target of [
+    { label: 'TypeScript', key: 'typescript', language: 'typescript' },
+    { label: 'JavaScript (ES modules)', key: 'javascript-esm', language: 'javascript', moduleFormat: 'esm' as const },
+    { label: 'JavaScript (CommonJS)', key: 'javascript-commonjs', language: 'javascript', moduleFormat: 'commonjs' as const },
+    { label: 'Python', key: 'python', language: 'python' },
+    { label: 'C#', key: 'csharp', language: 'csharp' }
+  ]) {
+    test(`${target.label} imports and calls them`, async (t) => {
+      const { file, className, dir, libFile, importRoots } = build(target.key, target.language, { moduleFormat: target.moduleFormat });
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? [libFile] : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), ['computing', '6', '80'], `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  for (const { language, flags } of [
+    { language: 'typescript', flags: { allowImportingTsExtensions: true } },
+    { language: 'javascript', flags: { allowJs: true, checkJs: true } }
+  ]) {
+    test(`${language} library and caller type-check under --strict`, () => {
+      const { file, dir, libFile } = build(`typecheck-${language}`, language);
+      fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
+        files: [path.relative(dir, libFile), path.relative(dir, file)]
       }));
       const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
       const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });

@@ -25,8 +25,9 @@ export type IrExpr =
   | { kind: 'toBoolean'; value: IrExpr }
   // The value as text, following docs/semantics.md ("Values").
   | { kind: 'toText'; value: IrExpr }
-  // A pure node: the callee is evaluated where the value is used, every time.
-  | { kind: 'call'; callee: IrCallee; args: IrExpr[] }
+  // A pure node: the callee is evaluated where the value is used, every time. `output` picks one
+  // output of an imported function with several (IrImport.outputs).
+  | { kind: 'call'; callee: IrCallee; args: IrExpr[]; output?: string }
   // Comparisons and logic on values whose types already match (flow control's own bookkeeping).
   | { kind: 'binary'; op: BinaryOp; left: IrExpr; right: IrExpr }
   | { kind: 'not'; value: IrExpr }
@@ -48,8 +49,9 @@ export type IrStatement =
   | { kind: 'store'; slot: string; value: IrExpr; source: SourceRef }
   | { kind: 'setMember'; member: string; value: IrExpr; source: SourceRef }
   | { kind: 'if'; condition: IrExpr; then: IrStatement[]; else: IrStatement[]; source: SourceRef }
-  // Runs an impure node's snippet or function; its first data output, if any, goes to `resultSlot`.
-  | { kind: 'call'; callee: IrCallee; args: IrExpr[]; resultSlot?: string; source: SourceRef }
+  // Runs an impure node's snippet or function; its first data output, if any, goes to `resultSlot`,
+  // or each output to a slot (`results`) for an imported function with several.
+  | { kind: 'call'; callee: IrCallee; args: IrExpr[]; resultSlot?: string; results?: { output: string; slot: string }[]; source: SourceRef }
   // For Loop: `counter` (a slot) runs from `first` to `last` (both included; `last` is read before
   // each pass, as Unreal does). The loop also ends when `stop` (a bool slot) is set by Break.
   | { kind: 'for'; counter: string; first: IrExpr; last: IrExpr; stop?: string; body: IrStatement[]; source: SourceRef }
@@ -120,6 +122,9 @@ export interface IrImport {
   module?: string;
   params: { pinId: string; type?: TypeRef }[];
   returns?: TypeRef;
+  // A function with several outputs (a graph library's): its result holds them, shaped as the
+  // language returns several values (an object, a tuple, a named tuple).
+  outputs?: { id: string; name: string; type?: TypeRef }[];
 }
 
 export interface IrBlock {
@@ -130,6 +135,9 @@ export interface IrBlock {
 
 export interface IrProgram {
   className: string;
+  // A function library: free functions (TypeScript, JavaScript, Python) or a static class (C#)
+  // instead of a class with a start method.
+  library?: boolean;
   members: IrMember[];
   slots: IrSlot[];
   helpers: IrCodeHelper[];
@@ -160,8 +168,11 @@ export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefin
       return { id: 'bool' };
     case 'toText':
       return { id: 'string' };
-    case 'call':
-      return calleeSignature(expr.callee, program)?.returns;
+    case 'call': {
+      const signature = calleeSignature(expr.callee, program);
+      if (expr.output && signature && 'outputs' in signature) return signature.outputs?.find((o) => o.id === expr.output)?.type;
+      return signature?.returns;
+    }
     case 'binary':
       return expr.op === '+' || expr.op === '-' ? exprType(expr.left, program) : { id: 'bool' };
     case 'not':

@@ -45,7 +45,7 @@ The browser tests drive the real webview bundle in an installed Microsoft Edge o
 Source layout:
 
 - `src/core/`: the graph model, serializer, node registry, reference runtime, graph-editing operations, the compiler and language packs, and the declaration scanners that read project functions (`src/core/importing/`). It must not import `vscode` or Node built-ins, so it can be shared with the webview and tested in plain Node (a unit test enforces this).
-- `src/extension/`: VS Code integration (activation, the custom editor, compiling and running, workspace node libraries and project functions, webview markup).
+- `src/extension/`: VS Code integration (activation, the custom editor, compiling and running, workspace node libraries, project functions and function libraries, webview markup).
 - `src/webview/`: the graph editor UI, written in TypeScript and bundled by esbuild. It has no runtime dependencies.
 - `test/unit/`: unit tests for `src/core`.
 - `test/webview/`: browser tests for the editor UI.

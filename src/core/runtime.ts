@@ -15,6 +15,8 @@ interface RunState {
   variables: Map<string, unknown>;
   resolve: NodeResolver;
   language: string;
+  // A function library's file (workspace-relative), when the run is in another document.
+  document?: string;
 }
 
 // What one run of a graph keeps: the event graphs share one frame (the object's), and each call
@@ -57,11 +59,12 @@ export class GraphRuntime {
   constructor(
     private readonly registry: NodeRegistry,
     private readonly emit: (event: RuntimeLogEvent) => void,
-    private readonly languages: LanguagePackRegistry = builtinLanguagePacks()
+    private readonly languages: LanguagePackRegistry = builtinLanguagePacks(),
+    // Reads another graph file (a function library, by workspace-relative path) for Simulate.
+    private readonly loadDocument?: (path: string) => GraphDocument | undefined
   ) {}
 
-  // Runs every Start node in the document's event graphs. Function and macro graphs only run when
-  // called, which arrives with Phase 4.
+  // Runs every Start node in the document's event graphs. Function graphs only run when called.
   run(doc: GraphDocument): void {
     const run: RunState = { doc, variables: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc) };
     const objectFrame: Frame = { outputs: new Map(), state: new Map(), params: new Map(), locals: new Map(), depth: 0 };
@@ -85,7 +88,7 @@ export class GraphRuntime {
   }
 
   private report(context: GraphContext, event: RuntimeLogEvent): void {
-    this.emit({ graphId: context.graph.id, ...event });
+    this.emit({ graphId: context.graph.id, ...(context.run.document ? { document: context.run.document } : {}), ...event });
   }
 
   // Reports an error on `node` and stops the run.
@@ -191,6 +194,14 @@ export class GraphRuntime {
       case 'end':
         break;
       default: {
+        const implementation = definition.implementation;
+        if (implementation?.kind === 'function' && implementation.source) {
+          const outputs = this.callLibrary(context, node, implementation.source, input);
+          for (const [pin, value] of outputs) setOutput(pin, value);
+          exit(Object.fromEntries(outputs));
+          continueFrom(definition.outputs.find((p) => p.kind === 'exec')?.id ?? 'execOut');
+          break;
+        }
         const result = this.callNode(context, node, definition, input);
         const output = definition.outputs.find((p) => p.kind === 'data');
         if (output) setOutput(output.id, result);
@@ -339,6 +350,18 @@ export class GraphRuntime {
   // the end without a Return Node returns the outputs' defaults.
   private callFunction(context: GraphContext, node: GraphNode, input: (pinId: string) => unknown): Map<string, unknown> {
     const graph = functionGraph(node, context.run.doc.graphs) ?? this.fail(context, node, 'This node calls a function that no longer exists.');
+    return this.runFunction(context, node, context.run, graph, input);
+  }
+
+  // A function of a graph library (another .vgraph file), run from that file.
+  private callLibrary(context: GraphContext, node: GraphNode, source: { document: string; graph: string }, input: (pinId: string) => unknown): Map<string, unknown> {
+    const doc = this.loadDocument?.(source.document) ?? this.fail(context, node, `Simulate can't read the function library ${source.document}.`);
+    const graph = doc.graphs.find((g) => g.id === source.graph && g.kind === 'function') ?? this.fail(context, node, `${source.document} no longer has this function.`);
+    const run: RunState = { doc, variables: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc), document: source.document };
+    return this.runFunction(context, node, run, graph, input);
+  }
+
+  private runFunction(context: GraphContext, node: GraphNode, run: RunState, graph: Graph, input: (pinId: string) => unknown): Map<string, unknown> {
     if (context.frame.depth >= MAX_CALL_DEPTH) this.fail(context, node, `Too many nested calls (${MAX_CALL_DEPTH}): the function keeps calling itself.`);
     const signature = graph.signature ?? { inputs: [], outputs: [] };
     const frame: Frame = {
@@ -349,7 +372,7 @@ export class GraphRuntime {
     const outputs = signature.outputs.filter((p) => p.kind === 'data');
     const entry = graph.nodes.find((n) => n.type === FUNCTION_ENTRY) ?? this.fail(context, node, `Function "${graph.name}" has no Function Entry node.`);
     try {
-      this.executeNode({ run: context.run, graph, frame, executing: new Set() }, entry);
+      this.executeNode({ run, graph, frame, executing: new Set() }, entry);
     } catch (error) {
       if (!(error instanceof ReturnSignal)) throw error;
       return new Map(outputs.map((p) => [p.id, error.values.has(p.id) ? error.values.get(p.id) : defaultValue(p.type)]));
@@ -432,6 +455,11 @@ export class GraphRuntime {
     if (operation === 'reroute') return follow('Reroute nodes are wired in a loop.', () => this.inputValue(context, node, definition, 'in', following));
     // Pure code and function nodes run on every read (docs/semantics.md, "Data flow").
     const kind = definition.implementation?.kind;
+    const implementation = definition.implementation;
+    if (implementation?.kind === 'function' && implementation.source && isPure(definition)) {
+      const source = implementation.source;
+      return follow('Pure nodes are wired in a loop.', () => this.callLibrary(context, node, source, (id) => this.inputValue(context, node, definition, id, following)).get(pinId));
+    }
     if ((kind === 'code' || kind === 'function') && isPure(definition)) {
       return follow('Pure nodes are wired in a loop.', () => this.callNode(context, node, definition, (id) => this.inputValue(context, node, definition, id, following)));
     }

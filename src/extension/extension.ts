@@ -8,6 +8,7 @@ import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
 import { detectWorkspaceLanguage } from './languages';
 import { watchWorkspaceNodeLibraries } from './node-libraries';
 import { isGeneratedFrom } from './placement';
+import { GraphLibraries } from './graph-libraries';
 import { ProjectFunctions } from './project-functions';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -28,9 +29,12 @@ export function activate(context: vscode.ExtensionContext): void {
   // The project's own functions, exposed as nodes (docs/code-as-nodes.md).
   const projectFunctions = new ProjectFunctions(registry, languages, output);
   context.subscriptions.push(projectFunctions);
+  // Function libraries made of graphs (docs/program-structure.md, "Functions").
+  const graphLibraries = new GraphLibraries(registry, languages);
+  context.subscriptions.push(graphLibraries);
 
-  // Compiling waits for the first scan, so functions that are merely still loading aren't reported missing.
-  const compiler = new CompileService(registry, languages, output, () => projectFunctions.ready);
+  // Compiling waits for the first scans, so functions that are merely still loading aren't reported missing.
+  const compiler = new CompileService(registry, languages, output, () => Promise.all([projectFunctions.ready, graphLibraries.ready]).then(() => undefined));
   const provider = new GraphEditorProvider(context, registry, languages, compiler, output, () => projectFunctions.loaded);
   context.subscriptions.push(
     compiler,

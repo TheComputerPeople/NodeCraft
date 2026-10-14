@@ -95,6 +95,9 @@ export interface CodeGenerator {
   // (docs/output-placement.md): "Inventory.vgraph" → "Inventory.vgraph.ts" or "inventory_vgraph.py".
   outputFileName(graphFileName: string): string;
   generate(program: IrProgram, options: GenerateOptions): GeneratedCode;
+  // For a function library: the name each function (by graph id) is exported as, and the class
+  // holding them in languages without free functions (C#). Callers import these names.
+  libraryExports(libraryName: string, functions: { id: string; name: string }[]): { names: Map<string, string>; container?: string };
   runner?: CodeRunner;
 }
 

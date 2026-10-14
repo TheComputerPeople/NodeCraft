@@ -61,6 +61,7 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 - Each call has its own **local variables**, starting at their defaults, and its own copy of the outputs and remembered state of the nodes inside the function, so recursion works. Member variables are shared, as everywhere in the object.
 - Simulate stops a chain of more than 1,000 nested calls with an error; generated code runs until the language's own stack runs out.
 - In generated code a function is a method of the class: one output is its return value; several are an object with a field per output (TypeScript and JavaScript), a tuple (Python) or a named tuple (C#).
+- A **function library**'s functions behave the same when called from another graph file. They have no member variables, and each call has its own locals and node state. In generated code they are module functions (a static class in C#) that callers import.
 
 ## Variables
 

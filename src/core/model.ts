@@ -49,6 +49,9 @@ export interface FunctionImplementation {
   name: string;
   // Python: the module's import name, e.g. "game.combat".
   module?: string;
+  // A function of a graph library: its .vgraph file (workspace-relative) and function graph, so
+  // Simulate can run it (src/core/libraries.ts).
+  source?: { document: string; graph: string };
 }
 
 export interface GraphNode {
@@ -144,6 +147,8 @@ export interface RuntimeLogEvent {
   kind: 'node.enter' | 'node.exit' | 'log' | 'error' | 'graph.complete';
   // The graph the node belongs to; node ids are only unique within a graph.
   graphId?: string;
+  // Set when the node is in another graph file (a function library's), relative to the workspace.
+  document?: string;
   nodeId?: string;
   nodeType?: string;
   values?: Record<string, unknown>;
