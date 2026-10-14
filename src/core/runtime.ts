@@ -5,26 +5,47 @@ import { DEFAULT_LANGUAGE, builtinLanguagePacks } from './languages';
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent } from './model';
 import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
+import { FUNCTION_ENTRY, functionGraph } from './functions';
 import { NodeResolver, createResolver, isPure } from './resolve';
 import { defaultValue, formatValue, fromStored, toBoolean, toNumber } from './values';
 
 interface RunState {
+  doc: GraphDocument;
   // Member variables by id, shared by every graph in the run.
   variables: Map<string, unknown>;
   resolve: NodeResolver;
+  language: string;
+}
+
+// What one run of a graph keeps: the event graphs share one frame (the object's), and each call
+// of a function gets its own, so recursion works (docs/program-structure.md, "Functions").
+interface Frame {
   // Latest output values of impure nodes, keyed by graph, node and pin.
   outputs: Map<string, unknown>;
   // What flow-control nodes remember between runs (Do Once's closed flag, …), keyed like outputs.
   state: Map<string, unknown>;
-  language: string;
+  // A function call's inputs (by signature pin id) and local variables (by id).
+  params: Map<string, unknown>;
+  locals: Map<string, unknown>;
+  // How many function calls deep this frame is.
+  depth: number;
 }
 
 interface GraphContext {
   run: RunState;
   graph: Graph;
+  frame: Frame;
   // Nodes currently on the execution call stack; reaching one again is an exec cycle.
   executing: Set<string>;
 }
+
+// Thrown by a Return Node to end its function's call with these output values.
+class ReturnSignal {
+  constructor(readonly values: Map<string, unknown>) {}
+}
+
+// Simulate stops runaway recursion with an error instead of overflowing the stack.
+export const MAX_CALL_DEPTH = 1000;
 
 // Simulate stops a loop after this many passes, as Unreal's editor does; generated code has no limit.
 export const MAX_LOOP_PASSES = 1_000_000;
@@ -42,7 +63,8 @@ export class GraphRuntime {
   // Runs every Start node in the document's event graphs. Function and macro graphs only run when
   // called, which arrives with Phase 4.
   run(doc: GraphDocument): void {
-    const run: RunState = { variables: new Map(), outputs: new Map(), state: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc.variables, doc.importedFunctions) };
+    const run: RunState = { doc, variables: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc) };
+    const objectFrame: Frame = { outputs: new Map(), state: new Map(), params: new Map(), locals: new Map(), depth: 0 };
     for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue !== undefined ? fromStored(variable.defaultValue, variable.type) : defaultValue(variable.type));
 
     const entries = doc.graphs
@@ -54,7 +76,7 @@ export class GraphRuntime {
     }
 
     try {
-      for (const { graph, start } of entries) this.executeNode({ run, graph, executing: new Set() }, start);
+      for (const { graph, start } of entries) this.executeNode({ run, graph, frame: objectFrame, executing: new Set() }, start);
       this.emit({ kind: 'graph.complete', message: 'Graph execution completed.' });
     } catch (error) {
       if (!(error instanceof RunStopped)) throw error;
@@ -100,7 +122,7 @@ export class GraphRuntime {
     };
     const input = (pinId: string): unknown => this.inputValue(context, node, definition, pinId);
     const setOutput = (pinId: string, value: unknown): void => {
-      context.run.outputs.set(outputKey(graph, node, pinId), value);
+      context.frame.outputs.set(outputKey(graph, node, pinId), value);
     };
     const continueFrom = (pinId: string): void => {
       for (const c of graph.connections) {
@@ -109,6 +131,24 @@ export class GraphRuntime {
         if (next) this.executeNode(context, next, c.toPin);
       }
     };
+
+    switch (nativeOperation(definition)) {
+      case 'function-entry':
+        continueFrom('execOut');
+        exit();
+        return;
+      case 'function-return':
+        if (context.frame.depth === 0) this.fail(context, node, 'A Return Node belongs in a function graph.');
+        exit();
+        throw new ReturnSignal(new Map(definition.inputs.filter((p) => p.kind === 'data').map((p) => [p.id, input(p.id)])));
+      case 'call-function': {
+        const outputs = this.callFunction(context, node, input);
+        for (const [pin, value] of outputs) setOutput(pin, value);
+        exit(Object.fromEntries(outputs));
+        continueFrom('execOut');
+        return;
+      }
+    }
 
     if (this.runFlowControl(context, node, definition, entry, input, setOutput, continueFrom)) {
       exit();
@@ -143,7 +183,7 @@ export class GraphRuntime {
       case 'set-variable': {
         const id = this.variableId(context, node);
         const value = input('value');
-        context.run.variables.set(id, value);
+        this.variables(context, id).set(id, value);
         exit({ [definition.inputs.find((p) => p.id === 'value')?.name ?? id]: value });
         continueFrom('execOut');
         break;
@@ -170,11 +210,11 @@ export class GraphRuntime {
     input: (pinId: string) => unknown, setOutput: (pinId: string, value: unknown) => void, continueFrom: (pinId: string) => void
   ): boolean {
     const key = (name: string) => JSON.stringify([context.graph.id, node.id, name]);
-    const get = (name: string): unknown => context.run.state.get(key(name));
+    const get = (name: string): unknown => context.frame.state.get(key(name));
     const set = (name: string, value: unknown): void => {
-      context.run.state.set(key(name), value);
+      context.frame.state.set(key(name), value);
     };
-    const output = (pinId: string): unknown => context.run.outputs.get(outputKey(context.graph, node, pinId));
+    const output = (pinId: string): unknown => context.frame.outputs.get(outputKey(context.graph, node, pinId));
     // Runs `init` the first time any of the node's inputs runs.
     const initOnce = (init: () => void): void => {
       if (get('initialized')) return;
@@ -295,6 +335,33 @@ export class GraphRuntime {
     return false;
   }
 
+  // Runs the function a call node calls, in a new frame, and returns its outputs by pin id. Reaching
+  // the end without a Return Node returns the outputs' defaults.
+  private callFunction(context: GraphContext, node: GraphNode, input: (pinId: string) => unknown): Map<string, unknown> {
+    const graph = functionGraph(node, context.run.doc.graphs) ?? this.fail(context, node, 'This node calls a function that no longer exists.');
+    if (context.frame.depth >= MAX_CALL_DEPTH) this.fail(context, node, `Too many nested calls (${MAX_CALL_DEPTH}): the function keeps calling itself.`);
+    const signature = graph.signature ?? { inputs: [], outputs: [] };
+    const frame: Frame = {
+      outputs: new Map(), state: new Map(), depth: context.frame.depth + 1,
+      params: new Map(signature.inputs.filter((p) => p.kind === 'data').map((p) => [p.id, input(p.id)])),
+      locals: new Map((graph.localVariables ?? []).map((v) => [v.id, v.defaultValue !== undefined ? fromStored(v.defaultValue, v.type) : defaultValue(v.type)]))
+    };
+    const outputs = signature.outputs.filter((p) => p.kind === 'data');
+    const entry = graph.nodes.find((n) => n.type === FUNCTION_ENTRY) ?? this.fail(context, node, `Function "${graph.name}" has no Function Entry node.`);
+    try {
+      this.executeNode({ run: context.run, graph, frame, executing: new Set() }, entry);
+    } catch (error) {
+      if (!(error instanceof ReturnSignal)) throw error;
+      return new Map(outputs.map((p) => [p.id, error.values.has(p.id) ? error.values.get(p.id) : defaultValue(p.type)]));
+    }
+    return new Map(outputs.map((p) => [p.id, defaultValue(p.type)]));
+  }
+
+  // Where a variable lives: the call's locals, or the object's members.
+  private variables(context: GraphContext, id: string): Map<string, unknown> {
+    return context.frame.locals.has(id) ? context.frame.locals : context.run.variables;
+  }
+
   // Runs a code node's snippet and returns its first data output. Project functions can't run
   // inside the editor (docs/code-as-nodes.md, "Simulate").
   private callNode(context: GraphContext, node: GraphNode, definition: NodeDefinition, input: (pinId: string) => unknown): unknown {
@@ -330,7 +397,17 @@ export class GraphRuntime {
     const definition = context.run.resolve(node) ?? this.fail(context, node, `Unknown node type: ${node.type}`);
     const operation = nativeOperation(definition);
     // Get is pure and read on every use; Set's output is the variable's current value.
-    if (operation === 'get-variable' || operation === 'set-variable') return context.run.variables.get(this.variableId(context, node)) ?? null;
+    if (operation === 'get-variable' || operation === 'set-variable') {
+      const id = this.variableId(context, node);
+      return this.variables(context, id).get(id) ?? null;
+    }
+    // A function's inputs, read from its entry node.
+    if (operation === 'function-entry') return context.frame.params.get(pinId) ?? defaultValue(definition.outputs.find((p) => p.id === pinId)?.type);
+    // A pure function's call: called on every read.
+    if (operation === 'call-function' && isPure(definition)) {
+      const outputs = this.callFunction(context, node, (id) => this.inputValue(context, node, definition, id, following));
+      return outputs.get(pinId);
+    }
     // Pure conversion: evaluated on every read.
     if (operation === 'to-string') return formatValue(this.inputValue(context, node, definition, 'value', following));
     // Make Array/Set/Map: a new container on every read.
@@ -362,14 +439,14 @@ export class GraphRuntime {
     // Impure: the value from the node's latest run, or the type default before it has run.
     const pin = definition.outputs.find((p) => p.id === pinId);
     const key = outputKey(context.graph, node, pinId);
-    return context.run.outputs.has(key) ? context.run.outputs.get(key) : defaultValue(pin?.type);
+    return context.frame.outputs.has(key) ? context.frame.outputs.get(key) : defaultValue(pin?.type);
   }
 
   // The id of the variable a Get/Set node is bound to (src/core/resolve.ts).
   private variableId(context: GraphContext, node: GraphNode): string {
     const id = node.properties.variable;
     if (typeof id !== 'string' || !id) this.fail(context, node, 'This variable node has no variable.');
-    if (!context.run.variables.has(id)) this.fail(context, node, 'This node uses a variable that no longer exists.');
+    if (!context.run.variables.has(id) && !context.frame.locals.has(id)) this.fail(context, node, 'This node uses a variable that no longer exists.');
     return id;
   }
 }

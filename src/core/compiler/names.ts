@@ -1,7 +1,7 @@
 // Turns raw graph names (node ids, node types, variable names) into legal, unique identifiers for a
 // target language.
 
-export type NameStyle = 'keep' | 'snake' | 'pascal';
+export type NameStyle = 'keep' | 'snake' | 'pascal' | 'camel';
 
 export class NameScope {
   private readonly used = new Set<string>();
@@ -29,6 +29,9 @@ export function toIdentifier(raw: string, style: NameStyle): string {
   switch (style) {
     case 'pascal':
       name = words.map((w) => w[0].toUpperCase() + w.slice(1)).join('');
+      break;
+    case 'camel':
+      name = words.map((w, i) => (i === 0 ? w.toLowerCase() : w[0].toUpperCase() + w.slice(1))).join('');
       break;
     case 'snake':
       name = words.map((w) => w.toLowerCase()).join('_');

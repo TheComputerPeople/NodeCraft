@@ -1,9 +1,12 @@
 // The node palette (left) and the Details panel (right).
-import { renameVariable, setVariableType, variableUses } from '../core/blueprint-edits';
+import {
+  addSignaturePin, findVariable, functionUses, removeSignaturePin, renameGraph, renameSignaturePin, renameVariable, setFunctionPure, setSignaturePinType, setVariableType, variableUses
+} from '../core/blueprint-edits';
+import { FUNCTION_ENTRY } from '../core/functions';
 import { definitionFor } from '../core/editing';
 import { SWITCH_INT, SWITCH_STRING, switchIntCases, switchStringCases } from '../core/flow-control';
-import { GraphNode, GraphVariable } from '../core/model';
-import { ContainerKind } from '../core/types';
+import { Graph, GraphNode, GraphVariable } from '../core/model';
+import { ContainerKind, TypeRef } from '../core/types';
 import { defaultValue } from '../core/values';
 import { formatType } from '../core/types';
 import { addNode, addPin } from './actions';
@@ -53,6 +56,11 @@ export function renderInspector(): void {
   const graph = state.graph;
   const node = graph?.nodes.find((n) => n.id === state.selectedNodeId);
   if (!node && state.selectedVariableId && renderVariableDetails(state.selectedVariableId)) return;
+  // A function's settings: when its graph is open with nothing selected, or its entry is selected.
+  if (graph?.kind === 'function' && ((!node && state.selectedNodeIds.size === 0) || node?.type === FUNCTION_ENTRY)) {
+    renderFunctionDetails(graph);
+    return;
+  }
   if (!graph || !node) {
     dom.inspector.innerHTML = state.selectedNodeIds.size > 1
       ? `<div class="muted details-empty">${state.selectedNodeIds.size} nodes selected.</div>`
@@ -124,6 +132,136 @@ function switchStartEditor(node: GraphNode): HTMLElement {
   return section;
 }
 
+// ---- Function details (Unreal's Details for a function: Inputs, Outputs, Pure, Description) --------
+
+function renderFunctionDetails(graph: Graph): void {
+  const doc = state.document;
+  if (!doc) return;
+  const signature = graph.signature ?? { inputs: [], outputs: [] };
+  const refresh = (): void => {
+    markDirty();
+    // Entry, return and call nodes take the signature's pins.
+    render();
+    renderPalette();
+    renderInspector();
+  };
+  const wrapper = document.createElement('div');
+  wrapper.className = 'details';
+  wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(graph.name)}</div><div class="muted inspector-type">Function</div>`;
+  const fields = document.createElement('div');
+  fields.className = 'details-fields';
+
+  const name = document.createElement('input');
+  name.value = graph.name;
+  name.setAttribute('aria-label', 'Function Name');
+  name.addEventListener('change', () => {
+    const error = renameGraph(doc, graph.id, name.value);
+    if (error) {
+      setStatus(error);
+      name.value = graph.name;
+      return;
+    }
+    dom.graphName.textContent = `${doc.name} › ${graph.name}`;
+    renderMyBlueprint();
+    refresh();
+  });
+  fields.appendChild(field('Function Name', name));
+
+  const description = document.createElement('textarea');
+  description.rows = 2;
+  description.value = signature.description ?? '';
+  description.setAttribute('aria-label', 'Description');
+  description.addEventListener('change', () => {
+    const sig = (graph.signature ??= { inputs: [], outputs: [] });
+    if (description.value.trim()) sig.description = description.value.trim();
+    else delete sig.description;
+    refresh();
+  });
+  fields.appendChild(field('Description', description));
+
+  const category = document.createElement('input');
+  category.value = signature.category ?? '';
+  category.setAttribute('aria-label', 'Category');
+  category.addEventListener('change', () => {
+    const sig = (graph.signature ??= { inputs: [], outputs: [] });
+    if (category.value.trim()) sig.category = category.value.trim();
+    else delete sig.category;
+    refresh();
+  });
+  fields.appendChild(field('Category', category));
+
+  const pure = document.createElement('input');
+  pure.type = 'checkbox';
+  pure.checked = !!signature.pure;
+  pure.setAttribute('aria-label', 'Pure');
+  pure.addEventListener('change', () => {
+    setFunctionPure(doc, graph.id, pure.checked);
+    refresh();
+  });
+  fields.appendChild(field('Pure', pure));
+
+  for (const side of ['inputs', 'outputs'] as const) {
+    fields.insertAdjacentHTML('beforeend', `<div class="details-heading">${side === 'inputs' ? 'Inputs' : 'Outputs'}</div>`);
+    for (const pin of signature[side]) {
+      const row = document.createElement('div');
+      row.className = 'signature-row';
+      const pinName = document.createElement('input');
+      pinName.value = pin.name;
+      pinName.setAttribute('aria-label', `${side === 'inputs' ? 'Input' : 'Output'} Name`);
+      pinName.addEventListener('change', () => {
+        const error = renameSignaturePin(doc, graph.id, side, pin.id, pinName.value);
+        if (error) {
+          setStatus(error);
+          pinName.value = pin.name;
+        } else refresh();
+      });
+      const type = typePicker(pin.type ?? { id: 'any' }, `${pin.name} Type`, (t) => {
+        setSignaturePinType(doc, graph.id, side, pin.id, t);
+        refresh();
+      });
+      const remove = document.createElement('button');
+      remove.textContent = '×';
+      remove.title = `Remove ${pin.name}`;
+      remove.addEventListener('click', () => {
+        removeSignaturePin(doc, graph.id, side, pin.id);
+        refresh();
+      });
+      row.append(pinName, type, remove);
+      fields.appendChild(row);
+    }
+    const add = document.createElement('button');
+    add.textContent = side === 'inputs' ? 'Add input' : 'Add output';
+    add.addEventListener('click', () => {
+      addSignaturePin(doc, graph.id, side);
+      refresh();
+    });
+    fields.appendChild(add);
+  }
+
+  const uses = functionUses(doc, graph.id);
+  fields.insertAdjacentHTML('beforeend', `<div class="muted">${uses ? `Called by ${uses} node${uses === 1 ? '' : 's'}.` : 'Not called yet: drag it from My Blueprint onto a graph.'}</div>`);
+  wrapper.appendChild(fields);
+  dom.inspector.innerHTML = '';
+  dom.inspector.appendChild(wrapper);
+}
+
+// Unreal's pin type picker: a type, a container, and a map's value type.
+function typePicker(type: TypeRef, label: string, apply: (type: TypeRef) => void): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'type-row';
+  const elementType = select(VARIABLE_TYPES, type.id, label);
+  const container = select(CONTAINERS, type.container ?? '', `${label} Container`);
+  const valueType = select(VARIABLE_TYPES, type.valueType?.id ?? 'any', `${label} Map Value`);
+  valueType.hidden = type.container !== 'map';
+  const change = (): void => {
+    const kind = container.value as '' | ContainerKind;
+    apply({ id: elementType.value, ...(kind ? { container: kind } : {}), ...(kind === 'map' ? { valueType: { id: valueType.value } } : {}) });
+  };
+  [elementType, container, valueType].forEach((el) => el.addEventListener('change', change));
+  row.append(elementType, container, valueType);
+  return row;
+}
+
 const VARIABLE_TYPES: { id: string; label: string }[] = [
   { id: 'bool', label: 'Boolean' },
   { id: 'int', label: 'Integer' },
@@ -163,7 +301,8 @@ function select(options: { id: string; label: string }[], value: string, label: 
 // The selected variable's settings, as in Unreal's Details panel for a variable.
 function renderVariableDetails(variableId: string): boolean {
   const doc = state.document;
-  const variable = doc?.variables.find((v) => v.id === variableId);
+  const found = doc && findVariable(doc, variableId);
+  const variable = found?.variable;
   if (!doc || !variable) return false;
   const refresh = (): void => {
     markDirty();
@@ -175,7 +314,7 @@ function renderVariableDetails(variableId: string): boolean {
 
   const wrapper = document.createElement('div');
   wrapper.className = 'details';
-  wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(variable.name)}</div><div class="muted inspector-type">Variable · ${escapeHtml(formatType(variable.type))}</div>`;
+  wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(variable.name)}</div><div class="muted inspector-type">${found?.graph ? `Local variable of ${escapeHtml(found.graph.name)}` : 'Variable'} · ${escapeHtml(formatType(variable.type))}</div>`;
   const fields = document.createElement('div');
   fields.className = 'details-fields';
 

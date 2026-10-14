@@ -3,6 +3,7 @@
 
 #nullable enable
 #pragma warning disable CS0162
+#pragma warning disable CS0219
 using System;
 using System.Collections.Generic;
 using System.Globalization;

@@ -1,5 +1,5 @@
 // Generates TypeScript, or JavaScript with JSDoc types, from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrImport, IrProgram, IrStatement, calleeSignature, exprType } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, exprType } from '../compiler/ir';
 import { relativeSpecifier, typescriptSpecifier } from '../compiler/module-paths';
 import { NameScope, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
@@ -66,6 +66,11 @@ class TypeScriptEmitter {
   private readonly blockNames = new Map<string, string>();
   // Local names of imported functions, aliased where they would clash.
   private readonly importNames = new Map<string, string>();
+  private readonly functionNames = new Map<string, string>();
+  // Parameter names of each function, keyed by function and input id.
+  private readonly paramNames = new Map<string, string>();
+  // Field names of a function's result object, when it has several outputs.
+  private readonly outputFields = new Map<string, Map<string, string>>();
   private readonly className: string;
   private needsFormat = false;
 
@@ -75,8 +80,13 @@ class TypeScriptEmitter {
     for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
     // Member variables keep their names; internal fields are private (TypeScript) or underscored (JavaScript).
     const internal = flavor.typed ? '' : '_';
-    for (const m of program.members) this.memberNames.set(m.id, this.names.claim(m.name));
-    for (const s of program.slots) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
+    for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
+    for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
+    for (const f of program.functions) {
+      this.functionNames.set(f.id, this.names.claim(f.name, 'camel'));
+      const fields = new NameScope(RESERVED);
+      this.outputFields.set(f.id, new Map(f.outputs.map((o) => [o.id, fields.claim(o.name, 'camel')])));
+    }
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'keep', internal));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', internal));
   }
@@ -91,11 +101,14 @@ class TypeScriptEmitter {
     out.line(`${esm ? 'export ' : ''}class ${this.className} {`);
     out.indent();
 
-    for (const m of this.program.members) this.field(this.memberNames.get(m.id)!, m.type, this.coerce(m.initial, m.type), false);
-    for (const s of this.program.slots) this.field(this.slotNames.get(s.id)!, s.type, this.defaultFor(s.type), true);
-    if (this.program.members.length || this.program.slots.length) out.line();
+    const members = this.program.members.filter((m) => !m.function);
+    const slots = this.program.slots.filter((x) => !x.function);
+    for (const m of members) this.field(this.memberNames.get(m.id)!, m.type, this.coerce(m.initial, m.type), false);
+    for (const x of slots) this.field(this.slotNames.get(x.id)!, x.type, this.defaultFor(x.type), true);
+    if (members.length || slots.length) out.line();
 
     this.method('start', [], undefined, false, () => this.statements(this.program.start));
+    for (const fn of this.program.functions) this.functionMethod(fn);
     for (const block of this.program.blocks) this.blockMethod(block);
     for (const helper of this.program.helpers) this.helperMethod(helper);
     out.trimTrailingBlank();
@@ -141,17 +154,19 @@ class TypeScriptEmitter {
     }
   }
 
-  private method(name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | undefined, internal: boolean, body: () => void): void {
+  // `returns` is a type, or the text of one (a function's result object).
+  private method(name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | string | undefined, internal: boolean, body: () => void): void {
     const { out, flavor } = this;
     out.endNode();
+    const returnText = typeof returns === 'string' ? returns : returns ? (flavor.typed ? this.typeName(returns) : flavor.mapType(returns)) : undefined;
     if (flavor.typed) {
       const list = params.map((p) => `${p.name}: ${this.typeName(p.type)}`).join(', ');
-      out.line(`${internal ? 'private ' : ''}${name}(${list}): ${returns ? this.typeName(returns) : 'void'} {`);
+      out.line(`${internal ? 'private ' : ''}${name}(${list}): ${returnText ?? 'void'} {`);
     } else {
-      if (params.length || returns) {
+      if (params.length || returnText) {
         out.line('/**');
         for (const p of params) out.line(` * @param {${flavor.mapType(p.type ?? { id: 'any' })}} ${p.name}`);
-        if (returns) out.line(` * @returns {${flavor.mapType(returns)}}`);
+        if (returnText) out.line(` * @returns {${returnText}}`);
         out.line(' */');
       }
       out.line(`${name}(${params.map((p) => p.name).join(', ')}) {`);
@@ -161,6 +176,58 @@ class TypeScriptEmitter {
     out.dedent();
     out.line('}');
     out.line();
+  }
+
+  // A function graph as a method: its locals and its nodes' outputs are variables of each call.
+  private functionMethod(fn: IrFunction): void {
+    const scope = new NameScope(RESERVED, ['this']);
+    const params = fn.params.map((p) => {
+      const name = scope.claim(p.name, 'camel');
+      this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
+      return { name, type: p.type };
+    });
+    const locals = this.program.members.filter((m) => m.function === fn.id);
+    for (const m of locals) this.memberNames.set(m.id, scope.claim(m.name, 'camel'));
+    const slots = this.program.slots.filter((x) => x.function === fn.id);
+    for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name));
+    if (fn.description) this.out.line(`// ${fn.description.replace(/\s+/g, ' ')}`);
+    this.method(this.functionNames.get(fn.id)!, params, this.resultType(fn), false, () => {
+      for (const m of locals) this.local(this.memberNames.get(m.id)!, m.type, this.coerce(m.initial, m.type));
+      for (const x of slots) this.local(this.slotNames.get(x.id)!, x.type, this.defaultFor(x.type));
+      this.statements(fn.body);
+      // Reaching the end without a Return Node returns the outputs' defaults.
+      if (fn.outputs.length && fn.body[fn.body.length - 1]?.kind !== 'return') this.out.line(`return ${this.result(fn, fn.outputs.map((o) => this.defaultFor(o.type)))};`);
+    });
+  }
+
+  private local(name: string, type: TypeRef | undefined, initial: string): void {
+    this.out.line(this.flavor.typed ? `let ${name}: ${this.typeName(type)} = ${initial};` : `let ${name} = ${initial};`);
+  }
+
+  // A function's return type: none, its one output's, or an object with a field per output.
+  private resultType(fn: IrFunction): TypeRef | string | undefined {
+    if (!fn.outputs.length) return undefined;
+    if (fn.outputs.length === 1) return fn.outputs[0].type ?? { id: 'any' };
+    const fields = this.outputFields.get(fn.id)!;
+    const type = (t: TypeRef | undefined) => (this.flavor.typed ? this.typeName(t) : this.flavor.mapType(t ?? { id: 'any' }));
+    return `{ ${fn.outputs.map((o) => `${fields.get(o.id)}: ${type(o.type)}`).join(this.flavor.typed ? '; ' : ', ')} }`;
+  }
+
+  // The value a function returns, from its outputs' values.
+  private result(fn: IrFunction, values: string[]): string {
+    if (fn.outputs.length === 1) return values[0];
+    const fields = this.outputFields.get(fn.id)!;
+    return `{ ${fn.outputs.map((o, i) => `${fields.get(o.id)}: ${values[i]}`).join(', ')} }`;
+  }
+
+  private slotRef(id: string): string {
+    const name = this.slotNames.get(id)!;
+    return this.program.slots.find((x) => x.id === id)?.function ? name : `this.${name}`;
+  }
+
+  private memberRef(id: string): string {
+    const name = this.memberNames.get(id)!;
+    return this.program.members.find((m) => m.id === id)?.function ? name : `this.${name}`;
   }
 
   private blockMethod(block: IrBlock): void {
@@ -198,11 +265,11 @@ class TypeScriptEmitter {
         out.line(`console.log(${this.text(s.value)});`);
         break;
       case 'store':
-        out.line(`this.${this.slotNames.get(s.slot)} = ${this.expr(s.value)};`);
+        out.line(`${this.slotRef(s.slot)} = ${this.expr(s.value)};`);
         break;
       case 'setMember': {
         const member = this.program.members.find((m) => m.id === s.member);
-        out.line(`this.${this.memberNames.get(s.member)} = ${this.coerce(s.value, member?.type)};`);
+        out.line(`${this.memberRef(s.member)} = ${this.coerce(s.value, member?.type)};`);
         break;
       }
       case 'if': {
@@ -230,8 +297,8 @@ class TypeScriptEmitter {
         break;
       }
       case 'for': {
-        const counter = `this.${this.slotNames.get(s.counter)}`;
-        const stop = s.stop ? ` && !this.${this.slotNames.get(s.stop)}` : '';
+        const counter = `${this.slotRef(s.counter)}`;
+        const stop = s.stop ? ` && !${this.slotRef(s.stop)}` : '';
         out.line(`for (${counter} = ${this.coerce(s.first, INT)}; ${counter} <= ${this.coerce(s.last, INT)}${stop}; ${counter}++) {`);
         out.indent();
         this.statements(s.body);
@@ -248,13 +315,13 @@ class TypeScriptEmitter {
         break;
       case 'forEach': {
         // The array is read before each pass, as Unreal's For Each Loop reads it.
-        const index = `this.${this.slotNames.get(s.index)}`;
+        const index = `${this.slotRef(s.index)}`;
         const element = this.program.slots.find((x) => x.id === s.element);
         const array = this.coerce(s.array, element?.type ? { ...element.type, container: 'array' } : undefined);
-        const stop = s.stop ? ` && !this.${this.slotNames.get(s.stop)}` : '';
+        const stop = s.stop ? ` && !${this.slotRef(s.stop)}` : '';
         out.line(`for (${index} = 0; ${index} < ${array}.length${stop}; ${index}++) {`);
         out.indent();
-        out.line(`this.${this.slotNames.get(s.element)} = ${array}[${index}];`);
+        out.line(`${this.slotRef(s.element)} = ${array}[${index}];`);
         this.statements(s.body);
         out.dedent();
         out.line('}');
@@ -262,12 +329,30 @@ class TypeScriptEmitter {
       }
       case 'call': {
         const call = this.call(s.callee, s.args);
-        out.line(s.resultSlot ? `this.${this.slotNames.get(s.resultSlot)} = ${call};` : `${call};`);
+        out.line(s.resultSlot ? `${this.slotRef(s.resultSlot)} = ${call};` : `${call};`);
         break;
       }
       case 'callBlock':
         out.line(`this.${this.blockNames.get(s.block)}();`);
         break;
+      case 'callFunction': {
+        const fn = this.program.functions.find((f) => f.id === s.function)!;
+        const call = this.functionCall(fn, s.args);
+        if (!s.results.length) out.line(`${call};`);
+        else if (fn.outputs.length === 1) out.line(`${this.slotRef(s.results[0].slot)} = ${call};`);
+        else {
+          // Each output into its slot: ({ health: this.slotA, alive: this.slotB } = this.f(...)).
+          const fields = this.outputFields.get(fn.id)!;
+          out.line(`({ ${s.results.map((r) => `${fields.get(r.output)}: ${this.slotRef(r.slot)}`).join(', ')} } = ${call});`);
+        }
+        break;
+      }
+      case 'return': {
+        const fn = this.program.functions.find((f) => f.id === s.source.graphId);
+        if (!fn || !fn.outputs.length) out.line('return;');
+        else out.line(`return ${this.result(fn, fn.outputs.map((o, i) => this.coerce(s.values[i] ?? { kind: 'default', type: o.type }, o.type)))};`);
+        break;
+      }
     }
   }
 
@@ -280,9 +365,9 @@ class TypeScriptEmitter {
       case 'default':
         return this.defaultFor(e.type);
       case 'member':
-        return `this.${this.memberNames.get(e.member)}`;
+        return `${this.memberRef(e.member)}`;
       case 'output':
-        return `this.${this.slotNames.get(e.slot)}`;
+        return `${this.slotRef(e.slot)}`;
       case 'add':
         return `${this.operand(e.left)} + ${this.operand(e.right)}`;
       case 'toNumber':
@@ -299,6 +384,13 @@ class TypeScriptEmitter {
       }
       case 'not':
         return `!${this.operand(e.value)}`;
+      case 'param':
+        return this.paramNames.get(`${e.function}\u0000${e.id}`) ?? 'undefined';
+      case 'callFunction': {
+        const fn = this.program.functions.find((f) => f.id === e.function)!;
+        const call = this.functionCall(fn, e.args);
+        return fn.outputs.length === 1 ? call : `${call}.${this.outputFields.get(fn.id)!.get(e.output)}`;
+      }
       case 'makeContainer': {
         const element = { id: e.type.id };
         if (e.type.container === 'map') {
@@ -311,6 +403,10 @@ class TypeScriptEmitter {
         return this.flavor.typed && !items.length ? `[] as ${this.typeName(e.type)}` : `[${items.join(', ')}]`;
       }
     }
+  }
+
+  private functionCall(fn: IrFunction, args: IrExpr[]): string {
+    return `this.${this.functionNames.get(fn.id)}(${args.map((a, i) => this.coerce(a, fn.params[i]?.type)).join(', ')})`;
   }
 
   private call(callee: IrCallee, args: IrExpr[]): string {

@@ -2,7 +2,8 @@
 // Variables are dragged onto the canvas to place Get and Set nodes.
 import * as edits from '../core/blueprint-edits';
 import * as editing from '../core/editing';
-import { GraphKind } from '../core/model';
+import { FUNCTION_CALL } from '../core/functions';
+import { GraphKind, GraphVariable } from '../core/model';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { formatType } from '../core/types';
 import { addNode } from './actions';
@@ -41,8 +42,15 @@ export function renderMyBlueprint(): void {
     for (const graph of graphs) {
       const item = itemElement(graph.name, 'graph', graph.id);
       item.classList.toggle('active', graph.id === state.graph?.id);
-      item.title = graph.kind === 'event' ? 'Open this event graph' : `Open this ${graph.kind}. Calling ${graph.kind}s arrives in a later version.`;
+      item.title = graph.kind === 'event' ? 'Open this event graph'
+        : graph.kind === 'function' ? 'Click to open; drag onto a graph to call it.' : `Open this ${graph.kind}. Using macros arrives in a later version.`;
       item.addEventListener('click', () => openGraph(graph.id));
+      if (graph.kind === 'function') {
+        item.addEventListener('mousedown', (e) => {
+          if (e.button !== 0 || eventElement(e)?.closest('input')) return;
+          state.variableDrag = { variableId: '', functionId: graph.id, startX: e.clientX, startY: e.clientY, moved: false };
+        });
+      }
       item.addEventListener('dblclick', () => startRename('graph', graph.id));
       item.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -57,6 +65,20 @@ export function renderMyBlueprint(): void {
     root.appendChild(el);
   }
 
+  // The open function's local variables (Unreal's Local Variables section).
+  const fn = state.graph?.kind === 'function' ? state.graph : undefined;
+  if (fn) {
+    const locals = sectionElement(`Local Variables (${fn.name})`, 'Add Local Variable', () => {
+      const variable = edits.addLocalVariable(doc, fn.id);
+      markDirty();
+      selectVariable(variable.id);
+      startRename('variable', variable.id);
+    });
+    if (!fn.localVariables?.length) locals.appendChild(emptyItem('No local variables'));
+    for (const variable of fn.localVariables ?? []) locals.appendChild(variableItem(variable));
+    root.appendChild(locals);
+  }
+
   if (doc.kind === 'class') {
     const vars = sectionElement('Variables', 'Add Variable', () => {
       const variable = edits.addVariable(doc);
@@ -65,42 +87,45 @@ export function renderMyBlueprint(): void {
       startRename('variable', variable.id);
     });
     if (!doc.variables.length) vars.appendChild(emptyItem('No variables'));
-    for (const variable of doc.variables) {
-      const item = itemElement(variable.name, 'variable', variable.id);
-      item.classList.toggle('selected', variable.id === state.selectedVariableId);
-      item.title = 'Drag onto the graph: Ctrl for Get, Alt for Set. Drop on a pin to wire it.';
-      const dot = document.createElement('span');
-      dot.className = 'mb-dot';
-      dot.style.setProperty('--pin-color', typeColor(variable.type));
-      if (variable.type.container) dot.dataset.container = variable.type.container;
-      item.prepend(dot);
-      const type = document.createElement('span');
-      type.className = 'mb-type';
-      type.textContent = formatType(variable.type);
-      item.appendChild(type);
-      item.addEventListener('mousedown', (e) => {
-        if (e.button !== 0 || eventElement(e)?.closest('input')) return;
-        selectVariable(variable.id);
-        state.variableDrag = { variableId: variable.id, startX: e.clientX, startY: e.clientY, moved: false };
-        e.preventDefault();
-      });
-      item.addEventListener('dblclick', () => startRename('variable', variable.id));
-      item.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        showFloatingMenu([
-          { label: 'Rename', action: () => startRename('variable', variable.id) },
-          { label: 'Delete', danger: true, action: () => removeVariable(variable.id) }
-        ], e.clientX, e.clientY);
-      });
-      vars.appendChild(item);
-    }
+    for (const variable of doc.variables) vars.appendChild(variableItem(variable));
     root.appendChild(vars);
 
-    // Event dispatchers need custom events and callable functions (Phase 4).
+    // Event dispatchers need custom events (Phase 4).
     const dispatchers = sectionElement('Event Dispatchers', 'Event dispatchers arrive in a later version', undefined);
     dispatchers.appendChild(emptyItem('Arrive in a later version'));
     root.appendChild(dispatchers);
   }
+}
+
+// A member or local variable: drag it onto the graph for Get or Set.
+function variableItem(variable: GraphVariable): HTMLElement {
+  const item = itemElement(variable.name, 'variable', variable.id);
+  item.classList.toggle('selected', variable.id === state.selectedVariableId);
+  item.title = 'Drag onto the graph: Ctrl for Get, Alt for Set. Drop on a pin to wire it.';
+  const dot = document.createElement('span');
+  dot.className = 'mb-dot';
+  dot.style.setProperty('--pin-color', typeColor(variable.type));
+  if (variable.type.container) dot.dataset.container = variable.type.container;
+  item.prepend(dot);
+  const type = document.createElement('span');
+  type.className = 'mb-type';
+  type.textContent = formatType(variable.type);
+  item.appendChild(type);
+  item.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || eventElement(e)?.closest('input')) return;
+    selectVariable(variable.id);
+    state.variableDrag = { variableId: variable.id, startX: e.clientX, startY: e.clientY, moved: false };
+    e.preventDefault();
+  });
+  item.addEventListener('dblclick', () => startRename('variable', variable.id));
+  item.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showFloatingMenu([
+      { label: 'Rename', action: () => startRename('variable', variable.id) },
+      { label: 'Delete', danger: true, action: () => removeVariable(variable.id) }
+    ], e.clientX, e.clientY);
+  });
+  return item;
 }
 
 function sectionElement(title: string, addLabel: string, onAdd: (() => void) | undefined): HTMLElement {
@@ -155,6 +180,9 @@ export function openGraph(graphId: string): void {
   applyTransform();
   render();
   renderMyBlueprint();
+  // Functions offer Return Nodes and no events; event graphs the reverse.
+  renderPalette();
+  renderInspector();
 }
 
 export function selectVariable(id: string | null): void {
@@ -222,7 +250,7 @@ function removeGraph(graphId: string): void {
 
 export function removeVariable(id: string): void {
   const doc = state.document;
-  const variable = doc?.variables.find((v) => v.id === id);
+  const variable = doc && edits.findVariable(doc, id)?.variable;
   if (!doc || !variable) return;
   const removed = edits.deleteVariable(doc, id);
   if (state.selectedVariableId === id) state.selectedVariableId = null;
@@ -240,10 +268,11 @@ export function updateVariableDrag(e: MouseEvent): void {
   if (!drag) return;
   if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 4) return;
   drag.moved = true;
-  const variable = state.document?.variables.find((v) => v.id === drag.variableId);
+  const doc = state.document;
+  const variable = doc && edits.findVariable(doc, drag.variableId)?.variable;
   const ghost = dom.dragGhost;
   ghost.hidden = false;
-  ghost.textContent = variable?.name ?? '';
+  ghost.textContent = drag.functionId ? doc?.graphs.find((g) => g.id === drag.functionId)?.name ?? '' : variable?.name ?? '';
   ghost.style.setProperty('--pin-color', typeColor(variable?.type));
   ghost.style.left = `${e.clientX}px`;
   ghost.style.top = `${e.clientY}px`;
@@ -258,9 +287,20 @@ export function finishVariableDrag(e: MouseEvent): void {
   if (!drag?.moved || !state.graph) return;
   const target = eventElement(e);
   if (!target?.closest('#canvas-wrap')) return;
-  const variable = state.document?.variables.find((v) => v.id === drag.variableId);
-  if (!variable) return;
   const position = screenToWorld(e.clientX, e.clientY);
+  // A function: place a call to it.
+  if (drag.functionId) {
+    addNode(FUNCTION_CALL, position, { graph: drag.functionId });
+    return;
+  }
+  const doc = state.document;
+  const found = doc && edits.findVariable(doc, drag.variableId);
+  const variable = found?.variable;
+  if (!variable) return;
+  if (found.graph && found.graph.id !== state.graph.id) {
+    setStatus(`${variable.name} is a local variable of ${found.graph.name}.`);
+    return;
+  }
   const properties = { variable: variable.id };
 
   const pin = target.closest<HTMLElement>('.pin[data-kind="data"]');

@@ -1,0 +1,946 @@
+{
+  "schemaVersion": 3,
+  "name": "Functions",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "core:function.call",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {
+            "graph": "ApplyDamage",
+            "pin:health": 25,
+            "pin:amount": 10
+          }
+        },
+        {
+          "id": "n2",
+          "type": "core:console.print",
+          "position": {
+            "x": 80,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:console.print",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "core:function.call",
+          "position": {
+            "x": 160,
+            "y": 0
+          },
+          "properties": {
+            "graph": "ApplyDamage",
+            "pin:health": 5
+          }
+        },
+        {
+          "id": "n5",
+          "type": "core:console.print",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n6",
+          "type": "core:console.print",
+          "position": {
+            "x": 240,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n7",
+          "type": "core:function.call",
+          "position": {
+            "x": 280,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Factorial",
+            "pin:n": 5
+          }
+        },
+        {
+          "id": "n8",
+          "type": "core:console.print",
+          "position": {
+            "x": 320,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n9",
+          "type": "core:function.call",
+          "position": {
+            "x": 360,
+            "y": 0
+          },
+          "properties": {
+            "graph": "CountUp",
+            "pin:to": 3
+          }
+        },
+        {
+          "id": "n10",
+          "type": "core:console.print",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n11",
+          "type": "core:function.call",
+          "position": {
+            "x": 440,
+            "y": 0
+          },
+          "properties": {
+            "graph": "CountUp",
+            "pin:to": 3
+          }
+        },
+        {
+          "id": "n12",
+          "type": "core:console.print",
+          "position": {
+            "x": 480,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n13",
+          "type": "core:function.call",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Say",
+            "pin:text": "hi"
+          }
+        },
+        {
+          "id": "n14",
+          "type": "core:function.call",
+          "position": {
+            "x": 560,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Nothing"
+          }
+        },
+        {
+          "id": "n15",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "n1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "newHealth",
+          "toNode": "n2",
+          "toPin": "value"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n1",
+          "fromPin": "execOut",
+          "toNode": "n2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n1",
+          "fromPin": "alive",
+          "toNode": "n3",
+          "toPin": "value"
+        },
+        {
+          "id": "w5",
+          "fromNode": "n2",
+          "fromPin": "execOut",
+          "toNode": "n3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n3",
+          "fromPin": "execOut",
+          "toNode": "n4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n4",
+          "fromPin": "newHealth",
+          "toNode": "n5",
+          "toPin": "value"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n4",
+          "fromPin": "execOut",
+          "toNode": "n5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w9",
+          "fromNode": "n4",
+          "fromPin": "alive",
+          "toNode": "n6",
+          "toPin": "value"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n5",
+          "fromPin": "execOut",
+          "toNode": "n6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w11",
+          "fromNode": "n7",
+          "fromPin": "result",
+          "toNode": "n8",
+          "toPin": "value"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n6",
+          "fromPin": "execOut",
+          "toNode": "n8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w13",
+          "fromNode": "n8",
+          "fromPin": "execOut",
+          "toNode": "n9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n9",
+          "fromPin": "total",
+          "toNode": "n10",
+          "toPin": "value"
+        },
+        {
+          "id": "w15",
+          "fromNode": "n9",
+          "fromPin": "execOut",
+          "toNode": "n10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n10",
+          "fromPin": "execOut",
+          "toNode": "n11",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w17",
+          "fromNode": "n11",
+          "fromPin": "total",
+          "toNode": "n12",
+          "toPin": "value"
+        },
+        {
+          "id": "w18",
+          "fromNode": "n11",
+          "fromPin": "execOut",
+          "toNode": "n12",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w19",
+          "fromNode": "n12",
+          "fromPin": "execOut",
+          "toNode": "n13",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w20",
+          "fromNode": "n13",
+          "fromPin": "execOut",
+          "toNode": "n14",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w21",
+          "fromNode": "n14",
+          "fromPin": "value",
+          "toNode": "n15",
+          "toPin": "value"
+        },
+        {
+          "id": "w22",
+          "fromNode": "n14",
+          "fromPin": "execOut",
+          "toNode": "n15",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "ApplyDamage",
+      "name": "Apply Damage",
+      "kind": "function",
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "ApplyDamage"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:math.subtract",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "core:math.max",
+          "position": {
+            "x": 80,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:math.greater",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "return",
+          "type": "core:function.return",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {
+            "graph": "ApplyDamage"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "return",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "entry",
+          "fromPin": "health",
+          "toNode": "n1",
+          "toPin": "a"
+        },
+        {
+          "id": "w3",
+          "fromNode": "entry",
+          "fromPin": "amount",
+          "toNode": "n1",
+          "toPin": "b"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "n2",
+          "toPin": "b"
+        },
+        {
+          "id": "w5",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "return",
+          "toPin": "newHealth"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "n3",
+          "toPin": "a"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "return",
+          "toPin": "alive"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "health",
+            "name": "Health",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          },
+          {
+            "id": "amount",
+            "name": "Amount",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            },
+            "defaultValue": 10
+          }
+        ],
+        "outputs": [
+          {
+            "id": "newHealth",
+            "name": "New Health",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          },
+          {
+            "id": "alive",
+            "name": "Alive",
+            "kind": "data",
+            "type": {
+              "id": "bool"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "Factorial",
+      "name": "Factorial",
+      "kind": "function",
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Factorial"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:math.less-equal",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {
+            "pin:b": 1
+          }
+        },
+        {
+          "id": "n2",
+          "type": "core:flow.branch",
+          "position": {
+            "x": 80,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "base",
+          "type": "core:function.return",
+          "position": {
+            "x": 80,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Factorial",
+            "pin:result": 1
+          }
+        },
+        {
+          "id": "n3",
+          "type": "core:math.subtract",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {
+            "pin:b": 1
+          }
+        },
+        {
+          "id": "recurse",
+          "type": "core:function.call",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Factorial"
+          }
+        },
+        {
+          "id": "n4",
+          "type": "core:math.multiply",
+          "position": {
+            "x": 160,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "step",
+          "type": "core:function.return",
+          "position": {
+            "x": 160,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Factorial"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "n2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "entry",
+          "fromPin": "n",
+          "toNode": "n1",
+          "toPin": "a"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "n2",
+          "toPin": "condition"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n2",
+          "fromPin": "true",
+          "toNode": "base",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w5",
+          "fromNode": "n2",
+          "fromPin": "false",
+          "toNode": "step",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "entry",
+          "fromPin": "n",
+          "toNode": "n3",
+          "toPin": "a"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "recurse",
+          "toPin": "n"
+        },
+        {
+          "id": "w8",
+          "fromNode": "entry",
+          "fromPin": "n",
+          "toNode": "n4",
+          "toPin": "a"
+        },
+        {
+          "id": "w9",
+          "fromNode": "recurse",
+          "fromPin": "result",
+          "toNode": "n4",
+          "toPin": "b"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n4",
+          "fromPin": "returnValue",
+          "toNode": "step",
+          "toPin": "result"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "pure": true,
+        "inputs": [
+          {
+            "id": "n",
+            "name": "N",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "Result",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CountUp",
+      "name": "Count Up",
+      "kind": "function",
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "CountUp"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:flow.for-loop",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {
+            "pin:firstIndex": 1
+          }
+        },
+        {
+          "id": "n2",
+          "type": "core:variable.get",
+          "position": {
+            "x": 80,
+            "y": 0
+          },
+          "properties": {
+            "variable": "local_total"
+          }
+        },
+        {
+          "id": "n3",
+          "type": "core:math.add",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "core:variable.set",
+          "position": {
+            "x": 160,
+            "y": 0
+          },
+          "properties": {
+            "variable": "local_total"
+          }
+        },
+        {
+          "id": "return",
+          "type": "core:function.return",
+          "position": {
+            "x": 160,
+            "y": 0
+          },
+          "properties": {
+            "graph": "CountUp"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "n1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "entry",
+          "fromPin": "to",
+          "toNode": "n1",
+          "toPin": "lastIndex"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n1",
+          "fromPin": "loopBody",
+          "toNode": "n3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n2",
+          "fromPin": "value",
+          "toNode": "n3",
+          "toPin": "a"
+        },
+        {
+          "id": "w5",
+          "fromNode": "n1",
+          "fromPin": "index",
+          "toNode": "n3",
+          "toPin": "b"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n3",
+          "fromPin": "execOut",
+          "toNode": "n4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n3",
+          "fromPin": "result",
+          "toNode": "n4",
+          "toPin": "value"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n1",
+          "fromPin": "completed",
+          "toNode": "return",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w9",
+          "fromNode": "n2",
+          "fromPin": "value",
+          "toNode": "return",
+          "toPin": "total"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "to",
+            "name": "To",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "total",
+            "name": "Total",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ]
+      },
+      "localVariables": [
+        {
+          "id": "local_total",
+          "name": "Total",
+          "type": {
+            "id": "int"
+          },
+          "defaultValue": 0
+        }
+      ]
+    },
+    {
+      "id": "Say",
+      "name": "Say",
+      "kind": "function",
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Say"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:console.print",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "n1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "entry",
+          "fromPin": "text",
+          "toNode": "n1",
+          "toPin": "value"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "text",
+            "name": "Text",
+            "kind": "data",
+            "type": {
+              "id": "string"
+            }
+          }
+        ],
+        "outputs": []
+      }
+    },
+    {
+      "id": "Nothing",
+      "name": "Nothing",
+      "kind": "function",
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Nothing"
+          }
+        }
+      ],
+      "connections": [],
+      "comments": [],
+      "signature": {
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "Value",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: function graphs with several outputs and input defaults, a recursive pure function, local variables reset on each call, a function without outputs, and one without a Return Node.",
+    "expectedOutput": [
+      "15",
+      "true",
+      "0",
+      "false",
+      "120",
+      "6",
+      "6",
+      "hi",
+      "0"
+    ]
+  }
+}

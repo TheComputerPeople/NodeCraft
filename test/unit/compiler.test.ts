@@ -264,10 +264,18 @@ describe('lowerDocument: pure nodes and project functions', () => {
 });
 
 describe('lowerDocument: graph kinds', () => {
-  test('function graphs with nodes are skipped with a warning', () => {
+  test('macro graphs with nodes are skipped with a warning (macros arrive later)', () => {
     const d = doc([], []);
-    d.graphs.push({ id: 'Helper', name: 'Helper', kind: 'function', signature: { inputs: [], outputs: [] }, comments: [], nodes: [node('p', 'core:console.print')], connections: [] });
+    d.graphs.push({ id: 'Helper', name: 'Helper', kind: 'macro', signature: { inputs: [], outputs: [] }, comments: [], nodes: [node('p', 'core:console.print')], connections: [] });
     assert.ok(codes(lower(d).diagnostics, 'warning').includes('graph-not-compiled'));
+  });
+
+  test('a function needs exactly one entry node, and no events', () => {
+    const d = doc([node('s', 'core:event.start')], []);
+    d.graphs.push({ id: 'Helper', name: 'Helper', kind: 'function', signature: { inputs: [], outputs: [] }, comments: [], nodes: [node('e', 'core:event.start')], connections: [] });
+    assert.deepEqual(codes(lower(d).diagnostics, 'error'), ['function-entry']);
+    d.graphs[1].nodes.push(node('entry', 'core:function.entry', { graph: 'Helper' }));
+    assert.deepEqual(codes(lower(d).diagnostics, 'error'), ['event-in-function']);
   });
 });
 

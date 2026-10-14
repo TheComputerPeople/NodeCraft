@@ -257,7 +257,7 @@ describe('growing outputs', () => {
 
 describe('wildcard pins', () => {
   const registry = new NodeRegistry();
-  const resolve = (variables: { id: string; name: string; type: { id: string; container?: 'array' } }[] = []) => createResolver(registry, variables);
+  const resolve = (variables: { id: string; name: string; type: { id: string; container?: 'array' } }[] = []) => createResolver(registry, { variables });
 
   test('connecting a typed pin gives a wildcard node its type, which passes on to wildcard nodes it is wired to', () => {
     const variables = [{ id: 'scores', name: 'Scores', type: { id: 'int', container: 'array' as const } }];

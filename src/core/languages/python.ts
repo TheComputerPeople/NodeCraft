@@ -1,5 +1,5 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrProgram, IrStatement, exprType } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, exprType } from '../compiler/ir';
 import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
 import { NameScope, dedent, toIdentifier } from '../compiler/names';
@@ -158,6 +158,9 @@ class PythonEmitter {
   private readonly blockNames = new Map<string, string>();
   // Local names of imported functions, aliased where they would clash.
   private readonly importNames = new Map<string, string>();
+  private readonly functionNames = new Map<string, string>();
+  // Parameter names of each function, keyed by function and input id.
+  private readonly paramNames = new Map<string, string>();
   private readonly className: string;
   private readonly helpersUsed = new Set<keyof typeof HELPERS>();
   private usesAny = false;
@@ -166,8 +169,9 @@ class PythonEmitter {
     this.className = new NameScope(RESERVED).claim(program.className, 'pascal');
     const moduleScope = new NameScope(RESERVED, [this.className, 'annotations', 'json', 'Any', '_format_value', '_to_number', '_to_boolean']);
     for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
-    for (const m of program.members) this.memberNames.set(m.id, this.names.claim(m.name));
-    for (const s of program.slots) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
+    for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
+    for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
+    for (const f of program.functions) this.functionNames.set(f.id, this.names.claim(f.name, 'snake'));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'snake', '_'));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', '_'));
   }
@@ -178,8 +182,8 @@ class PythonEmitter {
     body.line(`class ${this.className}:`);
     body.indent();
     const fields = [
-      ...this.program.members.map((m) => ({ name: this.memberNames.get(m.id)!, type: m.type, initial: this.value(m.initial, m.type) })),
-      ...this.program.slots.map((s) => ({ name: this.slotNames.get(s.id)!, type: s.type, initial: this.defaultFor(s.type) }))
+      ...this.program.members.filter((m) => !m.function).map((m) => ({ name: this.memberNames.get(m.id)!, type: m.type, initial: this.value(m.initial, m.type) })),
+      ...this.program.slots.filter((x) => !x.function).map((x) => ({ name: this.slotNames.get(x.id)!, type: x.type, initial: this.defaultFor(x.type) }))
     ];
     if (fields.length) {
       this.method('__init__', [], undefined, () => {
@@ -187,6 +191,7 @@ class PythonEmitter {
       });
     }
     this.method('start', [], undefined, () => this.statements(this.program.start));
+    for (const fn of this.program.functions) this.functionMethod(fn);
     for (const block of this.program.blocks) this.blockMethod(block);
     for (const helper of this.program.helpers) this.helperMethod(helper);
     body.trimTrailingBlank();
@@ -235,10 +240,11 @@ class PythonEmitter {
 
   // ---- Class members ------------------------------------------------------------------------
 
-  private method(name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | undefined, body: () => void): void {
+  // `returns` is a type, or the text of one (a function's tuple of outputs).
+  private method(name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | string | undefined, body: () => void): void {
     this.out.endNode();
     const list = ['self', ...params.map((p) => `${p.name}: ${this.typeName(p.type)}`)].join(', ');
-    this.out.line(`def ${name}(${list}) -> ${returns ? this.typeName(returns) : 'None'}:`);
+    this.out.line(`def ${name}(${list}) -> ${typeof returns === 'string' ? returns : returns ? this.typeName(returns) : 'None'}:`);
     this.block(body);
     this.out.line();
   }
@@ -250,6 +256,39 @@ class PythonEmitter {
     body();
     if (this.out.toString() === before) this.out.line('pass');
     this.out.dedent();
+  }
+
+  // A function graph as a method: its locals and its nodes' outputs are variables of each call.
+  private functionMethod(fn: IrFunction): void {
+    const scope = new NameScope(RESERVED);
+    const params = fn.params.map((p) => {
+      const name = scope.claim(p.name, 'snake');
+      this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
+      return { name, type: p.type };
+    });
+    const locals = this.program.members.filter((m) => m.function === fn.id);
+    for (const m of locals) this.memberNames.set(m.id, scope.claim(m.name, 'snake'));
+    const slots = this.program.slots.filter((x) => x.function === fn.id);
+    for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name));
+    const returns = fn.outputs.length > 1 ? `tuple[${fn.outputs.map((o) => this.typeName(o.type)).join(', ')}]` : fn.outputs[0]?.type ?? (fn.outputs.length ? { id: 'any' } : undefined);
+    this.method(this.functionNames.get(fn.id)!, params, returns, () => {
+      if (fn.description) this.out.line(`# ${fn.description.replace(/\s+/g, ' ')}`);
+      for (const m of locals) this.out.line(`${this.memberNames.get(m.id)}: ${this.typeName(m.type)} = ${this.value(m.initial, m.type)}`);
+      for (const x of slots) this.out.line(`${this.slotNames.get(x.id)}: ${this.typeName(x.type)} = ${this.defaultFor(x.type)}`);
+      this.statements(fn.body);
+      // Reaching the end without a Return Node returns the outputs' defaults.
+      if (fn.outputs.length && fn.body[fn.body.length - 1]?.kind !== 'return') this.out.line(`return ${fn.outputs.map((o) => this.defaultFor(o.type)).join(', ')}`);
+    });
+  }
+
+  private slotRef(id: string): string {
+    const name = this.slotNames.get(id)!;
+    return this.program.slots.find((x) => x.id === id)?.function ? name : `self.${name}`;
+  }
+
+  private memberRef(id: string): string {
+    const name = this.memberNames.get(id)!;
+    return this.program.members.find((m) => m.id === id)?.function ? name : `self.${name}`;
   }
 
   private blockMethod(block: IrBlock): void {
@@ -286,11 +325,11 @@ class PythonEmitter {
         out.line(`print(${this.text(s.value)})`);
         break;
       case 'store':
-        out.line(`self.${this.slotNames.get(s.slot)} = ${this.expr(s.value)}`);
+        out.line(`${this.slotRef(s.slot)} = ${this.expr(s.value)}`);
         break;
       case 'setMember': {
         const member = this.program.members.find((m) => m.id === s.member);
-        out.line(`self.${this.memberNames.get(s.member)} = ${this.value(s.value, member?.type)}`);
+        out.line(`${this.memberRef(s.member)} = ${this.value(s.value, member?.type)}`);
         break;
       }
       case 'if': {
@@ -312,8 +351,8 @@ class PythonEmitter {
       }
       case 'for': {
         // Python's range() would read Last Index once; Unreal reads it before each pass.
-        const counter = `self.${this.slotNames.get(s.counter)}`;
-        const stop = s.stop ? ` and not self.${this.slotNames.get(s.stop)}` : '';
+        const counter = `${this.slotRef(s.counter)}`;
+        const stop = s.stop ? ` and not ${this.slotRef(s.stop)}` : '';
         out.line(`${counter} = ${this.expr(s.first)}`);
         out.line(`while ${counter} <= ${this.expr(s.last)}${stop}:`);
         this.block(() => {
@@ -324,13 +363,13 @@ class PythonEmitter {
       }
       case 'forEach': {
         // The array is read before each pass, as Unreal's For Each Loop reads it.
-        const index = `self.${this.slotNames.get(s.index)}`;
-        const stop = s.stop ? ` and not self.${this.slotNames.get(s.stop)}` : '';
+        const index = `${this.slotRef(s.index)}`;
+        const stop = s.stop ? ` and not ${this.slotRef(s.stop)}` : '';
         const array = this.expr(s.array);
         out.line(`${index} = 0`);
         out.line(`while ${index} < len(${array})${stop}:`);
         this.block(() => {
-          out.line(`self.${this.slotNames.get(s.element)} = ${array}[${index}]`);
+          out.line(`${this.slotRef(s.element)} = ${array}[${index}]`);
           this.statements(s.body);
           out.line(`${index} += 1`);
         });
@@ -342,12 +381,23 @@ class PythonEmitter {
         break;
       case 'call': {
         const call = this.call(s.callee, s.args);
-        out.line(s.resultSlot ? `self.${this.slotNames.get(s.resultSlot)} = ${call}` : call);
+        out.line(s.resultSlot ? `${this.slotRef(s.resultSlot)} = ${call}` : call);
         break;
       }
       case 'callBlock':
         out.line(`self.${this.blockNames.get(s.block)}()`);
         break;
+      case 'callFunction': {
+        const call = this.functionCall(s.function, s.args);
+        // One output is the return value; several come back as a tuple, unpacked into the slots.
+        out.line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
+        break;
+      }
+      case 'return': {
+        const fn = this.program.functions.find((f) => f.id === s.source.graphId);
+        out.line(fn?.outputs.length ? `return ${fn.outputs.map((o, i) => (s.values[i] ? this.value(s.values[i], o.type) : this.defaultFor(o.type))).join(', ')}` : 'return');
+        break;
+      }
     }
   }
 
@@ -360,9 +410,9 @@ class PythonEmitter {
       case 'default':
         return this.defaultFor(e.type);
       case 'member':
-        return `self.${this.memberNames.get(e.member)}`;
+        return `${this.memberRef(e.member)}`;
       case 'output':
-        return `self.${this.slotNames.get(e.slot)}`;
+        return `${this.slotRef(e.slot)}`;
       case 'add':
         return `${this.operand(e.left)} + ${this.operand(e.right)}`;
       case 'toNumber':
@@ -385,6 +435,13 @@ class PythonEmitter {
       }
       case 'not':
         return `not ${this.operand(e.value)}`;
+      case 'param':
+        return this.paramNames.get(`${e.function}\u0000${e.id}`) ?? 'None';
+      case 'callFunction': {
+        const fn = this.program.functions.find((f) => f.id === e.function)!;
+        const call = this.functionCall(e.function, e.args);
+        return fn.outputs.length === 1 ? call : `${call}[${fn.outputs.findIndex((o) => o.id === e.output)}]`;
+      }
       case 'makeContainer': {
         if (e.type.container === 'map') {
           const pairs: string[] = [];
@@ -396,6 +453,10 @@ class PythonEmitter {
         return `[${items.join(', ')}]`;
       }
     }
+  }
+
+  private functionCall(id: string, args: IrExpr[]): string {
+    return `self.${this.functionNames.get(id)}(${args.map((a) => this.expr(a)).join(', ')})`;
   }
 
   private call(callee: IrCallee, args: IrExpr[]): string {

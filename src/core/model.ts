@@ -100,6 +100,9 @@ export interface GraphSignature {
   outputs: GraphPin[];
   // Pure functions have no exec pins and may be evaluated any number of times.
   pure?: boolean;
+  // Shown on call nodes and in the palette, as Unreal's function Description and Category.
+  description?: string;
+  category?: string;
 }
 
 // Event graphs hold entry points; function and macro graphs have a signature.

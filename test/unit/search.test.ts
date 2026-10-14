@@ -15,7 +15,7 @@ const doc = () => {
 };
 const search = (q: string) => {
   const d = doc();
-  return searchDocument(d, q, createResolver(new NodeRegistry(), d.variables));
+  return searchDocument(d, q, createResolver(new NodeRegistry(), d));
 };
 const summary = (q: string) => search(q).map((h) => `${h.kind}:${h.id}${h.detail ? ` (${h.detail})` : ''}`);
 

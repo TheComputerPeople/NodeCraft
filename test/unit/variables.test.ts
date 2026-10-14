@@ -17,7 +17,7 @@ function v2(nodes: GraphDocument['graphs'][0]['nodes'], connections: GraphDocume
 }
 
 describe('variable nodes resolve from their variable', () => {
-  const resolve = createResolver(registry, [{ id: 'v1', name: 'Health', type: { id: 'float' }, description: 'Hit points' }]);
+  const resolve = createResolver(registry, { variables: [{ id: 'v1', name: 'Health', type: { id: 'float' }, description: 'Hit points' }] });
 
   test('Get shows the variable name and type, drawn compact', () => {
     const def = resolve(node('g', VARIABLE_GET, { variable: 'v1' }))!;

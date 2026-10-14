@@ -8,7 +8,8 @@ import { hasWildcard } from '../containers';
 import { NodeResolver, REROUTE, createResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
+import { FUNCTION_ENTRY, functionGraph } from '../functions';
 
 export interface LowerOptions {
   registry: NodeRegistry;
@@ -57,13 +58,16 @@ class Lowerer {
   private readonly helpers = new Map<string, IrCodeHelper>();
   private readonly imports = new Map<string, IrImport>();
   private readonly blocks = new Map<string, IrBlock>();
+  private readonly functions: IrFunction[] = [];
+  // The function graph being lowered, if any: its slots and locals belong to each call.
+  private currentFunction: string | undefined;
 
   private readonly resolve: NodeResolver;
   // Reroute and pure nodes being followed for the current input, to catch data loops.
   private readonly following = new Set<string>();
 
   constructor(private readonly doc: GraphDocument, private readonly options: LowerOptions) {
-    this.resolve = createResolver(options.registry, doc.variables, doc.importedFunctions);
+    this.resolve = createResolver(options.registry, doc);
   }
 
   run(): LowerResult {
@@ -82,21 +86,38 @@ class Lowerer {
       });
     }
 
-    const eventGraphs: GraphInfo[] = [];
+    // Each function's local variables: members scoped to the function.
     for (const graph of this.doc.graphs) {
-      if (graph.kind !== 'event') {
-        if (graph.nodes.length) this.warning('graph-not-compiled', `${graph.kind === 'function' ? 'Function' : 'Macro'} "${graph.name}" isn't compiled yet; calling functions and macros arrives in a later version.`, graph.id);
-        continue;
+      if (graph.kind !== 'function') continue;
+      const localNames = new Set<string>();
+      for (const local of graph.localVariables ?? []) {
+        if (this.members.has(local.id) || localNames.has(local.name)) {
+          this.error('duplicate-variable', `Local variable "${local.name}" is declared more than once.`, graph.id);
+          continue;
+        }
+        localNames.add(local.name);
+        this.members.set(local.id, {
+          id: local.id, name: local.name, type: local.type, function: graph.id,
+          initial: local.defaultValue !== undefined ? { kind: 'literal', value: local.defaultValue } : { kind: 'default', type: local.type }
+        });
       }
-      eventGraphs.push(this.analyze(graph));
+    }
+
+    const eventGraphs: GraphInfo[] = [];
+    const functionGraphs: GraphInfo[] = [];
+    for (const graph of this.doc.graphs) {
+      if (graph.kind === 'event') eventGraphs.push(this.analyze(graph));
+      else if (graph.kind === 'function') functionGraphs.push(this.analyze(graph));
+      else if (graph.nodes.length) this.warning('graph-not-compiled', `Macro "${graph.name}" isn't compiled yet; macros arrive in a later version.`, graph.id);
     }
 
     const entries = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === START).map((start) => ({ info, start })));
     if (!entries.length) this.warning('no-start', 'The graph has no Start event, so the generated start method does nothing.');
 
-    for (const info of eventGraphs) this.checkExecCycles(info);
+    for (const info of [...eventGraphs, ...functionGraphs]) this.checkExecCycles(info);
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
 
+    for (const info of functionGraphs) this.lowerFunction(info);
     const start = entries.flatMap(({ info, start: node }) => this.lowerNode(info, node.id));
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
 
@@ -109,9 +130,43 @@ class Lowerer {
         helpers: [...this.helpers.values()],
         imports: [...this.imports.values()],
         blocks: [...this.blocks.values()],
+        functions: this.functions,
         start
       }
     };
+  }
+
+  // ---- Functions (docs/program-structure.md, "Functions") -----------------------------------
+
+  // A function graph's body, from its Function Entry node.
+  private lowerFunction(info: GraphInfo): void {
+    const graph = info.graph;
+    const entries = graph.nodes.filter((n) => n.type === FUNCTION_ENTRY);
+    if (entries.length !== 1) {
+      this.error('function-entry', `Function "${graph.name}" needs exactly one Function Entry node.`, graph.id, entries[1]?.id);
+      return;
+    }
+    for (const node of graph.nodes) {
+      if (node.type.startsWith('core:event.')) this.error('event-in-function', 'Events belong in event graphs, not in functions.', graph.id, node.id);
+    }
+    const signature = graph.signature ?? { inputs: [], outputs: [] };
+    const fn: IrFunction = {
+      id: graph.id,
+      name: graph.name,
+      params: signature.inputs.filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type })),
+      outputs: signature.outputs.filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type })),
+      pure: !!signature.pure,
+      ...(signature.description ? { description: signature.description } : {}),
+      body: []
+    };
+    // Registered before the body, so calls inside it (recursion) can find it.
+    this.functions.push(fn);
+    this.currentFunction = graph.id;
+    try {
+      fn.body = this.lowerNode(info, entries[0].id);
+    } finally {
+      this.currentFunction = undefined;
+    }
   }
 
   // ---- Validation ----------------------------------------------------------------------------
@@ -225,7 +280,9 @@ class Lowerer {
     const pin = entry ?? mainExecInput(def);
     const source: SourceRef = { graphId: info.graph.id, nodeId, title: def.displayName };
     const key = JSON.stringify([info.graph.id, nodeId, pin]);
-    if ((info.execIndegree.get(inputKey(nodeId, pin)) ?? 0) > 1 && ownBlock !== key) {
+    // Inside a function, shared code is written out on each path instead: a block method couldn't
+    // see the call's locals.
+    if (!this.currentFunction && (info.execIndegree.get(inputKey(nodeId, pin)) ?? 0) > 1 && ownBlock !== key) {
       if (!this.blocks.has(key)) {
         const main = pin === mainExecInput(def);
         const block: IrBlock = { id: key, name: main ? `run_${nodeId}` : `run_${nodeId}_${pin}`, body: [] };
@@ -257,6 +314,21 @@ class Lowerer {
       case 'reroute':
         // Exec reroutes pass execution straight on.
         return next('out');
+      case 'function-entry':
+        if (info.graph.kind !== 'function') this.error('entry-outside-function', 'A Function Entry node belongs in its function graph.', info.graph.id, nodeId);
+        return next('execOut');
+      case 'function-return':
+        if (info.graph.kind !== 'function') {
+          this.error('return-outside-function', 'A Return Node belongs in a function graph.', info.graph.id, nodeId);
+          return [];
+        }
+        return [{ kind: 'return', values: dataInputs(def).map((p) => input(p.id)), source }];
+      case 'call-function': {
+        const target = this.calledFunction(info, node);
+        if (!target) return next('execOut');
+        const results = def.outputs.filter((p) => p.kind === 'data').map((p) => ({ output: p.id, slot: this.slot(info, node, def, p.id) }));
+        return [{ kind: 'callFunction', function: target.id, args: dataInputs(def).map((p) => input(p.id)), results, source }, ...next('execOut')];
+      }
       case 'set-variable': {
         const member = this.variableMember(info, node, def);
         if (!member) return next('execOut');
@@ -332,6 +404,19 @@ class Lowerer {
     if (operation === 'get-variable' || operation === 'set-variable') {
       const member = this.variableMember(info, sourceNode, sourceDef);
       return member ? { kind: 'member', member: member.id } : { kind: 'default', type: pin?.type };
+    }
+    // A function's inputs, read from its entry node.
+    if (operation === 'function-entry') {
+      if (!this.currentFunction) return { kind: 'default', type: pin?.type };
+      return { kind: 'param', function: this.currentFunction, id: source.pin };
+    }
+    // A pure function's call: called where its value is used, every time.
+    if (operation === 'call-function' && isPure(sourceDef)) {
+      return this.follow(info, sourceNode, 'Pure nodes are wired in a loop.', pin, () => {
+        const target = this.calledFunction(info, sourceNode);
+        if (!target) return { kind: 'default', type: pin?.type };
+        return { kind: 'callFunction', function: target.id, args: dataInputs(sourceDef).map((p) => this.inputExpr(info, sourceNode, sourceDef, p.id)), output: source.pin };
+      });
     }
     return { kind: 'output', slot: this.slot(info, sourceNode, sourceDef, source.pin) };
   }
@@ -452,7 +537,7 @@ class Lowerer {
   private stateSlot(info: GraphInfo, node: GraphNode, def: NodeDefinition, name: string, type: string): string {
     const id = JSON.stringify([info.graph.id, node.id, `state:${name}`]);
     if (!this.slots.has(id)) {
-      this.slots.set(id, { id, name: `${node.id}_${name}`, type: { id: type }, source: { graphId: info.graph.id, nodeId: node.id, title: def.displayName } });
+      this.slots.set(id, { id, name: `${node.id}_${name}`, type: { id: type }, source: { graphId: info.graph.id, nodeId: node.id, title: def.displayName }, ...this.scope(info) });
     }
     return id;
   }
@@ -472,7 +557,7 @@ class Lowerer {
     }
   }
 
-  // The member a Get/Set node is bound to (src/core/resolve.ts).
+  // The member (or function local) a Get/Set node is bound to (src/core/resolve.ts).
   private variableMember(info: GraphInfo, node: GraphNode, _def: NodeDefinition): IrMember | undefined {
     const id = node.properties.variable;
     if (typeof id !== 'string' || !id) {
@@ -481,16 +566,32 @@ class Lowerer {
     }
     const member = this.members.get(id);
     if (!member) this.error('unknown-variable', 'This node uses a variable that no longer exists.', info.graph.id, node.id);
+    else if (member.function && member.function !== info.graph.id) {
+      this.error('local-outside-function', `"${member.name}" is a local variable of another function.`, info.graph.id, node.id);
+      return undefined;
+    }
     return member;
+  }
+
+  // The function graph a call node calls.
+  private calledFunction(info: GraphInfo, node: GraphNode): Graph | undefined {
+    const target = functionGraph(node, this.doc.graphs);
+    if (!target) this.error('function-missing', 'This node calls a function that no longer exists.', info.graph.id, node.id);
+    return target;
   }
 
   private slot(info: GraphInfo, node: GraphNode, def: NodeDefinition, pinId: string): string {
     const id = JSON.stringify([info.graph.id, node.id, pinId]);
     if (!this.slots.has(id)) {
       const pin = def.outputs.find((p) => p.id === pinId);
-      this.slots.set(id, { id, name: `${node.id}_${pinId}`, type: pin?.type, source: { graphId: info.graph.id, nodeId: node.id, title: def.displayName } });
+      this.slots.set(id, { id, name: `${node.id}_${pinId}`, type: pin?.type, source: { graphId: info.graph.id, nodeId: node.id, title: def.displayName }, ...this.scope(info) });
     }
     return id;
+  }
+
+  // Slots of nodes in a function graph live in each call.
+  private scope(info: GraphInfo): { function?: string } {
+    return info.graph.kind === 'function' ? { function: info.graph.id } : {};
   }
 
   private callee(info: GraphInfo, node: GraphNode, def: NodeDefinition): IrCallee | undefined {
@@ -551,7 +652,7 @@ class Lowerer {
   }
 
   private programView(): ProgramTypes {
-    return { members: [...this.members.values()], slots: [...this.slots.values()], helpers: [...this.helpers.values()], imports: [...this.imports.values()] };
+    return { members: [...this.members.values()], slots: [...this.slots.values()], helpers: [...this.helpers.values()], imports: [...this.imports.values()], functions: this.functions };
   }
 
   private error(code: string, message: string, graphId?: string, nodeId?: string): void {

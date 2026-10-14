@@ -86,6 +86,61 @@ describe('variables', () => {
     assert.deepEqual(doc.variables.map((x) => x.id), [keep.id]);
     assert.deepEqual(doc.graphs[0].nodes.map((n) => n.id), ['other', 'p']);
     assert.deepEqual(doc.graphs[0].connections, []);
-    assert.deepEqual(fn.nodes, []);
+    assert.deepEqual(fn.nodes.map((n) => n.type), ['core:function.entry'], 'the function keeps its entry node');
+  });
+});
+
+describe('function signatures', () => {
+  const withCall = () => {
+    const doc = fresh();
+    const fn = edits.addGraph(doc, 'function');
+    const input = edits.addSignaturePin(doc, fn.id, 'inputs', { id: 'float' })!;
+    doc.graphs[0].nodes.push(node('call', 'core:function.call', { graph: fn.id, [`pin:${input.id}`]: 3 }), node('s', 'core:event.start'), node('n', 'core:math.add'));
+    doc.graphs[0].connections.push(wire('s', 'execOut', 'call', 'execIn'), wire('n', 'result', 'call', input.id));
+    return { doc, fn, input };
+  };
+
+  test('a new function starts with its entry node; its first output adds a wired Return Node', () => {
+    const { doc, fn } = withCall();
+    assert.deepEqual(fn.nodes.map((n) => n.type), ['core:function.entry']);
+    edits.addSignaturePin(doc, fn.id, 'outputs');
+    assert.deepEqual(fn.nodes.map((n) => n.type), ['core:function.entry', 'core:function.return']);
+    assert.deepEqual(fn.connections.map((c) => `${c.fromNode}.${c.fromPin}->${c.toNode}.${c.toPin}`), ['entry.execOut->return.execIn']);
+    edits.addSignaturePin(doc, fn.id, 'outputs');
+    assert.equal(fn.nodes.length, 2, 'only the first output adds one');
+  });
+
+  test('renaming keeps names unique; retyping or removing a parameter drops its wires and values', () => {
+    const { doc, fn, input } = withCall();
+    edits.addSignaturePin(doc, fn.id, 'inputs');
+    assert.match(edits.renameSignaturePin(doc, fn.id, 'inputs', input.id, 'NewParam_1') ?? '', /already a parameter/);
+    assert.equal(edits.renameSignaturePin(doc, fn.id, 'inputs', input.id, 'Amount'), undefined);
+    edits.setSignaturePinType(doc, fn.id, 'inputs', input.id, { id: 'int' });
+    assert.deepEqual(doc.graphs[0].connections.map((c) => c.toPin), ['execIn'], 'the data wire is gone');
+    assert.equal(doc.graphs[0].nodes[0].properties[`pin:${input.id}`], undefined);
+    edits.removeSignaturePin(doc, fn.id, 'inputs', input.id);
+    assert.deepEqual(fn.signature!.inputs.map((p) => p.name), ['NewParam_1']);
+  });
+
+  test('making a function pure removes its calls\' exec wires', () => {
+    const { doc, fn } = withCall();
+    edits.setFunctionPure(doc, fn.id, true);
+    assert.equal(fn.signature!.pure, true);
+    assert.deepEqual(doc.graphs[0].connections.map((c) => c.toPin), ['NewParam']);
+    assert.equal(edits.functionUses(doc, fn.id), 1);
+  });
+
+  test('local variables belong to their function and are found, renamed and deleted like members', () => {
+    const doc = fresh();
+    const fn = edits.addGraph(doc, 'function');
+    const local = edits.addLocalVariable(doc, fn.id, { id: 'int' });
+    assert.equal(edits.findVariable(doc, local.id)?.graph, fn);
+    assert.equal(edits.renameVariable(doc, local.id, 'Total'), undefined);
+    edits.setVariableType(doc, local.id, { id: 'float' });
+    assert.deepEqual([fn.localVariables![0].name, fn.localVariables![0].type], ['Total', { id: 'float' }]);
+    fn.nodes.push(node('get', 'core:variable.get', { variable: local.id }));
+    assert.equal(edits.deleteVariable(doc, local.id), 1);
+    assert.deepEqual(fn.localVariables, []);
+    assert.throws(() => edits.addLocalVariable(doc, doc.graphs[0].id), /Only functions/);
   });
 });

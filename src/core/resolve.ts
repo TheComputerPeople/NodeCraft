@@ -5,7 +5,8 @@
 import { MAKE_ARRAY, MAKE_MAP, MAKE_SET, makeDefinition, resolveWildcards } from './containers';
 import { MULTIGATE, SWITCH_INT, SWITCH_STRING, flowControlDefinition } from './flow-control';
 import { isFunctionType, signatureChanges } from './imported-functions';
-import { GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
+import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables, functionNodeDefinition } from './functions';
+import { Graph, GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
 
 export type NodeResolver = (node: GraphNode) => NodeDefinition | undefined;
 
@@ -32,17 +33,27 @@ export function boundVariable(node: GraphNode, variables: readonly GraphVariable
   return typeof id === 'string' ? variables.find((v) => v.id === id) : undefined;
 }
 
-// `imported` is the document's stored function signatures: a project function whose code no
-// longer matches (or is gone) keeps the pins its nodes were made with until they are refreshed.
-export function createResolver(registry: ResolveContext, variables: readonly GraphVariable[], imported?: Readonly<Record<string, NodeDefinition>>): NodeResolver {
+// What the resolver needs from the document: its variables (and each function's locals), its
+// graphs (for function signatures), and its stored project-function signatures.
+export interface ResolverDocument {
+  variables: readonly GraphVariable[];
+  graphs?: readonly Graph[];
+  importedFunctions?: Readonly<Record<string, NodeDefinition>>;
+}
+
+// `doc.importedFunctions` is the document's stored function signatures: a project function whose
+// code no longer matches (or is gone) keeps the pins its nodes were made with until refreshed.
+export function createResolver(registry: ResolveContext, doc: ResolverDocument): NodeResolver {
+  const variables = [...doc.variables, ...allLocalVariables(doc)];
   return (node) => {
     const base = registry.get(node.type);
     if (isFunctionType(node.type)) {
-      const stored = imported?.[node.type];
+      const stored = doc.importedFunctions?.[node.type];
       return stored && (!base || signatureChanges(stored, base).length) ? stored : base;
     }
     if (!base) return undefined;
     if (node.type === VARIABLE_GET || node.type === VARIABLE_SET) return variableDefinition(base, node, variables);
+    if (node.type === FUNCTION_ENTRY || node.type === FUNCTION_RETURN || node.type === FUNCTION_CALL) return functionNodeDefinition(base, node, doc.graphs);
     if (node.type === SEQUENCE) return { ...base, outputs: Array.from({ length: sequencePinCount(node) }, (_, i) => execPin(`then${i}`, `Then ${i}`, 'output')) };
     if (node.type === REROUTE) return rerouteDefinition(base, node);
     if (node.type === MULTIGATE || node.type === SWITCH_INT || node.type === SWITCH_STRING) return flowControlDefinition(base, node);

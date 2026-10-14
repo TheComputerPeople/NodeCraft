@@ -170,6 +170,9 @@ button, input { font: inherit; color: inherit; }
 .details-fields .field input { width: 100%; padding: 5px 6px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--panel-border)); border-radius: 3px; font: inherit; }
 .details-heading { font-weight: 600; }
 .container-default { display: flex; flex-direction: column; gap: 4px; }
+.signature-row { display: flex; gap: 4px; align-items: center; }
+.signature-row > input { flex: 1; min-width: 0; padding: 5px 6px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--panel-border)); border-radius: 3px; font: inherit; }
+.signature-row select { padding: 4px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--panel-border)); border-radius: 3px; }
 .container-row { display: flex; gap: 4px; align-items: center; }
 .container-row input:not([type="checkbox"]) { flex: 1; min-width: 0; }
 .details-fields .field input[type="checkbox"] { width: auto; }

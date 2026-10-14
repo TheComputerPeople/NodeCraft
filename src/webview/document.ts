@@ -2,6 +2,7 @@
 import { pinDefinition, releaseWildcards } from '../core/editing';
 import { GraphDocument, GraphNode, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
 import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions } from '../core/imported-functions';
+import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/functions';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
 import { primaryGraph } from '../core/serializer';
 import { markCompileDirty, renderLanguagePicker } from './compile-results';
@@ -15,7 +16,7 @@ import { applyTransform } from './view';
 
 // A node's definition in the open document (variable nodes take their variable's name and type).
 export function lookupDefinition(node: GraphNode): NodeDefinition | undefined {
-  return createResolver({ get: (type) => state.defByType.get(type) }, state.document?.variables ?? [], state.document?.importedFunctions)(node);
+  return createResolver({ get: (type) => state.defByType.get(type) }, state.document ?? { variables: [] })(node);
 }
 
 // Something the palette and action menu can place: a node type, plus preset properties.
@@ -30,10 +31,21 @@ export interface PaletteEntry {
 // ("Get Score", "Set Score"), as in Unreal's action menu, and project functions only when the
 // graph's language can call them.
 export function paletteEntries(): PaletteEntry[] {
+  const inFunction = state.graph?.kind === 'function';
   const entries: PaletteEntry[] = state.definitions
     .filter((d) => d.type !== VARIABLE_GET && d.type !== VARIABLE_SET && callable(d))
+    // A function has one entry node, calls are offered per function, Return Nodes only fit in
+    // functions, and events don't (as in Unreal's action menu).
+    .filter((d) => d.type !== FUNCTION_ENTRY && d.type !== FUNCTION_CALL && (inFunction ? !d.type.startsWith('core:event.') : d.type !== FUNCTION_RETURN))
     .map((d) => ({ key: d.type, type: d.type, properties: {}, definition: d }));
-  for (const variable of state.document?.variables ?? []) {
+  for (const graph of state.document?.graphs ?? []) {
+    if (graph.kind !== 'function') continue;
+    const properties = { graph: graph.id };
+    const definition = lookupDefinition({ id: '', type: FUNCTION_CALL, position: { x: 0, y: 0 }, properties });
+    if (definition) entries.push({ key: `${FUNCTION_CALL}:${graph.id}`, type: FUNCTION_CALL, properties, definition });
+  }
+  const locals = state.graph?.localVariables ?? [];
+  for (const variable of [...(state.document?.variables ?? []), ...locals]) {
     for (const type of [VARIABLE_GET, VARIABLE_SET]) {
       const properties = { variable: variable.id };
       const definition = lookupDefinition({ id: '', type, position: { x: 0, y: 0 }, properties });

@@ -72,7 +72,7 @@ describe('stored signatures', () => {
   test('the resolver keeps the stored pins while the code differs, and follows cosmetic changes', () => {
     const registry = new NodeRegistry();
     registry.register(changed);
-    const resolve = createResolver(registry, [], { [old.type]: old });
+    const resolve = createResolver(registry, { variables: [], importedFunctions: { [old.type]: old } });
     assert.deepEqual(resolve(node('n', old.type))?.inputs.map((p) => p.id), ['execIn', 'a']);
     const retitled = { ...old, displayName: 'Score It' };
     registry.register(retitled);
@@ -80,7 +80,7 @@ describe('stored signatures', () => {
   });
 
   test('a missing function still resolves to its stored signature', () => {
-    assert.ok(createResolver(new NodeRegistry(), [], { [old.type]: old })(node('n', old.type)));
+    assert.ok(createResolver(new NodeRegistry(), { variables: [], importedFunctions: { [old.type]: old } })(node('n', old.type)));
   });
 
   test('sync records used functions, drops unused ones, keeps stale ones and takes cosmetic updates', () => {
@@ -115,7 +115,7 @@ describe('Refresh Node and Replace with', () => {
       wire('s', 'execOut', 'f', 'execIn'), wire('add', 'result', 'f', 'a'), wire('add', 'result', 'f', 'b'), wire('f', 'returnValue', 'p', 'value')
     ]);
     const graph = d.graphs[0];
-    const removed = rebindFunctionNode(graph, graph.nodes[2], next, createResolver(registry, []));
+    const removed = rebindFunctionNode(graph, graph.nodes[2], next, createResolver(registry, { variables: [] }));
     assert.deepEqual(removed, ['add.result->f.b'], 'a float wire into what is now a string pin');
     assert.equal(graph.connections.length, 3);
     assert.deepEqual(graph.nodes[2].properties, { 'pin:b': 2 });
@@ -127,7 +127,7 @@ describe('Refresh Node and Replace with', () => {
     const d = doc([node('s', 'core:event.start'), node('f', old.type)], [wire('s', 'execOut', 'f', 'execIn')]);
     const registry = new NodeRegistry();
     registry.register(renamed);
-    assert.deepEqual(rebindFunctionNode(d.graphs[0], d.graphs[0].nodes[1], renamed, createResolver(registry, [])), []);
+    assert.deepEqual(rebindFunctionNode(d.graphs[0], d.graphs[0].nodes[1], renamed, createResolver(registry, { variables: [] })), []);
     assert.equal(d.graphs[0].nodes[1].type, renamed.type);
   });
 });

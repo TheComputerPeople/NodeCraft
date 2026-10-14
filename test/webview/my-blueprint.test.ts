@@ -155,7 +155,7 @@ describe('My Blueprint panel', () => {
     await input.fill('Heal');
     await input.press('Enter');
     assert.equal(await e.page.textContent('#graph-name'), 'BlueprintDemo › Heal');
-    assert.equal(await e.count('.node'), 0, 'the new function is empty');
+    assert.deepEqual(await e.page.$$eval('.node', (els) => els.map((el) => (el as HTMLElement).querySelector('.node-title')?.textContent)), ['Heal'], 'the new function has only its entry node, titled with its name');
 
     await e.page.click('.mb-item[data-kind="graph"]:has(.mb-name:text-is("EventGraph"))');
     assert.equal(await e.count('.node'), 7);

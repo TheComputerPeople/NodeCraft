@@ -2,6 +2,7 @@
 import { copyNodes, pasteNodes } from '../core/clipboard';
 import * as editing from '../core/editing';
 import { addVariable, uniqueName } from '../core/blueprint-edits';
+import { FUNCTION_ENTRY } from '../core/functions';
 import { functionStatus, isFunctionType, rebindFunctionNode } from '../core/imported-functions';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { GraphNode, NodeDefinition, PinDefinition } from '../core/model';
@@ -33,6 +34,13 @@ export function addNode(type: string, position: Point, properties: Record<string
 
 export function deleteSelected(): void {
   if (!state.graph || !state.selectedNodeIds.size) return;
+  // A function's entry node can't be deleted, as in Unreal.
+  const entry = state.graph.nodes.find((n) => n.type === FUNCTION_ENTRY && state.selectedNodeIds.has(n.id));
+  if (entry) {
+    state.selectedNodeIds.delete(entry.id);
+    setStatus("A function's entry node can't be deleted.");
+    if (!state.selectedNodeIds.size) return;
+  }
   editing.deleteNodes(state.graph, new Set(state.selectedNodeIds));
   state.selectedNodeIds.clear();
   state.selectedNodeId = null;

@@ -180,7 +180,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
         // Unreadable graphs are skipped; opening them shows the problem.
         continue;
       }
-      const resolve = createResolver(this.registry, graphDocument.variables, graphDocument.importedFunctions);
+      const resolve = createResolver(this.registry, graphDocument);
       for (const hit of searchDocument(graphDocument, query, resolve)) {
         results.push({ ...hit, uri: uri.toString(), file: vscode.workspace.asRelativePath(uri), current: uri.toString() === currentKey });
         if (results.length >= MAX_FIND_RESULTS) return results;

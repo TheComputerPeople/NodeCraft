@@ -7,7 +7,7 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 - **Start** nodes in event graphs are the entry points. Running a class runs every Start node: graphs in document order, then Start nodes in node order within each graph.
 - In generated code, all Start nodes together become one `start()` method on the generated class (named per language convention).
 - All event graphs share the class's member variables.
-- Function and macro graphs only run when called. Calling them arrives with Phase 4.
+- Function graphs run when called; macro graphs arrive later in Phase 4.
 
 ## Execution flow
 
@@ -53,6 +53,14 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 - Add Unique returns -1 when the item is already there, as in Unreal. Remove Item removes every copy. Set's To Array is in ascending order. A map's Keys and Values follow the order the keys were added.
 - Equality of elements (Find, Contains, Remove Item) is the language's own for numbers, text and booleans.
 - **Wildcard pins** take the element type of the first wire connected to them, and pass it along wires to other wildcard nodes; a node whose wildcard pins have no type is a compile error.
+
+## Functions
+
+- A function graph runs from its **Function Entry** node, whose outputs are the function's inputs, until a **Return Node**, which ends the call with the values wired into it. Reaching the end without a Return Node returns each output's type default. A function may have several Return Nodes.
+- A call node runs the function with its inputs (an unconnected input uses the value typed on the node, else the input's default in the signature). An impure call's outputs keep the values of its latest call, like any impure node; a **pure** function's call runs each time one of its outputs is read.
+- Each call has its own **local variables**, starting at their defaults, and its own copy of the outputs and remembered state of the nodes inside the function, so recursion works. Member variables are shared, as everywhere in the object.
+- Simulate stops a chain of more than 1,000 nested calls with an error; generated code runs until the language's own stack runs out.
+- In generated code a function is a method of the class: one output is its return value; several are an object with a field per output (TypeScript and JavaScript), a tuple (Python) or a named tuple (C#).
 
 ## Variables
 

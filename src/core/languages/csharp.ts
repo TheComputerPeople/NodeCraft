@@ -1,6 +1,6 @@
 // C# pack: generates a C# class per graph from Visual IR, and runs it through a small console
 // project (docs/program-structure.md, "C# language pack").
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrProgram, IrStatement, calleeSignature, exprType } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, exprType } from '../compiler/ir';
 import { NameScope, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { scanCSharp } from '../importing/csharp-scanner';
@@ -251,6 +251,11 @@ class CSharpEmitter {
   private readonly slotNames = new Map<string, string>();
   private readonly helperNames = new Map<string, string>();
   private readonly blockNames = new Map<string, string>();
+  private readonly functionNames = new Map<string, string>();
+  // Parameter names of each function, keyed by function and input id.
+  private readonly paramNames = new Map<string, string>();
+  // Element names of a function's result tuple, when it has several outputs.
+  private readonly outputFields = new Map<string, Map<string, string>>();
   private readonly className: string;
   private readonly helpersUsed = new Set<keyof typeof HELPERS>();
 
@@ -258,8 +263,13 @@ class CSharpEmitter {
     this.className = new NameScope(RESERVED).claim(program.className, 'pascal');
     // A member can't share its class's name in C#.
     this.names = new NameScope(RESERVED, ['Start', this.className, ...HELPER_NAMES]);
-    for (const m of program.members) this.memberNames.set(m.id, this.names.claim(m.name));
-    for (const s of program.slots) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
+    for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
+    for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
+    for (const f of program.functions) {
+      this.functionNames.set(f.id, this.names.claim(f.name, 'pascal'));
+      const fields = new NameScope(RESERVED);
+      this.outputFields.set(f.id, new Map(f.outputs.map((o) => [o.id, fields.claim(o.name, 'pascal')])));
+    }
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'pascal'));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'pascal'));
   }
@@ -267,10 +277,13 @@ class CSharpEmitter {
   emit(): GeneratedCode {
     const body = this.out;
     body.indent();
-    for (const m of this.program.members) body.line(`public ${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
-    for (const s of this.program.slots) body.line(`private ${this.typeName(s.type)} ${this.slotNames.get(s.id)} = ${this.defaultFor(s.type)};`);
-    if (this.program.members.length || this.program.slots.length) body.line();
+    const members = this.program.members.filter((m) => !m.function);
+    const slots = this.program.slots.filter((x) => !x.function);
+    for (const m of members) body.line(`public ${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
+    for (const x of slots) body.line(`private ${this.typeName(x.type)} ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
+    if (members.length || slots.length) body.line();
     this.method('public', 'Start', [], undefined, () => this.statements(this.program.start));
+    for (const fn of this.program.functions) this.functionMethod(fn);
     for (const block of this.program.blocks) this.method('private', this.blockNames.get(block.id)!, [], undefined, () => this.statements(block.body));
     for (const helper of this.program.helpers) this.helperMethod(helper);
     for (const helper of ['format', 'number', 'boolean', 'as'] as const) {
@@ -288,6 +301,8 @@ class CSharpEmitter {
     header.line('#nullable enable');
     // A Branch on a constant (an unconnected condition) leaves one side unreachable.
     header.line('#pragma warning disable CS0162');
+    // A function's node outputs are locals; one nobody reads is not worth a warning.
+    header.line('#pragma warning disable CS0219');
     header.line('using System;');
     header.line('using System.Collections.Generic;');
     header.line('using System.Globalization;');
@@ -312,16 +327,45 @@ class CSharpEmitter {
 
   // ---- Class members ------------------------------------------------------------------------
 
-  private method(access: string, name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | undefined, body: () => void): void {
+  // `returns` is a type, or the text of one (a function's result tuple).
+  private method(access: string, name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | string | undefined, body: () => void): void {
     this.out.endNode();
     const list = params.map((p) => `${this.typeName(p.type)} ${p.name}`).join(', ');
-    this.out.line(`${access} ${returns ? this.typeName(returns) : 'void'} ${name}(${list})`);
+    this.out.line(`${access} ${typeof returns === 'string' ? returns : returns ? this.typeName(returns) : 'void'} ${name}(${list})`);
     this.out.line('{');
     this.out.indent();
     body();
     this.out.dedent();
     this.out.line('}');
     this.out.line();
+  }
+
+  // A function graph as a method: its locals and its nodes' outputs are variables of each call.
+  private functionMethod(fn: IrFunction): void {
+    const scope = new NameScope(RESERVED);
+    const params = fn.params.map((p) => {
+      const name = scope.claim(p.name, 'camel');
+      this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
+      return { name, type: p.type };
+    });
+    const locals = this.program.members.filter((m) => m.function === fn.id);
+    for (const m of locals) this.memberNames.set(m.id, scope.claim(m.name, 'camel'));
+    const slots = this.program.slots.filter((x) => x.function === fn.id);
+    for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name, 'keep', '_'));
+    const fields = this.outputFields.get(fn.id)!;
+    const returns = fn.outputs.length > 1 ? `(${fn.outputs.map((o) => `${this.typeName(o.type)} ${fields.get(o.id)}`).join(', ')})` : fn.outputs[0]?.type ?? (fn.outputs.length ? { id: 'any' } : undefined);
+    if (fn.description) this.out.line(`/// <summary>${fn.description.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\s+/g, ' ')}</summary>`);
+    this.method('public', this.functionNames.get(fn.id)!, params, returns, () => {
+      for (const m of locals) this.out.line(`${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
+      for (const x of slots) this.out.line(`${this.typeName(x.type)} ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
+      this.statements(fn.body);
+      // Reaching the end without a Return Node returns the outputs' defaults.
+      if (fn.outputs.length && fn.body[fn.body.length - 1]?.kind !== 'return') this.out.line(`return ${this.result(fn, fn.outputs.map((o) => this.defaultFor(o.type)))};`);
+    });
+  }
+
+  private result(fn: IrFunction, values: string[]): string {
+    return fn.outputs.length === 1 ? values[0] : `(${values.join(', ')})`;
   }
 
   // A code node's snippet as a method; inputs that are valid identifiers keep their ids.
@@ -420,6 +464,21 @@ class CSharpEmitter {
       case 'callBlock':
         out.line(`${this.blockNames.get(s.block)}();`);
         break;
+      case 'callFunction': {
+        const fn = this.program.functions.find((f) => f.id === s.function)!;
+        const call = this.functionCall(fn, s.args);
+        // One output is the return value; several come back as a tuple, deconstructed into the slots.
+        if (!s.results.length) out.line(`${call};`);
+        else if (fn.outputs.length === 1) out.line(`${this.slotNames.get(s.results[0].slot)} = ${call};`);
+        else out.line(`(${fn.outputs.map((o) => this.slotNames.get(s.results.find((r) => r.output === o.id)?.slot ?? '') ?? '_').join(', ')}) = ${call};`);
+        break;
+      }
+      case 'return': {
+        const fn = this.program.functions.find((f) => f.id === s.source.graphId);
+        if (!fn || !fn.outputs.length) out.line('return;');
+        else out.line(`return ${this.result(fn, fn.outputs.map((o, i) => this.coerce(s.values[i] ?? { kind: 'default', type: o.type }, o.type)))};`);
+        break;
+      }
     }
   }
 
@@ -468,6 +527,13 @@ class CSharpEmitter {
       }
       case 'not':
         return `!${this.operand(e.value)}`;
+      case 'param':
+        return this.paramNames.get(`${e.function}\u0000${e.id}`) ?? 'default';
+      case 'callFunction': {
+        const fn = this.program.functions.find((f) => f.id === e.function)!;
+        const call = this.functionCall(fn, e.args);
+        return fn.outputs.length === 1 ? call : `${call}.${this.outputFields.get(fn.id)!.get(e.output)}`;
+      }
       case 'makeContainer': {
         const element = { id: e.type.id };
         const type = this.typeName({ ...e.type, nullable: false });
@@ -484,6 +550,10 @@ class CSharpEmitter {
   private operand(e: IrExpr): string {
     const text = this.expr(e);
     return e.kind === 'add' || e.kind === 'binary' ? `(${text})` : text;
+  }
+
+  private functionCall(fn: IrFunction, args: IrExpr[]): string {
+    return `${this.functionNames.get(fn.id)}(${args.map((a, i) => this.coerce(a, fn.params[i]?.type)).join(', ')})`;
   }
 
   private call(callee: IrCallee, args: IrExpr[]): string {
