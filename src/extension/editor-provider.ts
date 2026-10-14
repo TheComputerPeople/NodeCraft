@@ -256,7 +256,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       if (event.kind === 'log') output.appendLine(event.message ?? '');
       else if (event.kind === 'error') output.appendLine(`[error] ${event.document ? `${event.document}: ` : ''}${event.message ?? ''}`);
     }, this.languages, (path) => loadGraphDocument(document.uri, path));
-    runtime.run(graphDocument);
+    runtime.run(graphDocument, vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<string[]>('runArguments', []));
   }
 
   private getHtml(webview: vscode.Webview): string {

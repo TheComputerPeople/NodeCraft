@@ -47,7 +47,11 @@ const RESOLVE_TYPESCRIPT = [
 
 const nodeRunner: CodeRunner = {
   commands: () => [['node']],
-  args: (file, className) => ['-e', `${RESOLVE_TYPESCRIPT}\nimport(${JSON.stringify(file.url)}).then((m) => new m.${className}().start())`],
+  // Start, then Main with the arguments when the class has one.
+  args: (file, className, context) => {
+    const main = context?.mainMethod ? ` o.${context.mainMethod}(${JSON.stringify(context.args ?? [])});` : '';
+    return ['-e', `${RESOLVE_TYPESCRIPT}\nimport(${JSON.stringify(file.url)}).then((m) => { const o = new m.${className}(); o.start();${main} })`];
+  },
   missingToolMessage: 'Node.js was not found. Install Node.js 22.18 or later (it runs TypeScript directly) and make sure `node` is on the PATH.'
 };
 
@@ -192,7 +196,8 @@ class TypeScriptEmitter {
     }
     if (dispatchers.length) this.dispatcherClass();
     if (this.needsFormat) this.formatHelper();
-    return { text: out.toString(), className: this.className, nodeLines: out.nodeLines };
+    const main = this.program.functions.find((f) => f.event?.entry === 'Main');
+    return { text: out.toString(), className: this.className, nodeLines: out.nodeLines, ...(main ? { mainMethod: this.functionNames.get(main.id) } : {}) };
   }
 
   // Unreal's event dispatcher: bound events run in the order they were bound, each event once. An

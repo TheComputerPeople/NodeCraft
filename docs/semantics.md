@@ -7,6 +7,7 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 - **Start** nodes in event graphs are the entry points. Running a class runs every Start node: graphs in document order, then Start nodes in node order within each graph.
 - In generated code, all Start nodes together become one `start()` method on the generated class (named per language convention).
 - All event graphs share the class's member variables.
+- **Main** runs after every Start node has run, with the program's command-line arguments (Args). Framework packs' events run when their framework calls them.
 - Function graphs run when called; macro graphs run where they are used (see "Macros").
 
 ## Execution flow

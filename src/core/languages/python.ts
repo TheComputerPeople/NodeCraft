@@ -237,7 +237,9 @@ const pythonGenerator: CodeGenerator = {
       '-c',
       [
         ...(context?.importRoots?.length ? [`import sys; sys.path[:0] = ${JSON.stringify(context.importRoots)}`] : []),
-        `import importlib.util as u; s = u.spec_from_file_location("vgraph_module", ${JSON.stringify(file.path)}); m = u.module_from_spec(s); s.loader.exec_module(m); m.${className}().start()`,
+        `import importlib.util as u; s = u.spec_from_file_location("vgraph_module", ${JSON.stringify(file.path)}); m = u.module_from_spec(s); s.loader.exec_module(m); o = m.${className}(); o.start()`,
+        // Then Main with the arguments, when the class has one.
+        ...(context?.mainMethod ? [`o.${context.mainMethod}(${JSON.stringify(context.args ?? [])})`] : []),
         // Latent actions (Delay) run once start() has returned.
         'import sys; q = sys.modules.get("_blueprint_latent"); q and q.run()'
       ].join('; ')
@@ -522,7 +524,11 @@ class PythonEmitter {
       footer.push('', '', "# Unreal's event dispatcher: bound events run in the order they were bound, each event once.", ...DISPATCHER_CLASS);
     }
     if (late.length) footer.push('', '', '# Classes are imported last: they may use this one.', ...late);
-    if (runnable) footer.push('', '', 'if __name__ == "__main__":', `    ${this.className}().start()`, ...(this.helpersUsed.has('latent') ? ['    _run_latent_actions()'] : []));
+    const main = this.program.functions.find((f) => f.event?.entry === 'Main');
+    const mainName = main && this.functionNames.get(main.id);
+    if (runnable) {
+      footer.push('', '', 'if __name__ == "__main__":', ...(mainName ? ['    import sys', '', `    app = ${this.className}()`, '    app.start()', `    app.${mainName}(sys.argv[1:])`] : [`    ${this.className}().start()`]), ...(this.helpersUsed.has('latent') ? ['    _run_latent_actions()'] : []));
+    }
 
     const roots = [...new Set(this.program.imports.map((i) => pythonImportRoot(i.path, i.module ?? pythonModuleName(i.path))))].sort();
     const headerText = header.toString();
@@ -531,7 +537,8 @@ class PythonEmitter {
       text: headerText + body.toString() + footer.join('\n') + '\n',
       className: this.className,
       nodeLines: body.nodeLines.map((n) => ({ ...n, line: n.line + offset })),
-      ...(roots.length ? { importRoots: roots } : {})
+      ...(roots.length ? { importRoots: roots } : {}),
+      ...(mainName ? { mainMethod: mainName } : {})
     };
   }
 

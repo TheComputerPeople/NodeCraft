@@ -44,7 +44,8 @@ export function paletteEntries(): PaletteEntry[] {
     // one by one; Return Nodes only fit in functions, and events only in event graphs (as in
     // Unreal's action menu).
     .filter((d) => ![FUNCTION_ENTRY, FUNCTION_CALL, MACRO_INPUTS, MACRO_OUTPUTS, MACRO_INSTANCE, CALL_EVENT, CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL, INTERFACE_CALL].includes(d.type))
-    .filter((d) => (kind === 'event' || !kind ? d.type !== FUNCTION_RETURN : !d.type.startsWith('core:event.') && (kind === 'function' || d.type !== FUNCTION_RETURN)))
+    // Entry events (Main, framework packs' events) belong in event graphs too.
+    .filter((d) => (kind === 'event' || !kind ? d.type !== FUNCTION_RETURN : !d.type.startsWith('core:event.') && d.implementation?.kind !== 'event' && (kind === 'function' || d.type !== FUNCTION_RETURN)))
     // A macro library's macro can't use itself.
     .filter((d) => !(d.implementation?.kind === 'macro' && kind === 'macro' && d.implementation.source.graph === state.graph?.id && state.document?.kind === 'macroLibrary'))
     .map((d) => ({ key: d.type, type: d.type, properties: {}, definition: d }));

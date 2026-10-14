@@ -27,6 +27,9 @@ export interface RunOptions {
   importRoots?: string[];
   // Project source files compiled with the generated file (RunContext.sources).
   sources?: string[];
+  // The class's Main method, and the program's command-line arguments for it.
+  mainMethod?: string;
+  args?: string[];
   // Used instead of the runner's candidates, e.g. from a setting.
   command?: string[];
   timeoutMs?: number;
@@ -40,7 +43,7 @@ export async function runGeneratedCode(runner: CodeRunner, filePath: string, cla
   const file = { path: filePath, url: pathToFileURL(filePath).href };
   const candidates = options.command?.length ? [options.command] : runner.commands(process.platform);
   for (const candidate of candidates) {
-    const context: RunContext = { importRoots: options.importRoots, sources: options.sources };
+    const context: RunContext = { importRoots: options.importRoots, sources: options.sources, mainMethod: options.mainMethod, args: options.args };
     if (runner.probe) {
       const probe = await runCommand([...candidate, ...runner.probe.args], { cwd: options.cwd, env: runner.env, timeoutMs: 30000 });
       if (!probe) continue;

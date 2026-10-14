@@ -106,6 +106,14 @@
             }
           },
           "markdownDescription": "Command used to run generated code, per language id, overriding the default (`node` for TypeScript and JavaScript; `py -3` or `python3` for Python). Example: `{ \"python\": [\"C:/Python313/python.exe\"] }`."
+        },
+        "blueprintVisualScripting.runArguments": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "Command-line arguments Run passes to a graph's **Main** event (its Args output). Simulate passes them too."
         }
       }
     },

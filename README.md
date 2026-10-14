@@ -127,6 +127,13 @@ Example:
 
 The `languages` map holds one snippet per target language (`typescript`, `javascript`, `python`). A snippet is a function body: its data inputs are parameters (`${pinId}` always works, and ids that are valid identifiers can be used directly) and its return value is the node's first data output. Compiling a graph to a language whose snippet is missing is a compile error. Simulate can run JavaScript snippets only; other languages run through generated code.
 
+### Framework events
+
+A node library can also add events that a framework runs, such as a command-line tool's commands. An event definition uses the implementation `{ "kind": "event", "method": "OnCommand" }`; its data outputs are the event's parameters. Each class that uses the event gets a public method named after `method` (`onCommand` in TypeScript and JavaScript, `on_command` in Python, `OnCommand` in C#), which the framework's host code calls. See `sample/visual-nodes/CLI/OnCommand.node.json`.
+
+A graph's **Main** event is the program's entry point: Run calls it after Start, with the `blueprintVisualScripting.runArguments` setting as its Args.
+
+
 ## Architecture
 
 ```text

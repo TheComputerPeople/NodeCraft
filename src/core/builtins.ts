@@ -26,6 +26,13 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
       outputs: [execOutput('execOut')], implementation: { kind: 'native', operation: 'start' }
     },
     {
+      // The program's entry point with its command-line arguments: Run calls it after Start.
+      type: 'core:event.main', version: 1, displayName: 'Main', category: 'Flow', keywords: ['main', 'entry', 'arguments', 'command line', 'args'],
+      description: "The program's entry point: runs after Start, with the command-line arguments.", color: '#9c1a1a', inputs: [],
+      outputs: [execOutput('execOut'), { id: 'args', name: 'Args', kind: 'data', direction: 'output', type: { id: 'string', container: 'array' } }],
+      implementation: { kind: 'event', method: 'Main' }
+    },
+    {
       type: 'core:flow.branch', version: 1, displayName: 'Branch', category: 'Flow',
       description: 'Choose one execution path from a boolean value.', color: '#e6b450', keywords: ['if', 'else', 'condition'],
       inputs: [execInput(), dataInput('condition', 'Condition', 'bool', true)],

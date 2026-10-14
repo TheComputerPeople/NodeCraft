@@ -41,4 +41,5 @@ describe('graph-v1.schema.json', () => {
 
 describe('node.schema.json', () => {
   test('accepts the sample library node', () => validator('schemas/node.schema.json')(JSON.parse(readRepoFile('sample/visual-nodes/Math/Double.node.json'))));
+  test('accepts the sample framework event', () => validator('schemas/node.schema.json')(JSON.parse(readRepoFile('sample/visual-nodes/CLI/OnCommand.node.json'))));
 });

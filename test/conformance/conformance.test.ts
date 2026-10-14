@@ -1101,6 +1101,61 @@ describe('interfaces', () => {
   }
 });
 
+// Main (docs/program-structure.md, "Entry points and framework packs"): Run calls it after Start
+// with the program's arguments.
+describe('Main', () => {
+  const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin });
+  const ARGS = ['alpha', 'beta'];
+  const EXPECTED = ['start', '2', 'alpha', 'beta'];
+
+  function program(language: string): GraphDocument {
+    return {
+      schemaVersion: 3, name: 'Tool', kind: 'class', language, variables: [],
+      graphs: [{
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [
+          n('s', 'core:event.start'), n('p0', 'core:console.print', { 'pin:value': 'start' }),
+          n('main', 'core:event.main'), n('length', 'core:array.length', { wildcards: { wildcard: 'string' } }), n('p1', 'core:console.print'),
+          n('each', 'core:flow.for-each-loop', { wildcards: { wildcard: 'string' } }), n('p2', 'core:console.print')
+        ],
+        connections: [
+          w('s', 'execOut', 'p0', 'execIn'),
+          w('main', 'execOut', 'p1', 'execIn'), w('main', 'args', 'length', 'target'), w('length', 'returnValue', 'p1', 'value'),
+          w('p1', 'execOut', 'each', 'execIn'), w('main', 'args', 'each', 'array'), w('each', 'loopBody', 'p2', 'execIn'), w('each', 'element', 'p2', 'value')
+        ]
+      }]
+    };
+  }
+
+  test('Simulate', () => {
+    const events: RuntimeLogEvent[] = [];
+    new GraphRuntime(registry(), (e) => events.push(e)).run(program('typescript'), ARGS);
+    assert.deepEqual(events.filter((e) => e.kind === 'error'), []);
+    assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), EXPECTED);
+  });
+
+  for (const target of [...TARGETS, { label: 'C# (through Run)', language: 'csharp', moduleFormat: undefined }]) {
+    test(target.label, async (t) => {
+      const dir = path.join(workDir, `main-${target.language}-${target.moduleFormat ?? 'default'}`);
+      fs.mkdirSync(dir, { recursive: true });
+      const result = compileDocument(program(target.language), { registry: registry(), languages, generate: { sourceFileName: 'tool.vgraph', moduleFormat: target.moduleFormat } });
+      assert.deepEqual(result.diagnostics, []);
+      assert.ok(result.output!.mainMethod, 'the generated class reports its Main method');
+      const file = path.join(dir, result.output!.fileName);
+      fs.writeFileSync(file, result.output!.text);
+      let outcome;
+      try {
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, result.output!.className, { cwd: dir, mainMethod: result.output!.mainMethod, args: ARGS, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), EXPECTED, `stderr:\n${outcome.stderr}`);
+    });
+  }
+});
+
 // Save String to File then Load File to String, in a scratch folder, on every target.
 describe('file nodes', () => {
   function fileGraph(file: string, language: string): GraphDocument {

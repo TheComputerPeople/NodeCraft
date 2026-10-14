@@ -103,8 +103,9 @@ export class GraphRuntime {
     private readonly loadDocument?: (path: string) => GraphDocument | undefined
   ) {}
 
-  // Runs every Start node in the document's event graphs. Function graphs only run when called.
-  run(doc: GraphDocument): void {
+  // Runs every Start node in the document's event graphs, then its Main event with `args` (the
+  // program's command-line arguments). Function graphs only run when called.
+  run(doc: GraphDocument, args: string[] = []): void {
     const layers = this.instantiate(doc);
     if (typeof layers === 'string') {
       this.emit({ kind: 'error', message: layers });
@@ -120,6 +121,7 @@ export class GraphRuntime {
       this.latent = [];
       this.clock = 0;
       this.start(run);
+      this.main(run, args);
       // Then the latent actions, as their time comes.
       for (let ran = 0; this.latent.length; ran++) {
         if (ran >= MAX_LATENT_ACTIONS) {
@@ -377,6 +379,12 @@ export class GraphRuntime {
           continueFrom(is ? 'succeeded' : 'failed');
           break;
         }
+        // An entry event (Main, a framework's): its chain runs.
+        if (implementation?.kind === 'event') {
+          exit();
+          continueFrom('execOut');
+          break;
+        }
         if (implementation?.kind === 'class' && implementation.operation === 'construct') {
           const object = this.construct(context, node, implementation.type);
           setOutput('object', object);
@@ -565,6 +573,20 @@ export class GraphRuntime {
     for (const { graph, start } of this.startEntries(layer)) this.executeNode({ run: layer, graph, frame: layer.objectFrame, executing: new Set() }, start);
   }
 
+  // The Main event of the object's most derived class that has one, with the arguments.
+  private main(run: RunState, args: string[]): void {
+    for (const layer of run.layers) {
+      for (const graph of layer.doc.graphs.filter((g) => g.kind === 'event')) {
+        for (const node of graph.nodes) {
+          const implementation = layer.resolve(node)?.implementation;
+          if (implementation?.kind !== 'event' || implementation.method !== 'Main') continue;
+          this.runEvent({ run: layer, graph, frame: layer.objectFrame, executing: new Set() }, node, { run: layer, graph, node }, [[...args]]);
+          return;
+        }
+      }
+    }
+  }
+
   // An object of `doc`'s class: a run per class in its chain, most derived first, or why it can't be
   // made (a parent class Simulate can't read).
   private instantiate(doc: GraphDocument, document?: string): RunState[] | string {
@@ -657,7 +679,9 @@ export class GraphRuntime {
   private runEvent(context: GraphContext, caller: GraphNode, event: BoundEvent, args: unknown[]): void {
     const run = event.run;
     if (run.eventDepth >= MAX_CALL_DEPTH) this.fail(context, caller, `Too many nested calls (${MAX_CALL_DEPTH}): the event keeps calling itself.`);
-    eventInputs(event.node).filter((p) => p.kind === 'data').forEach((p, i) => run.objectFrame.outputs.set(outputKey(event.graph, event.node, p.id), args[i]));
+    // A custom event's inputs are its own; an entry event's (Main…), its definition's data outputs.
+    const params = event.node.type === CUSTOM_EVENT ? eventInputs(event.node) : (run.resolve(event.node)?.outputs ?? []);
+    params.filter((p) => p.kind === 'data').forEach((p, i) => run.objectFrame.outputs.set(outputKey(event.graph, event.node, p.id), args[i]));
     run.eventDepth++;
     try {
       this.executeNode({ run, graph: event.graph, frame: run.objectFrame, executing: new Set() }, event.node);

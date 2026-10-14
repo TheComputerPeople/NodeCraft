@@ -19,6 +19,8 @@ export interface CompileOutcome {
   importRoots?: string[];
   // Project source files compiled with the generated file to run it (C#).
   sources?: string[];
+  // The method the class's Main event became.
+  mainMethod?: string;
 }
 
 export class CompileService implements vscode.Disposable {
@@ -86,7 +88,7 @@ export class CompileService implements vscode.Disposable {
     const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root)];
     const importRoots = result.output.importRoots?.map((r) => path.join(root, r));
     const sources = language === 'csharp' ? csharpRunSources(graphDir, root, outputPath, result.output.importedFiles ?? []) : undefined;
-    return finish({ report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources }, graph);
+    return finish({ report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, mainMethod: result.output.mainMethod }, graph);
   }
 
   // Compiles, then runs the generated code with the project's toolchain. A new run of the same
@@ -121,6 +123,8 @@ export class CompileService implements vscode.Disposable {
         cwd: path.dirname(outcome.outputPath),
         importRoots: outcome.importRoots,
         sources: outcome.sources,
+        mainMethod: outcome.mainMethod,
+        args: vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<string[]>('runArguments', []),
         command: configured[pack.id],
         signal: controller.signal,
         onStdout: (text) => out.append(text),

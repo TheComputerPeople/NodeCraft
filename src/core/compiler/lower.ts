@@ -150,8 +150,10 @@ class Lowerer {
     for (const info of [...eventGraphs, ...functionGraphs]) this.checkExecCycles(info);
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
 
-    // Custom events are methods too; registered first, so Call nodes anywhere find them.
-    const events = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === CUSTOM_EVENT).map((node) => ({ info, node, fn: this.registerEvent(info, node) })));
+    // Custom events are methods too; registered first, so Call nodes anywhere find them. So are
+    // entry events (Main, framework packs' events), whose methods something outside runs.
+    const isEntryEvent = (info: GraphInfo, node: GraphNode) => info.definitions.get(node.id)?.implementation?.kind === 'event';
+    const events = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === CUSTOM_EVENT || isEntryEvent(info, n)).map((node) => ({ info, node, fn: this.registerEvent(info, node) })));
     for (const info of functionGraphs) this.lowerFunction(info);
     for (const { info, node, fn } of events) this.lowerEvent(info, node, fn);
     const start = entries.flatMap(({ info, start: node }) => this.lowerNode(info, node.id));
@@ -317,6 +319,7 @@ class Lowerer {
       if (node.type.startsWith('core:event.')) this.error('event-in-function', 'Events belong in event graphs, not in functions.', graph.id, node.id);
       // As in Unreal: a function runs to its end at once, so it can't wait.
       if (isLatentType(node.type)) this.error('latent-in-function', 'Delay belongs in event graphs: a function can\'t wait.', graph.id, node.id);
+      if (info.definitions.get(node.id)?.implementation?.kind === 'event' && !node.type.startsWith('core:event.')) this.error('event-in-function', 'Events belong in event graphs, not in functions.', graph.id, node.id);
     }
     const signature = graph.signature ?? { inputs: [], outputs: [] };
     const fn: IrFunction = {
@@ -343,17 +346,23 @@ class Lowerer {
   // ---- Custom events (src/core/events.ts) ----------------------------------------------------
 
   private registerEvent(info: GraphInfo, node: GraphNode): IrFunction {
-    const name = eventName(node);
+    const implementation = info.definitions.get(node.id)?.implementation;
+    const entry = implementation?.kind === 'event' ? implementation.method : undefined;
+    const name = entry ?? eventName(node);
     const clash = this.functions.find((f) => f.name === name) ?? this.doc.graphs.find((g) => g.kind === 'function' && g.name === name);
-    if (clash) this.error('duplicate-event', `There is already a function or event named "${name}".`, info.graph.id, node.id);
+    if (clash) this.error('duplicate-event', entry ? `A class has one ${info.definitions.get(node.id)?.displayName} event.` : `There is already a function or event named "${name}".`, info.graph.id, node.id);
+    // An entry event's inputs are its definition's data outputs; a custom event's, its own.
+    const params = entry
+      ? (info.definitions.get(node.id)?.outputs ?? []).filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type }))
+      : eventInputs(node).filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type }));
     const fn: IrFunction = {
       id: eventFunctionId(info.graph.id, node.id),
       name,
-      params: eventInputs(node).filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type })),
+      params,
       outputs: [],
       pure: false,
       body: [],
-      event: { stores: [] }
+      event: { stores: [], ...(entry ? { entry } : {}) }
     };
     this.functions.push(fn);
     return fn;
@@ -830,6 +839,8 @@ class Lowerer {
       return [{ kind: 'store', slot: selection, value: input('selection'), source }, ...chain];
     }
 
+    // An entry event (Main, a framework's event): its method runs the chain after it.
+    if (def.implementation?.kind === 'event') return next('execOut');
     if (def.implementation?.kind !== 'code' && def.implementation?.kind !== 'function') {
       this.error('no-codegen', `"${def.displayName}" can't be compiled to ${this.options.languageName}.`, info.graph.id, nodeId);
       return [];
@@ -942,7 +953,7 @@ class Lowerer {
     }
     // A custom event's inputs: its method's parameters inside its own flow; elsewhere, the values
     // it last ran with, which its method keeps in slots.
-    if (operation === 'custom-event') {
+    if (operation === 'custom-event' || sourceDef.implementation?.kind === 'event') {
       const event = eventFunctionId(info.graph.id, sourceNode.id);
       if (source.pin === DELEGATE_PIN) return { kind: 'default', type: pin?.type };
       if (this.currentEvent === event) return { kind: 'param', function: event, id: source.pin };

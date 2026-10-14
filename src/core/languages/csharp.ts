@@ -220,7 +220,8 @@ export function csharpRunProject(targetFramework: string, sources: string[]): Re
       ''
     ].join('\n'),
     'BlueprintRun.cs': [
-      '// Runs a generated class\'s Start(), named by the first argument.',
+      '// Runs a generated class\'s Start(), named by the first argument, then the Main method the second',
+      '// names (if any) with the rest.',
       'namespace BlueprintRun;',
       '',
       'public static class Runner',
@@ -233,7 +234,9 @@ export function csharpRunProject(targetFramework: string, sources: string[]): Re
       '        if (type is null) { System.Console.Error.WriteLine("No class named " + args[0]); return 2; }',
       '        try',
       '        {',
-      '            type.GetMethod("Start")!.Invoke(System.Activator.CreateInstance(type), null);',
+      '            var instance = System.Activator.CreateInstance(type);',
+      '            type.GetMethod("Start")!.Invoke(instance, null);',
+      '            if (args.Length > 1 && args[1] != "") type.GetMethod(args[1])!.Invoke(instance, new object[] { new System.Collections.Generic.List<string>(args[2..]) });',
       '            // Latent actions (Delay) run once Start() has returned.',
       '            (System.AppDomain.CurrentDomain.GetData("blueprint.latent.run") as System.Action)?.Invoke();',
       '            return 0;',
@@ -352,7 +355,8 @@ const csharpGenerator: CodeGenerator = {
       }
     },
     scaffold: (file, _className, context) => csharpRunProject(context.targetFramework ?? 'net8.0', [file.path, ...(context.sources ?? [])]),
-    args: (_file, className, context) => ['run', '--project', `${context?.scaffoldDir}/${RUN_PROJECT_FILE}`, '--', className],
+    // The class, then its Main method (or nothing) and the arguments.
+    args: (_file, className, context) => ['run', '--project', `${context?.scaffoldDir}/${RUN_PROJECT_FILE}`, '--', className, context?.mainMethod ?? '', ...(context?.args ?? [])],
     missingToolMessage: 'The .NET SDK was not found. Install .NET 8 or later and make sure `dotnet` is on the PATH.'
   }
 };
@@ -548,11 +552,13 @@ class CSharpEmitter {
     const headerText = header.toString();
     const offset = headerText.split('\n').length - 1;
     const importedFiles = [...new Set(this.program.imports.map((i) => i.path).filter((path) => path))].sort();
+    const main = this.program.functions.find((f) => f.event?.entry === 'Main');
     return {
       text: `${headerText}${body.toString()}}\n`,
       className: this.options.namespace ? `${this.options.namespace}.${this.className}` : this.className,
       nodeLines: body.nodeLines.map((n) => ({ ...n, line: n.line + offset })),
-      ...(importedFiles.length ? { importedFiles } : {})
+      ...(importedFiles.length ? { importedFiles } : {}),
+      ...(main ? { mainMethod: this.functionNames.get(main.id) } : {})
     };
   }
 

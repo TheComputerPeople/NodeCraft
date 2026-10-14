@@ -149,7 +149,7 @@ export interface IrFunction {
   // A custom event (docs/program-structure.md, "Custom events and event dispatchers"): its inputs
   // read outside its own flow are kept in these slots when it runs, as Unreal keeps an event's
   // outputs.
-  event?: { stores: { param: string; slot: string }[] };
+  event?: { stores: { param: string; slot: string }[]; entry?: string };
 }
 
 // An event dispatcher of the class: bound events take these parameters.

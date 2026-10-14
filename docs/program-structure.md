@@ -103,8 +103,9 @@ Unreal's standard macros, as built-in nodes with Unreal's pins:
 
 ## Entry points and framework packs
 
-- Language packs add entry-point events beyond Start: **Main** (the program's entry point, with command-line arguments) and **Test Case** (generated as a test in the language's standard framework: `node:test`, `unittest`, xUnit), so graphs can be tests.
-- **Framework packs** add domain events and nodes as node libraries with event definitions (for example an HTTP request handler or a CLI command). The format is defined and one example pack ships; more come with demand.
+- **Main** is the program's entry point: an event with the command-line arguments (Args, an array of strings). Run calls it after Start with the `blueprintVisualScripting.runArguments` setting; Simulate passes the same arguments. Generated code gives it a method (`main`, `main`, `Main`); a Python module's `__main__` block calls it with `sys.argv[1:]`, and other programs call it themselves. A class has one Main.
+- **Framework packs** add events a framework runs, as node libraries (`*.node.json`): an event definition has the implementation `{ "kind": "event", "method": "<Name>" }`, its data outputs are the event's parameters, and generated code gives each class that uses it a public method named after `method` in the language's style (`onCommand`, `on_command`, `OnCommand`), which the framework's host code calls. Like Start and Main, these events belong in event graphs. Simulate can't run a framework's events (nothing calls them). The example pack in sample/visual-nodes/CLI has an On Command event.
+- **Not yet: Test Case.** Tests need a test file per language (`node:test`, `unittest`, xUnit), apart from the class's own file so a normal Run doesn't run them, and xUnit needs a NuGet package Run can't fetch offline. They come with Phase 5's debugging work.
 
 ## Exit check
 

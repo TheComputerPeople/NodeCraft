@@ -55,6 +55,8 @@ export interface GeneratedCode {
   // Project source files (relative to the workspace folder) the code calls into, for languages
   // that compile them together with the generated file to run it (C#).
   importedFiles?: string[];
+  // The method the class's Main event became, which Run calls after start with the arguments.
+  mainMethod?: string;
 }
 
 // How to run generated code with the project's own toolchain.
@@ -69,6 +71,9 @@ export interface RunContext {
   scaffoldDir?: string;
   // From `probe`, e.g. the .NET target framework.
   targetFramework?: string;
+  // GeneratedCode.mainMethod, and the program's command-line arguments for it.
+  mainMethod?: string;
+  args?: string[];
 }
 
 export interface CodeRunner {

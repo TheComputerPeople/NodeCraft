@@ -1,0 +1,16 @@
+{
+  "type": "cli:on-command",
+  "version": 1,
+  "displayName": "On Command",
+  "category": "CLI",
+  "description": "A framework pack's event: the host program calls the class's OnCommand method (onCommand, on_command) with a command's name and arguments.",
+  "keywords": ["command", "cli", "event"],
+  "color": "#9c1a1a",
+  "inputs": [],
+  "outputs": [
+    { "id": "execOut", "name": "", "kind": "exec", "direction": "output" },
+    { "id": "name", "name": "Name", "kind": "data", "direction": "output", "type": { "id": "string" } },
+    { "id": "args", "name": "Args", "kind": "data", "direction": "output", "type": { "id": "string", "container": "array" } }
+  ],
+  "implementation": { "kind": "event", "method": "OnCommand" }
+}

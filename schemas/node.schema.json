@@ -119,7 +119,8 @@
             "native",
             "code",
             "subgraph",
-            "function"
+            "function",
+            "event"
           ]
         },
         "operation": {
@@ -152,6 +153,10 @@
         "module": {
           "description": "function, Python only: the module's import name, such as game.combat.",
           "type": "string"
+        },
+        "method": {
+          "type": "string",
+          "description": "An event (kind \"event\"): the method generated code gives it, before each language's naming style; the framework host calls it."
         }
       }
     }

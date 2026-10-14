@@ -174,7 +174,7 @@ Design: [program-structure.md](program-structure.md). Steps, one commit each (la
 8. Custom events and event dispatchers.
 9. Classes: object references, Construct Object, Target pins, inheritance (graph and code classes), overrides and Parent calls, interfaces, Cast To.
 10. Latent actions: Delay and Retriggerable Delay, generated as timers, Simulate's virtual clock.
-11. Entry points (Main, Test Case) and the framework pack format.
+11. Entry points (Main; Test Case moves to Phase 5) and the framework pack format.
 12. The exit program, documentation and the parity checklist.
 
 ### Phase 5: Debugging
@@ -294,6 +294,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents later) | — |
 | Structure | Blueprint Interfaces (implemented in Class Settings, interface calls), Cast To class or interface | ✅ (pure Cast later) | — |
 | Structure | Access (Public, Protected, Private) for variables and functions | ✅ | — |
+| Structure | Entry points: Main with command-line arguments; framework packs' events | ✅ (Test Case with Phase 5) | — |
 | Structure | Custom events (Call), event dispatchers (Call, Bind, Unbind, Unbind all, Assign), on this object or another | ✅ | — |
 | Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python; methods with Phase 4 classes) | — |

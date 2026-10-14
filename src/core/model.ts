@@ -46,6 +46,11 @@ export type NodeImplementation =
   // A struct's Make, Break and Set Members, and an enum's Switch on, == and != (src/core/user-types.ts).
   | { kind: 'struct'; operation: 'make' | 'break' | 'set-members'; type: StructInfo }
   | { kind: 'enum'; operation: 'switch' | 'equal' | 'not-equal'; type: EnumInfo }
+  // An entry event that something outside the graph runs, by calling the method generated for it:
+  // Main (Run calls it with the program's arguments) and framework packs' events
+  // (docs/program-structure.md, "Entry points and framework packs"). Its data outputs are the
+  // method's parameters; `method` is its name before each language's naming style.
+  | { kind: 'event'; method: string }
   // A class's Construct node, which carries the class's public members, and its Cast To node; an
   // interface's Cast To node, which carries its functions (src/core/objects.ts).
   | { kind: 'class'; operation: 'construct' | 'cast'; type: ClassInfo }
