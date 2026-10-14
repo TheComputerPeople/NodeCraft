@@ -206,6 +206,16 @@ test('functions marked @blueprint become nodes that generated code imports', asy
   await compileOnceFound(pyGraph);
   assert.match(await readText(workspaceFile('uses_py_vgraph.py')), /^from game\.score import double$/m);
 
+  // C#: a static method in a project with a root namespace; the graph's class goes in it too.
+  await write('Tools/Tools.csproj', '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><RootNamespace>Studio.Tools</RootNamespace></PropertyGroup></Project>\n');
+  await write('Tools/MathTools.cs', 'namespace Studio.Tools;\n\npublic static class MathTools\n{\n    /// @blueprint pure\n    public static double Double(double value) => value * 2;\n}\n');
+  const csGraph = workspaceFile('Tools/Graphs/uses-cs.vgraph');
+  await write('Tools/Graphs/uses-cs.vgraph', projectGraph('UsesCs', 'csharp', 'fn:csharp:Tools/MathTools.cs#Studio.Tools.MathTools.Double'));
+  await compileOnceFound(csGraph);
+  const csharp = await readText(workspaceFile('Tools/Graphs/uses-cs.vgraph.cs'));
+  assert.match(csharp, /^namespace Studio\.Tools\.Graphs;$/m);
+  assert.match(csharp, /global::Studio\.Tools\.MathTools\.Double\(4\)/);
+
   // Renaming the function in code is detected: the node's function is gone.
   await write('lib/score.ts', '/** @blueprint pure */\nexport function twice(value: number): number {\n  return value * 2;\n}\n');
   const deadline = Date.now() + 15000;

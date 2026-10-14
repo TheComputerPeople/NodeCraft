@@ -9,12 +9,12 @@ import { NodeRegistry } from '../core/registry';
 import { pythonModule } from './placement';
 
 // Build output, dependencies and virtual environments hold no project functions.
-const EXCLUDE = '**/{node_modules,.git,.venv,venv,env,__pycache__,site-packages,dist,out,build,.tox}/**';
+const EXCLUDE = '**/{node_modules,.git,.venv,venv,env,__pycache__,site-packages,dist,out,build,.tox,bin,obj}/**';
 const MAX_FILES = 5000;
 const MAX_FILE_BYTES = 1_000_000;
 const RELOAD_DEBOUNCE_MS = 300;
 // Generated files: classes, never project functions.
-const GENERATED = /(\.vgraph\.[cm]?[jt]s|_vgraph\.py)$/i;
+const GENERATED = /(\.vgraph\.([cm]?[jt]s|cs)|_vgraph\.py)$/i;
 const SOURCE = 'functions';
 
 interface FileFunctions {
@@ -153,5 +153,5 @@ export class ProjectFunctions implements vscode.Disposable {
 
 function isExcluded(uri: vscode.Uri, folder: vscode.WorkspaceFolder): boolean {
   const relative = path.relative(folder.uri.fsPath, uri.fsPath).split(path.sep);
-  return relative.some((part) => ['node_modules', '.git', '.venv', 'venv', 'env', '__pycache__', 'site-packages', 'dist', 'out', 'build', '.tox'].includes(part));
+  return relative.some((part) => ['node_modules', '.git', '.venv', 'venv', 'env', '__pycache__', 'site-packages', 'dist', 'out', 'build', '.tox', 'bin', 'obj'].includes(part));
 }

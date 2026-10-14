@@ -7,7 +7,7 @@ import { LanguagePackRegistry } from '../core/language-pack';
 import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
-import { detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
+import { csharpNamespace, csharpRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
 
 export interface CompileOutcome {
@@ -17,6 +17,8 @@ export interface CompileOutcome {
   className?: string;
   // Absolute folders where the runtime finds imported project modules.
   importRoots?: string[];
+  // Project source files compiled with the generated file to run it (C#).
+  sources?: string[];
 }
 
 export class CompileService implements vscode.Disposable {
@@ -71,7 +73,8 @@ export class CompileService implements vscode.Disposable {
         sourceFileName: graphFileName,
         moduleFormat: detectModuleFormat(graphDir, root),
         outputDir: path.relative(root, graphDir).split(path.sep).join('/'),
-        importExtension: detectImportExtension(graphDir, root)
+        importExtension: detectImportExtension(graphDir, root),
+        namespace: csharpNamespace(graphDir, root)
       }
     });
     const language = result.output?.language ?? graph.language ?? '';
@@ -82,7 +85,8 @@ export class CompileService implements vscode.Disposable {
     await this.removeStaleOutputs(graphDir, graphFileName, outputPath);
     const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root)];
     const importRoots = result.output.importRoots?.map((r) => path.join(root, r));
-    return finish({ report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots }, graph);
+    const sources = language === 'csharp' ? csharpRunSources(graphDir, root, outputPath, result.output.importedFiles ?? []) : undefined;
+    return finish({ report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources }, graph);
   }
 
   // Compiles, then runs the generated code with the project's toolchain. A new run of the same
@@ -116,6 +120,7 @@ export class CompileService implements vscode.Disposable {
       const result = await runGeneratedCode(runner, outcome.outputPath, outcome.className, {
         cwd: path.dirname(outcome.outputPath),
         importRoots: outcome.importRoots,
+        sources: outcome.sources,
         command: configured[pack.id],
         signal: controller.signal,
         onStdout: (text) => out.append(text),

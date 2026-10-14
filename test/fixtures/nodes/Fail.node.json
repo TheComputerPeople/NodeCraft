@@ -14,7 +14,8 @@
     "kind": "code",
     "languages": {
       "javascript": "throw new Error(\"boom\");",
-      "python": "raise ValueError(\"boom\")"
+      "python": "raise ValueError(\"boom\")",
+      "csharp": "throw new InvalidOperationException(\"boom\");"
     }
   }
 }

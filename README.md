@@ -7,10 +7,10 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 - A `.vgraph` custom editor that looks and behaves like Unreal Engine's Blueprint editor: the same gestures, shortcuts, pin colors and node styles, so Blueprint users can start without relearning (see the reference below).
 - **Blueprints**: a `.vgraph` file is a class, function library or macro library holding graphs, functions, macros and variables, managed in the **My Blueprint** panel.
 - **Execution and data pins**, with Unreal's wiring rules, inline values for unconnected inputs, automatic **To String** conversion, reroute nodes, comment boxes, copy and paste, alignment tools and Find.
-- **Your code as nodes**, the equivalent of Unreal's `BlueprintCallable`: functions marked `@blueprint` in the project's TypeScript, JavaScript or Python code appear in the palette, generated code imports them, and nodes notice when the code changes (see below).
+- **Your code as nodes**, the equivalent of Unreal's `BlueprintCallable`: functions marked `@blueprint` in the project's TypeScript, JavaScript, Python or C# code appear in the palette, generated code imports them, and nodes notice when the code changes (see below).
 - Built-in Flow, Debug and Variable nodes (Start, Branch, Sequence, Print, Get and Set, To String, End), and Unreal's **standard library** of math, string, utility and file nodes, with the same meaning in every language.
 - Workspace `*.node.json` user node libraries, with a code snippet per language. Example: `Double`.
-- **Code generation**: each graph compiles to readable source code in its target language, written next to the graph and meant to be committed. TypeScript, JavaScript and Python are supported.
+- **Code generation**: each graph compiles to readable source code in its target language, written next to the graph and meant to be committed. TypeScript, JavaScript, Python and C# are supported.
 - Unreal-style **Compile** (F7) and **Compiler Results**, with error and warning badges on nodes and entries in the Problems panel.
 - **Run** (the generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter).
 - Saving goes through VS Code's text document, so undo, redo, dirty state and source control work as usual.
@@ -21,7 +21,7 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 2. Press `F5` (or choose **Run Blueprint Visual Scripting Extension** in Run and Debug). An Extension Development Host opens the `sample` workspace.
 3. Open `sample/demo.vgraph`.
 4. Click **Compile**. The graph's target language is JavaScript, so `demo.vgraph.js` appears next to it. Pick another language in the toolbar to generate TypeScript (`demo.vgraph.ts`) or Python (`demo_vgraph.py`) instead. Saving the graph also compiles it (setting: `blueprintVisualScripting.compileOnSave`).
-5. Click **▶ Run** to run the generated code with Node.js (22.18 or later, which runs TypeScript directly) or Python 3, or **Simulate** to run the graph inside the editor. Output appears in the `Blueprint Visual Scripting` Output channel.
+5. Click **▶ Run** to run the generated code with Node.js (22.18 or later, which runs TypeScript directly), Python 3 or the .NET SDK (8 or later; C# graphs are built in a small project the extension keeps in the temporary folder), or **Simulate** to run the graph inside the editor. Output appears in the `Blueprint Visual Scripting` Output channel.
 
 How graphs behave when they run is specified in [docs/semantics.md](docs/semantics.md); every language's generated code is tested against it.
 
@@ -37,7 +37,7 @@ The TypeScript configuration includes the DOM library definitions because VS Cod
 | `npm run check` | Type-checks the extension, the webview and the tests without emitting output |
 | `npm test` | Runs every test: unit tests, then browser tests of the webview |
 | `npm run test:unit` / `npm run test:webview` | Run one group |
-| `npm run test:conformance` | Runs every fixture graph in Simulate and as generated TypeScript, JavaScript and Python, and checks they print the same output (part of `npm test`; needs Node.js 22.18+ and Python 3) |
+| `npm run test:conformance` | Runs every fixture graph in Simulate and as generated TypeScript, JavaScript, Python and C#, and checks they print the same output (part of `npm test`; needs Node.js 22.18+, Python 3 and the .NET SDK; missing tools skip their tests) |
 | `npm run test:integration` | Launches VS Code with the extension and runs smoke tests inside it (not part of `npm test`) |
 
 The browser tests drive the real webview bundle in an installed Microsoft Edge or Google Chrome through `playwright-core` (no browser download). Set `BLUEPRINT_TEST_BROWSER` to a Chromium executable to use a different one; without any browser those tests are skipped.
@@ -75,8 +75,17 @@ def is_alive(health: float) -> bool:
     return health > 0
 ```
 
+```csharp
+public static class Loot
+{
+    /// <summary>A random drop chance.</summary>
+    /// @blueprint pure
+    public static double DropChance(int level) => 0.1 + level * 0.01;
+}
+```
+
 - `@blueprint` makes a node with exec pins (`BlueprintCallable`); `@blueprint pure` makes one without (`BlueprintPure`). `@category`, `@displayName` and `@keywords` work as Unreal's metadata does. Parameters become input pins (literal defaults become pin values) and the return value becomes **Return Value**.
-- TypeScript and JavaScript functions must be exported; Python functions are top-level `def`s. The palette shows only the functions the graph's language can call (a TypeScript graph can also call JavaScript).
+- TypeScript and JavaScript functions must be exported; Python functions are top-level `def`s; C# methods are `public` or `internal` static methods (C# has no free functions). Run compiles the C# project's files with the generated one. The palette shows only the functions the graph's language can call (a TypeScript graph can also call JavaScript).
 - Generated code imports each function the way the project does: relative TypeScript imports follow `tsconfig.json`, JavaScript uses the module's own extension, and Python imports by module name. **Run** finds them too.
 - Functions that can't be nodes (async functions, generators, rest parameters, generics, …) are listed in the **Blueprint Visual Scripting** output channel with the reason.
 - When a function's signature changes, its nodes keep their old pins and show a warning until you choose **Refresh Node** in the node's menu, or **Refresh All Nodes** in the Command Palette. A renamed or moved function shows an error, and the node menu offers **Replace with …** when it can tell where the function went.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { configCovers, detectImportExtension, detectModuleFormat, generatedFrom, globToRegExp, isGeneratedFrom, parseJsonc, pythonModule, verifyPlacement } from '../../src/extension/placement';
+import { configCovers, csharpNamespace, detectImportExtension, detectModuleFormat, generatedFrom, globToRegExp, isGeneratedFrom, parseJsonc, pythonModule, verifyPlacement } from '../../src/extension/placement';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-placement-'));
 after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -72,6 +72,21 @@ describe('imports of project code', () => {
     assert.deepEqual(pythonModule(path.join(dir, 'src/game/ai/brain.py'), dir), { module: 'game.ai.brain', root: path.join(dir, 'src') });
     assert.deepEqual(pythonModule(path.join(dir, 'src/game/__init__.py'), dir), { module: 'game', root: path.join(dir, 'src') });
     assert.deepEqual(pythonModule(path.join(dir, 'scripts/tools.py'), dir), { module: 'tools', root: path.join(dir, 'scripts') });
+  });
+});
+
+describe('C# namespaces', () => {
+  test("follow the project's root namespace and folders, as Visual Studio does", () => {
+    const dir = project({ 'Game.csproj': '<Project Sdk="Microsoft.NET.Sdk"></Project>', 'Graphs/2D Levels/x.vgraph': '' });
+    assert.equal(csharpNamespace(path.join(dir, 'Graphs', '2D Levels'), dir), 'Game.Graphs._2D_Levels');
+    assert.equal(csharpNamespace(dir, dir), 'Game');
+    const named = project({ 'src/App.csproj': '<Project><PropertyGroup><RootNamespace>Studio.App</RootNamespace></PropertyGroup></Project>', 'src/Ui/x.vgraph': '' });
+    assert.equal(csharpNamespace(path.join(named, 'src', 'Ui'), named), 'Studio.App.Ui');
+  });
+
+  test('are absent outside a project', () => {
+    const dir = project({ 'x.vgraph': '' });
+    assert.equal(csharpNamespace(dir, dir), undefined);
   });
 });
 

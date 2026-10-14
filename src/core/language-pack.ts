@@ -39,6 +39,8 @@ export interface GenerateOptions {
   // TypeScript only: how relative imports of TypeScript modules end (docs/code-as-nodes.md,
   // "Generated imports"). Defaults to "ts".
   importExtension?: 'ts' | 'js' | 'none';
+  // C# only: the namespace of the generated class (from the project's root namespace and folders).
+  namespace?: string;
 }
 
 export interface GeneratedCode {
@@ -50,15 +52,36 @@ export interface GeneratedCode {
   // Folders (relative to the workspace folder) the runtime must search for the project modules the
   // code imports, for languages that import by module name (Python's sys.path).
   importRoots?: string[];
+  // Project source files (relative to the workspace folder) the code calls into, for languages
+  // that compile them together with the generated file to run it (C#).
+  importedFiles?: string[];
 }
 
 // How to run generated code with the project's own toolchain.
+// What the extension knows when it runs generated code.
+export interface RunContext {
+  // Absolute folders for GeneratedCode.importRoots.
+  importRoots?: string[];
+  // Absolute paths of the project's own source files that must be compiled with the generated file
+  // (languages that build before running, such as C#).
+  sources?: string[];
+  // Where `scaffold`'s files were written.
+  scaffoldDir?: string;
+  // From `probe`, e.g. the .NET target framework.
+  targetFramework?: string;
+}
+
 export interface CodeRunner {
   // Candidate commands (an executable plus leading arguments), tried in order until one starts.
   commands(platform: string): string[][];
   // Arguments that load the generated file and call its start method.
-  // `importRoots` are absolute folders for GeneratedCode.importRoots.
-  args(file: { path: string; url: string }, className: string, context?: { importRoots?: string[] }): string[];
+  args(file: { path: string; url: string }, className: string, context?: RunContext): string[];
+  // Environment variables for the command.
+  env?: Record<string, string>;
+  // Asks the tool about itself before running (e.g. its version); the parsed values join the context.
+  probe?: { args: string[]; parse(stdout: string): Partial<RunContext> | undefined };
+  // Languages that run from a project: the files to write into a scratch folder before running.
+  scaffold?(file: { path: string; url: string }, className: string, context: RunContext): Record<string, string>;
   // Shown when no candidate command could start.
   missingToolMessage: string;
 }

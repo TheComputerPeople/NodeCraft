@@ -16,7 +16,8 @@ import { GraphDocument, NodeDefinition, RuntimeLogEvent } from '../../src/core/m
 import { NodeRegistry, parseNodeDefinition } from '../../src/core/registry';
 import { GraphRuntime } from '../../src/core/runtime';
 import { parseDocument } from '../../src/core/serializer';
-import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
+import { RUN_PROJECT_FILE, csharpRunProject } from '../../src/core/languages/csharp';
+import { ToolNotFoundError, runCommand, runGeneratedCode, writeScaffold } from '../../src/extension/runner';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 const languages = builtinLanguagePacks();
@@ -64,6 +65,34 @@ const TARGETS = [
   { label: 'Python', language: 'python' }
 ];
 
+// C# builds before it runs, so every fixture's class is compiled into one project, with warnings as
+// errors (C#'s counterpart of the TypeScript --strict check), and each test runs its class from it.
+type CSharpBuild = { dir: string; dll: string; classes: Map<string, string> } | { skip: string } | { error: string };
+let csharpBuild: Promise<CSharpBuild> | undefined;
+const DOTNET_ENV = { DOTNET_NOLOGO: '1', DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1' };
+
+async function buildCSharp(): Promise<CSharpBuild> {
+  const version = await runCommand(['dotnet', '--version'], { cwd: workDir, env: DOTNET_ENV, timeoutMs: 30000 });
+  const major = version && /^(\d+)\./.exec(version.stdout.trim())?.[1];
+  if (!major) return { skip: 'The .NET SDK is not installed' };
+  const dir = path.join(workDir, 'csharp');
+  fs.mkdirSync(dir, { recursive: true });
+  const classes = new Map<string, string>();
+  const sources = loadFixtures().map((fixture, i) => {
+    const result = compileDocument({ ...fixture.document, language: 'csharp' }, { registry: registry(), languages, generate: { sourceFileName: fixture.name, namespace: `Fixture${i}` } });
+    if (!result.output) throw new Error(`${fixture.name} didn't compile to C#: ${JSON.stringify(result.diagnostics)}`);
+    const file = path.join(dir, result.output.fileName);
+    fs.writeFileSync(file, result.output.text);
+    classes.set(fixture.name, result.output.className);
+    return file;
+  });
+  const tfm = `net${major}.0`;
+  writeScaffold(dir, csharpRunProject(tfm, sources));
+  const build = await runCommand(['dotnet', 'build', path.join(dir, RUN_PROJECT_FILE), '-nologo', '-v', 'q', '-p:TreatWarningsAsErrors=true'], { cwd: dir, env: DOTNET_ENV, timeoutMs: 300000 });
+  if (!build || build.exitCode !== 0) return { error: `dotnet build failed:\n${build?.stdout}\n${build?.stderr}` };
+  return { dir, dll: path.join(dir, 'bin', 'Debug', tfm, 'BlueprintRun.dll'), classes };
+}
+
 function outputLines(stdout: string): string[] {
   const lines = stdout.replace(/\r\n/g, '\n').split('\n');
   if (lines[lines.length - 1] === '') lines.pop();
@@ -104,6 +133,15 @@ for (const fixture of loadFixtures()) {
         assert.equal(outcome.exitCode !== 0, fixture.expectedError, `exit code ${outcome.exitCode}; stderr:\n${outcome.stderr}`);
       });
     }
+
+    test('C#', async (t) => {
+      const build = await (csharpBuild ??= buildCSharp());
+      if ('skip' in build) return t.skip(build.skip);
+      if ('error' in build) assert.fail(build.error);
+      const outcome = (await runCommand(['dotnet', build.dll, build.classes.get(fixture.name)!], { cwd: build.dir, env: DOTNET_ENV, timeoutMs: 30000 }))!;
+      assert.deepEqual(outputLines(outcome.stdout), fixture.expectedOutput, `stderr:\n${outcome.stderr}`);
+      assert.equal(outcome.exitCode !== 0, fixture.expectedError, `exit code ${outcome.exitCode}; stderr:\n${outcome.stderr}`);
+    });
   });
 }
 
@@ -161,6 +199,27 @@ describe('project functions', () => {
     'javascript-esm': { path: 'lib/score.mjs', text: jsModule('esm', false) },
     'javascript-commonjs': { path: 'lib/score.cjs', text: jsModule('commonjs', false) },
     // In a package in another folder: Run must put the package's root (lib) on sys.path.
+    // C#: a static class; Run compiles it with the generated file.
+    csharp: {
+      path: 'lib/Score.cs',
+      text: [
+        'public static class Score',
+        '{',
+        '    private static double total;',
+        '',
+        '    /// @blueprint',
+        '    public static double AddToTotal(double amount)',
+        '    {',
+        '        total += amount;',
+        '        return total;',
+        '    }',
+        '',
+        '    /// @blueprint pure',
+        '    public static double Double(double value) => value * 2;',
+        '}',
+        ''
+      ].join('\n')
+    },
     python: {
       path: 'lib/game/score.py',
       text: [
@@ -180,15 +239,16 @@ describe('project functions', () => {
 
   function project(language: string, key: string): { registry: NodeRegistry; document: GraphDocument } {
     const defs = definitions(language, key);
-    const add = defs.find((d) => !d.type.endsWith('#double'));
-    const double = defs.find((d) => d.type.endsWith('#double'));
+    const isDouble = (d: NodeDefinition) => /[#.]double$/i.test(d.type);
+    const add = defs.find((d) => !isDouble(d));
+    const double = defs.find(isDouble);
     assert.ok(add && double, `the module exposes both functions: ${defs.map((d) => d.type).join(', ')}`);
     const r = registry();
     r.registerMany([add, double]);
     const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
     const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}`, fromNode, fromPin, toNode, toPin });
     const document: GraphDocument = {
-      schemaVersion: 3, name: 'Score', kind: 'class', language, variables: [],
+      schemaVersion: 3, name: 'ScoreBoard', kind: 'class', language, variables: [],
       graphs: [{
         id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
         nodes: [
@@ -234,13 +294,15 @@ describe('project functions', () => {
     { label: 'TypeScript (extensionless imports)', language: 'typescript', key: 'typescript', importExtension: 'none' as const },
     { label: 'JavaScript (ES modules)', language: 'javascript', key: 'javascript-esm', moduleFormat: 'esm' as const },
     { label: 'JavaScript (CommonJS)', language: 'javascript', key: 'javascript-commonjs', moduleFormat: 'commonjs' as const },
-    { label: 'Python', language: 'python', key: 'python' }
+    { label: 'Python', language: 'python', key: 'python' },
+    { label: 'C#', language: 'csharp', key: 'csharp' }
   ]) {
     test(`${target.label} imports and calls them`, async (t) => {
       const { file, className, dir, importRoots } = build(target.language, target.key, { moduleFormat: target.moduleFormat, importExtension: target.importExtension });
       let outcome;
       try {
-        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), importRoots, timeoutMs: 30000 });
+        const sources = target.language === 'csharp' ? [path.join(dir, MODULES[target.key].path)] : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), importRoots, sources, timeoutMs: 180000 });
       } catch (error) {
         if (error instanceof ToolNotFoundError) return t.skip(error.message);
         throw error;
@@ -293,7 +355,7 @@ describe('file nodes', () => {
     assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), ['saved: héllo']);
   });
 
-  for (const target of TARGETS) {
+  for (const target of [...TARGETS, { label: 'C# (through Run)', language: 'csharp', moduleFormat: undefined }]) {
     test(target.label, async (t) => {
       const dir = path.join(workDir, `files-${target.language}-${target.moduleFormat ?? 'default'}`);
       fs.mkdirSync(dir, { recursive: true });
@@ -303,7 +365,7 @@ describe('file nodes', () => {
       fs.writeFileSync(file, result.output!.text);
       let outcome;
       try {
-        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, result.output!.className, { cwd: dir, timeoutMs: 30000 });
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, result.output!.className, { cwd: dir, timeoutMs: 180000 });
       } catch (error) {
         if (error instanceof ToolNotFoundError) return t.skip(error.message);
         throw error;

@@ -37,7 +37,7 @@ const features = () => parseDocument(readRepoFile('test/fixtures/graphs/features
 
 describe('golden files', () => {
   for (const [label, load] of [['demo', sample], ['features', features]] as const) {
-    const expectedFile: Record<string, string> = { typescript: `${label}.vgraph.ts`, javascript: `${label}.vgraph.js`, python: `${label}_vgraph.py` };
+    const expectedFile: Record<string, string> = { typescript: `${label}.vgraph.ts`, javascript: `${label}.vgraph.js`, python: `${label}_vgraph.py`, csharp: `${label}.vgraph.cs` };
     for (const [language, fileName] of Object.entries(expectedFile)) {
       test(`${label} matches its ${language} golden file`, () => {
         const result = compileAs(load(), language, `${label}.vgraph`);

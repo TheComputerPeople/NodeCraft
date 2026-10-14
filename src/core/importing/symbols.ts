@@ -26,6 +26,8 @@ export interface ScannedFunction {
   // The return type; null when the function returns nothing, undefined when the type is unknown.
   returns: TypeRef | null | undefined;
   doc: DocComment;
+  // The qualified class a static method belongs to (C#): generated code calls Container.name.
+  container?: string;
 }
 
 // A function that can't become a node, and why.
@@ -35,6 +37,7 @@ export interface SkippedFunction {
   reason: string;
   // Marked @blueprint, so its author expects a node.
   marked: boolean;
+  container?: string;
 }
 
 export interface ModuleScan {
@@ -94,7 +97,7 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions): NodeDefinit
     id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', ...(fn.returns ? { type: fn.returns } : {})
   }];
   return {
-    type: functionNodeType(options.language, options.path, fn.name),
+    type: functionNodeType(options.language, options.path, fn.container ? `${fn.container}.${fn.name}` : fn.name),
     version: 1,
     displayName: tag('displayName') || words(fn.name),
     // Unreal nests categories with "|"; the palette shows them as "A / B".
@@ -102,7 +105,7 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions): NodeDefinit
     ...(fn.doc.description ? { description: fn.doc.description } : {}),
     inputs: [...exec('input'), ...inputs],
     outputs: [...exec('output'), ...outputs],
-    implementation: { kind: 'function', language: options.language, path: options.path, name: fn.name, ...(options.module ? { module: options.module } : {}) },
+    implementation: { kind: 'function', language: options.language, path: options.path, name: fn.name, ...((fn.container ?? options.module) ? { module: fn.container ?? options.module } : {}) },
     ...(keywords?.length ? { keywords } : {})
   };
 }

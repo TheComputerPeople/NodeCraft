@@ -4,7 +4,7 @@ Phase 3 of the [roadmap](roadmap.md): the equivalent of Unreal's `UFUNCTION(Blue
 
 ## Exposing a function
 
-As in Unreal, a function becomes a node only when its author says so, so the palette isn't flooded with every helper in the project. The marker is a `@blueprint` tag in the function's documentation comment: JSDoc in TypeScript and JavaScript, the docstring in Python. A comment costs nothing at run time and needs no package, so code with markers runs and builds exactly as before.
+As in Unreal, a function becomes a node only when its author says so, so the palette isn't flooded with every helper in the project. The marker is a `@blueprint` tag in the function's documentation comment: JSDoc in TypeScript and JavaScript, the docstring in Python, and the `///` XML documentation comment in C# (where the marked functions are `public` or `internal` static methods; see [program-structure.md](program-structure.md)). A comment costs nothing at run time and needs no package, so code with markers runs and builds exactly as before.
 
 ```ts
 /**
