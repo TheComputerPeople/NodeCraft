@@ -60,6 +60,9 @@ button, input { font: inherit; color: inherit; }
 .node.compact { min-width: 0; border-color: color-mix(in srgb, var(--node-color) 70%, transparent); border-radius: 14px; }
 .compact-body { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 12px; cursor: grab; }
 .compact-body .node-title { font-weight: 600; }
+.compact-pins { display: flex; flex-direction: column; gap: 4px; }
+.node.compact.operator { border-radius: 10px; }
+.node.compact.operator .node-title { font-size: 17px; min-width: 24px; text-align: center; }
 
 /* Pins: data pins are circles in their type color, filled when connected; exec pins are arrows. */
 .pin { position: relative; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--pin-color); display: inline-block; flex: 0 0 auto; background: transparent; cursor: crosshair; }

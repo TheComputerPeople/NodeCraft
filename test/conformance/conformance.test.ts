@@ -265,3 +265,50 @@ describe('project functions', () => {
     });
   }
 });
+
+// Save String to File then Load File to String, in a scratch folder, on every target.
+describe('file nodes', () => {
+  function fileGraph(file: string, language: string): GraphDocument {
+    const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+    const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}`, fromNode, fromPin, toNode, toPin });
+    return {
+      schemaVersion: 3, name: 'Files', kind: 'class', language, variables: [],
+      graphs: [{
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [
+          n('s', 'core:event.start'),
+          n('save', 'core:file.save-string', { 'pin:text': 'saved: héllo', 'pin:filename': file }),
+          n('load', 'core:file.load-to-string', { 'pin:filename': file }),
+          n('p', 'core:console.print')
+        ],
+        connections: [w('s', 'execOut', 'save', 'execIn'), w('save', 'execOut', 'load', 'execIn'), w('load', 'execOut', 'p', 'execIn'), w('load', 'returnValue', 'p', 'value')]
+      }]
+    };
+  }
+
+  test('Simulate', () => {
+    const file = path.join(workDir, 'simulate.txt');
+    const events: RuntimeLogEvent[] = [];
+    new GraphRuntime(registry(), (e) => events.push(e)).run(fileGraph(file, 'javascript'));
+    assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), ['saved: héllo']);
+  });
+
+  for (const target of TARGETS) {
+    test(target.label, async (t) => {
+      const dir = path.join(workDir, `files-${target.language}-${target.moduleFormat ?? 'default'}`);
+      fs.mkdirSync(dir, { recursive: true });
+      const result = compileDocument(fileGraph(path.join(dir, 'out.txt'), target.language), { registry: registry(), languages, generate: { sourceFileName: 'files.vgraph', moduleFormat: target.moduleFormat } });
+      assert.deepEqual(result.diagnostics, []);
+      const file = path.join(dir, result.output!.fileName);
+      fs.writeFileSync(file, result.output!.text);
+      let outcome;
+      try {
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, result.output!.className, { cwd: dir, timeoutMs: 30000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), ['saved: héllo'], `stderr:\n${outcome.stderr}`);
+    });
+  }
+});

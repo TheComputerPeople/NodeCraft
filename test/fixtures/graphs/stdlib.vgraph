@@ -1,0 +1,1422 @@
+{
+  "schemaVersion": 3,
+  "name": "StandardLibrary",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n0",
+          "type": "core:math.subtract",
+          "position": {
+            "x": 300,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 7,
+            "pin:b": 2.5
+          }
+        },
+        {
+          "id": "p0",
+          "type": "core:console.print",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "core:math.multiply",
+          "position": {
+            "x": 340,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 3,
+            "pin:b": 4
+          }
+        },
+        {
+          "id": "p1",
+          "type": "core:console.print",
+          "position": {
+            "x": 340,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "core:math.divide",
+          "position": {
+            "x": 380,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 7,
+            "pin:b": 2
+          }
+        },
+        {
+          "id": "p2",
+          "type": "core:console.print",
+          "position": {
+            "x": 380,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:math.modulo",
+          "position": {
+            "x": 420,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": -7,
+            "pin:b": 3
+          }
+        },
+        {
+          "id": "p3",
+          "type": "core:console.print",
+          "position": {
+            "x": 420,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "core:math.less",
+          "position": {
+            "x": 460,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 1,
+            "pin:b": 2
+          }
+        },
+        {
+          "id": "p4",
+          "type": "core:console.print",
+          "position": {
+            "x": 460,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n5",
+          "type": "core:math.greater-equal",
+          "position": {
+            "x": 500,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 1,
+            "pin:b": 2
+          }
+        },
+        {
+          "id": "p5",
+          "type": "core:console.print",
+          "position": {
+            "x": 500,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n6",
+          "type": "core:math.equal",
+          "position": {
+            "x": 540,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 2,
+            "pin:b": 2
+          }
+        },
+        {
+          "id": "p6",
+          "type": "core:console.print",
+          "position": {
+            "x": 540,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n7",
+          "type": "core:math.not-equal",
+          "position": {
+            "x": 580,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 2,
+            "pin:b": 2
+          }
+        },
+        {
+          "id": "p7",
+          "type": "core:console.print",
+          "position": {
+            "x": 580,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n8",
+          "type": "core:math.and",
+          "position": {
+            "x": 620,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": true,
+            "pin:b": false
+          }
+        },
+        {
+          "id": "p8",
+          "type": "core:console.print",
+          "position": {
+            "x": 620,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n9",
+          "type": "core:math.or",
+          "position": {
+            "x": 660,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": true,
+            "pin:b": false
+          }
+        },
+        {
+          "id": "p9",
+          "type": "core:console.print",
+          "position": {
+            "x": 660,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n10",
+          "type": "core:math.not",
+          "position": {
+            "x": 700,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": false
+          }
+        },
+        {
+          "id": "p10",
+          "type": "core:console.print",
+          "position": {
+            "x": 700,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n11",
+          "type": "core:math.min",
+          "position": {
+            "x": 740,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 3,
+            "pin:b": 9
+          }
+        },
+        {
+          "id": "p11",
+          "type": "core:console.print",
+          "position": {
+            "x": 740,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n12",
+          "type": "core:math.max",
+          "position": {
+            "x": 780,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 3,
+            "pin:b": 9
+          }
+        },
+        {
+          "id": "p12",
+          "type": "core:console.print",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n13",
+          "type": "core:math.clamp",
+          "position": {
+            "x": 820,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": 15,
+            "pin:minimum": 0,
+            "pin:maximum": 10
+          }
+        },
+        {
+          "id": "p13",
+          "type": "core:console.print",
+          "position": {
+            "x": 820,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n14",
+          "type": "core:math.abs",
+          "position": {
+            "x": 860,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": -4
+          }
+        },
+        {
+          "id": "p14",
+          "type": "core:console.print",
+          "position": {
+            "x": 860,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n15",
+          "type": "core:math.round",
+          "position": {
+            "x": 900,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": 2.5
+          }
+        },
+        {
+          "id": "p15",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n16",
+          "type": "core:math.round",
+          "position": {
+            "x": 940,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": -2.5
+          }
+        },
+        {
+          "id": "p16",
+          "type": "core:console.print",
+          "position": {
+            "x": 940,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n17",
+          "type": "core:math.floor",
+          "position": {
+            "x": 980,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": -1.5
+          }
+        },
+        {
+          "id": "p17",
+          "type": "core:console.print",
+          "position": {
+            "x": 980,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n18",
+          "type": "core:math.ceil",
+          "position": {
+            "x": 1020,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": 1.2
+          }
+        },
+        {
+          "id": "p18",
+          "type": "core:console.print",
+          "position": {
+            "x": 1020,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n19",
+          "type": "core:math.sqrt",
+          "position": {
+            "x": 1060,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": 16
+          }
+        },
+        {
+          "id": "p19",
+          "type": "core:console.print",
+          "position": {
+            "x": 1060,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n20",
+          "type": "core:math.sqrt",
+          "position": {
+            "x": 1100,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": -1
+          }
+        },
+        {
+          "id": "p20",
+          "type": "core:console.print",
+          "position": {
+            "x": 1100,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n21",
+          "type": "core:math.power",
+          "position": {
+            "x": 1140,
+            "y": 200
+          },
+          "properties": {
+            "pin:base": 2,
+            "pin:exponent": 10
+          }
+        },
+        {
+          "id": "p21",
+          "type": "core:console.print",
+          "position": {
+            "x": 1140,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n22",
+          "type": "core:math.random-float-in-range",
+          "position": {
+            "x": 1180,
+            "y": 200
+          },
+          "properties": {
+            "pin:minimum": 5,
+            "pin:maximum": 5
+          }
+        },
+        {
+          "id": "p22",
+          "type": "core:console.print",
+          "position": {
+            "x": 1180,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n23",
+          "type": "core:math.random-integer-in-range",
+          "position": {
+            "x": 1220,
+            "y": 200
+          },
+          "properties": {
+            "pin:minimum": 3,
+            "pin:maximum": 3
+          }
+        },
+        {
+          "id": "p23",
+          "type": "core:console.print",
+          "position": {
+            "x": 1220,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n24",
+          "type": "core:string.append",
+          "position": {
+            "x": 1260,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": "Hello, ",
+            "pin:b": "World"
+          }
+        },
+        {
+          "id": "p24",
+          "type": "core:console.print",
+          "position": {
+            "x": 1260,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n25",
+          "type": "core:string.len",
+          "position": {
+            "x": 1300,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "héllo😀"
+          }
+        },
+        {
+          "id": "p25",
+          "type": "core:console.print",
+          "position": {
+            "x": 1300,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n26",
+          "type": "core:string.contains",
+          "position": {
+            "x": 1340,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "blueprint",
+            "pin:part": "print"
+          }
+        },
+        {
+          "id": "p26",
+          "type": "core:console.print",
+          "position": {
+            "x": 1340,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n27",
+          "type": "core:string.to-upper",
+          "position": {
+            "x": 1380,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "abc"
+          }
+        },
+        {
+          "id": "p27",
+          "type": "core:console.print",
+          "position": {
+            "x": 1380,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n28",
+          "type": "core:string.to-lower",
+          "position": {
+            "x": 1420,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "ABC"
+          }
+        },
+        {
+          "id": "p28",
+          "type": "core:console.print",
+          "position": {
+            "x": 1420,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n29",
+          "type": "core:string.trim",
+          "position": {
+            "x": 1460,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "  x  "
+          }
+        },
+        {
+          "id": "p29",
+          "type": "core:console.print",
+          "position": {
+            "x": 1460,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n30",
+          "type": "core:string.replace",
+          "position": {
+            "x": 1500,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "a-b-c",
+            "pin:find": "-",
+            "pin:replacement": "+"
+          }
+        },
+        {
+          "id": "p30",
+          "type": "core:console.print",
+          "position": {
+            "x": 1500,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n31",
+          "type": "core:string.replace",
+          "position": {
+            "x": 1540,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "abc",
+            "pin:find": "",
+            "pin:replacement": "X"
+          }
+        },
+        {
+          "id": "p31",
+          "type": "core:console.print",
+          "position": {
+            "x": 1540,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n32",
+          "type": "core:string.substring",
+          "position": {
+            "x": 1580,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "héllo😀",
+            "pin:start": 4,
+            "pin:count": 5
+          }
+        },
+        {
+          "id": "p32",
+          "type": "core:console.print",
+          "position": {
+            "x": 1580,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n33",
+          "type": "core:string.to-float",
+          "position": {
+            "x": 1620,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": " 2.5e1 "
+          }
+        },
+        {
+          "id": "p33",
+          "type": "core:console.print",
+          "position": {
+            "x": 1620,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n34",
+          "type": "core:string.to-float",
+          "position": {
+            "x": 1660,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "abc"
+          }
+        },
+        {
+          "id": "p34",
+          "type": "core:console.print",
+          "position": {
+            "x": 1660,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n35",
+          "type": "core:string.to-int",
+          "position": {
+            "x": 1700,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "42"
+          }
+        },
+        {
+          "id": "p35",
+          "type": "core:console.print",
+          "position": {
+            "x": 1700,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n36",
+          "type": "core:string.to-int",
+          "position": {
+            "x": 1740,
+            "y": 200
+          },
+          "properties": {
+            "pin:text": "4.2"
+          }
+        },
+        {
+          "id": "p36",
+          "type": "core:console.print",
+          "position": {
+            "x": 1740,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n37",
+          "type": "core:utilities.is-valid",
+          "position": {
+            "x": 1780,
+            "y": 200
+          },
+          "properties": {}
+        },
+        {
+          "id": "p37",
+          "type": "core:console.print",
+          "position": {
+            "x": 1780,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n38",
+          "type": "core:utilities.select",
+          "position": {
+            "x": 1820,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": "yes",
+            "pin:b": "no",
+            "pin:pickA": false
+          }
+        },
+        {
+          "id": "p38",
+          "type": "core:console.print",
+          "position": {
+            "x": 1820,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "e0",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "p0",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d0",
+          "fromNode": "n0",
+          "fromPin": "returnValue",
+          "toNode": "p0",
+          "toPin": "value"
+        },
+        {
+          "id": "e1",
+          "fromNode": "p0",
+          "fromPin": "execOut",
+          "toNode": "p1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d1",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "p1",
+          "toPin": "value"
+        },
+        {
+          "id": "e2",
+          "fromNode": "p1",
+          "fromPin": "execOut",
+          "toNode": "p2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d2",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "p2",
+          "toPin": "value"
+        },
+        {
+          "id": "e3",
+          "fromNode": "p2",
+          "fromPin": "execOut",
+          "toNode": "p3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d3",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "p3",
+          "toPin": "value"
+        },
+        {
+          "id": "e4",
+          "fromNode": "p3",
+          "fromPin": "execOut",
+          "toNode": "p4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d4",
+          "fromNode": "n4",
+          "fromPin": "returnValue",
+          "toNode": "p4",
+          "toPin": "value"
+        },
+        {
+          "id": "e5",
+          "fromNode": "p4",
+          "fromPin": "execOut",
+          "toNode": "p5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d5",
+          "fromNode": "n5",
+          "fromPin": "returnValue",
+          "toNode": "p5",
+          "toPin": "value"
+        },
+        {
+          "id": "e6",
+          "fromNode": "p5",
+          "fromPin": "execOut",
+          "toNode": "p6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d6",
+          "fromNode": "n6",
+          "fromPin": "returnValue",
+          "toNode": "p6",
+          "toPin": "value"
+        },
+        {
+          "id": "e7",
+          "fromNode": "p6",
+          "fromPin": "execOut",
+          "toNode": "p7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d7",
+          "fromNode": "n7",
+          "fromPin": "returnValue",
+          "toNode": "p7",
+          "toPin": "value"
+        },
+        {
+          "id": "e8",
+          "fromNode": "p7",
+          "fromPin": "execOut",
+          "toNode": "p8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d8",
+          "fromNode": "n8",
+          "fromPin": "returnValue",
+          "toNode": "p8",
+          "toPin": "value"
+        },
+        {
+          "id": "e9",
+          "fromNode": "p8",
+          "fromPin": "execOut",
+          "toNode": "p9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d9",
+          "fromNode": "n9",
+          "fromPin": "returnValue",
+          "toNode": "p9",
+          "toPin": "value"
+        },
+        {
+          "id": "e10",
+          "fromNode": "p9",
+          "fromPin": "execOut",
+          "toNode": "p10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d10",
+          "fromNode": "n10",
+          "fromPin": "returnValue",
+          "toNode": "p10",
+          "toPin": "value"
+        },
+        {
+          "id": "e11",
+          "fromNode": "p10",
+          "fromPin": "execOut",
+          "toNode": "p11",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d11",
+          "fromNode": "n11",
+          "fromPin": "returnValue",
+          "toNode": "p11",
+          "toPin": "value"
+        },
+        {
+          "id": "e12",
+          "fromNode": "p11",
+          "fromPin": "execOut",
+          "toNode": "p12",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d12",
+          "fromNode": "n12",
+          "fromPin": "returnValue",
+          "toNode": "p12",
+          "toPin": "value"
+        },
+        {
+          "id": "e13",
+          "fromNode": "p12",
+          "fromPin": "execOut",
+          "toNode": "p13",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d13",
+          "fromNode": "n13",
+          "fromPin": "returnValue",
+          "toNode": "p13",
+          "toPin": "value"
+        },
+        {
+          "id": "e14",
+          "fromNode": "p13",
+          "fromPin": "execOut",
+          "toNode": "p14",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d14",
+          "fromNode": "n14",
+          "fromPin": "returnValue",
+          "toNode": "p14",
+          "toPin": "value"
+        },
+        {
+          "id": "e15",
+          "fromNode": "p14",
+          "fromPin": "execOut",
+          "toNode": "p15",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d15",
+          "fromNode": "n15",
+          "fromPin": "returnValue",
+          "toNode": "p15",
+          "toPin": "value"
+        },
+        {
+          "id": "e16",
+          "fromNode": "p15",
+          "fromPin": "execOut",
+          "toNode": "p16",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d16",
+          "fromNode": "n16",
+          "fromPin": "returnValue",
+          "toNode": "p16",
+          "toPin": "value"
+        },
+        {
+          "id": "e17",
+          "fromNode": "p16",
+          "fromPin": "execOut",
+          "toNode": "p17",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d17",
+          "fromNode": "n17",
+          "fromPin": "returnValue",
+          "toNode": "p17",
+          "toPin": "value"
+        },
+        {
+          "id": "e18",
+          "fromNode": "p17",
+          "fromPin": "execOut",
+          "toNode": "p18",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d18",
+          "fromNode": "n18",
+          "fromPin": "returnValue",
+          "toNode": "p18",
+          "toPin": "value"
+        },
+        {
+          "id": "e19",
+          "fromNode": "p18",
+          "fromPin": "execOut",
+          "toNode": "p19",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d19",
+          "fromNode": "n19",
+          "fromPin": "returnValue",
+          "toNode": "p19",
+          "toPin": "value"
+        },
+        {
+          "id": "e20",
+          "fromNode": "p19",
+          "fromPin": "execOut",
+          "toNode": "p20",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d20",
+          "fromNode": "n20",
+          "fromPin": "returnValue",
+          "toNode": "p20",
+          "toPin": "value"
+        },
+        {
+          "id": "e21",
+          "fromNode": "p20",
+          "fromPin": "execOut",
+          "toNode": "p21",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d21",
+          "fromNode": "n21",
+          "fromPin": "returnValue",
+          "toNode": "p21",
+          "toPin": "value"
+        },
+        {
+          "id": "e22",
+          "fromNode": "p21",
+          "fromPin": "execOut",
+          "toNode": "p22",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d22",
+          "fromNode": "n22",
+          "fromPin": "returnValue",
+          "toNode": "p22",
+          "toPin": "value"
+        },
+        {
+          "id": "e23",
+          "fromNode": "p22",
+          "fromPin": "execOut",
+          "toNode": "p23",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d23",
+          "fromNode": "n23",
+          "fromPin": "returnValue",
+          "toNode": "p23",
+          "toPin": "value"
+        },
+        {
+          "id": "e24",
+          "fromNode": "p23",
+          "fromPin": "execOut",
+          "toNode": "p24",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d24",
+          "fromNode": "n24",
+          "fromPin": "returnValue",
+          "toNode": "p24",
+          "toPin": "value"
+        },
+        {
+          "id": "e25",
+          "fromNode": "p24",
+          "fromPin": "execOut",
+          "toNode": "p25",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d25",
+          "fromNode": "n25",
+          "fromPin": "returnValue",
+          "toNode": "p25",
+          "toPin": "value"
+        },
+        {
+          "id": "e26",
+          "fromNode": "p25",
+          "fromPin": "execOut",
+          "toNode": "p26",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d26",
+          "fromNode": "n26",
+          "fromPin": "returnValue",
+          "toNode": "p26",
+          "toPin": "value"
+        },
+        {
+          "id": "e27",
+          "fromNode": "p26",
+          "fromPin": "execOut",
+          "toNode": "p27",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d27",
+          "fromNode": "n27",
+          "fromPin": "returnValue",
+          "toNode": "p27",
+          "toPin": "value"
+        },
+        {
+          "id": "e28",
+          "fromNode": "p27",
+          "fromPin": "execOut",
+          "toNode": "p28",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d28",
+          "fromNode": "n28",
+          "fromPin": "returnValue",
+          "toNode": "p28",
+          "toPin": "value"
+        },
+        {
+          "id": "e29",
+          "fromNode": "p28",
+          "fromPin": "execOut",
+          "toNode": "p29",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d29",
+          "fromNode": "n29",
+          "fromPin": "returnValue",
+          "toNode": "p29",
+          "toPin": "value"
+        },
+        {
+          "id": "e30",
+          "fromNode": "p29",
+          "fromPin": "execOut",
+          "toNode": "p30",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d30",
+          "fromNode": "n30",
+          "fromPin": "returnValue",
+          "toNode": "p30",
+          "toPin": "value"
+        },
+        {
+          "id": "e31",
+          "fromNode": "p30",
+          "fromPin": "execOut",
+          "toNode": "p31",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d31",
+          "fromNode": "n31",
+          "fromPin": "returnValue",
+          "toNode": "p31",
+          "toPin": "value"
+        },
+        {
+          "id": "e32",
+          "fromNode": "p31",
+          "fromPin": "execOut",
+          "toNode": "p32",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d32",
+          "fromNode": "n32",
+          "fromPin": "returnValue",
+          "toNode": "p32",
+          "toPin": "value"
+        },
+        {
+          "id": "e33",
+          "fromNode": "p32",
+          "fromPin": "execOut",
+          "toNode": "p33",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d33",
+          "fromNode": "n33",
+          "fromPin": "returnValue",
+          "toNode": "p33",
+          "toPin": "value"
+        },
+        {
+          "id": "e34",
+          "fromNode": "p33",
+          "fromPin": "execOut",
+          "toNode": "p34",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d34",
+          "fromNode": "n34",
+          "fromPin": "returnValue",
+          "toNode": "p34",
+          "toPin": "value"
+        },
+        {
+          "id": "e35",
+          "fromNode": "p34",
+          "fromPin": "execOut",
+          "toNode": "p35",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d35",
+          "fromNode": "n35",
+          "fromPin": "returnValue",
+          "toNode": "p35",
+          "toPin": "value"
+        },
+        {
+          "id": "e36",
+          "fromNode": "p35",
+          "fromPin": "execOut",
+          "toNode": "p36",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d36",
+          "fromNode": "n36",
+          "fromPin": "returnValue",
+          "toNode": "p36",
+          "toPin": "value"
+        },
+        {
+          "id": "e37",
+          "fromNode": "p36",
+          "fromPin": "execOut",
+          "toNode": "p37",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d37",
+          "fromNode": "n37",
+          "fromPin": "returnValue",
+          "toNode": "p37",
+          "toPin": "value"
+        },
+        {
+          "id": "e38",
+          "fromNode": "p37",
+          "fromPin": "execOut",
+          "toNode": "p38",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d38",
+          "fromNode": "n38",
+          "fromPin": "returnValue",
+          "toNode": "p38",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "expectedOutput": [
+      "4.5",
+      "12",
+      "3.5",
+      "-1",
+      "true",
+      "false",
+      "true",
+      "false",
+      "false",
+      "true",
+      "true",
+      "3",
+      "9",
+      "10",
+      "4",
+      "3",
+      "-2",
+      "-2",
+      "2",
+      "4",
+      "NaN",
+      "1024",
+      "5",
+      "3",
+      "Hello, World",
+      "6",
+      "true",
+      "ABC",
+      "abc",
+      "x",
+      "a+b+c",
+      "abc",
+      "o😀",
+      "25",
+      "0",
+      "42",
+      "0",
+      "false",
+      "no"
+    ]
+  }
+}

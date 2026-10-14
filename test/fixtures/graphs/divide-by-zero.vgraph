@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 3,
+  "name": "DivideByZero",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n0",
+          "type": "core:math.subtract",
+          "position": {
+            "x": 300,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 1,
+            "pin:b": 0
+          }
+        },
+        {
+          "id": "p0",
+          "type": "core:console.print",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "core:math.divide",
+          "position": {
+            "x": 340,
+            "y": 200
+          },
+          "properties": {
+            "pin:a": 1,
+            "pin:b": 0
+          }
+        },
+        {
+          "id": "p1",
+          "type": "core:console.print",
+          "position": {
+            "x": 340,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "e0",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "p0",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d0",
+          "fromNode": "n0",
+          "fromPin": "returnValue",
+          "toNode": "p0",
+          "toPin": "value"
+        },
+        {
+          "id": "e1",
+          "fromNode": "p0",
+          "fromPin": "execOut",
+          "toNode": "p1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "d1",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "p1",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "expectedOutput": [
+      "1"
+    ],
+    "expectedError": true
+  }
+}

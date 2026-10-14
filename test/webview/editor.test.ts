@@ -157,8 +157,9 @@ describe('webview editor', () => {
   test('searching matches keywords, as Unreal does', async (t) => {
     const e = await openSample(t);
     if (!e) return;
-    await e.page.fill('#search', 'if');
-    assert.deepEqual(await e.page.$$eval('.palette-node strong', (els) => els.map((el) => el.textContent)), ['Branch']);
+    // Start's keyword: Unreal's name for it.
+    await e.page.fill('#search', 'beginplay');
+    assert.deepEqual(await e.page.$$eval('.palette-node strong', (els) => els.map((el) => el.textContent)), ['Start']);
   });
 
   test('highlights nodes reached by a run', async (t) => {

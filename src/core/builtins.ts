@@ -1,4 +1,5 @@
 import { NodeDefinition, PinDefinition, TypeRef } from './model';
+import { standardLibraryDefinitions } from './stdlib';
 
 const t = (id: string): TypeRef => ({ id });
 const dataInput = (id: string, name: string, type: string, defaultValue?: unknown): PinDefinition => ({
@@ -77,6 +78,7 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
       type: 'core:flow.end', version: 1, displayName: 'End', category: 'Flow',
       description: 'End a branch of execution.', color: '#7bd88f', inputs: [execInput()], outputs: [],
       implementation: { kind: 'native', operation: 'end' }
-    }
+    },
+    ...standardLibraryDefinitions()
   ];
 }

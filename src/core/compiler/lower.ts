@@ -394,7 +394,8 @@ class Lowerer {
     }
     const helper: IrCodeHelper = {
       id: def.type,
-      name: def.type,
+      // "core:math.clamp" becomes math_clamp: the namespace adds nothing to a method name.
+      name: def.type.replace(/^[\w-]+:/, ''),
       params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
       returns: def.outputs.find((p) => p.kind === 'data')?.type,
       code: sources[language]

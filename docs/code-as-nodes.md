@@ -100,9 +100,19 @@ A node keeps the signature it was created with. The graph file stores the last k
 
 Each language's basics are available as built-in nodes with Unreal's names and categories, implemented in every language pack, so graphs stay portable between languages:
 
-- **Math:** Subtract, Multiply, Divide, Modulo (%), Min, Max, Clamp, Abs, Round, Floor, Ceil, Sqrt, Power, Random Float in Range, Random Integer in Range, comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`), and the boolean operators AND, OR, NOT.
-- **String:** Append, Len, Contains, To Upper, To Lower, Trim, Replace, Substring, and the conversions to and from numbers.
+- **Math:** Subtract, Multiply, Divide, Modulo (%), Min, Max, Clamp, Abs, Round, Floor, Ceil, Sqrt, Power, Random Float in Range, Random Integer in Range, comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`), and the boolean operators AND, OR, NOT. (Add predates the library and keeps its exec pins, so existing graphs don't change.)
+- **String:** Append, Len, Contains, To Upper, To Lower, Trim, Replace, Substring, String To Float and String To Int (To String already converts the other way).
 - **Utilities:** Is Valid, Select.
-- **File:** Load File to String and Save String to File, as `UFileHelper` offers them; they need Workspace Trust to run.
+- **File:** Load File to String and Save String to File, as `UFileHelper` offers them.
+
+Operators are compact nodes showing their symbol (`-`, `×`, `÷`, `%`, `<`, `==`, AND, …), and the rest are pure nodes with a title bar, as in Unreal; the file nodes run when execution reaches them. Where languages disagree, the nodes follow one rule everywhere, checked by the conformance suite:
+
+- Dividing (or taking a remainder) by zero stops the run with an error.
+- `%` takes the sign of A, as in C++ and JavaScript (Python's `%` follows B).
+- Round rounds halves up (toward positive infinity), as Unreal's Round does; Round, Floor and Ceil return integers.
+- Sqrt of a negative number, and a Power with no real result, give NaN.
+- String lengths and positions count characters (code points), not UTF-16 units.
+- String To Float and String To Int accept plain decimal numbers only; anything else gives 0, as in Unreal. Replace with an empty From leaves the text unchanged.
+- Load File to String and Save String to File use UTF-8 and paths relative to the working directory; a file that can't be read or written stops the run with an error. (Unreal's versions return a success flag instead; nodes with several outputs arrive with Phase 4.)
 
 Collection nodes (Make Array, Length, Get, Add, Contains, Remove) arrive with Phase 4, with the wildcard pins they need.

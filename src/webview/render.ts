@@ -67,15 +67,25 @@ function renderNode(node: GraphNode): HTMLElement {
     def.outputs.forEach((pin) => body.appendChild(renderPin(node, pin, false)));
     el.appendChild(body);
   } else if (def.compact) {
-    // Compact nodes (variable getters, conversions): pins either side of the title, no title bar.
+    // Compact nodes (variable getters, conversions, operators): inputs stacked left of the title,
+    // outputs right of it, no title bar.
     const body = document.createElement('div');
     body.className = 'compact-body';
-    def.inputs.forEach((pin) => body.appendChild(renderPin(node, pin, false)));
+    // Operators (+, <, AND, …) show their symbol large, as Unreal does.
+    if (def.type.startsWith('core:math.')) el.classList.add('operator');
+    const column = (pins: PinDefinition[]): void => {
+      if (!pins.length) return;
+      const pinsEl = document.createElement('div');
+      pinsEl.className = 'compact-pins';
+      pins.forEach((pin) => pinsEl.appendChild(renderPin(node, pin, false)));
+      body.appendChild(pinsEl);
+    };
+    column(def.inputs);
     const title = document.createElement('span');
     title.className = 'node-title';
     title.textContent = def.displayName;
     body.appendChild(title);
-    def.outputs.forEach((pin) => body.appendChild(renderPin(node, pin, false)));
+    column(def.outputs);
     el.appendChild(body);
   } else {
     const header = document.createElement('div');
