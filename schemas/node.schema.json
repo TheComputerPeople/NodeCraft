@@ -118,7 +118,8 @@
           "enum": [
             "native",
             "code",
-            "subgraph"
+            "subgraph",
+            "function"
           ]
         },
         "operation": {
@@ -134,6 +135,22 @@
           }
         },
         "graph": {
+          "type": "string"
+        },
+        "language": {
+          "description": "function: the module's language (typescript, javascript or python).",
+          "type": "string"
+        },
+        "path": {
+          "description": "function: the module's path relative to the workspace folder, with / separators.",
+          "type": "string"
+        },
+        "name": {
+          "description": "function: the function's exported name.",
+          "type": "string"
+        },
+        "module": {
+          "description": "function, Python only: the module's import name, such as game.combat.",
           "type": "string"
         }
       }

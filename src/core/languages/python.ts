@@ -1,5 +1,6 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
-import { IrBlock, IrCodeHelper, IrExpr, IrProgram, IrStatement, exprType } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrProgram, IrStatement, exprType } from '../compiler/ir';
+import { pythonModuleName } from '../compiler/module-paths';
 import { NameScope, dedent, toIdentifier } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
@@ -13,8 +14,11 @@ const RESERVED = new Set([
 
 const PRIMITIVES: Record<string, string> = { bool: 'bool', int: 'int', float: 'float', string: 'str', any: 'Any', wildcard: 'Any' };
 
+// Types from project code (native) aren't imported into generated files: the editor checks them by
+// name, and the generated code passes them on as `Any`.
 function mapType(type: TypeRef): string {
-  const element = PRIMITIVES[type.id] ?? parseTypeId(type.id).name;
+  const { category, name } = parseTypeId(type.id);
+  const element = PRIMITIVES[type.id] ?? (category === 'native' ? 'Any' : name);
   const base = type.container === 'array' ? `list[${element}]`
     : type.container === 'set' ? `set[${element}]`
     : type.container === 'map' ? `dict[${element}, ${type.valueType ? mapType(type.valueType) : 'Any'}]`
@@ -89,6 +93,7 @@ const HELPERS: Record<'format' | 'number' | 'boolean', string[]> = {
 
 const pythonGenerator: CodeGenerator = {
   snippetLanguages: ['python'],
+  importLanguages: ['python'],
   outputFileName: (graphFileName) => `${toIdentifier(graphFileName.replace(/\.vgraph$/i, ''), 'snake')}_vgraph.py`,
   generate: (program, options) => new PythonEmitter(program, options).emit(),
   runner: {
@@ -118,12 +123,16 @@ class PythonEmitter {
   private readonly slotNames = new Map<string, string>();
   private readonly helperNames = new Map<string, string>();
   private readonly blockNames = new Map<string, string>();
+  // Local names of imported functions, aliased where they would clash.
+  private readonly importNames = new Map<string, string>();
   private readonly className: string;
   private readonly helpersUsed = new Set<keyof typeof HELPERS>();
   private usesAny = false;
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions) {
     this.className = new NameScope(RESERVED).claim(program.className, 'pascal');
+    const moduleScope = new NameScope(RESERVED, [this.className, 'annotations', 'json', 'Any', '_format_value', '_to_number', '_to_boolean']);
+    for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
     for (const m of program.members) this.memberNames.set(m.id, this.names.claim(m.name));
     for (const s of program.slots) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'snake', '_'));
@@ -159,6 +168,17 @@ class PythonEmitter {
     const imports = [...(this.helpersUsed.has('format') ? ['import json'] : []), ...(this.usesAny || this.helpersUsed.size ? ['from typing import Any'] : [])];
     if (imports.length) {
       imports.forEach((i) => header.line(i));
+      header.line();
+    }
+    // Project code, one import per module (docs/code-as-nodes.md, "Generated imports").
+    const byModule = new Map<string, string[]>();
+    for (const i of [...this.program.imports].sort((a, b) => compare(a.name, b.name))) {
+      const module = i.module ?? pythonModuleName(i.path);
+      const local = this.importNames.get(i.id)!;
+      byModule.set(module, [...(byModule.get(module) ?? []), local === i.name ? local : `${i.name} as ${local}`]);
+    }
+    if (byModule.size) {
+      for (const [module, names] of [...byModule].sort(([a], [b]) => compare(a, b))) header.line(`from ${module} import ${names.join(', ')}`);
       header.line();
     }
     header.line();
@@ -242,8 +262,8 @@ class PythonEmitter {
           this.block(() => this.statements(s.else));
         }
         break;
-      case 'callCode': {
-        const call = `self.${this.helperNames.get(s.helper)}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+      case 'call': {
+        const call = this.call(s.callee, s.args);
         out.line(s.resultSlot ? `self.${this.slotNames.get(s.resultSlot)} = ${call}` : call);
         break;
       }
@@ -279,7 +299,14 @@ class PythonEmitter {
         this.helpersUsed.add('boolean');
         return `_to_boolean(${this.expr(e.value)})`;
       }
+      case 'call':
+        return this.call(e.callee, e.args);
     }
+  }
+
+  private call(callee: IrCallee, args: IrExpr[]): string {
+    const list = args.map((a) => this.expr(a)).join(', ');
+    return callee.kind === 'helper' ? `self.${this.helperNames.get(callee.id)}(${list})` : `${this.importNames.get(callee.id)}(${list})`;
   }
 
   private operand(e: IrExpr): string {
@@ -338,4 +365,8 @@ function literal(value: unknown): string {
 
 function isNumeric(type: TypeRef | undefined): boolean {
   return !!type && !type.container && (type.id === 'int' || type.id === 'float');
+}
+
+function compare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }

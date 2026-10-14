@@ -24,15 +24,20 @@ export type IrExpr =
   | { kind: 'toNumber'; value: IrExpr }
   | { kind: 'toBoolean'; value: IrExpr }
   // The value as text, following docs/semantics.md ("Values").
-  | { kind: 'toText'; value: IrExpr };
+  | { kind: 'toText'; value: IrExpr }
+  // A pure node: the callee is evaluated where the value is used, every time.
+  | { kind: 'call'; callee: IrCallee; args: IrExpr[] };
+
+// What a call runs: a code node's snippet (a helper) or a function the generated file imports.
+export type IrCallee = { kind: 'helper' | 'import'; id: string };
 
 export type IrStatement =
   | { kind: 'print'; value: IrExpr; source: SourceRef }
   | { kind: 'store'; slot: string; value: IrExpr; source: SourceRef }
   | { kind: 'setMember'; member: string; value: IrExpr; source: SourceRef }
   | { kind: 'if'; condition: IrExpr; then: IrStatement[]; else: IrStatement[]; source: SourceRef }
-  // Runs a code node's snippet; its first data output, if any, goes to `resultSlot`.
-  | { kind: 'callCode'; helper: string; args: IrExpr[]; resultSlot?: string; source: SourceRef }
+  // Runs an impure node's snippet or function; its first data output, if any, goes to `resultSlot`.
+  | { kind: 'call'; callee: IrCallee; args: IrExpr[]; resultSlot?: string; source: SourceRef }
   // Runs a shared block: a node reached by more than one exec wire, plus everything after it.
   | { kind: 'callBlock'; block: string; source: SourceRef };
 
@@ -63,6 +68,21 @@ export interface IrCodeHelper {
   code: string;
 }
 
+// A function from the project's code (docs/code-as-nodes.md, "Generated imports").
+export interface IrImport {
+  // The node type.
+  id: string;
+  // The function's exported name.
+  name: string;
+  language: string;
+  // The module's workspace-relative path.
+  path: string;
+  // Python: the module's import name.
+  module?: string;
+  params: { pinId: string; type?: TypeRef }[];
+  returns?: TypeRef;
+}
+
 export interface IrBlock {
   id: string;
   name: string;
@@ -74,13 +94,16 @@ export interface IrProgram {
   members: IrMember[];
   slots: IrSlot[];
   helpers: IrCodeHelper[];
+  imports: IrImport[];
   blocks: IrBlock[];
   // Body of the class's start method: every Start node, in graph and node order.
   start: IrStatement[];
 }
 
 // Static type of an expression, as far as it is known.
-export function exprType(expr: IrExpr, program: Pick<IrProgram, 'members' | 'slots'>): TypeRef | undefined {
+export type ProgramTypes = Pick<IrProgram, 'members' | 'slots' | 'helpers' | 'imports'>;
+
+export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefined {
   switch (expr.kind) {
     case 'literal':
       return literalType(expr.value);
@@ -97,7 +120,13 @@ export function exprType(expr: IrExpr, program: Pick<IrProgram, 'members' | 'slo
       return { id: 'bool' };
     case 'toText':
       return { id: 'string' };
+    case 'call':
+      return calleeSignature(expr.callee, program)?.returns;
   }
+}
+
+export function calleeSignature(callee: IrCallee, program: Pick<IrProgram, 'helpers' | 'imports'>): IrCodeHelper | IrImport | undefined {
+  return callee.kind === 'helper' ? program.helpers.find((h) => h.id === callee.id) : program.imports.find((i) => i.id === callee.id);
 }
 
 function literalType(value: unknown): TypeRef | undefined {

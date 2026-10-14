@@ -31,9 +31,12 @@ function isIdentifier(name: string): boolean {
 
 const PRIMITIVES: Record<string, string> = { bool: 'boolean', int: 'number', float: 'number', string: 'string', any: 'unknown', wildcard: 'unknown' };
 
-// TypeScript spelling; also used for JSDoc annotations in generated JavaScript.
+// TypeScript spelling; also used for JSDoc annotations in generated JavaScript. Types from project
+// code (native) aren't imported into generated files: the editor checks them by name, and the
+// generated code passes them on as `any`.
 function mapType(type: TypeRef): string {
-  const element = PRIMITIVES[type.id] ?? parseTypeId(type.id).name;
+  const { category, name } = parseTypeId(type.id);
+  const element = PRIMITIVES[type.id] ?? (category === 'native' ? 'any' : name);
   const base = type.container === 'array' ? `${wrapUnion(element)}[]`
     : type.container === 'set' ? `Set<${element}>`
     : type.container === 'map' ? `Map<${element}, ${type.valueType ? mapType(type.valueType) : 'unknown'}>`

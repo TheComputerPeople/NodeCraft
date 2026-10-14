@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CompileResult, compileDocument } from '../../src/core/compiler';
+import { pythonModuleName, relativeSpecifier, typescriptSpecifier } from '../../src/core/compiler/module-paths';
 import { NameScope, dedent, toIdentifier } from '../../src/core/compiler/names';
+import { GenerateOptions } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
-import { GraphDocument } from '../../src/core/model';
+import { GraphDocument, NodeDefinition } from '../../src/core/model';
 import { NodeRegistry, parseNodeDefinition } from '../../src/core/registry';
 import { parseDocument } from '../../src/core/serializer';
 import { doc, node, readRepoFile, repoRoot, wire } from './helpers';
@@ -105,6 +107,86 @@ describe('TypeScript and JavaScript generation', () => {
   test('reports languages without a generator', () => {
     const result = compileAs(sample(), 'cobol');
     assert.deepEqual(result.diagnostics.map((d) => d.code), ['unknown-language']);
+  });
+});
+
+describe('project function imports', () => {
+  // Start → Save (impure) → Print(Double(4)), with a function whose name clashes with the class.
+  const fn = (language: string, path: string, name: string, pure: boolean, module?: string): NodeDefinition => ({
+    type: `fn:${language}:${path}#${name}`, version: 1, displayName: name, category: 'Project',
+    inputs: [
+      ...(pure ? [] : [{ id: 'execIn', name: '', kind: 'exec' as const, direction: 'input' as const }]),
+      { id: 'value', name: 'Value', kind: 'data', direction: 'input', type: { id: 'float' } }
+    ],
+    outputs: [
+      ...(pure ? [] : [{ id: 'execOut', name: '', kind: 'exec' as const, direction: 'output' as const }]),
+      { id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', type: { id: 'float' } }
+    ],
+    implementation: { kind: 'function', language, path, name, ...(module ? { module } : {}) }
+  });
+  const compileWith = (language: string, ext: string, generate: Partial<GenerateOptions> = {}, module?: string) => {
+    const lib = language === 'python' ? 'lib/math.py' : `lib/math.${ext}`;
+    const defs = [fn(language, lib, 'double', true, module), fn(language, lib, 'save', false, module), fn(language, language === 'python' ? 'lib/other.py' : `lib/other.${ext}`, 'Test', true, module && 'lib.other')];
+    const registry = new NodeRegistry();
+    registry.registerMany(defs);
+    const d = doc(
+      [node('s', 'core:event.start'), node('f', defs[1].type), node('d', defs[0].type, { 'pin:value': 4 }), node('t', defs[2].type), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'f', 'execIn'), wire('f', 'execOut', 'p', 'execIn'), wire('t', 'returnValue', 'd', 'value'), wire('d', 'returnValue', 'p', 'value')]
+    );
+    const result = compileDocument({ ...d, language }, { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'graph.vgraph', outputDir: 'graphs', ...generate } });
+    assert.deepEqual(result.diagnostics.filter((x) => x.severity === 'error'), []);
+    return result.output!.text;
+  };
+
+  test('TypeScript imports each module once, relative to the generated file, aliasing clashes', () => {
+    const text = compileWith('typescript', 'ts');
+    assert.match(text, /^import \{ double, save \} from "\.\.\/lib\/math\.ts";$/m);
+    assert.match(text, /^import \{ Test as Test_2 \} from "\.\.\/lib\/other\.ts";$/m);
+    assert.match(text, /this\.f_returnValue = save\(/, 'impure: called once and stored');
+    assert.match(text, /console\.log\(String\(double\(Test_2\(/, 'pure: called where used');
+  });
+
+  test("TypeScript follows the project's import extension", () => {
+    assert.match(compileWith('typescript', 'ts', { importExtension: 'js' }), /from "\.\.\/lib\/math\.js";/);
+    assert.match(compileWith('typescript', 'ts', { importExtension: 'none' }), /from "\.\.\/lib\/math";/);
+    assert.match(compileWith('typescript', 'mts', { importExtension: 'none' }), /from "\.\.\/lib\/math\.mjs";/, '.mts needs an extension');
+  });
+
+  test('JavaScript imports or requires with the real extension', () => {
+    assert.match(compileWith('javascript', 'js'), /^import \{ double, save \} from "\.\.\/lib\/math\.js";$/m);
+    const cjs = compileWith('javascript', 'cjs', { moduleFormat: 'commonjs' });
+    assert.match(cjs, /^const \{ double, save \} = require\("\.\.\/lib\/math\.cjs"\);$/m);
+    assert.match(cjs, /^const \{ Test: Test_2 \} = require\("\.\.\/lib\/other\.cjs"\);$/m);
+  });
+
+  test('Python imports by module name', () => {
+    const text = compileWith('python', 'py', {}, 'lib.math');
+    assert.match(text, /^from lib\.math import double, save$/m);
+    assert.match(text, /^from lib\.other import Test as Test_2$/m);
+    assert.match(text, /print\(_format_value\(double\(Test_2\(/);
+  });
+});
+
+describe('module paths', () => {
+  test('relative specifiers', () => {
+    assert.equal(relativeSpecifier('', 'math.ts'), './math.ts');
+    assert.equal(relativeSpecifier('graphs', 'lib/math.ts'), '../lib/math.ts');
+    assert.equal(relativeSpecifier('src/graphs', 'src/lib/math.ts'), '../lib/math.ts');
+    assert.equal(relativeSpecifier('src', 'src/math.ts'), './math.ts');
+    assert.equal(relativeSpecifier('a/b', 'a/b/c/d.ts'), './c/d.ts');
+  });
+
+  test('TypeScript extensions', () => {
+    assert.equal(typescriptSpecifier('', 'a.ts', 'js'), './a.js');
+    assert.equal(typescriptSpecifier('', 'a.cts', 'js'), './a.cjs');
+    assert.equal(typescriptSpecifier('', 'a.ts', 'none'), './a');
+    assert.equal(typescriptSpecifier('', 'a.js', 'none'), './a.js', 'JavaScript keeps its extension');
+  });
+
+  test('Python module names from paths', () => {
+    assert.equal(pythonModuleName('combat.py'), 'combat');
+    assert.equal(pythonModuleName('game/combat.py'), 'game.combat');
+    assert.equal(pythonModuleName('game/__init__.py'), 'game');
   });
 });
 

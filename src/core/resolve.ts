@@ -66,3 +66,8 @@ function variableDefinition(base: NodeDefinition, node: GraphNode, variables: re
     outputs: base.outputs.map(typed)
   };
 }
+
+// A node without exec pins: evaluated where its outputs are used (docs/semantics.md, "Data flow").
+export function isPure(def: NodeDefinition): boolean {
+  return ![...def.inputs, ...def.outputs].some((p) => p.kind === 'exec');
+}

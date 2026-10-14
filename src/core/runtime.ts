@@ -4,7 +4,7 @@ import { LanguagePackRegistry } from './language-pack';
 import { DEFAULT_LANGUAGE, builtinLanguagePacks } from './languages';
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent } from './model';
 import { NodeRegistry } from './registry';
-import { NodeResolver, createResolver } from './resolve';
+import { NodeResolver, createResolver, isPure } from './resolve';
 import { defaultValue, formatValue, toBoolean, toNumber } from './values';
 
 interface RunState {
@@ -134,67 +134,72 @@ export class GraphRuntime {
       }
       case 'end':
         break;
-      default:
-        if (definition.implementation?.kind !== 'code') this.fail(context, node, `No runtime implementation for ${node.type}.`);
-        this.runCodeNode(context, node, definition, input, setOutput);
-        exit(Object.fromEntries(definition.outputs.filter((p) => p.kind === 'data').slice(0, 1).map((p) => [p.id, context.run.outputs.get(outputKey(graph, node, p.id))])));
+      default: {
+        const result = this.callNode(context, node, definition, input);
+        const output = definition.outputs.find((p) => p.kind === 'data');
+        if (output) setOutput(output.id, result);
+        exit(output ? { [output.id]: result } : {});
         continueFrom(definition.outputs.find((p) => p.kind === 'exec')?.id ?? 'execOut');
         break;
+      }
     }
 
     exit();
   }
 
-  private runCodeNode(
-    context: GraphContext,
-    node: GraphNode,
-    definition: NodeDefinition,
-    input: (pinId: string) => unknown,
-    setOutput: (pinId: string, value: unknown) => void
-  ): void {
-    if (definition.implementation?.kind !== 'code') return;
+  // Runs a code node's snippet and returns its first data output. Project functions can't run
+  // inside the editor (docs/code-as-nodes.md, "Simulate").
+  private callNode(context: GraphContext, node: GraphNode, definition: NodeDefinition, input: (pinId: string) => unknown): unknown {
+    const implementation = definition.implementation;
+    if (implementation?.kind === 'function') {
+      this.fail(context, node, `Simulate can't run your project's code ("${definition.displayName}" is ${implementation.name} in ${implementation.path}). Use Run to run the generated code.`);
+    }
+    if (implementation?.kind !== 'code') this.fail(context, node, `No runtime implementation for ${node.type}.`);
     const pack = this.languages.get(context.run.language) ?? this.fail(context, node, `Unknown graph language "${context.run.language}".`);
     if (!pack.simulator) this.fail(context, node, `Simulate can't run code node ${node.type}: ${pack.displayName} code can't run inside the editor.`);
-    const sources = definition.implementation.languages;
+    const sources = implementation.languages;
     const sourceLanguage = pack.simulator.sourceLanguages.find((key) => sources[key] !== undefined)
       ?? this.fail(context, node, `Code node ${node.type} has no ${pack.simulator.sourceLanguages.join(' or ')} implementation.`);
     const inputs = definition.inputs.filter((p) => p.kind === 'data').map((p) => ({ id: p.id, value: input(p.id) }));
-    let result: unknown;
     try {
-      result = pack.simulator.run(sources[sourceLanguage], inputs);
+      return pack.simulator.run(sources[sourceLanguage], inputs);
     } catch (error) {
       this.fail(context, node, error instanceof Error ? error.message : String(error));
     }
-    const output = definition.outputs.find((p) => p.kind === 'data');
-    if (output) setOutput(output.id, result);
   }
 
-  private inputValue(context: GraphContext, node: GraphNode, definition: NodeDefinition, pinId: string, rerouting = new Set<string>()): unknown {
+  // `following` holds the reroute and pure nodes being followed for one input, to catch data loops.
+  private inputValue(context: GraphContext, node: GraphNode, definition: NodeDefinition, pinId: string, following = new Set<string>()): unknown {
     const { graph } = context;
     const pin = definition.inputs.find((p) => p.id === pinId);
     const connection = graph.connections.find((c) => c.toNode === node.id && c.toPin === pinId);
     const source = connection && graph.nodes.find((n) => n.id === connection.fromNode);
     if (!connection || !source) return unconnectedValue(node, pin, pinId);
-    return this.outputValue(context, source, connection.fromPin, rerouting);
+    return this.outputValue(context, source, connection.fromPin, following);
   }
 
-  // `rerouting` holds the reroute nodes being followed for one input, to catch reroute loops.
-  private outputValue(context: GraphContext, node: GraphNode, pinId: string, rerouting: Set<string>): unknown {
+  private outputValue(context: GraphContext, node: GraphNode, pinId: string, following: Set<string>): unknown {
     const definition = context.run.resolve(node) ?? this.fail(context, node, `Unknown node type: ${node.type}`);
     const operation = nativeOperation(definition);
     // Get is pure and read on every use; Set's output is the variable's current value.
     if (operation === 'get-variable' || operation === 'set-variable') return context.run.variables.get(this.variableId(context, node)) ?? null;
     // Pure conversion: evaluated on every read.
-    if (operation === 'to-string') return formatValue(this.inputValue(context, node, definition, 'value', rerouting));
-    // Reroutes pass through whatever feeds them.
-    if (operation === 'reroute') {
-      if (rerouting.has(node.id)) this.fail(context, node, 'Reroute nodes are wired in a loop.');
-      rerouting.add(node.id);
+    if (operation === 'to-string') return formatValue(this.inputValue(context, node, definition, 'value', following));
+    const follow = (loopMessage: string, value: () => unknown): unknown => {
+      if (following.has(node.id)) this.fail(context, node, loopMessage);
+      following.add(node.id);
       try {
-        return this.inputValue(context, node, definition, 'in', rerouting);
+        return value();
       } finally {
-        rerouting.delete(node.id);
+        following.delete(node.id);
       }
+    };
+    // Reroutes pass through whatever feeds them.
+    if (operation === 'reroute') return follow('Reroute nodes are wired in a loop.', () => this.inputValue(context, node, definition, 'in', following));
+    // Pure code and function nodes run on every read (docs/semantics.md, "Data flow").
+    const kind = definition.implementation?.kind;
+    if ((kind === 'code' || kind === 'function') && isPure(definition)) {
+      return follow('Pure nodes are wired in a loop.', () => this.callNode(context, node, definition, (id) => this.inputValue(context, node, definition, id, following)));
     }
 
     // Impure: the value from the node's latest run, or the type default before it has run.

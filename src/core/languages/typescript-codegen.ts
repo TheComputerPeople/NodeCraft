@@ -1,5 +1,6 @@
 // Generates TypeScript, or JavaScript with JSDoc types, from Visual IR.
-import { IrBlock, IrCodeHelper, IrExpr, IrProgram, IrStatement, exprType } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrImport, IrProgram, IrStatement, calleeSignature, exprType } from '../compiler/ir';
+import { relativeSpecifier, typescriptSpecifier } from '../compiler/module-paths';
 import { NameScope, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode } from '../language-pack';
@@ -32,6 +33,7 @@ const nodeRunner: CodeRunner = {
 export function typescriptGenerator(flavor: TypeScriptFlavor): CodeGenerator {
   return {
     snippetLanguages: flavor.typed ? ['typescript', 'javascript'] : ['javascript'],
+    importLanguages: flavor.typed ? ['typescript', 'javascript'] : ['javascript'],
     outputFileName: (graphFileName) => `${graphFileName}.${flavor.typed ? 'ts' : 'js'}`,
     generate: (program, options) => new TypeScriptEmitter(program, options, flavor).emit(),
     runner: nodeRunner
@@ -45,11 +47,15 @@ class TypeScriptEmitter {
   private readonly slotNames = new Map<string, string>();
   private readonly helperNames = new Map<string, string>();
   private readonly blockNames = new Map<string, string>();
+  // Local names of imported functions, aliased where they would clash.
+  private readonly importNames = new Map<string, string>();
   private readonly className: string;
   private needsFormat = false;
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions, private readonly flavor: TypeScriptFlavor) {
     this.className = new NameScope(RESERVED).claim(program.className, 'pascal');
+    const moduleScope = new NameScope(RESERVED, [this.className, FORMAT_HELPER]);
+    for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
     // Member variables keep their names; internal fields are private (TypeScript) or underscored (JavaScript).
     const internal = flavor.typed ? '' : '_';
     for (const m of program.members) this.memberNames.set(m.id, this.names.claim(m.name));
@@ -64,6 +70,7 @@ class TypeScriptEmitter {
     out.line('// Do not edit: changes are overwritten when the graph is compiled.');
     out.line();
     const esm = flavor.typed || this.options.moduleFormat !== 'commonjs';
+    this.imports(esm);
     out.line(`${esm ? 'export ' : ''}class ${this.className} {`);
     out.indent();
 
@@ -84,6 +91,26 @@ class TypeScriptEmitter {
     }
     if (this.needsFormat) this.formatHelper();
     return { text: out.toString(), className: this.className, nodeLines: out.nodeLines };
+  }
+
+  // One import (or require) per module of project code the graph calls, sorted so that rearranging
+  // the graph doesn't reorder them.
+  private imports(esm: boolean): void {
+    const byModule = new Map<string, IrImport[]>();
+    for (const i of sortImports(this.program.imports)) {
+      const specifier = this.flavor.typed
+        ? typescriptSpecifier(this.options.outputDir ?? '', i.path, this.options.importExtension ?? 'ts')
+        : relativeSpecifier(this.options.outputDir ?? '', i.path);
+      byModule.set(specifier, [...(byModule.get(specifier) ?? []), i]);
+    }
+    for (const [specifier, imports] of [...byModule].sort(([a], [b]) => compare(a, b))) {
+      const names = imports.map((i) => {
+        const local = this.importNames.get(i.id)!;
+        return local === i.name ? local : `${i.name}${esm ? ' as ' : ': '}${local}`;
+      }).join(', ');
+      this.out.line(esm ? `import { ${names} } from ${JSON.stringify(specifier)};` : `const { ${names} } = require(${JSON.stringify(specifier)});`);
+    }
+    if (byModule.size) this.out.line();
   }
 
   // ---- Class members ------------------------------------------------------------------------
@@ -172,10 +199,8 @@ class TypeScriptEmitter {
         }
         out.line('}');
         break;
-      case 'callCode': {
-        const helper = this.program.helpers.find((h) => h.id === s.helper)!;
-        const args = s.args.map((a, i) => this.coerce(a, helper.params[i]?.type)).join(', ');
-        const call = `this.${this.helperNames.get(s.helper)}(${args})`;
+      case 'call': {
+        const call = this.call(s.callee, s.args);
         out.line(s.resultSlot ? `this.${this.slotNames.get(s.resultSlot)} = ${call};` : `${call};`);
         break;
       }
@@ -205,7 +230,15 @@ class TypeScriptEmitter {
         return this.text(e.value);
       case 'toBoolean':
         return this.typeOf(e.value)?.id === 'bool' && !this.typeOf(e.value)?.container ? this.expr(e.value) : `Boolean(${this.expr(e.value)})`;
+      case 'call':
+        return this.call(e.callee, e.args);
     }
+  }
+
+  private call(callee: IrCallee, args: IrExpr[]): string {
+    const params = calleeSignature(callee, this.program)?.params ?? [];
+    const list = args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ');
+    return callee.kind === 'helper' ? `this.${this.helperNames.get(callee.id)}(${list})` : `${this.importNames.get(callee.id)}(${list})`;
   }
 
   private operand(e: IrExpr): string {
@@ -279,4 +312,12 @@ class TypeScriptEmitter {
 
 function isNumeric(type: TypeRef | undefined): boolean {
   return !!type && !type.container && (type.id === 'int' || type.id === 'float');
+}
+
+function sortImports(imports: IrImport[]): IrImport[] {
+  return [...imports].sort((a, b) => compare(a.name, b.name));
+}
+
+function compare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }

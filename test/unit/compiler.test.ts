@@ -15,7 +15,7 @@ function registryWith(...extra: NodeDefinition[]): NodeRegistry {
 }
 
 const lower = (d: GraphDocument, registry = new NodeRegistry()): LowerResult =>
-  lowerDocument(d, { registry, languageName: 'TypeScript', snippetLanguages: ['typescript', 'javascript'] });
+  lowerDocument(d, { registry, languageName: 'TypeScript', snippetLanguages: ['typescript', 'javascript'], importLanguages: ['typescript', 'javascript'] });
 
 const codes = (diagnostics: CompileDiagnostic[], severity: 'error' | 'warning') =>
   diagnostics.filter((d) => d.severity === severity).map((d) => d.code);
@@ -187,7 +187,7 @@ describe('lowerDocument: code nodes', () => {
     assert.equal(helper.code, 'return value * 2 as number;');
     assert.deepEqual(helper.params, [{ pinId: 'value', type: { id: 'float' } }]);
     const [call] = result.program!.start;
-    assert.ok(call.kind === 'callCode' && call.resultSlot);
+    assert.ok(call.kind === 'call' && call.callee.kind === 'helper' && call.resultSlot);
   });
 
   test('without a snippet for the language are errors', () => {
@@ -199,6 +199,67 @@ describe('lowerDocument: code nodes', () => {
   test('with several data outputs produce only the first, with a warning', () => {
     const result = lower(graphWith('t.multi'), registryWith(codeNode('t.multi', { javascript: 'return 1;' }, 2)));
     assert.deepEqual(codes(result.diagnostics, 'warning'), ['extra-outputs']);
+  });
+});
+
+// A function from project code, as the importer describes it (docs/code-as-nodes.md).
+const projectFunction = (name: string, options: { pure?: boolean; language?: string; path?: string } = {}): NodeDefinition => ({
+  type: `fn:${options.language ?? 'typescript'}:${options.path ?? 'lib/math.ts'}#${name}`, version: 1, displayName: name, category: 'Project',
+  inputs: [
+    ...(options.pure ? [] : [{ id: 'execIn', name: '', kind: 'exec' as const, direction: 'input' as const }]),
+    { id: 'value', name: 'Value', kind: 'data', direction: 'input', type: { id: 'float' } }
+  ],
+  outputs: [
+    ...(options.pure ? [] : [{ id: 'execOut', name: '', kind: 'exec' as const, direction: 'output' as const }]),
+    { id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', type: { id: 'float' } }
+  ],
+  implementation: { kind: 'function', language: options.language ?? 'typescript', path: options.path ?? 'lib/math.ts', name }
+});
+
+describe('lowerDocument: pure nodes and project functions', () => {
+  test('a pure node is evaluated where each value is used', () => {
+    const double = projectFunction('double', { pure: true });
+    const result = lower(doc(
+      [node('s', 'core:event.start'), node('d', double.type, { 'pin:value': 4 }), node('p1', 'core:console.print'), node('p2', 'core:console.print')],
+      [wire('s', 'execOut', 'p1', 'execIn'), wire('p1', 'execOut', 'p2', 'execIn'), wire('d', 'returnValue', 'p1', 'value'), wire('d', 'returnValue', 'p2', 'value')]
+    ), registryWith(double));
+    assert.deepEqual(result.diagnostics, []);
+    const call = { kind: 'call', callee: { kind: 'import', id: double.type }, args: [{ kind: 'literal', value: 4 }] };
+    assert.deepEqual(result.program!.start.map((s) => s.kind === 'print' && s.value), [call, call]);
+    assert.deepEqual(result.program!.slots, [], 'pure nodes need no storage');
+  });
+
+  test('an impure project function is called once, its result stored, and imported', () => {
+    const save = projectFunction('save');
+    const result = lower(doc(
+      [node('s', 'core:event.start'), node('f', save.type)],
+      [wire('s', 'execOut', 'f', 'execIn')]
+    ), registryWith(save));
+    const [call] = result.program!.start;
+    assert.ok(call.kind === 'call' && call.callee.kind === 'import' && call.resultSlot);
+    assert.deepEqual(result.program!.imports, [{
+      id: save.type, name: 'save', language: 'typescript', path: 'lib/math.ts',
+      params: [{ pinId: 'value', type: { id: 'float' } }], returns: { id: 'float' }
+    }]);
+  });
+
+  test('a function in another language is an error on each node that calls it', () => {
+    const fn = projectFunction('double', { language: 'python', path: 'lib/math.py' });
+    const result = lower(doc(
+      [node('s', 'core:event.start'), node('a', fn.type), node('b', fn.type)],
+      [wire('s', 'execOut', 'a', 'execIn'), wire('a', 'execOut', 'b', 'execIn')]
+    ), registryWith(fn));
+    assert.deepEqual(codes(result.diagnostics, 'error'), ['wrong-language', 'wrong-language']);
+    assert.match(result.diagnostics[0].message, /"double" is Python code \(lib\/math\.py\); a TypeScript graph can't call it/);
+  });
+
+  test('pure nodes wired in a loop are an error', () => {
+    const double = projectFunction('double', { pure: true });
+    const result = lower(doc(
+      [node('s', 'core:event.start'), node('a', double.type), node('b', double.type), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'p', 'execIn'), wire('a', 'returnValue', 'b', 'value'), wire('b', 'returnValue', 'a', 'value'), wire('a', 'returnValue', 'p', 'value')]
+    ), registryWith(double));
+    assert.deepEqual(codes(result.diagnostics, 'error'), ['data-cycle']);
   });
 });
 

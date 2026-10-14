@@ -44,6 +44,13 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 
 - A code node runs the snippet for the graph's language. Its data inputs are the snippet's parameters, and the snippet's return value becomes the node's first data output. Additional data outputs aren't supported yet.
 - In a snippet, `${pinId}` refers to an input. Inputs whose ids are valid identifiers in the target language can also be used by name.
+- A code node without exec pins is pure: it runs each time one of its outputs is read, like any pure node.
+
+## Project functions
+
+- A node for a function in the project's own code ([code-as-nodes.md](code-as-nodes.md)) calls that function with its data inputs, in pin order. The return value becomes the "Return Value" output.
+- A function marked `@blueprint pure` is a pure node, so it is called each time its value is read. Mark a function pure only if calling it more often, or less often, changes nothing.
+- Simulate can't run project code: reaching a project function is an error that stops the run. Run executes the generated code, which imports the function.
 
 ## Errors
 

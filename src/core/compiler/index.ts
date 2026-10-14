@@ -33,7 +33,7 @@ export function compileDocument(doc: GraphDocument, options: CompileOptions): Co
     return { diagnostics: [{ severity: 'error', code: 'no-generator', message: `${pack.displayName} graphs can't be compiled yet.` }] };
   }
 
-  const lowered = lowerDocument(doc, { registry: options.registry, languageName: pack.displayName, snippetLanguages: generator.snippetLanguages });
+  const lowered = lowerDocument(doc, { registry: options.registry, languageName: pack.displayName, snippetLanguages: generator.snippetLanguages, importLanguages: generator.importLanguages });
   if (!lowered.program) return { diagnostics: lowered.diagnostics };
   const code = generator.generate(lowered.program, options.generate);
   return {

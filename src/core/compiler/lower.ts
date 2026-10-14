@@ -2,10 +2,10 @@
 // The rules implemented here are those of docs/semantics.md.
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from '../model';
 import { NodeRegistry } from '../registry';
-import { NodeResolver, createResolver } from '../resolve';
+import { NodeResolver, createResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
-import { IrBlock, IrCodeHelper, IrExpr, IrMember, IrProgram, IrSlot, IrStatement, SourceRef, exprType } from './ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
 
 export interface LowerOptions {
   registry: NodeRegistry;
@@ -13,6 +13,8 @@ export interface LowerOptions {
   languageName: string;
   // Keys of a code node's `languages` map the target can use, most preferred first.
   snippetLanguages: string[];
+  // Languages of project code the target can import (docs/code-as-nodes.md, "Node identity").
+  importLanguages: string[];
 }
 
 export interface LowerResult {
@@ -50,11 +52,12 @@ class Lowerer {
   private readonly members = new Map<string, IrMember>();
   private readonly slots = new Map<string, IrSlot>();
   private readonly helpers = new Map<string, IrCodeHelper>();
+  private readonly imports = new Map<string, IrImport>();
   private readonly blocks = new Map<string, IrBlock>();
 
   private readonly resolve: NodeResolver;
-  // Reroute nodes being followed for the current input, to catch reroute loops.
-  private readonly rerouting = new Set<string>();
+  // Reroute and pure nodes being followed for the current input, to catch data loops.
+  private readonly following = new Set<string>();
 
   constructor(private readonly doc: GraphDocument, private readonly options: LowerOptions) {
     this.resolve = createResolver(options.registry, doc.variables);
@@ -101,6 +104,7 @@ class Lowerer {
         members: [...this.members.values()],
         slots: [...this.slots.values()],
         helpers: [...this.helpers.values()],
+        imports: [...this.imports.values()],
         blocks: [...this.blocks.values()],
         start
       }
@@ -232,25 +236,27 @@ class Lowerer {
         return [];
     }
 
-    if (def.implementation?.kind !== 'code') {
+    if (def.implementation?.kind !== 'code' && def.implementation?.kind !== 'function') {
       this.error('no-codegen', `"${def.displayName}" can't be compiled to ${this.options.languageName}.`, info.graph.id, nodeId);
       return [];
     }
-    const helper = this.codeHelper(info, node, def);
-    if (!helper) return [];
+    const execOut = def.outputs.find((p) => p.kind === 'exec')?.id ?? 'execOut';
+    const callee = this.callee(info, node, def);
+    // Keep going after an error, so every node on the path is checked.
+    if (!callee) return next(execOut);
     const output = def.outputs.find((p) => p.kind === 'data');
     if (def.outputs.filter((p) => p.kind === 'data').length > 1) {
       this.warning('extra-outputs', `"${def.displayName}" has several data outputs; only "${output?.name || output?.id}" is produced.`, info.graph.id, nodeId);
     }
     return [
       {
-        kind: 'callCode',
-        helper: helper.id,
-        args: helper.params.map((p) => this.inputExpr(info, node, def, p.pinId)),
+        kind: 'call',
+        callee,
+        args: dataInputs(def).map((p) => this.inputExpr(info, node, def, p.id)),
         ...(output ? { resultSlot: this.slot(info, node, def, output.id) } : {}),
         source
       },
-      ...next(def.outputs.find((p) => p.kind === 'exec')?.id ?? 'execOut')
+      ...next(execOut)
     ];
   }
 
@@ -270,20 +276,37 @@ class Lowerer {
     if (operation === 'to-string') return { kind: 'toText', value: this.inputExpr(info, sourceNode, sourceDef, 'value') };
     // Reroutes are transparent: read whatever feeds them.
     if (operation === 'reroute') {
-      if (this.rerouting.has(sourceNode.id)) {
-        this.error('data-cycle', 'Reroute nodes are wired in a loop.', info.graph.id, sourceNode.id);
-        return { kind: 'default', type: pin?.type };
-      }
-      this.rerouting.add(sourceNode.id);
-      const value = this.inputExpr(info, sourceNode, sourceDef, 'in');
-      this.rerouting.delete(sourceNode.id);
-      return value;
+      return this.follow(info, sourceNode, 'Reroute nodes are wired in a loop.', pin, () => this.inputExpr(info, sourceNode, sourceDef, 'in'));
+    }
+    // Pure code and function nodes are evaluated where their value is used (docs/semantics.md).
+    const kind = sourceDef.implementation?.kind;
+    if (isPure(sourceDef) && (kind === 'code' || kind === 'function')) {
+      return this.follow(info, sourceNode, 'Pure nodes are wired in a loop.', pin, () => {
+        const callee = this.callee(info, sourceNode, sourceDef);
+        if (!callee) return { kind: 'default', type: pin?.type };
+        return { kind: 'call', callee, args: dataInputs(sourceDef).map((p) => this.inputExpr(info, sourceNode, sourceDef, p.id)) };
+      });
     }
     if (operation === 'get-variable' || operation === 'set-variable') {
       const member = this.variableMember(info, sourceNode, sourceDef);
       return member ? { kind: 'member', member: member.id } : { kind: 'default', type: pin?.type };
     }
     return { kind: 'output', slot: this.slot(info, sourceNode, sourceDef, source.pin) };
+  }
+
+  // Evaluates `value` for a node feeding an input, reporting a loop if that node is already being
+  // followed for the same input.
+  private follow(info: GraphInfo, node: GraphNode, loopMessage: string, pin: PinDefinition | undefined, value: () => IrExpr): IrExpr {
+    if (this.following.has(node.id)) {
+      this.error('data-cycle', loopMessage, info.graph.id, node.id);
+      return { kind: 'default', type: pin?.type };
+    }
+    this.following.add(node.id);
+    try {
+      return value();
+    } finally {
+      this.following.delete(node.id);
+    }
   }
 
   // The member a Get/Set node is bound to (src/core/resolve.ts).
@@ -307,6 +330,38 @@ class Lowerer {
     return id;
   }
 
+  private callee(info: GraphInfo, node: GraphNode, def: NodeDefinition): IrCallee | undefined {
+    if (def.implementation?.kind === 'function') {
+      const imported = this.importFor(info, node, def);
+      return imported && { kind: 'import', id: imported.id };
+    }
+    const helper = this.codeHelper(info, node, def);
+    return helper && { kind: 'helper', id: helper.id };
+  }
+
+  // A function from the project's code, which the generated file imports.
+  private importFor(info: GraphInfo, node: GraphNode, def: NodeDefinition): IrImport | undefined {
+    const existing = this.imports.get(def.type);
+    if (existing) return existing;
+    const implementation = def.implementation;
+    if (implementation?.kind !== 'function') return undefined;
+    if (!this.options.importLanguages.includes(implementation.language)) {
+      this.error('wrong-language', `"${def.displayName}" is ${languageName(implementation.language)} code (${implementation.path}); a ${this.options.languageName} graph can't call it.`, info.graph.id, node.id);
+      return undefined;
+    }
+    const imported: IrImport = {
+      id: def.type,
+      name: implementation.name,
+      language: implementation.language,
+      path: implementation.path,
+      ...(implementation.module ? { module: implementation.module } : {}),
+      params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
+      returns: def.outputs.find((p) => p.kind === 'data')?.type
+    };
+    this.imports.set(def.type, imported);
+    return imported;
+  }
+
   private codeHelper(info: GraphInfo, node: GraphNode, def: NodeDefinition): IrCodeHelper | undefined {
     const existing = this.helpers.get(def.type);
     if (existing) return existing;
@@ -321,7 +376,7 @@ class Lowerer {
     const helper: IrCodeHelper = {
       id: def.type,
       name: def.type,
-      params: def.inputs.filter((p) => p.kind === 'data').map((p) => ({ pinId: p.id, type: p.type })),
+      params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
       returns: def.outputs.find((p) => p.kind === 'data')?.type,
       code: sources[language]
     };
@@ -329,8 +384,8 @@ class Lowerer {
     return helper;
   }
 
-  private programView(): Pick<IrProgram, 'members' | 'slots'> {
-    return { members: [...this.members.values()], slots: [...this.slots.values()] };
+  private programView(): ProgramTypes {
+    return { members: [...this.members.values()], slots: [...this.slots.values()], helpers: [...this.helpers.values()], imports: [...this.imports.values()] };
   }
 
   private error(code: string, message: string, graphId?: string, nodeId?: string): void {
@@ -356,5 +411,15 @@ function inputKey(nodeId: string, pinId: string): string {
 
 function nativeOperation(def: NodeDefinition): string {
   return def.implementation?.kind === 'native' ? def.implementation.operation : '';
+}
+
+function dataInputs(def: NodeDefinition): PinDefinition[] {
+  return def.inputs.filter((p) => p.kind === 'data');
+}
+
+const LANGUAGE_NAMES: Record<string, string> = { typescript: 'TypeScript', javascript: 'JavaScript', python: 'Python' };
+
+function languageName(id: string): string {
+  return LANGUAGE_NAMES[id] ?? id;
 }
 

@@ -35,7 +35,21 @@ export interface NodeDefinition {
 export type NodeImplementation =
   | { kind: 'native'; operation: string }
   | { kind: 'code'; languages: Record<string, string>; defaultLanguage?: string }
-  | { kind: 'subgraph'; graph: string };
+  | { kind: 'subgraph'; graph: string }
+  | FunctionImplementation;
+
+// A function in the project's own code, which generated code imports (docs/code-as-nodes.md).
+export interface FunctionImplementation {
+  kind: 'function';
+  // The module's language: "typescript", "javascript" or "python".
+  language: string;
+  // The module's path relative to the workspace folder, with "/" separators.
+  path: string;
+  // The function's exported name.
+  name: string;
+  // Python: the module's import name, e.g. "game.combat".
+  module?: string;
+}
 
 export interface GraphNode {
   id: string;

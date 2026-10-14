@@ -32,6 +32,12 @@ export interface GenerateOptions {
   sourceFileName: string;
   // JavaScript only: the project's module system (from the nearest package.json).
   moduleFormat?: 'esm' | 'commonjs';
+  // The generated file's folder, relative to the workspace folder with "/" separators ("" for the
+  // folder itself). Imports of project code are relative to it.
+  outputDir?: string;
+  // TypeScript only: how relative imports of TypeScript modules end (docs/code-as-nodes.md,
+  // "Generated imports"). Defaults to "ts".
+  importExtension?: 'ts' | 'js' | 'none';
 }
 
 export interface GeneratedCode {
@@ -55,6 +61,8 @@ export interface CodeRunner {
 export interface CodeGenerator {
   // Keys of a code node's `languages` map usable in generated code, most preferred first.
   snippetLanguages: string[];
+  // Languages of project code that generated code can import and call (docs/code-as-nodes.md).
+  importLanguages: string[];
   // Name of the generated file for a graph file, following the language's import rules
   // (docs/output-placement.md): "Inventory.vgraph" → "Inventory.vgraph.ts" or "inventory_vgraph.py".
   outputFileName(graphFileName: string): string;

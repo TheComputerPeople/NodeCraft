@@ -9,8 +9,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { compileDocument } from '../../src/core/compiler';
+import { GenerateOptions } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
-import { GraphDocument, RuntimeLogEvent } from '../../src/core/model';
+import { GraphDocument, NodeDefinition, RuntimeLogEvent } from '../../src/core/model';
 import { NodeRegistry, parseNodeDefinition } from '../../src/core/registry';
 import { GraphRuntime } from '../../src/core/runtime';
 import { parseDocument } from '../../src/core/serializer';
@@ -121,6 +122,126 @@ describe('generated code type-checks', () => {
       fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
         compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
         files
+      }));
+      const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+      const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    });
+  }
+});
+
+// Graphs calling the project's own functions (docs/code-as-nodes.md): the generated code imports
+// real modules, runs with the real toolchain and type-checks. Simulate can't run project code.
+describe('project functions', () => {
+  // Start → Add To Total(5) → Print(Double(its result)) → Add To Total(7) → Print(its result).
+  // Add To Total keeps a running total, so an extra call would show up in the output.
+  const MODULES: Record<string, { path: string; text: string }> = {
+    typescript: {
+      path: 'lib/score.ts',
+      text: 'let total = 0;\nexport function addToTotal(amount: number): number {\n  total += amount;\n  return total;\n}\nexport function double(value: number): number {\n  return value * 2;\n}\n'
+    },
+    'javascript-esm': {
+      path: 'lib/score.mjs',
+      text: 'let total = 0;\n/** @param {number} amount @returns {number} */\nexport function addToTotal(amount) {\n  total += amount;\n  return total;\n}\n/** @param {number} value @returns {number} */\nexport function double(value) {\n  return value * 2;\n}\n'
+    },
+    'javascript-commonjs': {
+      path: 'lib/score.cjs',
+      text: 'let total = 0;\n/** @param {number} amount @returns {number} */\nfunction addToTotal(amount) {\n  total += amount;\n  return total;\n}\n/** @param {number} value @returns {number} */\nfunction double(value) {\n  return value * 2;\n}\nmodule.exports = { addToTotal, double };\n'
+    },
+    // Next to the generated file: its folder is the working directory, so it is on sys.path.
+    python: {
+      path: 'graphs/score.py',
+      text: 'total = 0\n\n\ndef add_to_total(amount: float) -> float:\n    global total\n    total += amount\n    return total\n\n\ndef double(value: float) -> float:\n    return value * 2\n'
+    }
+  };
+
+  function project(language: string, key: string): { registry: NodeRegistry; document: GraphDocument } {
+    const modulePath = MODULES[key].path;
+    const fn = (name: string, pure: boolean): NodeDefinition => ({
+      type: `fn:${language}:${modulePath}#${name}`, version: 1, displayName: name, category: 'Project',
+      inputs: [
+        ...(pure ? [] : [{ id: 'execIn', name: '', kind: 'exec' as const, direction: 'input' as const }]),
+        { id: 'value', name: 'Value', kind: 'data', direction: 'input', type: { id: 'float' } }
+      ],
+      outputs: [
+        ...(pure ? [] : [{ id: 'execOut', name: '', kind: 'exec' as const, direction: 'output' as const }]),
+        { id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', type: { id: 'float' } }
+      ],
+      implementation: { kind: 'function', language, path: modulePath, name, ...(language === 'python' ? { module: 'score' } : {}) }
+    });
+    const add = fn(language === 'python' ? 'add_to_total' : 'addToTotal', false);
+    const double = fn('double', true);
+    const r = registry();
+    r.registerMany([add, double]);
+    const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+    const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}`, fromNode, fromPin, toNode, toPin });
+    const document: GraphDocument = {
+      schemaVersion: 3, name: 'Score', kind: 'class', language, variables: [],
+      graphs: [{
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [
+          n('s', 'core:event.start'), n('a1', add.type, { 'pin:value': 5 }), n('d', double.type), n('p1', 'core:console.print'),
+          n('a2', add.type, { 'pin:value': 7 }), n('p2', 'core:console.print')
+        ],
+        connections: [
+          w('s', 'execOut', 'a1', 'execIn'), w('a1', 'execOut', 'p1', 'execIn'), w('p1', 'execOut', 'a2', 'execIn'), w('a2', 'execOut', 'p2', 'execIn'),
+          w('a1', 'returnValue', 'd', 'value'), w('d', 'returnValue', 'p1', 'value'), w('a2', 'returnValue', 'p2', 'value')
+        ]
+      }]
+    };
+    return { registry: r, document };
+  }
+
+  // Writes the module and the generated file into a fresh project folder.
+  function build(language: string, key: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string } {
+    const { registry: r, document } = project(language, key);
+    const dir = path.join(workDir, `project-${key}`);
+    const module = MODULES[key];
+    fs.mkdirSync(path.join(dir, path.dirname(module.path)), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
+    fs.writeFileSync(path.join(dir, module.path), module.text);
+    const result = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'score.vgraph', outputDir: 'graphs', ...generate } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'graphs', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    return { file, className: result.output!.className, dir };
+  }
+
+  test('Simulate stops at the first project function', () => {
+    const { registry: r, document } = project('typescript', 'typescript');
+    const events: RuntimeLogEvent[] = [];
+    new GraphRuntime(r, (e) => events.push(e)).run(document);
+    assert.equal(events.find((e) => e.kind === 'error')?.nodeId, 'a1');
+  });
+
+  for (const target of [
+    { label: 'TypeScript', language: 'typescript', key: 'typescript' },
+    { label: 'JavaScript (ES modules)', language: 'javascript', key: 'javascript-esm', moduleFormat: 'esm' as const },
+    { label: 'JavaScript (CommonJS)', language: 'javascript', key: 'javascript-commonjs', moduleFormat: 'commonjs' as const },
+    { label: 'Python', language: 'python', key: 'python' }
+  ]) {
+    test(`${target.label} imports and calls them`, async (t) => {
+      const { file, className, dir } = build(target.language, target.key, { moduleFormat: target.moduleFormat });
+      let outcome;
+      try {
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), timeoutMs: 30000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), ['10', '12'], `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  for (const { language, key, flags } of [
+    { language: 'typescript', key: 'typescript', flags: { allowImportingTsExtensions: true } },
+    { language: 'javascript', key: 'javascript-esm', flags: { allowJs: true, checkJs: true } }
+  ]) {
+    test(`${language} calling them type-checks under --strict`, () => {
+      const { file, dir } = build(language, key);
+      fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
+        files: [path.relative(dir, file)]
       }));
       const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
       const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });

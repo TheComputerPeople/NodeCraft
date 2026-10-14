@@ -200,6 +200,39 @@ describe('GraphRuntime: code nodes', () => {
   });
 });
 
+describe('GraphRuntime: pure nodes and project functions', () => {
+  // A pure code node: no exec pins, so it runs each time its output is read.
+  const counter: NodeDefinition = {
+    type: 't.counter', version: 1, displayName: 'Counter', category: 'Test', inputs: [],
+    outputs: [{ id: 'result', name: 'Result', kind: 'data', direction: 'output', type: { id: 'int' } }],
+    implementation: { kind: 'code', languages: { javascript: 'globalThis.__vgraphCount = (globalThis.__vgraphCount ?? 0) + 1; return globalThis.__vgraphCount;' } }
+  };
+  const project: NodeDefinition = {
+    type: 'fn:typescript:lib/save.ts#save', version: 1, displayName: 'Save', category: 'Project',
+    inputs: [{ id: 'execIn', name: '', kind: 'exec', direction: 'input' }],
+    outputs: [{ id: 'execOut', name: '', kind: 'exec', direction: 'output' }],
+    implementation: { kind: 'function', language: 'typescript', path: 'lib/save.ts', name: 'save' }
+  };
+  const registry = new NodeRegistry();
+  registry.registerMany([counter, project]);
+
+  test('a pure node runs again for every read', () => {
+    delete (globalThis as { __vgraphCount?: number }).__vgraphCount;
+    const events = run(doc(
+      [node('s', 'core:event.start'), node('c', 't.counter'), node('p1', 'core:console.print'), node('p2', 'core:console.print')],
+      [wire('s', 'execOut', 'p1', 'execIn'), wire('p1', 'execOut', 'p2', 'execIn'), wire('c', 'result', 'p1', 'value'), wire('c', 'result', 'p2', 'value')]
+    ), registry);
+    assert.deepEqual(logs(events), ['1', '2']);
+  });
+
+  test('a project function stops Simulate with a pointer to Run', () => {
+    const events = run(doc([node('s', 'core:event.start'), node('f', project.type)], [wire('s', 'execOut', 'f', 'execIn')]), registry);
+    const error = events.find((e) => e.kind === 'error');
+    assert.equal(error?.nodeId, 'f');
+    assert.match(error?.message ?? '', /Simulate can't run your project's code \("Save" is save in lib\/save\.ts\)\. Use Run/);
+  });
+});
+
 describe('GraphRuntime: documents', () => {
   test('runs the Start nodes of every event graph, tagging events with their graph', () => {
     const d = doc([node('s', 'core:event.start'), node('p', 'core:console.print', { 'pin:value': 'first graph' })], [wire('s', 'execOut', 'p', 'execIn')]);
