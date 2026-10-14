@@ -2,6 +2,7 @@
 // source code. Names here are raw (taken from graph ids); each generator makes them legal and
 // unique in its language.
 import { TypeRef } from '../types';
+import { EnumInfo, StructInfo, UserType } from '../user-types';
 
 // The node a piece of IR came from, for diagnostics and node markers in generated code.
 export interface SourceRef {
@@ -36,7 +37,13 @@ export type IrExpr =
   // An input of the function being generated (its Function Entry node's output).
   | { kind: 'param'; function: string; id: string }
   // A pure call of a function graph, reading one of its outputs.
-  | { kind: 'callFunction'; function: string; args: IrExpr[]; output: string };
+  | { kind: 'callFunction'; function: string; args: IrExpr[]; output: string }
+  // A new struct value (`type` is "struct:<Name>") from its fields, in the struct's order.
+  | { kind: 'makeStruct'; type: string; fields: IrExpr[] }
+  // One field (by id) of a struct value.
+  | { kind: 'structField'; value: IrExpr; type: string; field: string }
+  // An enum's value (`value` is the enumerator's id).
+  | { kind: 'enumValue'; type: string; value: string };
 
 // `+` and `-` are integer arithmetic on counters; the rest give booleans.
 export type BinaryOp = '<' | '<=' | '>=' | '==' | '!=' | '&&' | '||' | '+' | '-';
@@ -125,7 +132,14 @@ export interface IrImport {
   // A function with several outputs (a graph library's): its result holds them, shaped as the
   // language returns several values (an object, a tuple, a named tuple).
   outputs?: { id: string; name: string; type?: TypeRef }[];
+  // A struct or enum the program uses (`id` is its type id), imported from its generated file.
+  userType?: UserType;
 }
+
+// The type a structure or enumeration document declares, with each field's initial value.
+export type IrDeclaration =
+  | { kind: 'struct'; type: StructInfo; initial: IrExpr[] }
+  | { kind: 'enum'; type: EnumInfo };
 
 export interface IrBlock {
   id: string;
@@ -146,6 +160,13 @@ export interface IrProgram {
   functions: IrFunction[];
   // Body of the class's start method: every Start node, in graph and node order.
   start: IrStatement[];
+  // A structure or enumeration document: the generated file declares this type instead of a class.
+  declaration?: IrDeclaration;
+}
+
+// The structs and enums a program uses, by type id.
+export function userTypes(program: Pick<IrProgram, 'imports'>): Map<string, UserType> {
+  return new Map(program.imports.flatMap((i) => (i.userType ? [[i.id, i.userType] as const] : [])));
 }
 
 // Static type of an expression, as far as it is known.
@@ -183,6 +204,13 @@ export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefin
       return program.functions.find((f) => f.id === expr.function)?.params.find((p) => p.id === expr.id)?.type;
     case 'callFunction':
       return program.functions.find((f) => f.id === expr.function)?.outputs.find((o) => o.id === expr.output)?.type;
+    case 'makeStruct':
+    case 'enumValue':
+      return { id: expr.type };
+    case 'structField': {
+      const type = program.imports.find((i) => i.id === expr.type)?.userType;
+      return type?.kind === 'struct' ? type.fields.find((f) => f.id === expr.field)?.type : undefined;
+    }
   }
 }
 

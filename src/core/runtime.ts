@@ -7,6 +7,7 @@ import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
 import { expandDocument, isExpandedNode, macroProblemKey, visibleNodeId } from './macros';
+import { StructValue, TypeLookup, typeLookup } from './user-types';
 import { NodeResolver, createResolver, isPure } from './resolve';
 import { defaultValue, formatValue, fromStored, toBoolean, toNumber } from './values';
 
@@ -20,6 +21,8 @@ interface RunState {
   document?: string;
   // Why macro instances that couldn't be expanded can't be (src/core/macros.ts).
   macroProblems: Map<string, string>;
+  // The workspace's structs and enums (src/core/user-types.ts).
+  types: TypeLookup;
 }
 
 // What one run of a graph keeps: the event graphs share one frame (the object's), and each call
@@ -71,7 +74,7 @@ export class GraphRuntime {
   run(doc: GraphDocument): void {
     const run = this.runState(doc);
     const objectFrame: Frame = { outputs: new Map(), state: new Map(), params: new Map(), locals: new Map(), depth: 0 };
-    for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue !== undefined ? fromStored(variable.defaultValue, variable.type) : defaultValue(variable.type));
+    for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue !== undefined ? fromStored(variable.defaultValue, variable.type, run.types) : defaultValue(variable.type, run.types));
 
     const entries = run.doc.graphs
       .filter((g) => g.kind === 'event')
@@ -166,6 +169,22 @@ export class GraphRuntime {
         continueFrom('execOut');
         return;
       }
+    }
+
+    const user = definition.implementation;
+    if (user?.kind === 'struct' && user.operation === 'set-members') {
+      const result = this.setMembers(context, node, definition, input);
+      setOutput('result', result);
+      exit({ result });
+      continueFrom('execOut');
+      return;
+    }
+    if (user?.kind === 'enum' && user.operation === 'switch') {
+      const selection = input('selection');
+      const chosen = user.type.enumerators.find((e) => e.name === selection);
+      exit({ selection });
+      if (chosen) continueFrom(chosen.id);
+      return;
     }
 
     if (this.runFlowControl(context, node, definition, entry, input, setOutput, continueFrom)) {
@@ -380,7 +399,8 @@ export class GraphRuntime {
   // A run of `doc`, with the macros it uses expanded (each use is a copy of the macro's nodes).
   private runState(original: GraphDocument, document?: string): RunState {
     const { doc, problems } = expandDocument(original, (type) => this.registry.get(type));
-    return { doc, variables: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc), macroProblems: problems, ...(document ? { document } : {}) };
+    const language = doc.language || DEFAULT_LANGUAGE;
+    return { doc, variables: new Map(), language, resolve: createResolver(this.registry, doc), macroProblems: problems, types: typeLookup(this.registry.all(), language), ...(document ? { document } : {}) };
   }
 
   private runFunction(context: GraphContext, node: GraphNode, run: RunState, graph: Graph, input: (pinId: string) => unknown): Map<string, unknown> {
@@ -389,7 +409,7 @@ export class GraphRuntime {
     const frame: Frame = {
       outputs: new Map(), state: new Map(), depth: context.frame.depth + 1,
       params: new Map(signature.inputs.filter((p) => p.kind === 'data').map((p) => [p.id, input(p.id)])),
-      locals: new Map((graph.localVariables ?? []).map((v) => [v.id, v.defaultValue !== undefined ? fromStored(v.defaultValue, v.type) : defaultValue(v.type)]))
+      locals: new Map((graph.localVariables ?? []).map((v) => [v.id, v.defaultValue !== undefined ? fromStored(v.defaultValue, v.type, run.types) : defaultValue(v.type, run.types)]))
     };
     const outputs = signature.outputs.filter((p) => p.kind === 'data');
     const entry = graph.nodes.find((n) => n.type === FUNCTION_ENTRY) ?? this.fail(context, node, `Function "${graph.name}" has no Function Entry node.`);
@@ -397,9 +417,26 @@ export class GraphRuntime {
       this.executeNode({ run, graph, frame, executing: new Set() }, entry);
     } catch (error) {
       if (!(error instanceof ReturnSignal)) throw error;
-      return new Map(outputs.map((p) => [p.id, error.values.has(p.id) ? error.values.get(p.id) : defaultValue(p.type)]));
+      return new Map(outputs.map((p) => [p.id, error.values.has(p.id) ? error.values.get(p.id) : defaultValue(p.type, run.types)]));
     }
-    return new Map(outputs.map((p) => [p.id, defaultValue(p.type)]));
+    return new Map(outputs.map((p) => [p.id, defaultValue(p.type, run.types)]));
+  }
+
+  // Set members in: the struct with the node's member pins changed. A struct read from a variable
+  // (its Get node) is written back to the variable, as Unreal's by-reference input does.
+  private setMembers(context: GraphContext, node: GraphNode, definition: NodeDefinition, input: (pinId: string) => unknown): StructValue | null {
+    const value = input('struct');
+    if (!(value instanceof StructValue)) return null;
+    const members = definition.inputs.filter((p) => p.kind === 'data' && p.id !== 'struct');
+    const result = value.with(new Map(members.map((p) => [p.id, input(p.id)])));
+    const wire = context.graph.connections.find((c) => c.toNode === node.id && c.toPin === 'struct');
+    const source = wire && context.graph.nodes.find((n) => n.id === wire.fromNode);
+    const sourceDefinition = source && context.run.resolve(source);
+    if (source && sourceDefinition && nativeOperation(sourceDefinition) === 'get-variable') {
+      const id = this.variableId(context, source);
+      this.variables(context, id).set(id, result);
+    }
+    return result;
   }
 
   // Where a variable lives: the call's locals, or the object's members.
@@ -434,7 +471,7 @@ export class GraphRuntime {
     const pin = definition.inputs.find((p) => p.id === pinId);
     const connection = graph.connections.find((c) => c.toNode === node.id && c.toPin === pinId);
     const source = connection && graph.nodes.find((n) => n.id === connection.fromNode);
-    if (!connection || !source) return unconnectedValue(node, pin, pinId);
+    if (!connection || !source) return unconnectedValue(node, pin, pinId, context.run.types);
     return this.outputValue(context, source, connection.fromPin, following);
   }
 
@@ -448,7 +485,20 @@ export class GraphRuntime {
     }
     if (operation === 'macro-instance') this.fail(context, node, this.macroProblem(context, node));
     // A function's inputs, read from its entry node.
-    if (operation === 'function-entry') return context.frame.params.get(pinId) ?? defaultValue(definition.outputs.find((p) => p.id === pinId)?.type);
+    if (operation === 'function-entry') return context.frame.params.get(pinId) ?? defaultValue(definition.outputs.find((p) => p.id === pinId)?.type, context.run.types);
+    // Make and Break are pure; so are an enum's == and !=.
+    const user = definition.implementation;
+    if (user?.kind === 'struct' && user.operation === 'make') {
+      return new StructValue(user.type, new Map(user.type.fields.map((f) => [f.id, this.inputValue(context, node, definition, f.id, following)])));
+    }
+    if (user?.kind === 'struct' && user.operation === 'break') {
+      const value = this.inputValue(context, node, definition, 'struct', following);
+      return value instanceof StructValue ? value.get(pinId) : null;
+    }
+    if (user?.kind === 'enum' && (user.operation === 'equal' || user.operation === 'not-equal')) {
+      const same = this.inputValue(context, node, definition, 'a', following) === this.inputValue(context, node, definition, 'b', following);
+      return user.operation === 'equal' ? same : !same;
+    }
     // A pure function's call: called on every read.
     if (operation === 'call-function' && isPure(definition)) {
       const outputs = this.callFunction(context, node, (id) => this.inputValue(context, node, definition, id, following));
@@ -490,7 +540,7 @@ export class GraphRuntime {
     // Impure: the value from the node's latest run, or the type default before it has run.
     const pin = definition.outputs.find((p) => p.id === pinId);
     const key = outputKey(context.graph, node, pinId);
-    return context.frame.outputs.has(key) ? context.frame.outputs.get(key) : defaultValue(pin?.type);
+    return context.frame.outputs.has(key) ? context.frame.outputs.get(key) : defaultValue(pin?.type, context.run.types);
   }
 
   private macroProblem(context: GraphContext, node: GraphNode): string {
@@ -506,11 +556,11 @@ export class GraphRuntime {
   }
 }
 
-function unconnectedValue(node: GraphNode, pin: PinDefinition | undefined, pinId: string): unknown {
+function unconnectedValue(node: GraphNode, pin: PinDefinition | undefined, pinId: string, types: TypeLookup): unknown {
   const stored = node.properties[`pin:${pinId}`];
-  if (stored !== undefined) return fromStored(stored, pin?.type);
-  if (pin?.defaultValue !== undefined) return fromStored(pin.defaultValue, pin?.type);
-  return defaultValue(pin?.type);
+  if (stored !== undefined) return fromStored(stored, pin?.type, types);
+  if (pin?.defaultValue !== undefined) return fromStored(pin.defaultValue, pin?.type, types);
+  return defaultValue(pin?.type, types);
 }
 
 function outputKey(graph: Graph, node: GraphNode, pinId: string): string {

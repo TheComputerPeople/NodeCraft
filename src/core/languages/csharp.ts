@@ -1,10 +1,11 @@
 // C# pack: generates a C# class per graph from Visual IR, and runs it through a small console
 // project (docs/program-structure.md, "C# language pack").
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, exprType } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, exprType, userTypes } from '../compiler/ir';
 import { NameScope, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { scanCSharp } from '../importing/csharp-scanner';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
+import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 import { TypeRef, parseTypeId } from '../types';
 
 const RESERVED = new Set([
@@ -225,6 +226,46 @@ function resultFields(outputs: { id: string; name: string }[]): Map<string, stri
   return new Map(outputs.map((o) => [o.id, fields.claim(o.name, 'pascal')]));
 }
 
+// The format helpers with branches for the structs and enums a class prints: an enum prints its
+// name (its [Description], else the member's name), a struct each field by name.
+function formatHelper(enums: boolean, structs: boolean): string[] {
+  const lines = [...HELPERS.format];
+  const insert = (before: string, added: string[]): void => {
+    lines.splice(lines.indexOf(before), 0, ...added);
+  };
+  if (enums) {
+    insert('    _ => ToJson(value)', ['    Enum e => EnumName(e),']);
+    insert('        case double or float or int or long or short or byte or sbyte or uint or ulong or ushort or decimal:', ['        case Enum e:', '            return JsonString(EnumName(e));']);
+    lines.push(
+      '',
+      'private static string EnumName(Enum value)',
+      '{',
+      '    var names = value.GetType().GetField(value.ToString())?.GetCustomAttributes(typeof(System.ComponentModel.DescriptionAttribute), false);',
+      '    return names is { Length: > 0 } ? ((System.ComponentModel.DescriptionAttribute)names[0]).Description : value.ToString();',
+      '}'
+    );
+  }
+  if (structs) {
+    insert('            return JsonString(value.ToString() ?? "");', [
+      '            if (value.GetType().GetMethod("BlueprintFields")?.Invoke(value, null) is (string Name, object? Value)[] fields)',
+      '                return "{" + string.Join(",", Array.ConvertAll(fields, f => JsonString(f.Name) + ":" + ToJson(f.Value))) + "}";'
+    ]);
+  }
+  return lines;
+}
+
+// Property names of a struct's fields and member names of an enum's values (PascalCase), the same
+// in the type's own file and in every file that uses it.
+export function csharpFieldNames(type: StructInfo): Map<string, string> {
+  const scope = new NameScope(RESERVED, [new NameScope(RESERVED).claim(type.name, 'pascal'), 'BlueprintFields']);
+  return new Map(type.fields.map((f) => [f.id, scope.claim(f.name, 'pascal')]));
+}
+
+export function csharpEnumMembers(type: EnumInfo): Map<string, string> {
+  const scope = new NameScope(RESERVED);
+  return new Map(type.enumerators.map((e) => [e.id, scope.claim(e.name, 'pascal')]));
+}
+
 const csharpGenerator: CodeGenerator = {
   libraryExports: csharpLibraryExports,
   snippetLanguages: ['csharp'],
@@ -275,10 +316,14 @@ class CSharpEmitter {
   private readonly helpersUsed = new Set<keyof typeof HELPERS>();
   // A function library: a static class of static methods.
   private readonly library: boolean;
+  // The structs and enums the program uses (and the one it declares), by type id.
+  private readonly types: Map<string, UserType>;
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions) {
     this.library = !!program.library;
     this.className = new NameScope(RESERVED).claim(program.className, 'pascal');
+    this.types = userTypes(program);
+    if (program.declaration) this.types.set(program.declaration.type.id, program.declaration.type);
     // A member can't share its class's name in C#. A library's functions are claimed first,
     // exactly as csharpLibraryExports claims them.
     this.names = new NameScope(RESERVED, [...(this.library ? [] : ['Start']), this.className, ...HELPER_NAMES]);
@@ -294,6 +339,7 @@ class CSharpEmitter {
 
   emit(): GeneratedCode {
     const body = this.out;
+    if (this.program.declaration) return this.emitDeclaration();
     body.indent();
     const members = this.program.members.filter((m) => !m.function);
     const slots = this.program.slots.filter((x) => !x.function);
@@ -306,7 +352,8 @@ class CSharpEmitter {
     for (const helper of this.program.helpers) this.helperMethod(helper);
     for (const helper of ['format', 'number', 'boolean', 'as'] as const) {
       if (!this.helpersUsed.has(helper)) continue;
-      for (const line of HELPERS[helper]) body.line(line);
+      const kinds = [...this.types.values()].map((t) => t.kind);
+      for (const line of helper === 'format' ? formatHelper(kinds.includes('enum'), kinds.includes('struct')) : HELPERS[helper]) body.line(line);
       body.line();
     }
     body.trimTrailingBlank();
@@ -332,9 +379,62 @@ class CSharpEmitter {
     }
     header.line(`public ${this.library ? 'static ' : ''}class ${this.className}`);
     header.line('{');
+    return this.finish(header, body);
+  }
+
+  // The file's header (comment, settings, usings and namespace), as every generated file starts.
+  private header(): CodeWriter {
+    const header = new CodeWriter('    ');
+    header.line(`// Generated by Blueprint Visual Scripting from ${this.options.sourceFileName}.`);
+    header.line('// Do not edit: changes are overwritten when the graph is compiled.');
+    header.line();
+    header.line('#nullable enable');
+    header.line('using System;');
+    header.line('using System.Collections.Generic;');
+    header.line();
+    if (this.options.namespace) {
+      header.line(`namespace ${this.options.namespace};`);
+      header.line();
+    }
+    return header;
+  }
+
+  // A structure (a record struct: a value type, copied on assignment as in Unreal) or an
+  // enumeration (a C# enum; values whose name isn't the member's carry it as a [Description]).
+  private emitDeclaration(): GeneratedCode {
+    const header = this.header();
+    const body = this.out;
+    const declaration = this.program.declaration!;
+    if (declaration.kind === 'enum') {
+      const members = csharpEnumMembers(declaration.type);
+      header.line(`public enum ${this.className}`);
+      header.line('{');
+      body.indent();
+      declaration.type.enumerators.forEach((e, i) => {
+        const member = members.get(e.id)!;
+        if (member !== e.name) body.line(`[System.ComponentModel.Description(${literal(e.name)})]`);
+        body.line(`${member}${i < declaration.type.enumerators.length - 1 ? ',' : ''}`);
+      });
+      body.dedent();
+      return this.finish(header, body);
+    }
+    const type = declaration.type;
+    const fields = csharpFieldNames(type);
+    header.line(`public readonly record struct ${this.className}(${type.fields.map((f) => `${this.typeName(f.type)} ${fields.get(f.id)}`).join(', ')})`);
+    header.line('{');
+    body.indent();
+    body.line(`public ${this.className}() : this(${type.fields.map((f, i) => this.coerce(declaration.initial[i], f.type)).join(', ')}) { }`);
+    body.line();
+    body.line('// As Print shows it: each field by name, in order.');
+    body.line(`public (string Name, object? Value)[] BlueprintFields() => new (string, object?)[] { ${type.fields.map((f) => `(${literal(f.name)}, ${fields.get(f.id)})`).join(', ')} };`);
+    body.dedent();
+    return this.finish(header, body);
+  }
+
+  private finish(header: CodeWriter, body: CodeWriter): GeneratedCode {
     const headerText = header.toString();
     const offset = headerText.split('\n').length - 1;
-    const importedFiles = [...new Set(this.program.imports.map((i) => i.path))].sort();
+    const importedFiles = [...new Set(this.program.imports.map((i) => i.path).filter((path) => path))].sort();
     return {
       text: `${headerText}${body.toString()}}\n`,
       className: this.options.namespace ? `${this.options.namespace}.${this.className}` : this.className,
@@ -561,6 +661,19 @@ class CSharpEmitter {
         const call = this.functionCall(fn, e.args);
         return fn.outputs.length === 1 ? call : `${call}.${this.outputFields.get(fn.id)!.get(e.output)}`;
       }
+      case 'makeStruct': {
+        const type = this.types.get(e.type);
+        if (type?.kind !== 'struct') return 'default';
+        return `new ${this.userTypeName(type.id)}(${type.fields.map((f, i) => this.coerce(e.fields[i], f.type)).join(', ')})`;
+      }
+      case 'structField': {
+        const type = this.types.get(e.type);
+        return `${this.operand(e.value)}.${type?.kind === 'struct' ? csharpFieldNames(type).get(e.field) : e.field}`;
+      }
+      case 'enumValue': {
+        const type = this.types.get(e.type);
+        return `${this.userTypeName(e.type)}.${type?.kind === 'enum' ? csharpEnumMembers(type).get(e.value) : e.value}`;
+      }
       case 'makeContainer': {
         const element = { id: e.type.id };
         const type = this.typeName({ ...e.type, nullable: false });
@@ -638,6 +751,10 @@ class CSharpEmitter {
   private defaultFor(type: TypeRef | undefined): string {
     if (type?.nullable) return 'null';
     if (type?.container) return `new ${this.typeName({ ...type, nullable: false })}()`;
+    // A struct with its fields' defaults; an enum's first value.
+    const user = type && this.types.get(type.id);
+    if (user?.kind === 'struct') return `new ${this.userTypeName(user.id)}()`;
+    if (user?.kind === 'enum' && user.enumerators[0]) return `${this.userTypeName(user.id)}.${csharpEnumMembers(user).get(user.enumerators[0].id)}`;
     switch (type?.id) {
       case 'bool':
         return 'false';
@@ -651,10 +768,27 @@ class CSharpEmitter {
     }
   }
 
+  // The name a struct or enum goes by: its own in its file, else fully qualified.
+  private userTypeName(id: string): string {
+    if (this.program.declaration?.type.id === id) return this.className;
+    const imported = this.program.imports.find((i) => i.id === id);
+    return imported ? `global::${imported.module ? `${imported.module}.` : ''}${imported.name}` : 'object';
+  }
+
+  // C#'s spelling of a type, with structs and enums by their qualified names.
+  private mapType(type: TypeRef): string {
+    if (!isUserTypeId(type.id) && !(type.valueType && isUserTypeId(type.valueType.id))) return mapType(type);
+    const element = isUserTypeId(type.id) ? this.userTypeName(type.id) : mapType({ id: type.id });
+    const value = type.valueType ? this.mapType(type.valueType) : 'object';
+    const base = type.container === 'array' ? `List<${element}>` : type.container === 'set' ? `HashSet<${element}>` : type.container === 'map' ? `Dictionary<${element}, ${value}>` : element;
+    return type.nullable ? `${base}?` : base;
+  }
+
   private typeName(type: TypeRef | undefined): string {
-    const name = mapType(type ?? { id: 'any' });
-    // Object-like types start out null, so they must admit it (containers start out empty).
-    const startsNull = !type || (!type.container && !['bool', 'int', 'float', 'string'].includes(type.id));
+    const name = this.mapType(type ?? { id: 'any' });
+    // Object-like types start out null, so they must admit it (containers start out empty; structs
+    // and enums are values).
+    const startsNull = !type || (!type.container && !['bool', 'int', 'float', 'string'].includes(type.id) && !this.types.has(type.id));
     return startsNull && !name.endsWith('?') ? `${name}?` : name;
   }
 

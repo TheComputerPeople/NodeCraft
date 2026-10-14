@@ -2,11 +2,12 @@
 // Pure data operations shared by the editor and tests; each mutates the document passed in.
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables } from './functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from './macros';
-import { Graph, GraphConnection, GraphDocument, GraphKind, GraphNode, GraphPin, GraphVariable, NodeDefinition } from './model';
+import { DocumentKind, Graph, GraphConnection, GraphDocument, GraphKind, GraphNode, GraphPin, GraphVariable, NodeDefinition } from './model';
 import { VARIABLE_GET, VARIABLE_SET } from './resolve';
-import { createGraph } from './serializer';
+import { createEmptyDocument, createGraph } from './serializer';
 import { TypeRef } from './types';
 import { storedDefault } from './values';
+import { Enumerator } from './user-types';
 
 // The first of `base`, `base_1`, `base_2`, ... not in `taken`, following Unreal's naming.
 export function uniqueName(base: string, taken: Iterable<string>): string {
@@ -21,6 +22,7 @@ function uniqueId(prefix: string, name: string, taken: Iterable<string>): string
 
 // Graph kinds a document kind can hold (as in Unreal's asset types).
 export function allowedGraphKinds(doc: GraphDocument): GraphKind[] {
+  if (doc.kind === 'structure' || doc.kind === 'enumeration') return [];
   return doc.kind === 'functionLibrary' ? ['function'] : doc.kind === 'macroLibrary' ? ['macro'] : ['event', 'function', 'macro'];
 }
 
@@ -58,9 +60,11 @@ export function deleteGraph(doc: GraphDocument, graphId: string): string | undef
   return undefined;
 }
 
+// A class's member variable, or a structure's field (Unreal's struct editor names new fields
+// MemberVar).
 export function addVariable(doc: GraphDocument, type: TypeRef = { id: 'bool' }): GraphVariable {
-  if (doc.kind !== 'class') throw new Error('Only classes have variables.');
-  const name = uniqueName('NewVar', doc.variables.map((v) => v.name));
+  if (doc.kind !== 'class' && doc.kind !== 'structure') throw new Error('Only classes have variables, and structures fields.');
+  const name = uniqueName(doc.kind === 'structure' ? 'MemberVar' : 'NewVar', doc.variables.map((v) => v.name));
   const variable: GraphVariable = { id: uniqueId('var_', name, doc.variables.map((v) => v.id)), name, type, defaultValue: storedDefault(type) };
   doc.variables.push(variable);
   return variable;
@@ -453,4 +457,64 @@ export function collapseToMacro(
   }
   for (const { c, pin } of outgoingPins) wireOut(instance.id, pin.id, c.toNode, c.toPin);
   return { macro, instance };
+}
+
+// ---- Enumerations (Unreal's enum editor) --------------------------------------------------------
+
+export function addEnumerator(doc: GraphDocument): Enumerator {
+  if (doc.kind !== 'enumeration') throw new Error('Only enumerations have values.');
+  const values = (doc.enumerators ??= []);
+  const name = uniqueName('NewEnumerator', values.map((e) => e.name));
+  const enumerator: Enumerator = { id: uniqueId('', name, values.map((e) => e.id)), name };
+  values.push(enumerator);
+  return enumerator;
+}
+
+export function renameEnumerator(doc: GraphDocument, id: string, name: string): string | undefined {
+  const trimmed = name.trim();
+  if (!trimmed) return 'A value needs a name.';
+  if (doc.enumerators?.some((e) => e.id !== id && e.name === trimmed)) return `There is already a value named "${trimmed}".`;
+  const enumerator = doc.enumerators?.find((e) => e.id === id);
+  if (enumerator) enumerator.name = trimmed;
+  return undefined;
+}
+
+export function removeEnumerator(doc: GraphDocument, id: string): string | undefined {
+  if ((doc.enumerators?.length ?? 0) <= 1) return 'An enumeration needs at least one value.';
+  doc.enumerators = doc.enumerators?.filter((e) => e.id !== id);
+  return undefined;
+}
+
+// Moves a structure's field or an enumeration's value up (-1) or down (+1).
+export function moveMember(doc: GraphDocument, id: string, by: -1 | 1): void {
+  const list: { id: string }[] = doc.kind === 'enumeration' ? doc.enumerators ?? [] : doc.variables;
+  const from = list.findIndex((item) => item.id === id);
+  const to = from + by;
+  if (from < 0 || to < 0 || to >= list.length) return;
+  [list[from], list[to]] = [list[to], list[from]];
+}
+
+// ---- New files ----------------------------------------------------------------------------------
+
+// The kinds of .vgraph file, named as Unreal's Content Browser names the assets.
+export const DOCUMENT_KIND_NAMES: Record<DocumentKind, string> = {
+  class: 'Blueprint Class',
+  functionLibrary: 'Blueprint Function Library',
+  macroLibrary: 'Blueprint Macro Library',
+  structure: 'Structure',
+  enumeration: 'Enumeration'
+};
+
+// A new file of `kind`, as Unreal makes new assets: a class with its event graph, a library with one
+// function or macro, a structure with one field, an enumeration with one value.
+export function newDocument(name: string, language: string | undefined, kind: DocumentKind): GraphDocument {
+  const doc = createEmptyDocument(name, language);
+  if (kind === 'class') return doc;
+  doc.kind = kind;
+  doc.graphs = [];
+  if (kind === 'functionLibrary') addGraph(doc, 'function');
+  if (kind === 'macroLibrary') addGraph(doc, 'macro');
+  if (kind === 'structure') addVariable(doc);
+  if (kind === 'enumeration') addEnumerator(doc);
+  return doc;
 }

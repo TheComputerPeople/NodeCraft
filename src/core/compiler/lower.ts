@@ -8,9 +8,12 @@ import { hasWildcard } from '../containers';
 import { NodeResolver, REROUTE, createResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isExpandedNode, macroLookup, visibleNodeId } from '../macros';
+import { TypeLookup, UserType, declaredType, isUserTypeId, typeLookup } from '../user-types';
+import { TypeRef } from '../types';
+import { toIdentifier } from './names';
 
 export interface LowerOptions {
   registry: NodeRegistry;
@@ -65,6 +68,8 @@ class Lowerer {
 
   private readonly resolve: NodeResolver;
   private readonly macros: MacroLookup;
+  // The workspace's structs and enums (src/core/user-types.ts).
+  private readonly types: TypeLookup;
   // Reroute and pure nodes being followed for the current input, to catch data loops.
   private readonly following = new Set<string>();
   // While checking a graph with macros expanded in it: problems with the macros' own nodes were
@@ -77,9 +82,11 @@ class Lowerer {
   constructor(private readonly doc: GraphDocument, private readonly options: LowerOptions) {
     this.resolve = createResolver(options.registry, doc);
     this.macros = macroLookup(doc.graphs, (type) => options.registry.get(type));
+    this.types = typeLookup(options.registry.all(), doc.language);
   }
 
   run(): LowerResult {
+    if (this.doc.kind === 'structure' || this.doc.kind === 'enumeration') return this.declaration();
     const names = new Set<string>();
     for (const variable of this.doc.variables) {
       if (this.members.has(variable.id) || names.has(variable.name)) {
@@ -91,7 +98,7 @@ class Lowerer {
         id: variable.id,
         name: variable.name,
         type: variable.type,
-        initial: variable.defaultValue !== undefined ? { kind: 'literal', value: variable.defaultValue } : { kind: 'default', type: variable.type }
+        initial: this.initialExpr(variable.defaultValue, variable.type)
       });
     }
 
@@ -107,7 +114,7 @@ class Lowerer {
         localNames.add(local.name);
         this.members.set(local.id, {
           id: local.id, name: local.name, type: local.type, function: graph.id,
-          initial: local.defaultValue !== undefined ? { kind: 'literal', value: local.defaultValue } : { kind: 'default', type: local.type }
+          initial: this.initialExpr(local.defaultValue, local.type)
         });
       }
     }
@@ -133,20 +140,129 @@ class Lowerer {
     const start = entries.flatMap(({ info, start: node }) => this.lowerNode(info, node.id));
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
 
-    return {
-      diagnostics: this.diagnostics,
-      program: {
-        className: this.doc.name,
-        ...(this.doc.kind === 'functionLibrary' ? { library: true } : {}),
-        members: [...this.members.values()],
-        slots: [...this.slots.values()],
-        helpers: [...this.helpers.values()],
-        imports: [...this.imports.values()],
-        blocks: [...this.blocks.values()],
-        functions: this.functions,
-        start
-      }
+    const program: IrProgram = {
+      className: this.doc.name,
+      ...(this.doc.kind === 'functionLibrary' ? { library: true } : {}),
+      members: [...this.members.values()],
+      slots: [...this.slots.values()],
+      helpers: [...this.helpers.values()],
+      imports: [...this.imports.values()],
+      blocks: [...this.blocks.values()],
+      functions: this.functions,
+      start
     };
+    this.importTypes(program);
+    if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
+    return { diagnostics: this.diagnostics, program };
+  }
+
+  // ---- Structs and enums (src/core/user-types.ts) ---------------------------------------------
+
+  // A structure or enumeration document: the type it declares, with the fields' initial values.
+  private declaration(): LowerResult {
+    const type = declaredType(this.doc);
+    if (!type) return { diagnostics: this.diagnostics };
+    const names = new Set<string>();
+    const items = type.kind === 'struct' ? type.fields : type.enumerators;
+    for (const item of items) {
+      if (!item.name.trim()) this.error('unnamed-member', `Every ${type.kind === 'struct' ? 'field' : 'value'} of ${type.name} needs a name.`);
+      else if (names.has(item.name)) this.error('duplicate-member', `${type.name} has two ${type.kind === 'struct' ? 'fields' : 'values'} named "${item.name}".`);
+      names.add(item.name);
+    }
+    if (type.kind === 'enum' && !type.enumerators.length) this.error('empty-enum', `${type.name} needs at least one value.`);
+    if (type.kind === 'struct' && !type.fields.length) this.error('empty-struct', `${type.name} needs at least one field.`);
+    if (type.kind === 'struct') {
+      for (const field of type.fields) if (field.type.id === type.id) this.error('recursive-struct', `${type.name} can't contain itself (field "${field.name}").`);
+    }
+    const declaration: IrDeclaration = type.kind === 'struct'
+      ? { kind: 'struct', type, initial: type.fields.map((f) => this.initialExpr(f.defaultValue, f.type)) }
+      : { kind: 'enum', type };
+    const program: IrProgram = { className: this.doc.name, members: [], slots: [], helpers: [], imports: [], blocks: [], functions: [], start: [], declaration };
+    this.importTypes(program);
+    if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
+    return { diagnostics: this.diagnostics, program };
+  }
+
+  // Imports for every struct and enum the program mentions, from their generated files. Sets and
+  // maps keyed by them aren't supported yet: their order and hashing differ between languages.
+  private importTypes(program: IrProgram): void {
+    const used = new Map<string, UserType>();
+    const visit = (value: unknown): void => {
+      if (typeof value === 'string') {
+        const type = isUserTypeId(value) ? this.types(value) : undefined;
+        if (type && !used.has(value)) {
+          used.set(value, type);
+          // A struct's fields may hold other structs and enums the generated code then refers to.
+          if (type.kind === 'struct') for (const f of type.fields) visit(f.type);
+        }
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (typeof value !== 'object' || value === null) return;
+      const record = value as Record<string, unknown>;
+      if ((record.container === 'set' || record.container === 'map') && typeof record.id === 'string' && isUserTypeId(record.id)) {
+        this.error('unsupported-key-type', `Sets and map keys of ${record.id.slice(record.id.indexOf(':') + 1)} aren't supported yet.`);
+      }
+      for (const [key, item] of Object.entries(record)) if (key !== 'userType' && key !== 'source') visit(item);
+    };
+    const { declaration, ...rest } = program;
+    visit(rest);
+    if (declaration?.kind === 'struct') {
+      declaration.type.fields.forEach((f) => visit(f.type));
+      declaration.initial.forEach(visit);
+    }
+    for (const [id, type] of [...used].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+      if (declaration && declaration.type.id === id) continue;
+      if (type.language && type.language !== (this.doc.language || type.language)) continue;
+      const name = toIdentifier(type.name, 'pascal');
+      const source = type.source;
+      program.imports.push({
+        id, name, language: type.language ?? this.doc.language ?? '', path: source?.generatedPath ?? '', params: [], userType: type,
+        ...(source?.module ? { module: source.module } : {})
+      });
+    }
+  }
+
+  // A variable's or field's initial value: its stored default, else its type's default.
+  private initialExpr(stored: unknown, type: TypeRef | undefined): IrExpr {
+    return stored !== undefined ? this.literalOf(stored, type) : { kind: 'default', type };
+  }
+
+  // A value written on the graph (JSON) as an expression of `type`: enums are stored by their
+  // value's id, structs as an object of the fields that differ from their defaults.
+  private literalOf(value: unknown, type: TypeRef | undefined): IrExpr {
+    if (!type) return { kind: 'literal', value };
+    if (type.container) {
+      const element: TypeRef = { id: type.id };
+      if (!isUserTypeId(type.id) && !(type.valueType && isUserTypeId(type.valueType.id))) return { kind: 'literal', value };
+      if (!Array.isArray(value)) return { kind: 'default', type };
+      const items = type.container === 'map'
+        ? value.flatMap((pair) => (Array.isArray(pair) && pair.length === 2 ? [this.literalOf(pair[0], element), this.literalOf(pair[1], type.valueType)] : []))
+        : value.map((item) => this.literalOf(item, element));
+      return { kind: 'makeContainer', type, items };
+    }
+    const user = this.types(type.id);
+    if (user?.kind === 'enum') {
+      const enumerator = user.enumerators.find((e) => e.id === value) ?? user.enumerators[0];
+      return enumerator ? { kind: 'enumValue', type: user.id, value: enumerator.id } : { kind: 'default', type };
+    }
+    if (user?.kind === 'struct') {
+      const stored = typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+      if (!user.fields.some((f) => stored[f.id] !== undefined)) return { kind: 'default', type };
+      return { kind: 'makeStruct', type: user.id, fields: user.fields.map((f) => this.initialExpr(stored[f.id] ?? f.defaultValue, f.type)) };
+    }
+    return { kind: 'literal', value };
+  }
+
+  // An unconnected input's value: stored on the node, else the pin's default, else the type default.
+  private unconnectedExpr(node: GraphNode, pin: PinDefinition | undefined, pinId: string): IrExpr {
+    const stored = node.properties[`pin:${pinId}`];
+    if (stored !== undefined) return this.literalOf(stored, pin?.type);
+    if (pin?.defaultValue !== undefined) return this.literalOf(pin.defaultValue, pin.type);
+    return { kind: 'default', type: pin?.type };
   }
 
   // ---- Functions (docs/program-structure.md, "Functions") -----------------------------------
@@ -381,6 +497,33 @@ class Lowerer {
         return [];
     }
 
+    const user = def.implementation;
+    if (user?.kind === 'struct' && user.operation === 'set-members') {
+      // The struct with the chosen fields changed; one read from a variable is written back to it.
+      const result = this.slot(info, node, def, 'result');
+      const wire = info.dataSources.get(inputKey(nodeId, 'struct'));
+      const sourceNode = wire && info.nodes.get(wire.node);
+      const sourceDef = wire && info.definitions.get(wire.node);
+      const member = sourceNode && sourceDef && nativeOperation(sourceDef) === 'get-variable' ? this.variableMember(info, sourceNode, sourceDef) : undefined;
+      const current: IrExpr = member ? { kind: 'member', member: member.id } : { kind: 'output', slot: result };
+      const changed = new Set(dataInputs(def).map((p) => p.id).filter((id) => id !== 'struct'));
+      const value: IrExpr = { kind: 'makeStruct', type: user.type.id, fields: user.type.fields.map((f) => (changed.has(f.id) ? input(f.id) : { kind: 'structField', value: current, type: user.type.id, field: f.id })) };
+      const statements: IrStatement[] = member
+        ? [{ kind: 'setMember', member: member.id, value, source }, { kind: 'store', slot: result, value: current, source }]
+        : [{ kind: 'store', slot: result, value: input('struct'), source }, { kind: 'store', slot: result, value, source }];
+      return [...statements, ...next('execOut')];
+    }
+    if (user?.kind === 'enum' && user.operation === 'switch') {
+      const selection = this.stateSlot(info, node, def, 'selection', user.type.id);
+      const read: IrExpr = { kind: 'output', slot: selection };
+      // Values with nothing wired to their output need no test.
+      const chain = user.type.enumerators.reduceRight<IrStatement[]>((otherwise, e) => {
+        const then = next(e.id);
+        return then.length ? [{ kind: 'if', condition: { kind: 'binary', op: '==', left: read, right: { kind: 'enumValue', type: user.type.id, value: e.id } }, then, else: otherwise, source }] : otherwise;
+      }, []);
+      return [{ kind: 'store', slot: selection, value: input('selection'), source }, ...chain];
+    }
+
     if (def.implementation?.kind !== 'code' && def.implementation?.kind !== 'function') {
       this.error('no-codegen', `"${def.displayName}" can't be compiled to ${this.options.languageName}.`, info.graph.id, nodeId);
       return [];
@@ -407,7 +550,7 @@ class Lowerer {
   private inputExpr(info: GraphInfo, node: GraphNode, def: NodeDefinition, pinId: string): IrExpr {
     const pin = def.inputs.find((p) => p.id === pinId);
     const source = info.dataSources.get(inputKey(node.id, pinId));
-    if (!source) return unconnectedExpr(node, pin, pinId);
+    if (!source) return this.unconnectedExpr(node, pin, pinId);
 
     const sourceNode = info.nodes.get(source.node);
     const sourceDef = info.definitions.get(source.node);
@@ -421,6 +564,22 @@ class Lowerer {
       const type = sourceDef.outputs[0]?.type ?? { id: 'any', container: 'array' };
       return this.follow(info, sourceNode, 'Pure nodes are wired in a loop.', pin, () => ({
         kind: 'makeContainer', type, items: sourceDef.inputs.filter((p) => p.kind === 'data').map((p) => this.inputExpr(info, sourceNode, sourceDef, p.id))
+      }));
+    }
+    const user = sourceDef.implementation;
+    if (user?.kind === 'struct' && user.operation === 'make') {
+      return this.follow(info, sourceNode, 'Pure nodes are wired in a loop.', pin, () => ({
+        kind: 'makeStruct', type: user.type.id, fields: user.type.fields.map((f) => this.inputExpr(info, sourceNode, sourceDef, f.id))
+      }));
+    }
+    if (user?.kind === 'struct' && user.operation === 'break') {
+      return this.follow(info, sourceNode, 'Pure nodes are wired in a loop.', pin, () => ({
+        kind: 'structField', value: this.inputExpr(info, sourceNode, sourceDef, 'struct'), type: user.type.id, field: source.pin
+      }));
+    }
+    if (user?.kind === 'enum' && (user.operation === 'equal' || user.operation === 'not-equal')) {
+      return this.follow(info, sourceNode, 'Pure nodes are wired in a loop.', pin, () => ({
+        kind: 'binary', op: user.operation === 'equal' ? '==' : '!=', left: this.inputExpr(info, sourceNode, sourceDef, 'a'), right: this.inputExpr(info, sourceNode, sourceDef, 'b')
       }));
     }
     // Reroutes are transparent: read whatever feeds them.
@@ -715,14 +874,6 @@ class Lowerer {
     const diagnostic: CompileDiagnostic = { severity, code, message, ...(graphId ? { graphId } : {}), ...(visible ? { nodeId: visible } : {}) };
     if (!this.diagnostics.some((d) => d.severity === severity && d.code === code && d.message === message && d.graphId === diagnostic.graphId && d.nodeId === diagnostic.nodeId)) this.diagnostics.push(diagnostic);
   }
-}
-
-// An unconnected input's value: stored on the node, else the pin's default, else the type default.
-function unconnectedExpr(node: GraphNode, pin: PinDefinition | undefined, pinId: string): IrExpr {
-  const stored = node.properties[`pin:${pinId}`];
-  if (stored !== undefined) return { kind: 'literal', value: stored };
-  if (pin?.defaultValue !== undefined) return { kind: 'literal', value: pin.defaultValue };
-  return { kind: 'default', type: pin?.type };
 }
 
 function inputKey(nodeId: string, pinId: string): string {

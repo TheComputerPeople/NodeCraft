@@ -1,10 +1,11 @@
 // Generates TypeScript, or JavaScript with JSDoc types, from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, exprType } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, exprType, userTypes } from '../compiler/ir';
 import { relativeSpecifier, typescriptSpecifier } from '../compiler/module-paths';
 import { NameScope, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode } from '../language-pack';
 import { TypeRef } from '../types';
+import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 
 const RESERVED = new Set([
   'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do', 'else', 'enum', 'export',
@@ -60,6 +61,18 @@ function resultFields(outputs: { id: string; name: string }[]): Map<string, stri
   return new Map(outputs.map((o) => [o.id, fields.claim(o.name, 'camel')]));
 }
 
+// Property names of a struct's fields (camelCase) and member names of an enum's values
+// (PascalCase), the same in the type's own file and in every file that uses it.
+export function typescriptFieldNames(type: StructInfo): Map<string, string> {
+  const scope = new NameScope(RESERVED, ['toJSON']);
+  return new Map(type.fields.map((f) => [f.id, scope.claim(f.name, 'camel')]));
+}
+
+export function typescriptEnumMembers(type: EnumInfo): Map<string, string> {
+  const scope = new NameScope(RESERVED);
+  return new Map(type.enumerators.map((e) => [e.id, scope.claim(e.name, 'pascal')]));
+}
+
 export function typescriptGenerator(flavor: TypeScriptFlavor): CodeGenerator {
   return {
     libraryExports: (_name, functions) => ({ names: typescriptExportNames(functions) }),
@@ -90,11 +103,15 @@ class TypeScriptEmitter {
   private readonly outputFields = new Map<string, Map<string, string>>();
   private readonly className: string;
   private needsFormat = false;
+  // The structs and enums the program uses (and the one it declares), by type id.
+  private readonly types: Map<string, UserType>;
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions, private readonly flavor: TypeScriptFlavor) {
     this.library = !!program.library;
     this.esm = flavor.typed || options.moduleFormat !== 'commonjs';
     this.className = new NameScope(RESERVED).claim(program.className, 'pascal');
+    this.types = userTypes(program);
+    if (program.declaration) this.types.set(program.declaration.type.id, program.declaration.type);
     // A library's functions are claimed first, exactly as typescriptExportNames claims them.
     this.names = this.library ? new NameScope(RESERVED, [FORMAT_HELPER]) : new NameScope(RESERVED, ['start']);
     for (const f of program.functions) {
@@ -118,6 +135,7 @@ class TypeScriptEmitter {
     out.line();
     const esm = this.esm;
     this.imports(esm);
+    if (this.program.declaration) return this.emitDeclaration();
     if (this.library) return this.emitLibrary();
     out.line(`${esm ? 'export ' : ''}class ${this.className} {`);
     out.indent();
@@ -158,6 +176,87 @@ class TypeScriptEmitter {
     return { text: out.toString(), className: this.className, nodeLines: out.nodeLines };
   }
 
+  // A structure or enumeration: a class whose instances are never changed (Set Members makes a new
+  // one), or an object of values that are their names. Both use only TypeScript that Node.js can
+  // run by stripping types (no parameter properties, no `enum`).
+  private emitDeclaration(): GeneratedCode {
+    const { out, flavor } = this;
+    const declaration = this.program.declaration!;
+    const exported = this.esm ? 'export ' : '';
+    if (declaration.kind === 'enum') {
+      const members = typescriptEnumMembers(declaration.type);
+      const values = declaration.type.enumerators.map((e) => [members.get(e.id)!, JSON.stringify(e.name)] as const);
+      if (flavor.typed) {
+        out.line(`${exported}const ${this.className} = {`);
+        values.forEach(([name, value], i) => out.line(`  ${name}: ${value}${i < values.length - 1 ? ',' : ''}`));
+        out.line('} as const;');
+        out.line(`${exported}type ${this.className} = (typeof ${this.className})[keyof typeof ${this.className}];`);
+      } else {
+        out.line(`${exported}const ${this.className} = Object.freeze({`);
+        values.forEach(([name, value], i) => out.line(`  ${name}: ${value}${i < values.length - 1 ? ',' : ''}`));
+        out.line('});');
+      }
+    } else {
+      const type = declaration.type;
+      const fields = typescriptFieldNames(type);
+      const params = type.fields.map((f, i) => ({ name: fields.get(f.id)!, type: f.type, initial: this.coerce(declaration.initial[i], f.type) }));
+      out.line(`${exported}class ${this.className} {`);
+      out.indent();
+      if (flavor.typed) {
+        for (const p of params) out.line(`readonly ${p.name}: ${this.typeName(p.type)};`);
+        out.line();
+        out.line(`constructor(${params.map((p) => `${p.name}: ${this.typeName(p.type)} = ${p.initial}`).join(', ')}) {`);
+        out.indent();
+        for (const p of params) out.line(`this.${p.name} = ${p.name};`);
+        out.dedent();
+        out.line('}');
+      } else {
+        out.line('/**');
+        for (const p of params) out.line(` * @param {${this.mapType(p.type)}} [${p.name}]`);
+        out.line(' */');
+        out.line(`constructor(${params.map((p) => `${p.name} = ${p.initial}`).join(', ')}) {`);
+        out.indent();
+        for (const p of params) out.line(`this.${p.name} = ${p.name};`);
+        out.line('Object.freeze(this);');
+        out.dedent();
+        out.line('}');
+      }
+      out.line();
+      out.line('// As Print shows it: each field by name, in order.');
+      out.line(flavor.typed ? 'toJSON(): Record<string, unknown> {' : 'toJSON() {');
+      out.line(`  return { ${type.fields.map((f) => `${JSON.stringify(f.name)}: this.${fields.get(f.id)}`).join(', ')} };`);
+      out.line('}');
+      out.dedent();
+      out.line('}');
+    }
+    if (!this.esm) {
+      out.line();
+      out.line(`module.exports = { ${this.className} };`);
+    }
+    return { text: out.toString(), className: this.className, nodeLines: out.nodeLines };
+  }
+
+  // The name a struct or enum goes by in this file: its own, or its import's.
+  private userTypeName(id: string): string | undefined {
+    if (this.program.declaration?.type.id === id) return this.className;
+    return this.importNames.get(id);
+  }
+
+  // A type's spelling: TypeScript's, or JSDoc's in JavaScript (where an enum value is its name).
+  private mapType(type: TypeRef | undefined): string {
+    if (!type) return this.flavor.mapType({ id: 'any' });
+    const element = (id: string): string | undefined => {
+      if (!isUserTypeId(id)) return undefined;
+      if (!this.flavor.typed && this.types.get(id)?.kind === 'enum') return 'string';
+      return this.userTypeName(id) ?? 'unknown';
+    };
+    const own = element(type.id);
+    const value = type.valueType && this.mapType(type.valueType);
+    if (!own && !(type.valueType && isUserTypeId(type.valueType.id))) return this.flavor.mapType(type);
+    const name = own ?? this.flavor.mapType({ id: type.id });
+    return type.container === 'array' ? `${name}[]` : type.container === 'set' ? `Set<${name}>` : type.container === 'map' ? `Map<${name}, ${value}>` : name;
+  }
+
   // A class member, or (in a library) a module function.
   private self(name: string): string {
     return this.library ? name : `this.${name}`;
@@ -189,7 +288,7 @@ class TypeScriptEmitter {
     if (this.flavor.typed) {
       this.out.line(`${internal ? 'private ' : ''}${name}: ${this.typeName(type)} = ${initial};`);
     } else {
-      this.out.line(`/** @type {${this.flavor.mapType(type ?? { id: 'any' })}} */`);
+      this.out.line(`/** @type {${this.mapType(type ?? { id: 'any' })}} */`);
       this.out.line(`${name} = ${initial};`);
     }
   }
@@ -198,7 +297,7 @@ class TypeScriptEmitter {
   private method(name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | string | undefined, internal: boolean, body: () => void): void {
     const { out, flavor } = this;
     out.endNode();
-    const returnText = typeof returns === 'string' ? returns : returns ? (flavor.typed ? this.typeName(returns) : flavor.mapType(returns)) : undefined;
+    const returnText = typeof returns === 'string' ? returns : returns ? (flavor.typed ? this.typeName(returns) : this.mapType(returns)) : undefined;
     // In a library, methods are module functions; the library's own functions are exported.
     const keyword = this.library ? `${!internal && this.esm ? 'export ' : ''}function ` : '';
     if (flavor.typed) {
@@ -207,7 +306,7 @@ class TypeScriptEmitter {
     } else {
       if (params.length || returnText) {
         out.line('/**');
-        for (const p of params) out.line(` * @param {${flavor.mapType(p.type ?? { id: 'any' })}} ${p.name}`);
+        for (const p of params) out.line(` * @param {${this.mapType(p.type ?? { id: 'any' })}} ${p.name}`);
         if (returnText) out.line(` * @returns {${returnText}}`);
         out.line(' */');
       }
@@ -251,7 +350,7 @@ class TypeScriptEmitter {
     if (!fn.outputs.length) return undefined;
     if (fn.outputs.length === 1) return fn.outputs[0].type ?? { id: 'any' };
     const fields = this.outputFields.get(fn.id)!;
-    const type = (t: TypeRef | undefined) => (this.flavor.typed ? this.typeName(t) : this.flavor.mapType(t ?? { id: 'any' }));
+    const type = (t: TypeRef | undefined) => (this.flavor.typed ? this.typeName(t) : this.mapType(t ?? { id: 'any' }));
     return `{ ${fn.outputs.map((o) => `${fields.get(o.id)}: ${type(o.type)}`).join(this.flavor.typed ? '; ' : ', ')} }`;
   }
 
@@ -442,6 +541,19 @@ class TypeScriptEmitter {
         const call = this.functionCall(fn, e.args);
         return fn.outputs.length === 1 ? call : `${call}.${this.outputFields.get(fn.id)!.get(e.output)}`;
       }
+      case 'makeStruct': {
+        const type = this.types.get(e.type);
+        if (type?.kind !== 'struct') return 'null';
+        return `new ${this.userTypeName(type.id)}(${type.fields.map((f, i) => this.coerce(e.fields[i], f.type)).join(', ')})`;
+      }
+      case 'structField': {
+        const type = this.types.get(e.type);
+        return `${this.operand(e.value)}.${type?.kind === 'struct' ? typescriptFieldNames(type).get(e.field) : e.field}`;
+      }
+      case 'enumValue': {
+        const type = this.types.get(e.type);
+        return `${this.userTypeName(e.type)}.${type?.kind === 'enum' ? typescriptEnumMembers(type).get(e.value) : e.value}`;
+      }
       case 'makeContainer': {
         const element = { id: e.type.id };
         if (e.type.container === 'map') {
@@ -500,14 +612,18 @@ class TypeScriptEmitter {
 
   // `<number>` for a set of numbers, `<string, number>` for a map of strings to numbers.
   private containerTypeArgs(type: TypeRef): string {
-    const element = this.flavor.mapType({ id: type.id });
-    return type.container === 'map' ? `<${element}, ${this.flavor.mapType(type.valueType ?? { id: 'any' })}>` : `<${element}>`;
+    const element = this.mapType({ id: type.id });
+    return type.container === 'map' ? `<${element}, ${this.mapType(type.valueType ?? { id: 'any' })}>` : `<${element}>`;
   }
 
   private defaultFor(type: TypeRef | undefined): string {
     if (type?.container === 'array') return '[]';
     if (type?.container === 'set') return 'new Set()';
     if (type?.container === 'map') return 'new Map()';
+    // A struct with its fields' defaults; an enum's first value.
+    const user = type && this.types.get(type.id);
+    if (user?.kind === 'struct') return `new ${this.userTypeName(user.id)}()`;
+    if (user?.kind === 'enum' && user.enumerators[0]) return `${this.userTypeName(user.id)}.${typescriptEnumMembers(user).get(user.enumerators[0].id)}`;
     switch (type?.id) {
       case 'bool':
         return 'false';
@@ -522,7 +638,7 @@ class TypeScriptEmitter {
   }
 
   private typeName(type: TypeRef | undefined): string {
-    const name = this.flavor.mapType(type ?? { id: 'any' });
+    const name = this.mapType(type ?? { id: 'any' });
     // Object-like types start out null, so they must admit it.
     const defaultsToNull = this.defaultFor(type) === 'null' && name !== 'unknown';
     return defaultsToNull && !name.endsWith('| null') ? `${name} | null` : name;

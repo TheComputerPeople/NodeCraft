@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.invalid/blueprint-vgraph.schema.json",
   "title": "Blueprint Visual Graph (schema 3)",
-  "description": "A .vgraph file: a class, function library or macro library containing one or more graphs.",
+  "description": "A .vgraph file: a class, function library or macro library containing one or more graphs, or a structure or enumeration declaring a type.",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -22,7 +22,9 @@
       "enum": [
         "class",
         "functionLibrary",
-        "macroLibrary"
+        "macroLibrary",
+        "structure",
+        "enumeration"
       ]
     },
     "language": {
@@ -31,16 +33,38 @@
     },
     "variables": {
       "type": "array",
-      "description": "Member variables; must be empty for libraries.",
+      "description": "Member variables, or a structure's fields; must be empty for libraries and enumerations.",
       "items": {
         "$ref": "#/$defs/variable"
       }
     },
     "graphs": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "$ref": "#/$defs/graph"
+      },
+      "description": "Classes and libraries have at least one graph; structures and enumerations have none."
+    },
+    "enumerators": {
+      "type": "array",
+      "description": "An enumeration's values, in order. Values are stored in graphs by id.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
       }
     },
     "importedFunctions": {
@@ -106,6 +130,67 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "class",
+              "functionLibrary",
+              "macroLibrary"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "graphs": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "structure"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "graphs": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "enumeration"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "enumerators"
+        ],
+        "properties": {
+          "variables": {
+            "maxItems": 0
+          },
+          "graphs": {
+            "maxItems": 0
+          },
+          "enumerators": {
+            "minItems": 1
           }
         }
       }

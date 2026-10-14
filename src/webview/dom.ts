@@ -32,7 +32,11 @@ export const dom = {
   findAll: element<HTMLInputElement>('find-all'),
   findList: element<HTMLUListElement>('find-list'),
   findClose: element<HTMLButtonElement>('find-close'),
-  fitButton: element<HTMLButtonElement>('fit')
+  fitButton: element<HTMLButtonElement>('fit'),
+  // Structure and enumeration files are edited here instead of on the canvas.
+  typeEditor: element<HTMLElement>('type-editor'),
+  palette: element<HTMLElement>('palette'),
+  help: element<HTMLElement>('help')
 };
 
 export function setStatus(text: string): void {

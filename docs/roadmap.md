@@ -289,7 +289,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Macros: tunnels with exec and data pins, expanded where used, macro libraries | ✅ | — |
 | Structure | Flow-control library: For Loop (with Break), While Loop, Do Once, Do N, Gate, MultiGate, Flip Flop, Switch on Int/String | ✅ (MultiGate's Is Random later) | — |
 | Structure | For Each Loop (with Break) | ✅ | — |
-| Structure | Structs, enums, Make/Break | ⬜ | 4 |
+| Structure | Structs, enums, Make/Break, Set Members, Switch on Enum, the structure and enumeration editors | ✅ (sets and map keys of structs or enums later) | — |
 | Structure | Classes, inheritance, interfaces, Cast To | ⬜ | 4 |
 | Structure | Event dispatchers, custom events | ⬜ | 4 |
 | Structure | Latent actions (Delay) | ⬜ | 4 |

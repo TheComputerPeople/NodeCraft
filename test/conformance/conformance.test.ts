@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { compileDocument } from '../../src/core/compiler';
 import { exposeFunctions } from '../../src/core/importing/symbols';
 import { libraryDefinitions } from '../../src/core/libraries';
+import { declaredType, userTypeDefinitions } from '../../src/core/user-types';
 import { GenerateOptions } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { GraphDocument, NodeDefinition, RuntimeLogEvent } from '../../src/core/model';
@@ -483,6 +484,157 @@ describe('function libraries', () => {
       fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
         compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
         files: [path.relative(dir, libFile), path.relative(dir, file)]
+      }));
+      const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+      const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    });
+  }
+});
+
+// Structs and enums (docs/program-structure.md, "Structs and enums"), each in its own file in
+// another folder, used by a class: defaults, Make, Break, Set Members (written back to the
+// variable, without changing a copy), Switch on, ==, and printing.
+describe('structs and enums', () => {
+  const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin });
+  const STATS = 'struct:Player Stats';
+  const TEAM = 'enum:Team';
+
+  function team(language: string): GraphDocument {
+    return {
+      schemaVersion: 3, name: 'Team', kind: 'enumeration', language, variables: [], graphs: [],
+      enumerators: [{ id: 'red', name: 'Red' }, { id: 'blue', name: 'Light Blue' }, { id: 'green', name: 'Green' }]
+    };
+  }
+
+  function stats(language: string): GraphDocument {
+    return {
+      schemaVersion: 3, name: 'Player Stats', kind: 'structure', language, graphs: [],
+      variables: [
+        { id: 'name', name: 'Name', type: { id: 'string' }, defaultValue: 'Hero' },
+        { id: 'health', name: 'Health', type: { id: 'float' }, defaultValue: 100 },
+        { id: 'team', name: 'Team', type: { id: TEAM }, defaultValue: 'blue' },
+        { id: 'scores', name: 'Scores', type: { id: 'int', container: 'array' }, defaultValue: [1, 2] }
+      ]
+    };
+  }
+
+  const generated = (language: string, file: string) => `types/${languages.get(language)!.generator!.outputFileName(file)}`;
+  const moduleOf = (language: string, file: string) => (language === 'python' ? languages.get('python')!.generator!.outputFileName(file).replace(/\.py$/, '') : language === 'csharp' ? 'Types' : undefined);
+
+  function definitions(language: string): NodeDefinition[] {
+    return [[team(language), 'Team.vgraph'], [stats(language), 'PlayerStats.vgraph']].flatMap(([doc, file]) => {
+      const module = moduleOf(language, file as string);
+      const type = declaredType(doc as GraphDocument, { document: `types/${file}`, generatedPath: generated(language, file as string), ...(module ? { module } : {}) })!;
+      return userTypeDefinitions(type);
+    });
+  }
+
+  // Start → Print(Stats) → Set Copy = Stats → Set members in Stats (Health 42) → Print(Stats.Health)
+  // → Print(Copy.Health) → Print(Make(Mage, 7, Red)) → Switch on Stats.Team → Print → Print(Stats.Team == Green).
+  function game(language: string): { registry: NodeRegistry; document: GraphDocument } {
+    const r = registry();
+    r.registerMany(definitions(language));
+    const document: GraphDocument = {
+      schemaVersion: 3, name: 'Game', kind: 'class', language,
+      variables: [{ id: 'stats', name: 'Stats', type: { id: STATS }, defaultValue: {} }, { id: 'copy', name: 'Copy', type: { id: STATS } }],
+      graphs: [{
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [
+          n('s', 'core:event.start'), n('get', 'core:variable.get', { variable: 'stats' }), n('getCopy', 'core:variable.get', { variable: 'copy' }),
+          n('p1', 'core:console.print'), n('setCopy', 'core:variable.set', { variable: 'copy' }),
+          n('members', `${STATS}.set-members`, { members: ['health'], 'pin:health': 42 }),
+          n('break', `${STATS}.break`), n('breakCopy', `${STATS}.break`), n('p2', 'core:console.print'), n('p3', 'core:console.print'),
+          n('make', `${STATS}.make`, { 'pin:name': 'Mage', 'pin:health': 7, 'pin:team': 'red' }), n('p4', 'core:console.print'),
+          n('switch', `${TEAM}.switch`), n('isRed', 'core:console.print', { 'pin:value': 'is red' }), n('isBlue', 'core:console.print', { 'pin:value': 'is blue' }),
+          n('eq', `${TEAM}.equal`, { 'pin:b': 'green' }), n('p5', 'core:console.print')
+        ],
+        connections: [
+          w('s', 'execOut', 'p1', 'execIn'), w('get', 'value', 'p1', 'value'),
+          w('p1', 'execOut', 'setCopy', 'execIn'), w('get', 'value', 'setCopy', 'value'),
+          w('setCopy', 'execOut', 'members', 'execIn'), w('get', 'value', 'members', 'struct'),
+          w('members', 'execOut', 'p2', 'execIn'), w('get', 'value', 'break', 'struct'), w('break', 'health', 'p2', 'value'),
+          w('p2', 'execOut', 'p3', 'execIn'), w('getCopy', 'value', 'breakCopy', 'struct'), w('breakCopy', 'health', 'p3', 'value'),
+          w('p3', 'execOut', 'p4', 'execIn'), w('make', 'struct', 'p4', 'value'),
+          w('p4', 'execOut', 'switch', 'execIn'), w('break', 'team', 'switch', 'selection'),
+          w('switch', 'red', 'isRed', 'execIn'), w('switch', 'blue', 'isBlue', 'execIn'),
+          w('isBlue', 'execOut', 'p5', 'execIn'), w('break', 'team', 'eq', 'a'), w('eq', 'returnValue', 'p5', 'value')
+        ]
+      }]
+    };
+    return { registry: r, document };
+  }
+
+  const EXPECTED = [
+    '{"Name":"Hero","Health":100,"Team":"Light Blue","Scores":[1,2]}',
+    '42',
+    '100',
+    '{"Name":"Mage","Health":7,"Team":"Red","Scores":[1,2]}',
+    'is blue',
+    'false'
+  ];
+
+  test('Simulate', () => {
+    const { registry: r, document } = game('typescript');
+    const events: RuntimeLogEvent[] = [];
+    new GraphRuntime(r, (e) => events.push(e)).run(document);
+    assert.deepEqual(events.filter((e) => e.kind === 'error'), []);
+    assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), EXPECTED);
+  });
+
+  // Compiles the types into types/ and the class into game/.
+  function build(key: string, language: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; typeFiles: string[]; importRoots?: string[] } {
+    const dir = path.join(workDir, `types-${key}`);
+    fs.mkdirSync(path.join(dir, 'types'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'game'), { recursive: true });
+    const typeRegistry = registry();
+    typeRegistry.registerMany(definitions(language));
+    const typeFiles = ([[team(language), 'Team.vgraph'], [stats(language), 'PlayerStats.vgraph']] as const).map(([doc, file]) => {
+      const result = compileDocument(doc, { registry: typeRegistry, languages, generate: { sourceFileName: file, outputDir: 'types', namespace: 'Types', ...generate } });
+      assert.deepEqual(result.diagnostics, [], `${file}: ${JSON.stringify(result.diagnostics)}`);
+      const out = path.join(dir, 'types', result.output!.fileName);
+      fs.writeFileSync(out, result.output!.text);
+      return out;
+    });
+    const { registry: r, document } = game(language);
+    const result = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'Game.vgraph', outputDir: 'game', namespace: 'Game', ...generate } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    return { file, className: result.output!.className, dir, typeFiles, importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)) };
+  }
+
+  for (const target of [
+    { label: 'TypeScript', key: 'typescript', language: 'typescript' },
+    { label: 'JavaScript (ES modules)', key: 'javascript-esm', language: 'javascript', moduleFormat: 'esm' as const },
+    { label: 'JavaScript (CommonJS)', key: 'javascript-commonjs', language: 'javascript', moduleFormat: 'commonjs' as const },
+    { label: 'Python', key: 'python', language: 'python' },
+    { label: 'C#', key: 'csharp', language: 'csharp' }
+  ]) {
+    test(target.label, async (t) => {
+      const { file, className, dir, typeFiles, importRoots } = build(target.key, target.language, { moduleFormat: target.moduleFormat });
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? typeFiles : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'game'), importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), EXPECTED, `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  for (const { language, flags } of [
+    { language: 'typescript', flags: { allowImportingTsExtensions: true } },
+    { language: 'javascript', flags: { allowJs: true, checkJs: true } }
+  ]) {
+    test(`${language} types and their use type-check under --strict`, () => {
+      const { file, dir, typeFiles } = build(`typecheck-${language}`, language);
+      fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
+        files: [...typeFiles, file].map((f) => path.relative(dir, f))
       }));
       const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
       const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });

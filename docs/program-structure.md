@@ -64,11 +64,12 @@ Unreal's standard macros, as built-in nodes with Unreal's pins:
 
 ## Structs and enums
 
-- Two more `.vgraph` kinds, as Unreal's assets: **`structure`** (named fields with types and defaults) and **`enumeration`** (named values). They open in a field or value list editor rather than a graph.
-- They are workspace types: `struct:<Name>` and `enum:<Name>` pin types refer to them by name, the type pickers list them, and generated code imports them from their own generated file.
-- Structs are values (copied on assignment), as in Unreal: generated as a class with a copy on assignment in TypeScript, a dataclass in Python and a `record struct` in C#.
-- Nodes: **Make** and **Break** for each struct, **Set Members** (Unreal's "Set Members in"), **split struct pins** (right-click a struct pin → Split Struct Pin, and Recombine), and for enums **Switch on**, **==**, and **To String** (the value's name).
-- Enum values are generated as the language's enum (TypeScript string enum, Python `enum.Enum`, C# `enum`).
+- Two more `.vgraph` kinds, as Unreal's assets: **`structure`** (named fields with types and defaults, stored as the document's `variables`) and **`enumeration`** (named values, stored as `enumerators`). They have no graphs and open in a field or value list editor instead of the canvas. **New Graph** offers every kind under Unreal's names (Blueprint Class, Blueprint Function Library, Blueprint Macro Library, Structure, Enumeration).
+- They are workspace types: `struct:<Name>` and `enum:<Name>` pin types refer to them by name, the type pickers list those in the graph's language, and generated code imports them from their own generated file. The workspace service (src/extension/graph-libraries.ts) turns each into node definitions that carry the type (src/core/user-types.ts), so the compiler, Simulate and the editor learn it from the node registry.
+- Nodes: **Make** and **Break** for each struct (pure), **Set members in** (its Details choose which fields get a pin; a struct wired from a variable's Get is written back to the variable, as Unreal's by-reference input), and for enums **Switch on** (an exec output per value), **==** and **!=**. Print and To String show an enum value's name. Unconnected enum pins pick a value from a dropdown; struct pins are fed by Make.
+- Structs are values, as in Unreal: no node changes a struct in place (Set Members makes a new one and assigns it), so copies never affect each other. Generated as a class with readonly fields in TypeScript and JavaScript, a frozen dataclass in Python, and a `readonly record struct` in C#. Enums are generated as an object of name strings (`as const`, with a matching type) in TypeScript, a frozen object in JavaScript, an `Enum` in Python and an `enum` in C# (values whose name isn't a valid member name carry it as `[Description]`). TypeScript output avoids `enum` and parameter properties so Node.js can run it by stripping types.
+- Stored values: an enum value is stored by its value's id, so renaming a value keeps graphs working; a struct variable's default is its structure's field defaults.
+- Not yet: sets and map keys of structs or enums (their order and hashing differ between languages; a compile error says so), and split struct pins (next step). A container inside a struct is shared by copies of the struct, as containers are shared everywhere (semantics.md, "Containers").
 
 ## Custom events and event dispatchers
 

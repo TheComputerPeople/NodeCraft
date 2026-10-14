@@ -55,22 +55,31 @@ export function parseDocument(text: string, fallbackName = 'NewGraph'): ParsedDo
   return { document };
 }
 
-const DOCUMENT_KINDS: DocumentKind[] = ['class', 'functionLibrary', 'macroLibrary'];
+const DOCUMENT_KINDS: DocumentKind[] = ['class', 'functionLibrary', 'macroLibrary', 'structure', 'enumeration'];
 const GRAPH_KINDS: GraphKind[] = ['event', 'function', 'macro'];
 
 // Which graph kinds each document kind may contain, as in Unreal.
 const ALLOWED_GRAPHS: Record<DocumentKind, GraphKind[]> = {
   class: ['event', 'function', 'macro'],
   functionLibrary: ['function'],
-  macroLibrary: ['macro']
+  macroLibrary: ['macro'],
+  structure: [],
+  enumeration: []
 };
+
+// Whether a document holds graphs: structures and enumerations only declare a type.
+export function hasGraphs(kind: DocumentKind): boolean {
+  return ALLOWED_GRAPHS[kind].length > 0;
+}
 
 // Fills optional fields and enforces the structural rules; throws with a readable message when
 // the document breaks them.
 function normalizeDocument(raw: Record<string, unknown>, fallbackName: string): GraphDocument {
   const kind = raw.kind ?? 'class';
   if (!DOCUMENT_KINDS.includes(kind as DocumentKind)) throw new Error(`Invalid .vgraph document: unknown kind "${String(kind)}".`);
-  if (!Array.isArray(raw.graphs) || raw.graphs.length === 0) throw new Error('Invalid .vgraph document: expected at least one graph.');
+  const graphless = kind === 'structure' || kind === 'enumeration';
+  if (graphless ? raw.graphs !== undefined && !Array.isArray(raw.graphs) : !Array.isArray(raw.graphs) || raw.graphs.length === 0) throw new Error('Invalid .vgraph document: expected at least one graph.');
+  if (raw.enumerators !== undefined && (kind !== 'enumeration' || !Array.isArray(raw.enumerators))) throw new Error('Invalid .vgraph document: only an enumeration has enumerators, as an array.');
   if (raw.variables !== undefined && !Array.isArray(raw.variables)) throw new Error('Invalid .vgraph document: variables must be an array.');
 
   const doc: GraphDocument = {
@@ -80,11 +89,12 @@ function normalizeDocument(raw: Record<string, unknown>, fallbackName: string): 
     kind: kind as DocumentKind,
     language: typeof raw.language === 'string' && raw.language ? raw.language : DEFAULT_LANGUAGE,
     variables: (raw.variables as GraphDocument['variables'] | undefined) ?? [],
-    graphs: raw.graphs.map((g, i) => normalizeGraph(g, i)),
+    graphs: ((raw.graphs as unknown[] | undefined) ?? []).map((g, i) => normalizeGraph(g, i)),
+    ...(kind === 'enumeration' ? { enumerators: (raw.enumerators as GraphDocument['enumerators']) ?? [] } : {}),
     metadata: isObject(raw.metadata) ? raw.metadata : {}
   };
 
-  if (doc.kind !== 'class' && doc.variables.length) throw new Error(`Invalid .vgraph document: a ${doc.kind} cannot have variables.`);
+  if (doc.kind !== 'class' && doc.kind !== 'structure' && doc.variables.length) throw new Error(`Invalid .vgraph document: a ${doc.kind} cannot have variables.`);
   const ids = new Set<string>();
   for (const graph of doc.graphs) {
     if (ids.has(graph.id)) throw new Error(`Invalid .vgraph document: duplicate graph id "${graph.id}".`);
@@ -107,7 +117,7 @@ function normalizeGraph(raw: unknown, index: number): Graph {
   return graph;
 }
 
-const DOCUMENT_KEY_ORDER = ['schemaVersion', 'name', 'kind', 'language', 'variables', 'graphs', 'metadata'];
+const DOCUMENT_KEY_ORDER = ['schemaVersion', 'name', 'kind', 'language', 'variables', 'enumerators', 'graphs', 'metadata'];
 const GRAPH_KEY_ORDER = ['id', 'name', 'kind', 'signature', 'localVariables', 'nodes', 'connections', 'comments'];
 
 // Known fields come first in a fixed order, so files diff cleanly whichever code produced them.

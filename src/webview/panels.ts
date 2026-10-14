@@ -18,6 +18,7 @@ import { render } from './render';
 import { headerColor } from './style';
 import { state } from './state';
 import { screenToWorld } from './view';
+import { UserType, listUserTypes } from '../core/user-types';
 
 export function renderPalette(): void {
   dom.categories.innerHTML = '';
@@ -85,10 +86,38 @@ export function renderInspector(): void {
     }
     wrapper.appendChild(list);
   }
+  const user = def.implementation;
+  if (user?.kind === 'struct' && user.operation === 'set-members') wrapper.appendChild(membersEditor(node, user.type.fields));
   if (node.type === SWITCH_STRING) wrapper.appendChild(switchCasesEditor(node));
   if (node.type === SWITCH_INT) wrapper.appendChild(switchStartEditor(node));
   dom.inspector.innerHTML = '';
   dom.inspector.appendChild(wrapper);
+}
+
+// Set members in: a checkbox per field, for the fields the node changes (each gets a pin), as in
+// Unreal's Details for the node.
+function membersEditor(node: GraphNode, fields: { id: string; name: string }[]): HTMLElement {
+  const list = document.createElement('div');
+  list.className = 'details-fields';
+  list.insertAdjacentHTML('beforeend', '<div class="details-heading">Members to set</div>');
+  const chosen = new Set(Array.isArray(node.properties.members) ? (node.properties.members as string[]) : []);
+  for (const f of fields) {
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = chosen.has(f.id);
+    box.setAttribute('aria-label', f.name);
+    box.addEventListener('change', () => {
+      if (box.checked) chosen.add(f.id);
+      else chosen.delete(f.id);
+      // Kept in field order; a field no longer set loses its wires.
+      node.properties.members = fields.map((x) => x.id).filter((id) => chosen.has(id));
+      if (!box.checked && state.graph) state.graph.connections = state.graph.connections.filter((c) => !(c.toNode === node.id && c.toPin === f.id));
+      markDirty();
+      render();
+    });
+    list.appendChild(field(f.name, box));
+  }
+  return list;
 }
 
 // Switch on String's case names (Unreal's "Pin Names"), one field each.
@@ -253,13 +282,13 @@ function renderFunctionDetails(graph: Graph): void {
 }
 
 // Unreal's pin type picker: a type, a container, and a map's value type. Macros also offer Exec.
-function typePicker<T extends TypeRef | 'exec'>(type: T, label: string, apply: (type: T | TypeRef) => void, allowExec = false): HTMLElement {
+export function typePicker<T extends TypeRef | 'exec'>(type: T, label: string, apply: (type: T | TypeRef) => void, allowExec = false, exclude?: string): HTMLElement {
   const row = document.createElement('div');
   row.className = 'type-row';
   const data = type === 'exec' ? undefined : (type as TypeRef);
-  const elementType = select(allowExec ? [{ id: 'exec', label: 'Exec' }, ...VARIABLE_TYPES] : VARIABLE_TYPES, data?.id ?? 'exec', label);
+  const elementType = select(allowExec ? [{ id: 'exec', label: 'Exec' }, ...typeOptions(exclude)] : typeOptions(exclude), data?.id ?? 'exec', label);
   const container = select(CONTAINERS, data?.container ?? '', `${label} Container`);
-  const valueType = select(VARIABLE_TYPES, data?.valueType?.id ?? 'any', `${label} Map Value`);
+  const valueType = select(typeOptions(), data?.valueType?.id ?? 'any', `${label} Map Value`);
   container.hidden = !data;
   valueType.hidden = data?.container !== 'map';
   const change = (): void => {
@@ -273,6 +302,20 @@ function typePicker<T extends TypeRef | 'exec'>(type: T, label: string, apply: (
   [elementType, container, valueType].forEach((el) => el.addEventListener('change', change));
   row.append(elementType, container, valueType);
   return row;
+}
+
+// The built-in types, then the workspace's structs and enums in the document's language (but not a
+// structure itself, which can't contain itself).
+export function typeOptions(exclude?: string): { id: string; label: string }[] {
+  return [...VARIABLE_TYPES, ...workspaceTypes().filter((t) => t.id !== exclude).map((t) => ({ id: t.id, label: t.name }))];
+}
+
+export function workspaceTypes(): UserType[] {
+  return listUserTypes(state.definitions, state.document?.language);
+}
+
+function userType(id: string): UserType | undefined {
+  return workspaceTypes().find((t) => t.id === id);
 }
 
 const VARIABLE_TYPES: { id: string; label: string }[] = [
@@ -346,9 +389,9 @@ function renderVariableDetails(variableId: string): boolean {
   // Type and container, like Unreal's pin type picker with its container dropdown.
   const typeRow = document.createElement('div');
   typeRow.className = 'type-row';
-  const elementType = select(VARIABLE_TYPES, variable.type.id, 'Variable Type');
+  const elementType = select(typeOptions(), variable.type.id, 'Variable Type');
   const container = select(CONTAINERS, variable.type.container ?? '', 'Container Type');
-  const valueType = select(VARIABLE_TYPES, variable.type.valueType?.id ?? 'any', 'Map Value Type');
+  const valueType = select(typeOptions(), variable.type.valueType?.id ?? 'any', 'Map Value Type');
   valueType.hidden = variable.type.container !== 'map';
   const applyType = (): void => {
     const kind = container.value as '' | ContainerKind;
@@ -437,8 +480,10 @@ function containerDefaultEditor(variable: GraphVariable): HTMLElement {
   return list;
 }
 
-// An editor for one value of a primitive type.
-function elementEditor(typeId: string, value: unknown, change: (value: unknown) => void, label: string): HTMLInputElement {
+// An editor for one value of a primitive type, or an enum's value (stored by id).
+function elementEditor(typeId: string, value: unknown, change: (value: unknown) => void, label: string): HTMLElement {
+  const enumType = userType(typeId);
+  if (enumType?.kind === 'enum') return enumSelect(enumType, value, change, label);
   const input = document.createElement('input');
   input.setAttribute('aria-label', label);
   if (typeId === 'bool') {
@@ -457,11 +502,24 @@ function elementEditor(typeId: string, value: unknown, change: (value: unknown) 
   return input;
 }
 
-function defaultValueEditor(variable: GraphVariable): HTMLElement {
+export function defaultValueEditor(variable: GraphVariable): HTMLElement {
   const input = document.createElement('input');
   input.setAttribute('aria-label', 'Default Value');
   const type = variable.type;
   if (type.container) return containerDefaultEditor(variable);
+  const user = userType(type.id);
+  if (user?.kind === 'enum') {
+    return enumSelect(user, variable.defaultValue, (value) => {
+      variable.defaultValue = value;
+      markDirty();
+    }, 'Default Value');
+  }
+  if (user?.kind === 'struct' || type.id.startsWith('struct:')) {
+    const note = document.createElement('span');
+    note.className = 'muted';
+    note.textContent = `The field defaults of ${user?.name ?? type.id.slice('struct:'.length)}.`;
+    return note;
+  }
   if (type.id === 'bool') {
     input.type = 'checkbox';
     input.checked = Boolean(variable.defaultValue);
@@ -480,4 +538,11 @@ function defaultValueEditor(variable: GraphVariable): HTMLElement {
     markDirty();
   });
   return input;
+}
+
+// A dropdown of an enum's values (Unreal's enum pin editor); the stored value is the value's id.
+export function enumSelect(type: { enumerators: { id: string; name: string }[] }, value: unknown, change: (value: string) => void, label: string): HTMLSelectElement {
+  const el = select(type.enumerators.map((e) => ({ id: e.id, label: e.name })), typeof value === 'string' && type.enumerators.some((e) => e.id === value) ? value : type.enumerators[0]?.id ?? '', label);
+  el.addEventListener('change', () => change(el.value));
+  return el;
 }

@@ -8,6 +8,7 @@ import { isFunctionType, signatureChanges } from './imported-functions';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables, functionNodeDefinition } from './functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS, macroNodeDefinition } from './macros';
 import { Graph, GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
+import { setMembersDefinition } from './user-types';
 
 export type NodeResolver = (node: GraphNode) => NodeDefinition | undefined;
 
@@ -58,6 +59,7 @@ export function createResolver(registry: ResolveContext, doc: ResolverDocument):
     if (node.type === MACRO_INPUTS || node.type === MACRO_OUTPUTS || node.type === MACRO_INSTANCE) return macroNodeDefinition(base, node, doc.graphs);
     if (node.type === SEQUENCE) return { ...base, outputs: Array.from({ length: sequencePinCount(node) }, (_, i) => execPin(`then${i}`, `Then ${i}`, 'output')) };
     if (node.type === REROUTE) return rerouteDefinition(base, node);
+    if (base.implementation?.kind === 'struct' && base.implementation.operation === 'set-members') return setMembersDefinition(base, node.properties.members);
     if (node.type === MULTIGATE || node.type === SWITCH_INT || node.type === SWITCH_STRING) return flowControlDefinition(base, node);
     // Wildcard pins take the element types the node adopted (src/core/containers.ts).
     if (node.type === MAKE_ARRAY || node.type === MAKE_SET || node.type === MAKE_MAP) return resolveWildcards(makeDefinition(base, node), node);

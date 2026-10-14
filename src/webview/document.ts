@@ -6,6 +6,7 @@ import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/function
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
 import { primaryGraph } from '../core/serializer';
+import { isTypeDocument, renderTypeEditor } from './type-editor';
 import { markCompileDirty, renderLanguagePicker } from './compile-results';
 import { dom, setStatus } from './dom';
 import { postToHost } from './host';
@@ -119,8 +120,17 @@ export function applySettings(message: HostMessage): void {
 export function loadDocument(doc: GraphDocument, preserveView = false): void {
   const previousGraphId = state.graph?.id;
   state.document = copyDocument(doc);
-  state.graph = state.document.graphs.find((g) => g.id === previousGraphId) ?? primaryGraph(state.document);
-  dom.graphName.textContent = `${state.document.name} › ${state.graph.name}`;
+  state.graph = state.document.graphs.find((g) => g.id === previousGraphId) ?? primaryGraph(state.document) ?? null;
+  dom.graphName.textContent = state.graph ? `${state.document.name} › ${state.graph.name}` : state.document.name;
+  // A structure or enumeration has no graphs: its fields or values are edited instead.
+  const typeDocument = isTypeDocument(state.document);
+  dom.typeEditor.hidden = !typeDocument;
+  dom.typeEditor.dataset.kind = state.document.kind;
+  dom.palette.hidden = typeDocument;
+  dom.help.hidden = typeDocument;
+  dom.fitButton.hidden = typeDocument;
+  for (const button of [dom.runButton, dom.simulateButton]) button.hidden = typeDocument;
+  if (typeDocument) renderTypeEditor();
   renderLanguagePicker();
   // Variables may have changed, and the palette lists one Get and Set entry per variable.
   renderPalette();

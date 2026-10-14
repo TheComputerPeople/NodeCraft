@@ -1,6 +1,7 @@
 import type { CompileDiagnostic } from './compiler/diagnostics';
 import type { SearchHit } from './search';
 import type { TypeRef } from './types';
+import type { EnumInfo, Enumerator, StructInfo } from './user-types';
 
 export type { TypeRef } from './types';
 
@@ -37,7 +38,10 @@ export type NodeImplementation =
   | { kind: 'code'; languages: Record<string, string>; defaultLanguage?: string }
   | { kind: 'subgraph'; graph: string }
   | FunctionImplementation
-  | MacroImplementation;
+  | MacroImplementation
+  // A struct's Make, Break and Set Members, and an enum's Switch on, == and != (src/core/user-types.ts).
+  | { kind: 'struct'; operation: 'make' | 'break' | 'set-members'; type: StructInfo }
+  | { kind: 'enum'; operation: 'switch' | 'equal' | 'not-equal'; type: EnumInfo };
 
 // A macro of a macro library (src/core/libraries.ts): its graph, with the library's other macros
 // already expanded in it, so it can be expanded anywhere (src/core/macros.ts).
@@ -138,17 +142,20 @@ export interface Graph {
 
 // What a .vgraph file is, mirroring Unreal's asset types: a class (variables, event graphs,
 // functions, macros), a library of functions, or a library of macros.
-export type DocumentKind = 'class' | 'functionLibrary' | 'macroLibrary';
+// Structures and enumerations declare a type and have no graphs (src/core/user-types.ts).
+export type DocumentKind = 'class' | 'functionLibrary' | 'macroLibrary' | 'structure' | 'enumeration';
 
-// The contents of a .vgraph file (schema version 2).
+// The contents of a .vgraph file (schema version 3).
 export interface GraphDocument {
   schemaVersion: number;
   name: string;
   kind: DocumentKind;
   language?: string;
-  // Member variables; libraries have none.
+  // Member variables; a structure's fields; libraries and enumerations have none.
   variables: GraphVariable[];
   graphs: Graph[];
+  // An enumeration's values, in order.
+  enumerators?: Enumerator[];
   // The signature of each project function the graphs call, by node type, as it was when its
   // nodes were made or last refreshed (docs/code-as-nodes.md, "When the code changes").
   importedFunctions?: Record<string, NodeDefinition>;

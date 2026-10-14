@@ -2,7 +2,9 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { builtinLanguagePacks } from '../core/languages';
 import { NodeRegistry } from '../core/registry';
-import { createEmptyDocument, serializeDocument } from '../core/serializer';
+import { DOCUMENT_KIND_NAMES, newDocument } from '../core/blueprint-edits';
+import { DocumentKind } from '../core/model';
+import { serializeDocument } from '../core/serializer';
 import { CompileService } from './compile-service';
 import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
 import { detectWorkspaceLanguage } from './languages';
@@ -85,6 +87,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('blueprintVisualScripting.createGraph', async () => {
+      // What to make, as Unreal's Content Browser offers it.
+      const picked = await vscode.window.showQuickPick(
+        (Object.entries(DOCUMENT_KIND_NAMES) as [DocumentKind, string][]).map(([documentKind, label]) => ({ label, documentKind })),
+        { placeHolder: 'What kind of file?' }
+      );
+      if (!picked) return;
       const target = await vscode.window.showSaveDialog({
         defaultUri: vscode.Uri.joinPath(vscode.workspace.workspaceFolders?.[0]?.uri ?? context.extensionUri, 'NewGraph.vgraph'),
         filters: { 'Visual Graph': ['vgraph'] },
@@ -94,7 +102,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const name = target.path.split('/').pop()?.replace(/\.vgraph$/i, '') || 'NewGraph';
       const language = await detectWorkspaceLanguage(languages);
-      const graphDocument = createEmptyDocument(name, language?.id);
+      const graphDocument = newDocument(name, language?.id, picked.documentKind);
       await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(serializeDocument(graphDocument)));
       await vscode.commands.executeCommand('vscode.open', target);
     })

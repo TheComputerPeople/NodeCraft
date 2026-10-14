@@ -33,6 +33,24 @@ button, input { font: inherit; color: inherit; }
 #status { margin-left: auto; color: var(--muted); }
 #canvas-wrap { position: relative; overflow: hidden; cursor: default; background-image: radial-gradient(circle, color-mix(in srgb, var(--fg) 16%, transparent) 1px, transparent 1px); background-size: 24px 24px; }
 #world { position: absolute; inset: 0; transform-origin: 0 0; z-index: 1; pointer-events: none; }
+/* Structure and enumeration files: a list of fields or values over the canvas. */
+#type-editor { position: absolute; inset: 0; z-index: 10; overflow: auto; padding: 18px 24px; background: var(--vscode-editor-background, var(--panel)); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+#type-editor[hidden] { display: none; }
+#type-editor textarea { width: min(720px, 100%); }
+#type-editor input:not([type="checkbox"]), #type-editor select, #type-editor textarea { padding: 4px 6px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--panel-border)); border-radius: 3px; font: inherit; min-width: 0; }
+#type-editor .type-row, #type-editor .container-default { display: flex; gap: 4px; flex-wrap: wrap; }
+#type-editor .container-default { flex-direction: column; align-items: stretch; }
+#type-editor .container-row { display: flex; gap: 4px; }
+#help[hidden], #palette[hidden], #toolbar button[hidden] { display: none; }
+.type-title { display: flex; align-items: baseline; gap: 10px; }
+.type-members { display: grid; gap: 6px; width: min(900px, 100%); }
+.type-member { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.4fr) minmax(120px, 1fr) auto; gap: 8px; align-items: center; }
+#type-editor[data-kind="enumeration"] .type-member { grid-template-columns: minmax(140px, 1fr) minmax(160px, 2fr) auto; }
+.type-header { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.type-actions { display: flex; gap: 4px; }
+.type-actions button, .type-add { border: 1px solid var(--panel-border); background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 3px 8px; border-radius: 4px; cursor: pointer; }
+.type-actions button:disabled { opacity: .4; cursor: default; }
+#type-editor .container-default button { border: 1px solid var(--panel-border); background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 3px 8px; border-radius: 4px; cursor: pointer; }
 #edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; transform-origin: 0 0; z-index: 0; }
 /* Wires take their source pin's color (docs/unreal-conventions.md); exec wires are thicker. */
 .edge { fill: none; stroke: var(--wire-color, var(--fg)); stroke-width: 2; opacity: .95; }

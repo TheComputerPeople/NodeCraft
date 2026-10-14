@@ -43,6 +43,7 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
   - numbers print in their shortest exact form, using JavaScript's rules: `30`, `0.1`, `1e-7`, `1e+21`, `NaN`, `Infinity`. Integral values have no decimal point. (Unreal prints `30.0` for floats; matching that needs type information that `any` pins don't carry, so it is deferred.)
   - strings print unchanged; arrays, sets and maps print as compact JSON, with numbers by the rules above. Sets print in ascending order (they have no order of their own); maps print as objects in the order their keys were added.
 - **Add** converts its inputs to numbers (a missing value counts as 0) and adds them.
+- **Structs and enums:** a struct's default has each field's default; an enum's default is its first value. A struct prints as a JSON object with a key per field name, in field order; an enum value prints as its name (inside JSON, as a string). Structs are values: Set Members makes a new struct, so a variable assigned from another keeps its fields when the other is changed.
 
 ## Containers
 

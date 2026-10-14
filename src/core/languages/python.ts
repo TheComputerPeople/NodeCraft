@@ -1,11 +1,12 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, exprType } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, exprType, userTypes } from '../compiler/ir';
 import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
 import { NameScope, dedent, toIdentifier } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
 import { TypeRef, parseTypeId } from '../types';
+import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 
 const RESERVED = new Set([
   'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue', 'def', 'del', 'elif', 'else',
@@ -119,6 +120,39 @@ const HELPERS: Record<'format' | 'number' | 'boolean', string[]> = {
   ]
 };
 
+// The format helper with branches for the structs and enums a module prints: an enum prints its
+// value (its name), a struct each field by name.
+function formatHelper(enums: boolean, structs: boolean): string[] {
+  const lines = [...HELPERS.format];
+  const insert = (before: string, added: string[]): void => {
+    const at = lines.indexOf(before);
+    lines.splice(at, 0, ...added);
+  };
+  if (enums) {
+    insert('    return _to_json(value)', ['    if isinstance(value, Enum):', '        return value.value']);
+    insert('    return json.dumps(str(value), ensure_ascii=False)', ['    if isinstance(value, Enum):', '        return json.dumps(value.value, ensure_ascii=False)']);
+  }
+  if (structs) {
+    insert('    return json.dumps(str(value), ensure_ascii=False)', [
+      '    if hasattr(value, "_blueprint_fields"):',
+      '        return "{" + ",".join(json.dumps(k, ensure_ascii=False) + ":" + _to_json(v) for k, v in value._blueprint_fields()) + "}"'
+    ]);
+  }
+  return lines;
+}
+
+// Attribute names of a struct's fields (snake_case) and member names of an enum's values
+// (UPPER_CASE), the same in the type's own module and in every module that uses it.
+export function pythonFieldNames(type: StructInfo): Map<string, string> {
+  const scope = new NameScope(RESERVED, ['field', 'dataclass', '_blueprint_fields']);
+  return new Map(type.fields.map((f) => [f.id, scope.claim(f.name, 'snake')]));
+}
+
+export function pythonEnumMembers(type: EnumInfo): Map<string, string> {
+  const scope = new NameScope(RESERVED, ['name', 'value']);
+  return new Map(type.enumerators.map((e) => [e.id, scope.claim(e.name, 'snake').toUpperCase()]));
+}
+
 // Names fixed in every generated module, which functions must not take.
 const MODULE_NAMES = ['annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text'];
 
@@ -177,10 +211,16 @@ class PythonEmitter {
   private readonly className: string;
   private readonly helpersUsed = new Set<keyof typeof HELPERS>();
   private usesAny = false;
+  // The structs and enums the program uses (and the one it declares), by type id.
+  private readonly types: Map<string, UserType>;
+  // Standard-library imports the body needs beyond the usual ones, e.g. "from enum import Enum".
+  private readonly extraImports = new Set<string>();
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions) {
     this.library = !!program.library;
     this.className = new NameScope(RESERVED).claim(program.className, 'pascal');
+    this.types = userTypes(program);
+    if (program.declaration) this.types.set(program.declaration.type.id, program.declaration.type);
     // A library's functions are claimed first, exactly as pythonExportNames claims them.
     this.names = this.library ? new NameScope(RESERVED, MODULE_NAMES) : new NameScope(RESERVED, ['start']);
     for (const f of program.functions) this.functionNames.set(f.id, this.names.claim(f.name, 'snake'));
@@ -195,6 +235,7 @@ class PythonEmitter {
   emit(): GeneratedCode {
     // The class body is written first so the imports reflect what it uses.
     const body = this.out;
+    if (this.program.declaration) return this.emitDeclaration();
     if (this.library) {
       // A library: module-level functions.
       for (const fn of this.program.functions) this.functionMethod(fn);
@@ -222,6 +263,44 @@ class PythonEmitter {
     return this.finish(true);
   }
 
+  // A structure (a frozen dataclass: its values are never changed, Set Members makes a new one) or
+  // an enumeration (an Enum whose values are their names).
+  private emitDeclaration(): GeneratedCode {
+    const body = this.out;
+    const declaration = this.program.declaration!;
+    if (declaration.kind === 'enum') {
+      this.extraImports.add('from enum import Enum');
+      const members = pythonEnumMembers(declaration.type);
+      body.line(`class ${this.className}(Enum):`);
+      for (const e of declaration.type.enumerators) body.line(`    ${members.get(e.id)} = ${literal(e.name)}`);
+      return this.finish(false);
+    }
+    const type = declaration.type;
+    const fields = pythonFieldNames(type);
+    this.extraImports.add('from dataclasses import dataclass');
+    body.line('@dataclass(frozen=True)');
+    body.line(`class ${this.className}:`);
+    type.fields.forEach((f, i) => {
+      const initial = this.value(declaration.initial[i], f.type);
+      // Containers and structs are built for each value, not shared.
+      const shared = !f.type.container && this.types.get(f.type.id)?.kind !== 'struct';
+      if (!shared) this.extraImports.add('from dataclasses import dataclass, field');
+      body.line(`    ${fields.get(f.id)}: ${this.typeName(f.type)} = ${shared ? initial : `field(default_factory=lambda: ${initial})`}`);
+    });
+    this.usesAny = true;
+    body.line();
+    body.line('    # As Print shows it: each field by name, in order.');
+    body.line('    def _blueprint_fields(self) -> list[tuple[str, Any]]:');
+    body.line(`        return [${type.fields.map((f) => `(${literal(f.name)}, self.${fields.get(f.id)})`).join(', ')}]`);
+    return this.finish(false);
+  }
+
+  // The name a struct or enum goes by in this module: its own, or its import's.
+  private userTypeName(id: string): string {
+    if (this.program.declaration?.type.id === id) return this.className;
+    return this.importNames.get(id) ?? 'Any';
+  }
+
   // The module around the body written so far: header and imports (now that the body has shown
   // what it uses), then the helpers and, for a class, the run-as-script footer.
   private finish(runnable: boolean): GeneratedCode {
@@ -232,7 +311,15 @@ class PythonEmitter {
     header.line();
     header.line('from __future__ import annotations');
     header.line();
-    const imports = [...(this.helpersUsed.has('format') ? ['import json'] : []), ...(this.usesAny || this.helpersUsed.size ? ['from typing import Any'] : [])];
+    const printsEnums = this.helpersUsed.has('format') && [...this.types.values()].some((t) => t.kind === 'enum');
+    if (printsEnums) this.extraImports.add('from enum import Enum');
+    const dataclassImport = this.extraImports.has('from dataclasses import dataclass, field') ? 'from dataclasses import dataclass, field' : this.extraImports.has('from dataclasses import dataclass') ? 'from dataclasses import dataclass' : undefined;
+    const imports = [
+      ...(this.helpersUsed.has('format') ? ['import json'] : []),
+      ...(dataclassImport ? [dataclassImport] : []),
+      ...(this.extraImports.has('from enum import Enum') ? ['from enum import Enum'] : []),
+      ...(this.usesAny || this.helpersUsed.size ? ['from typing import Any'] : [])
+    ];
     if (imports.length) {
       imports.forEach((i) => header.line(i));
       header.line();
@@ -240,6 +327,7 @@ class PythonEmitter {
     // Project code, one import per module (docs/code-as-nodes.md, "Generated imports").
     const byModule = new Map<string, string[]>();
     for (const i of [...this.program.imports].sort((a, b) => compare(a.name, b.name))) {
+      if (!i.path && !i.module) continue;
       const module = i.module ?? pythonModuleName(i.path);
       const local = this.importNames.get(i.id)!;
       byModule.set(module, [...(byModule.get(module) ?? []), local === i.name ? local : `${i.name} as ${local}`]);
@@ -252,7 +340,9 @@ class PythonEmitter {
 
     const footer: string[] = [];
     for (const helper of ['format', 'number', 'boolean'] as const) {
-      if (this.helpersUsed.has(helper)) footer.push('', '', ...HELPERS[helper]);
+      if (!this.helpersUsed.has(helper)) continue;
+      const kinds = [...this.types.values()].map((t) => t.kind);
+      footer.push('', '', ...(helper === 'format' ? formatHelper(kinds.includes('enum'), kinds.includes('struct')) : HELPERS[helper]));
     }
     if (runnable) footer.push('', '', 'if __name__ == "__main__":', `    ${this.className}().start()`);
 
@@ -479,6 +569,19 @@ class PythonEmitter {
         const call = this.functionCall(e.function, e.args);
         return fn.outputs.length === 1 ? call : `${call}[${fn.outputs.findIndex((o) => o.id === e.output)}]`;
       }
+      case 'makeStruct': {
+        const type = this.types.get(e.type);
+        if (type?.kind !== 'struct') return 'None';
+        return `${this.userTypeName(type.id)}(${type.fields.map((f, i) => this.value(e.fields[i], f.type)).join(', ')})`;
+      }
+      case 'structField': {
+        const type = this.types.get(e.type);
+        return `${this.operand(e.value)}.${type?.kind === 'struct' ? pythonFieldNames(type).get(e.field) : e.field}`;
+      }
+      case 'enumValue': {
+        const type = this.types.get(e.type);
+        return `${this.userTypeName(e.type)}.${type?.kind === 'enum' ? pythonEnumMembers(type).get(e.value) : e.value}`;
+      }
       case 'makeContainer': {
         if (e.type.container === 'map') {
           const pairs: string[] = [];
@@ -535,6 +638,10 @@ class PythonEmitter {
     if (type?.container === 'array') return '[]';
     if (type?.container === 'set') return 'set()';
     if (type?.container === 'map') return '{}';
+    // A struct with its fields' defaults; an enum's first value.
+    const user = type && this.types.get(type.id);
+    if (user?.kind === 'struct') return `${this.userTypeName(user.id)}()`;
+    if (user?.kind === 'enum' && user.enumerators[0]) return `${this.userTypeName(user.id)}.${pythonEnumMembers(user).get(user.enumerators[0].id)}`;
     switch (type?.id) {
       case 'bool':
         return 'False';
@@ -549,10 +656,18 @@ class PythonEmitter {
   }
 
   private typeName(type: TypeRef | undefined): string {
-    const name = mapType(type ?? { id: 'any' });
+    const name = this.mapType(type ?? { id: 'any' });
     if (name.includes('Any')) this.usesAny = true;
     // Object-like types start out None, so they must admit it.
     return this.defaultFor(type) === 'None' && name !== 'Any' && !name.endsWith('| None') ? `${name} | None` : name;
+  }
+
+  // Python's spelling of a type, with structs and enums by the names this module knows them by.
+  private mapType(type: TypeRef): string {
+    if (!isUserTypeId(type.id) && !(type.valueType && isUserTypeId(type.valueType.id))) return mapType(type);
+    const element = isUserTypeId(type.id) ? this.userTypeName(type.id) : mapType({ id: type.id });
+    const value = type.valueType ? this.mapType(type.valueType) : 'Any';
+    return type.container === 'array' ? `list[${element}]` : type.container === 'set' ? `set[${element}]` : type.container === 'map' ? `dict[${element}, ${value}]` : element;
   }
 
   private typeOf(e: IrExpr): TypeRef | undefined {

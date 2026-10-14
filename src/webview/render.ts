@@ -10,7 +10,7 @@ import { dom } from './dom';
 import { openGraph } from './my-blueprint';
 import { FUNCTION_CALL } from '../core/functions';
 import { MACRO_INSTANCE } from '../core/macros';
-import { renderInspector } from './panels';
+import { enumSelect, renderInspector, workspaceTypes } from './panels';
 import { Point, state } from './state';
 import { applyTransform, screenPointToWorld } from './view';
 import { headerColor, nodeKind, pinColor } from './style';
@@ -173,12 +173,24 @@ function renderPin(node: GraphNode, pin: PinDefinition, showLabel: boolean): HTM
 }
 
 // Unreal edits an unconnected input's value right on the node: a checkbox for bool, a field for
-// numbers and text. Containers get an editor in a later version.
-function defaultEditor(node: GraphNode, pin: PinDefinition): HTMLInputElement | undefined {
+// numbers and text, a dropdown for an enum. Containers and structs (made with Make) have none.
+function defaultEditor(node: GraphNode, pin: PinDefinition): HTMLElement | undefined {
   const type = pin.type;
-  if (type?.container) return undefined;
+  if (type?.container || type?.id.startsWith('struct:')) return undefined;
   const key = `pin:${pin.id}`;
   const value = node.properties[key] ?? pin.defaultValue;
+  const enumType = type && workspaceTypes().find((t) => t.id === type.id);
+  if (enumType?.kind === 'enum' || type?.id.startsWith('enum:')) {
+    const options = enumType?.kind === 'enum' ? enumType : { enumerators: [] };
+    const picker = enumSelect(options, value, (id) => {
+      node.properties[key] = id;
+      markDirty();
+    }, pin.name || pin.id);
+    picker.className = 'pin-default';
+    picker.dataset.pin = pin.id;
+    picker.addEventListener('mousedown', (e) => e.stopPropagation());
+    return picker;
+  }
   const input = document.createElement('input');
   input.className = 'pin-default';
   input.dataset.pin = pin.id;

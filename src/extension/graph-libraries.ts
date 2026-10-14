@@ -10,6 +10,7 @@ import { libraryDefinitions, macroLibraryDefinitions } from '../core/libraries';
 import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
+import { declaredType, userTypeDefinitions } from '../core/user-types';
 import { csharpNamespace, pythonModule } from './placement';
 
 const GLOB = '**/*.vgraph';
@@ -96,7 +97,7 @@ export class GraphLibraries implements vscode.Disposable {
       return undefined;
     }
     // Most graphs are classes; skip parsing them.
-    if (!text.includes('functionLibrary') && !text.includes('macroLibrary')) return undefined;
+    if (!/"kind":\s*"(functionLibrary|macroLibrary|structure|enumeration)"/.test(text)) return undefined;
     let doc: GraphDocument;
     try {
       doc = parseDocument(text, path.basename(uri.fsPath, '.vgraph')).document;
@@ -106,15 +107,20 @@ export class GraphLibraries implements vscode.Disposable {
     const root = folder.uri.fsPath;
     if (doc.kind === 'macroLibrary') return { path: relative(root, uri.fsPath), definitions: macroLibraryDefinitions(doc, relative(root, uri.fsPath)) };
     const generator = doc.language ? this.languages.get(doc.language)?.generator : undefined;
-    if (doc.kind !== 'functionLibrary' || !generator) return undefined;
+    if (!generator) return undefined;
     const dir = path.dirname(uri.fsPath);
     const generated = path.join(dir, generator.outputFileName(path.basename(uri.fsPath)));
+    const module = doc.language === 'python' ? pythonModule(generated, root).module : doc.language === 'csharp' ? csharpNamespace(dir, root) : undefined;
+    // Structs and enums: their Make, Break, Switch… nodes carry the type (src/core/user-types.ts).
+    const type = declaredType(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) });
+    if (type) return { path: relative(root, uri.fsPath), definitions: userTypeDefinitions(type) };
+    if (doc.kind !== 'functionLibrary') return undefined;
     const functions = doc.graphs.filter((g) => g.kind === 'function').map((g) => ({ id: g.id, name: g.name }));
     const definitions = libraryDefinitions(doc, {
       documentPath: relative(root, uri.fsPath),
       generatedPath: relative(root, generated),
       exports: generator.libraryExports(doc.name, functions),
-      module: doc.language === 'python' ? pythonModule(generated, root).module : doc.language === 'csharp' ? csharpNamespace(dir, root) : undefined
+      module
     });
     return { path: relative(root, uri.fsPath), definitions };
   }

@@ -30,6 +30,10 @@ export function renderMyBlueprint(): void {
   const doc = state.document;
   if (!doc) return;
   const allowed = edits.allowedGraphKinds(doc);
+  if (doc.kind === 'structure' || doc.kind === 'enumeration') {
+    root.appendChild(emptyItem(doc.kind === 'structure' ? 'A structure has fields, edited in the middle.' : 'An enumeration has values, edited in the middle.'));
+    return;
+  }
 
   for (const section of GRAPH_SECTIONS.filter((s) => allowed.includes(s.kind))) {
     const el = sectionElement(section.title, section.add, () => {
