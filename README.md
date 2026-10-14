@@ -133,6 +133,8 @@ The editor follows Unreal Engine 5's Blueprint editor. [docs/unreal-conventions.
 |---|---|
 | Add a node (graph action menu) | Right-click the background; the palette on the left also works |
 | Node actions (alignment, break links, delete…) | Right-click a node |
+| Pin actions, then the node's actions | Right-click a pin |
+| Rename or delete a comment | Right-click its title bar |
 | Place Branch, Sequence or Start | Hold B, S or P and click |
 | Comment around the selection | C (hold C and click to place an empty comment) |
 | Move | Drag a node; arrow keys move the selection |

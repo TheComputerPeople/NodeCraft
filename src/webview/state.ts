@@ -44,9 +44,10 @@ export interface Panning {
   // Right-button presses pan when dragged and open a context menu when not (as in Unreal).
   button: number;
   moved: boolean;
-  // The node and pin under a right-button press, for their context menus.
+  // The node, pin or comment title under a right-button press, for their context menus.
   nodeId: string | null;
   pin: PinAddress | null;
+  commentId: string | null;
 }
 
 // Marquee modes, as in Unreal: drag replaces, Shift+drag adds, Ctrl+drag removes.
@@ -62,7 +63,8 @@ export interface GroupSelection {
 
 export type MenuContext =
   | { kind: 'add-node'; position: Point; entries: PaletteEntry[]; allEntries: PaletteEntry[]; title: string; source: (PinAddress & { kind: PinKind }) | null }
-  | { kind: 'node'; nodeId: string };
+  | { kind: 'node'; nodeId: string }
+  | { kind: 'comment'; commentId: string };
 
 export interface EditorState {
   // Null until the host sends a parsable document; editing is disabled while null.

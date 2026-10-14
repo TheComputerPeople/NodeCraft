@@ -9,7 +9,7 @@ import { dom, eventElement, pinElement, setStatus } from './dom';
 import { newConnectionId } from './host';
 import { clearCommentSelection } from './comments';
 import { hideContextMenu } from './menus';
-import { MenuItem, showFloatingMenu } from './floating-menu';
+import { MenuItem } from './floating-menu';
 import { renderMyBlueprint } from './my-blueprint';
 import { renderInspector, renderPalette } from './panels';
 import { render, renderEdges, syncSelectionClasses } from './render';
@@ -224,12 +224,13 @@ export function addSequenceOutput(node: GraphNode): void {
   render();
 }
 
-// A pin's right-click menu, as in Unreal: break its links, and remove it where pins can be removed.
-export function showPinMenu(nodeId: string, pinId: string, clientX: number, clientY: number): void {
+// A pin's actions, as in Unreal: break its links, promote it, and remove it where pins can be
+// removed. The node menu shows them above the node's own actions.
+export function pinMenuItems(nodeId: string, pinId: string): MenuItem[] {
   const graph = state.graph;
   const node = graph?.nodes.find((n) => n.id === nodeId);
-  if (!graph || !node) return;
   const items: MenuItem[] = [];
+  if (!graph || !node) return items;
   if (graph.connections.some((c) => (c.fromNode === nodeId && c.fromPin === pinId) || (c.toNode === nodeId && c.toPin === pinId))) {
     items.push({ label: 'Break Link(s)', action: () => disconnectPin(nodeId, pinId) });
   }
@@ -249,7 +250,7 @@ export function showPinMenu(nodeId: string, pinId: string, clientX: number, clie
       }
     });
   }
-  if (items.length) showFloatingMenu(items, clientX, clientY);
+  return items;
 }
 
 // Arrow keys move the selection, as in Unreal.

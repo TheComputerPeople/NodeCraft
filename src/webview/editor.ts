@@ -1,6 +1,6 @@
 // Webview entry point: wires DOM and host events to the editor modules.
 import { HostMessage, RuntimeLogEvent } from '../core/model';
-import { addNode, compatibleEntriesForDraft, completeConnection, copySelection, deleteSelected, duplicateSelected, finishRewire, moveSelection, pasteText, showPinMenu } from './actions';
+import { addNode, compatibleEntriesForDraft, completeConnection, copySelection, deleteSelected, duplicateSelected, finishRewire, moveSelection, pasteText, pinMenuItems } from './actions';
 import { deleteSelectedComments, finishCommentDrag, isDraggingComment, placeComment, selectedCommentIds, startCommentRename, updateCommentDrag, wrapSelectionInComment } from './comments';
 import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, setLanguage, showCompileResult } from './compile-results';
 import { applySettings, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
@@ -9,11 +9,11 @@ import { postToHost } from './host';
 import { openFind, reveal, showResults } from './find';
 import { AlignEdge, alignSelection, straightenConnections } from './align';
 import { finishVariableDrag, removeVariable, startRename, updateVariableDrag } from './my-blueprint';
-import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showNodeContextMenu } from './menus';
+import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showNodeContextMenu } from './menus';
 import { renderPalette } from './panels';
 import { render, renderDrafts, renderEdges, scheduleRuntimePaint, updateEdgesFor } from './render';
 import { beginGroupSelection, finishGroupSelection, hideSelectionBox, selectAllNodes, selectNode, setPrimarySelection, updateGroupSelection } from './selection';
-import { state } from './state';
+import { Panning, state } from './state';
 import { applyTransform, fitGraph, screenToWorld, zoomAt } from './view';
 
 const RUN_TRAIL_MS = 1500;
@@ -218,11 +218,16 @@ document.addEventListener('paste', (e) => {
 // Right-click menus open on release, so a right-drag can pan instead (as in Unreal).
 dom.canvasWrap.addEventListener('contextmenu', (e) => e.preventDefault());
 
-function openContextMenu(nodeId: string | null, clientX: number, clientY: number): void {
+// Unreal distinguishes what was right-clicked: a pin (its actions, then its node's), a node, a
+// comment, or the background (the action menu).
+function openContextMenu(panning: Panning, clientX: number, clientY: number): void {
+  const nodeId = panning.pin?.node ?? panning.nodeId;
   if (nodeId) {
     if (!state.selectedNodeIds.has(nodeId)) selectNode(nodeId, false, true);
     else setPrimarySelection(nodeId);
-    showNodeContextMenu(nodeId, clientX, clientY);
+    showNodeContextMenu(nodeId, clientX, clientY, panning.pin ? pinMenuItems(panning.pin.node, panning.pin.pin) : null);
+  } else if (panning.commentId) {
+    showCommentContextMenu(panning.commentId, clientX, clientY);
   } else {
     showAddNodeMenu(screenToWorld(clientX, clientY), clientX, clientY, paletteEntries(), 'Add Node');
   }
@@ -241,7 +246,8 @@ dom.canvasWrap.addEventListener('mousedown', (e) => {
     const nodeId = target?.closest<HTMLElement>('.node')?.dataset.node ?? null;
     const pinEl = target?.closest<HTMLElement>('.pin');
     const pin = pinEl ? { node: pinEl.dataset.node ?? '', pin: pinEl.dataset.pin ?? '' } : null;
-    state.panning = { startX: e.clientX, startY: e.clientY, panX: state.pan.x, panY: state.pan.y, button: e.button, moved: false, nodeId, pin };
+    const commentId = target?.closest<HTMLElement>('.comment-title')?.closest<HTMLElement>('.comment')?.dataset.comment ?? null;
+    state.panning = { startX: e.clientX, startY: e.clientY, panX: state.pan.x, panY: state.pan.y, button: e.button, moved: false, nodeId, pin, commentId };
     e.preventDefault();
     return;
   }
@@ -273,8 +279,7 @@ window.addEventListener('mouseup', (e) => {
   if (panning) {
     state.panning = null;
     if (panning.button === 2 && !panning.moved && e.button === 2) {
-      if (panning.pin) showPinMenu(panning.pin.node, panning.pin.pin, e.clientX, e.clientY);
-      else openContextMenu(panning.nodeId, e.clientX, e.clientY);
+      openContextMenu(panning, e.clientX, e.clientY);
     }
     return;
   }

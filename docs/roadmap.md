@@ -223,6 +223,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Wiring | Double-click a wire adds a reroute node (community) | ✅ | — |
 | Wiring | Alignment menu; Q straightens, Shift+W/A/S/D align (community) | ✅ | — |
 | Nodes | Right-click action menu with "Context Sensitive" toggle; keyword search | ✅ | — |
+| Nodes | Separate right-click menus for the background, a node, a pin (pin actions above node actions) and a comment | ✅ | — |
 | Nodes | Hold-key + click placement: B, S, C, P | ✅ | — |
 | Nodes | Hold-key + click placement: D, G, F, M, N, O (need Phase 4 nodes) | ⬜ | 4 |
 | Nodes | Cut/copy/paste (also between graphs and files, as text), Ctrl+D duplicate | ✅ | — |

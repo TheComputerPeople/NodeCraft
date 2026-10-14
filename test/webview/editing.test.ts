@@ -176,7 +176,7 @@ describe('editing tools', () => {
     assert.deepEqual(await thenPins(), ['then0', 'then1', 'then2', 'then3']);
     const pin = await e.pinCenter('seq', 'then1');
     await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
-    await e.page.locator('#floating-menu button', { hasText: 'Remove Execution Pin' }).dispatchEvent('mousedown');
+    await e.page.locator('#context-menu button', { hasText: 'Remove Execution Pin' }).click();
     assert.deepEqual(await thenPins(), ['then0', 'then1', 'then2']);
   });
 
@@ -242,7 +242,8 @@ describe('editing tools', () => {
     if (!e) return;
     const pin = await e.pinCenter('print_false', 'value');
     await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
-    await e.page.locator('#floating-menu button', { hasText: 'Promote to Variable' }).dispatchEvent('mousedown');
+    await e.page.locator('#context-menu button', { hasText: 'Promote to Variable' }).click();
+    await savedGraph(e, (g) => g.nodes.some((n) => n.type === 'core:variable.get'));
     const saved = (await e.posted()).filter((m) => m.type === 'applyDocument').pop()!.document!;
     const variable = saved.variables.find((v) => v.name === 'Value')!;
     assert.deepEqual(variable.type, { id: 'any' });
@@ -251,5 +252,65 @@ describe('editing tools', () => {
     const get = graph.nodes.find((n) => n.type === 'core:variable.get' && n.properties.variable === variable.id)!;
     assert.ok(graph.connections.some((c) => c.fromNode === get.id && c.toNode === 'print_false' && c.toPin === 'value'));
     assert.deepEqual(await e.page.$$eval('.mb-item[data-kind="variable"] .mb-name', (els) => els.map((el) => el.textContent)), ['Value']);
+  });
+
+  // Unreal tells apart what was right-clicked: a pin gets its pin actions above its node's actions,
+  // a comment gets its own menu.
+  const menuTitle = (e: EditorPage) => e.page.textContent('#context-menu .context-title');
+  const menuHeadings = (e: EditorPage) => e.page.$$eval('#context-menu .context-heading', (els) => els.map((el) => el.textContent));
+  const menuButtons = (e: EditorPage) => e.page.$$eval('#context-menu button', (els) => els.map((el) => el.textContent));
+
+  test('right-clicking a pin shows its pin actions above the node actions', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const pin = await e.pinCenter('start_1', 'execOut');
+    await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
+    assert.equal(await menuTitle(e), 'Start');
+    assert.deepEqual(await menuHeadings(e), ['Pin Actions', 'Node Actions', 'Alignment']);
+    const buttons = await menuButtons(e);
+    assert.equal(buttons[0], 'Break Link(s)');
+    assert.ok(buttons.includes('Duplicate') && buttons.includes('Delete Node'));
+    await e.page.locator('#context-menu button', { hasText: 'Break Link(s)' }).click();
+    await savedGraph(e, (g) => !g.connections.some((c) => c.fromNode === 'start_1'));
+    assert.equal(await e.page.isVisible('#context-menu'), false);
+  });
+
+  test('a pin with no actions of its own still opens its node menu', async (t) => {
+    if (!browser) return t.skip(skipReason);
+    const document = sampleDocument();
+    document.graphs[0].nodes.push({ id: 'lonely', type: 'core:flow.end', position: { x: 400, y: 380 }, properties: {} });
+    editor = await EditorPage.open(browser);
+    await editor.send({ type: 'init', document, definitions: sampleDefinitions(), saveDelay: 0 });
+    const e = editor;
+    const pin = await e.pinCenter('lonely', 'execIn');
+    await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
+    assert.equal(await menuTitle(e), 'End');
+    assert.deepEqual(await menuHeadings(e), ['Alignment'], 'no empty Pin Actions section');
+    assert.equal((await menuButtons(e))[0], 'Duplicate');
+  });
+
+  test('right-clicking a comment title opens the comment menu: Rename and Delete', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    await e.page.mouse.click(600, 700);
+    await e.page.keyboard.down('c');
+    await e.page.mouse.click(400, 650);
+    await e.page.keyboard.up('c');
+    await e.page.keyboard.press('Enter');
+    const title = (await e.page.locator('.comment-title').boundingBox())!;
+
+    await e.page.mouse.click(title.x + 20, title.y + 8, { button: 'right' });
+    assert.equal(await menuTitle(e), 'Comment');
+    assert.deepEqual(await menuButtons(e), ['Rename', 'Delete Comment']);
+    await e.page.locator('#context-menu button', { hasText: 'Rename' }).click();
+    await e.page.locator('.comment-rename').fill('Setup');
+    await e.page.keyboard.press('Enter');
+    await savedGraph(e, (g) => g.comments[0]?.text === 'Setup');
+
+    await e.page.mouse.click(title.x + 20, title.y + 8, { button: 'right' });
+    assert.equal(await menuTitle(e), 'Setup');
+    await e.page.locator('#context-menu button', { hasText: 'Delete Comment' }).click();
+    assert.equal(await e.count('.comment'), 0);
+    assert.equal(await e.count('.node'), 7, 'nodes are kept');
   });
 });

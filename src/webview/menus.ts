@@ -1,4 +1,5 @@
-// The floating context menu: the node-search "action menu" and per-node actions.
+// The canvas's context menus: the node-search "action menu", and the menus for a node, a pin
+// (its pin actions above the node's) and a comment.
 import { PinAddress, definitionFor } from '../core/editing';
 import { PinKind } from '../core/model';
 import { addNode, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected } from './actions';
@@ -6,6 +7,9 @@ import { alignSelection, distributeSelection, straightenConnections } from './al
 import { PaletteEntry, lookupDefinition, paletteEntries, searchText } from './document';
 import { dom, escapeHtml } from './dom';
 import { headerColor } from './style';
+import { deleteSelectedComments, selectedCommentIds, startCommentRename } from './comments';
+import { MenuItem } from './floating-menu';
+import { render } from './render';
 import { selectConnected } from './selection';
 import { Point, state } from './state';
 import { centerOnNode } from './view';
@@ -73,12 +77,21 @@ function renderContextNodeResults(query: string): void {
   }
 }
 
-export function showNodeContextMenu(nodeId: string, clientX: number, clientY: number): void {
+// A node's menu. Right-clicking a pin opens the same menu with that pin's actions on top, as in
+// Unreal, so the menu always opens even when the pin itself has nothing to offer.
+export function showNodeContextMenu(nodeId: string, clientX: number, clientY: number, pinItems: MenuItem[] | null = null): void {
   const node = state.graph?.nodes.find((n) => n.id === nodeId);
   if (!node) return;
   const def = definitionFor(node, lookupDefinition);
+  const pinSection = pinItems?.length
+    ? `<div class="context-heading">Pin Actions</div>
+      ${pinItems.map((item, i) => `<button data-pin-action="${i}"${item.danger ? ' class="context-danger"' : ''}>${escapeHtml(item.label)}</button>`).join('')}
+      <div class="context-separator"></div>
+      <div class="context-heading">Node Actions</div>`
+    : '';
   dom.contextMenu.innerHTML = `
       <div class="context-title">${escapeHtml(def.displayName)}</div>
+      ${pinSection}
       <button data-action="duplicate">Duplicate</button>
       <button data-action="disconnect">Disconnect All Connections</button>
       <button data-action="select-connected">Select Connected Nodes</button>
@@ -119,6 +132,43 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
     button.addEventListener('click', () => {
       actions[button.dataset.action ?? '']?.();
       hideContextMenu();
+    });
+  });
+  dom.contextMenu.querySelectorAll<HTMLButtonElement>('button[data-pin-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      hideContextMenu();
+      pinItems?.[Number(button.dataset.pinAction)]?.action();
+    });
+  });
+}
+
+// A comment's menu, from its title bar. (Unreal sets a comment's color in Details.)
+export function showCommentContextMenu(commentId: string, clientX: number, clientY: number): void {
+  const comment = state.graph?.comments.find((c) => c.id === commentId);
+  if (!comment) return;
+  if (!selectedCommentIds.has(commentId)) {
+    selectedCommentIds.clear();
+    selectedCommentIds.add(commentId);
+    state.selectedNodeIds.clear();
+    state.selectedNodeId = null;
+    render();
+  }
+  dom.contextMenu.innerHTML = `
+      <div class="context-title">${escapeHtml(comment.text)}</div>
+      <button data-action="rename" title="F2">Rename</button>
+      <div class="context-separator"></div>
+      <button data-action="delete" class="context-danger">Delete Comment</button>`;
+  state.context = { kind: 'comment', commentId };
+  dom.contextMenu.hidden = false;
+  positionContextMenu(clientX, clientY);
+  const actions: Record<string, () => void> = {
+    rename: () => startCommentRename(commentId),
+    delete: () => deleteSelectedComments()
+  };
+  dom.contextMenu.querySelectorAll<HTMLButtonElement>('button[data-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      hideContextMenu();
+      actions[button.dataset.action ?? '']?.();
     });
   });
 }
