@@ -1,15 +1,15 @@
 import { definitionFor } from '../core/editing';
-import { GraphNode, PinDefinition } from '../core/model';
+import { GraphConnection, GraphNode, PinDefinition } from '../core/model';
 import { formatType } from '../core/types';
 import { SEQUENCE } from '../core/resolve';
 import { addSequenceOutput, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
 import { lookupDefinition, markDirty, pinDef } from './document';
-import { dom, pinElement } from './dom';
+import { dom } from './dom';
 import { renderInspector } from './panels';
 import { Point, state } from './state';
-import { applyTransform, centerOf, screenPointToWorld } from './view';
+import { applyTransform, screenPointToWorld } from './view';
 import { headerColor, nodeKind, pinColor } from './style';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -21,6 +21,7 @@ export function render(): void {
   renderComments();
   state.graph.nodes.forEach((node) => dom.world.appendChild(renderNode(node)));
   applyTransform();
+  measurePins();
   renderEdges();
   renderInspector();
   syncSelectionClasses();
@@ -135,14 +136,8 @@ function renderPin(node: GraphNode, pin: PinDefinition, showLabel: boolean): HTM
   handle.addEventListener('mousedown', (e) => onPinMouseDown(node, pin, e));
   handle.addEventListener('dragstart', (e) => e.preventDefault());
   // Hovering a pin highlights its wires, as in Unreal.
-  handle.addEventListener('mouseenter', () => {
-    state.hoverPin = { node: node.id, pin: pin.id };
-    renderEdges();
-  });
-  handle.addEventListener('mouseleave', () => {
-    state.hoverPin = null;
-    renderEdges();
-  });
+  handle.addEventListener('mouseenter', () => setHoverPin({ node: node.id, pin: pin.id }));
+  handle.addEventListener('mouseleave', () => setHoverPin(null));
 
   if (pin.direction === 'input') {
     row.append(handle, label);
@@ -185,44 +180,120 @@ function defaultEditor(node: GraphNode, pin: PinDefinition): HTMLInputElement | 
   return input;
 }
 
-// `pointer` is the cursor position (client coordinates) while a wire is being dragged.
+// ---- Wires ------------------------------------------------------------------------------------
+// Wires are drawn in world coordinates inside an SVG that shares #world's transform, so panning
+// and zooming never redraw them. Pin positions come from offsets measured once per render (pin
+// position inside its node), so drawing a wire needs no layout queries; dragging nodes updates
+// only the wires attached to them.
+
+// Pin centers relative to their node's top-left, in world units, keyed by `pinKey`.
+const pinOffsets = new Map<string, Point>();
+// The drawn elements of each wire, for updating geometry and classes without a full redraw.
+const wireElements = new Map<string, { hit: SVGPathElement; path: SVGPathElement }>();
+let draftLayer: SVGGElement | undefined;
+
+function pinKey(nodeId: string, pinId: string): string {
+  return `${nodeId}\u0000${pinId}`;
+}
+
+// Measures every rendered pin's center within its node. A pin's offset parent is its node (the
+// nearest positioned ancestor), and offsets are unaffected by the canvas zoom.
+function measurePins(): void {
+  pinOffsets.clear();
+  for (const el of dom.world.querySelectorAll<HTMLElement>('.pin[data-node]')) {
+    pinOffsets.set(pinKey(el.dataset.node ?? '', el.dataset.pin ?? ''), { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop + el.offsetHeight / 2 });
+  }
+}
+
+function pinPosition(nodeId: string, pinId: string, nodes: Map<string, GraphNode>): Point | undefined {
+  const node = nodes.get(nodeId);
+  const offset = pinOffsets.get(pinKey(nodeId, pinId));
+  return node && offset ? { x: node.position.x + offset.x, y: node.position.y + offset.y } : undefined;
+}
+
+function nodeMap(): Map<string, GraphNode> {
+  return new Map((state.graph?.nodes ?? []).map((n) => [n.id, n]));
+}
+
+function wireTouches(c: GraphConnection, pin: { node: string; pin: string }): boolean {
+  return (c.fromNode === pin.node && c.fromPin === pin.pin) || (c.toNode === pin.node && c.toPin === pin.pin);
+}
+
+// Redraws every wire. `pointer` is the cursor (client coordinates) while a wire is being dragged.
 export function renderEdges(pointer: Point | null = null): void {
   dom.edges.innerHTML = '';
+  wireElements.clear();
+  draftLayer = undefined;
   if (!state.graph) return;
-  const rect = dom.canvasWrap.getBoundingClientRect();
+  const nodes = nodeMap();
   const moving = new Set(state.rewire?.connectionIds ?? []);
   const hover = state.hoverPin;
   for (const c of state.graph.connections) {
-    // Wires being moved are drawn from the pointer instead (below).
+    // Wires being moved are drawn from the pointer instead (see renderDrafts).
     if (moving.has(c.id)) continue;
-    const source = pinElement(c.fromNode, c.fromPin);
-    const target = pinElement(c.toNode, c.toPin);
-    if (!source || !target) continue;
+    const a = pinPosition(c.fromNode, c.fromPin, nodes);
+    const b = pinPosition(c.toNode, c.toPin, nodes);
+    if (!a || !b) continue;
     const ran = state.executedNodeIds.has(c.fromNode) && state.executedNodeIds.has(c.toNode);
-    const hovered = !!hover && ((c.fromNode === hover.node && c.fromPin === hover.pin) || (c.toNode === hover.node && c.toPin === hover.pin));
-    addPath(centerOf(source, rect), centerOf(target, rect), [ran ? 'active' : '', hovered ? 'hover' : ''].join(' ').trim(), wireStyle(c.fromNode, c.fromPin), c.id);
+    const hovered = !!hover && wireTouches(c, hover);
+    addWire(a, b, [ran ? 'active' : '', hovered ? 'hover' : ''].join(' ').trim(), wireStyle(c.fromNode, c.fromPin), c.id);
   }
+  renderDrafts(pointer);
+}
 
+// Updates the wires attached to `nodeIds` after those nodes moved, reusing their elements.
+export function updateEdgesFor(nodeIds: ReadonlySet<string>): void {
+  if (!state.graph) return;
+  const nodes = nodeMap();
+  for (const c of state.graph.connections) {
+    if (!nodeIds.has(c.fromNode) && !nodeIds.has(c.toNode)) continue;
+    const elements = wireElements.get(c.id);
+    const a = pinPosition(c.fromNode, c.fromPin, nodes);
+    const b = pinPosition(c.toNode, c.toPin, nodes);
+    if (!elements || !a || !b) continue;
+    const d = bezierPath(a, b);
+    elements.hit.setAttribute('d', d);
+    elements.path.setAttribute('d', d);
+  }
+}
+
+// Redraws only wires being dragged out (new or moved), on their own layer above the others.
+export function renderDrafts(pointer: Point | null = null): void {
+  if (!state.graph) return;
+  if (!draftLayer) {
+    draftLayer = document.createElementNS(SVG_NS, 'g');
+    dom.edges.appendChild(draftLayer);
+  }
+  draftLayer.replaceChildren();
+  const nodes = nodeMap();
   const draft = state.draftConnection;
   if (draft) {
-    const source = pinElement(draft.node, draft.pin);
-    if (source) {
-      const end = screenPointToWorld(pointer ?? { x: draft.startX, y: draft.startY }, rect);
-      addPath(centerOf(source, rect), end, 'draft', wireStyle(draft.node, draft.pin));
-    }
+    const from = pinPosition(draft.node, draft.pin, nodes);
+    if (from) addWire(from, screenPointToWorld(pointer ?? { x: draft.startX, y: draft.startY }), 'draft', wireStyle(draft.node, draft.pin), null, draftLayer);
   }
-
   const rewire = state.rewire;
   if (rewire) {
-    const end = screenPointToWorld(pointer ?? { x: rewire.startX, y: rewire.startY }, rect);
-    for (const c of state.graph.connections.filter((connection) => moving.has(connection.id))) {
+    const end = screenPointToWorld(pointer ?? { x: rewire.startX, y: rewire.startY });
+    const ids = new Set(rewire.connectionIds);
+    for (const c of state.graph.connections.filter((connection) => ids.has(connection.id))) {
       // The end that stays put: the far pin of each wire being moved.
-      const fixed = rewire.side === 'from' ? pinElement(c.toNode, c.toPin) : pinElement(c.fromNode, c.fromPin);
+      const fixed = rewire.side === 'from' ? pinPosition(c.toNode, c.toPin, nodes) : pinPosition(c.fromNode, c.fromPin, nodes);
       if (!fixed) continue;
       const style = wireStyle(c.fromNode, c.fromPin);
-      if (rewire.side === 'from') addPath(end, centerOf(fixed, rect), 'draft', style);
-      else addPath(centerOf(fixed, rect), end, 'draft', style);
+      if (rewire.side === 'from') addWire(end, fixed, 'draft', style, null, draftLayer);
+      else addWire(fixed, end, 'draft', style, null, draftLayer);
     }
+  }
+}
+
+// Highlights the wires on a hovered pin by toggling classes, without redrawing.
+function setHoverPin(pin: { node: string; pin: string } | null): void {
+  const previous = state.hoverPin;
+  state.hoverPin = pin;
+  for (const c of state.graph?.connections ?? []) {
+    const was = !!previous && wireTouches(c, previous);
+    const now = !!pin && wireTouches(c, pin);
+    if (was !== now) wireElements.get(c.id)?.path.classList.toggle('hover', now);
   }
 }
 
@@ -237,11 +308,12 @@ function wireStyle(nodeId: string, pinId: string): WireStyle {
   return { color: pinColor(pin), exec: pin?.kind === 'exec' };
 }
 
-function addPath(a: Point, b: Point, className: string, style: WireStyle, connectionId: string | null = null): void {
+function addWire(a: Point, b: Point, className: string, style: WireStyle, connectionId: string | null = null, parent: SVGElement = dom.edges): void {
   const d = bezierPath(a, b);
+  let hit: SVGPathElement | undefined;
   if (connectionId) {
     // A wide invisible stroke under the visible wire, so wires are easy to click.
-    const hit = document.createElementNS(SVG_NS, 'path');
+    hit = document.createElementNS(SVG_NS, 'path');
     hit.setAttribute('d', d);
     hit.setAttribute('class', 'edge-hit');
     hit.dataset.connectionId = connectionId;
@@ -255,14 +327,15 @@ function addPath(a: Point, b: Point, className: string, style: WireStyle, connec
       if (e.altKey) removeConnection(connectionId);
       else if (e.ctrlKey || e.metaKey) beginRewireFromConnection(connectionId, e.clientX, e.clientY);
     });
-    dom.edges.appendChild(hit);
+    parent.appendChild(hit);
   }
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('d', d);
   path.setAttribute('class', `edge ${style.exec ? 'exec ' : ''}${className}`.trim());
   path.style.setProperty('--wire-color', style.color);
   path.setAttribute('pointer-events', 'none');
-  dom.edges.appendChild(path);
+  parent.appendChild(path);
+  if (connectionId && hit) wireElements.set(connectionId, { hit, path });
 }
 
 function bezierPath(a: Point, b: Point): string {

@@ -1,6 +1,5 @@
 // Pan/zoom and the conversion between screen (client) and world (graph) coordinates.
 import { dom } from './dom';
-import { renderEdges } from './render';
 import { Point, state } from './state';
 
 export function screenToWorld(clientX: number, clientY: number): Point {
@@ -35,7 +34,6 @@ export function zoomAt(clientX: number, clientY: number, zoomIn: boolean): void 
   state.pan.x = clientX - rect.left - before.x * state.zoom;
   state.pan.y = clientY - rect.top - before.y * state.zoom;
   applyTransform();
-  renderEdges();
 }
 
 // Fits the view to the selected nodes when `selection` is set and something is selected (Unreal's
@@ -52,7 +50,6 @@ export function fitGraph(selection = false): void {
   state.pan.x = (rect.width - (maxX - minX) * state.zoom) / 2 - minX * state.zoom;
   state.pan.y = (rect.height - (maxY - minY) * state.zoom) / 2 - minY * state.zoom;
   applyTransform();
-  renderEdges();
 }
 
 export function centerOnNode(nodeId: string): void {
@@ -62,5 +59,4 @@ export function centerOnNode(nodeId: string): void {
   state.pan.x = rect.width / 2 - (node.position.x + 125) * state.zoom;
   state.pan.y = rect.height / 2 - (node.position.y + 80) * state.zoom;
   applyTransform();
-  renderEdges();
 }

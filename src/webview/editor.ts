@@ -11,7 +11,7 @@ import { AlignEdge, alignSelection, straightenConnections } from './align';
 import { finishVariableDrag, removeVariable, startRename, updateVariableDrag } from './my-blueprint';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showNodeContextMenu } from './menus';
 import { renderPalette } from './panels';
-import { render, renderEdges, scheduleRuntimePaint } from './render';
+import { render, renderDrafts, renderEdges, scheduleRuntimePaint, updateEdgesFor } from './render';
 import { beginGroupSelection, finishGroupSelection, hideSelectionBox, selectAllNodes, selectNode, setPrimarySelection, updateGroupSelection } from './selection';
 import { state } from './state';
 import { applyTransform, fitGraph, screenToWorld, zoomAt } from './view';
@@ -323,8 +323,8 @@ window.addEventListener('mousemove', (e) => {
     panning.moved = true;
     state.pan.x = panning.panX + dx;
     state.pan.y = panning.panY + dy;
+    // Wires share the canvas transform, so panning needs no redraw.
     applyTransform();
-    renderEdges();
     return;
   }
   if (state.selection) {
@@ -346,10 +346,10 @@ window.addEventListener('mousemove', (e) => {
         el.style.top = `${item.node.position.y}px`;
       }
     }
-    renderEdges();
+    updateEdgesFor(new Set(drag.items.map((item) => item.node.id)));
     return;
   }
-  if (state.rewire || state.draftConnection) renderEdges({ x: e.clientX, y: e.clientY });
+  if (state.rewire || state.draftConnection) renderDrafts({ x: e.clientX, y: e.clientY });
 });
 
 dom.canvasWrap.addEventListener('wheel', (e) => {
@@ -359,7 +359,6 @@ dom.canvasWrap.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 window.addEventListener('resize', () => {
-  renderEdges();
   if (!dom.contextMenu.hidden) clampContextMenuToCanvas();
 });
 
