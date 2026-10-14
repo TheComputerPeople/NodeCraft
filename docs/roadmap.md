@@ -214,8 +214,8 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Wiring | Alt+click a pin breaks its links | ✅ | — |
 | Wiring | Ctrl+drag a pin moves all its links | ✅ | — |
 | Wiring | Hovering a pin highlights its wires | ✅ | — |
-| Wiring | Double-click a wire adds a reroute node (community) | ⬜ | 2 |
-| Wiring | Alignment menu; Q straightens, Shift+W/A/S/D align (community) | ⬜ | 2 |
+| Wiring | Double-click a wire adds a reroute node (community) | ✅ | — |
+| Wiring | Alignment menu; Q straightens, Shift+W/A/S/D align (community) | ✅ | — |
 | Nodes | Right-click action menu with "Context Sensitive" toggle; keyword search | 🟡 (menu and keywords, no toggle) | 2 |
 | Nodes | Hold-key + click placement: B, S, C, P | ✅ | — |
 | Nodes | Hold-key + click placement: D, G, F, M, N, O (need Phase 4 nodes) | ⬜ | 4 |
@@ -224,7 +224,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Nodes | C wraps the selection in a comment; comments move their nodes, resize, rename | ✅ | — |
 | Nodes | Collapse to function/macro | ⬜ | 4 (needs callable functions) |
 | Nodes | Inline default values on pins | ✅ | — |
-| Nodes | Add-pin (+) on Sequence | ⬜ | 2 |
+| Nodes | Add-pin (+) on Sequence; remove a pin from its menu | ✅ (Sequence starts with 3 outputs, Unreal's with 2) | — |
 | Nodes | Make Array, wildcard pins, split struct pins | ⬜ | 4 (needs container and struct operations) |
 | Nodes | Automatic conversion nodes | ⬜ | 2 |
 | Visuals | Exec pins white arrows, data pins and wires colored by type | ✅ | — |

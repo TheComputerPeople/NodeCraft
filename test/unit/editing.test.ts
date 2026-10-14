@@ -172,3 +172,37 @@ describe('nodeIdFor', () => {
     assert.match(editing.nodeIdFor('core:math.add', () => 0.5), /^core_math_add_[a-z0-9]+$/);
   });
 });
+
+describe('reroute nodes', () => {
+  test('splitting a data wire inserts a typed knot that passes the value through', () => {
+    const g = sample();
+    const knot = editing.insertReroute(g, lookup, 'c7', { x: 700, y: 300 }, { node: 'knot', connections: ['k1', 'k2'] })!;
+    assert.deepEqual(knot.properties, { kind: 'data', type: { id: 'float' } });
+    assert.ok(!g.connections.some((c) => c.id === 'c7'));
+    assert.deepEqual(g.connections.filter((c) => c.id.startsWith('k')).map((c) => `${c.fromNode}.${c.fromPin}->${c.toNode}.${c.toPin}`),
+      ['add_1.result->knot.in', 'knot.out->print_true.value']);
+  });
+
+  test('splitting an exec wire makes an exec knot', () => {
+    const g = sample();
+    assert.deepEqual(editing.insertReroute(g, lookup, 'c1', { x: 0, y: 0 }, { node: 'k', connections: ['a', 'b'] })?.properties, { kind: 'exec' });
+  });
+});
+
+describe('Sequence pins', () => {
+  test('adding and removing pins renumbers later outputs and keeps their wires', () => {
+    const g = graphOf(doc([node('q', 'core:flow.sequence'), node('a', 'x'), node('b', 'x'), node('c', 'x')],
+      [wire('q', 'then0', 'a', 'in'), wire('q', 'then1', 'b', 'in'), wire('q', 'then2', 'c', 'in')]));
+    const q = g.nodes[0];
+    editing.addSequencePin(q);
+    assert.equal(q.properties.pins, 4);
+    assert.equal(editing.removeSequencePin(g, q, 'then1'), true);
+    assert.equal(q.properties.pins, 3);
+    assert.deepEqual(g.connections.map((c) => `${c.fromPin}->${c.toNode}`), ['then0->a', 'then1->c']);
+  });
+
+  test('a Sequence keeps at least one output', () => {
+    const g = graphOf(doc([node('q', 'core:flow.sequence', { pins: 1 })], []));
+    assert.equal(editing.removeSequencePin(g, g.nodes[0], 'then0'), false);
+  });
+});

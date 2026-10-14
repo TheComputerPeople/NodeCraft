@@ -1,7 +1,8 @@
 import { definitionFor } from '../core/editing';
 import { GraphNode, PinDefinition } from '../core/model';
 import { formatType } from '../core/types';
-import { beginRewireFromConnection, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
+import { SEQUENCE } from '../core/resolve';
+import { addSequenceOutput, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
 import { lookupDefinition, markDirty, pinDef } from './document';
@@ -51,7 +52,18 @@ function renderNode(node: GraphNode): HTMLElement {
     el.appendChild(badge);
   }
 
-  if (def.compact) {
+  if (kind === 'reroute') {
+    // A knot: the wire enters on the left and leaves on the right; the middle is the grab handle.
+    el.classList.add('knot');
+    const body = document.createElement('div');
+    body.className = 'knot-body';
+    def.inputs.forEach((pin) => body.appendChild(renderPin(node, pin, false)));
+    const grip = document.createElement('span');
+    grip.className = 'knot-grip';
+    body.appendChild(grip);
+    def.outputs.forEach((pin) => body.appendChild(renderPin(node, pin, false)));
+    el.appendChild(body);
+  } else if (def.compact) {
     // Variable getters: the variable's name beside its output pin, no title bar.
     const body = document.createElement('div');
     body.className = 'compact-body';
@@ -80,6 +92,16 @@ function renderNode(node: GraphNode): HTMLElement {
     def.outputs.forEach((pin) => right.appendChild(renderPin(node, pin, true)));
     body.append(left, right);
     el.appendChild(body);
+    // Unreal's "Add pin +" on nodes whose outputs can grow.
+    if (node.type === SEQUENCE) {
+      const add = document.createElement('button');
+      add.className = 'add-pin';
+      add.textContent = 'Add pin +';
+      add.title = 'Add an output';
+      add.addEventListener('mousedown', (e) => e.stopPropagation());
+      add.addEventListener('click', () => addSequenceOutput(node));
+      el.appendChild(add);
+    }
   }
 
   // The whole node body is draggable. Pin mousedown stops propagation and therefore
@@ -222,6 +244,8 @@ function addPath(a: Point, b: Point, className: string, style: WireStyle, connec
     hit.setAttribute('d', d);
     hit.setAttribute('class', 'edge-hit');
     hit.dataset.connectionId = connectionId;
+    // Double-clicking a wire adds a reroute node there.
+    hit.addEventListener('dblclick', (e) => insertRerouteAt(connectionId, e.clientX, e.clientY));
     hit.addEventListener('mousedown', (e) => {
       // Other buttons fall through to the canvas (right-drag pans).
       if (e.button !== 0) return;

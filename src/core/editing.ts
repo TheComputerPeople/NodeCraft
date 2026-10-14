@@ -2,6 +2,7 @@
 // manipulation: no DOM, no rendering, no persistence. Functions that change the graph mutate the
 // object passed in and report whether anything changed so callers can decide to save and redraw.
 import { GraphConnection, GraphNode, NodeDefinition, PinDefinition } from './model';
+import { REROUTE, sequencePinCount } from './resolve';
 import { canConnect } from './types';
 
 export interface GraphContent {
@@ -191,3 +192,45 @@ export function nodeIdFor(type: string, random: () => number = Math.random): str
   return `${slug}_${random().toString(36).slice(2, 8)}`;
 }
 
+
+// Splits a wire with a reroute node at `position`; the knot carries the wire's kind and type.
+// Returns the new node, or undefined when the wire doesn't exist.
+export function insertReroute(
+  graph: GraphContent,
+  lookup: DefinitionLookup,
+  connectionId: string,
+  position: { x: number; y: number },
+  ids: { node: string; connections: [string, string] }
+): GraphNode | undefined {
+  const wire = graph.connections.find((c) => c.id === connectionId);
+  const source = wire && pinDefinition(graph, lookup, wire.fromNode, wire.fromPin);
+  if (!wire || !source) return undefined;
+  const properties = source.kind === 'exec' ? { kind: 'exec' } : { kind: 'data', ...(source.type ? { type: source.type } : {}) };
+  const knot: GraphNode = { id: ids.node, type: REROUTE, position: { x: position.x, y: position.y }, properties };
+  graph.nodes.push(knot);
+  graph.connections = graph.connections.filter((c) => c.id !== connectionId);
+  graph.connections.push(
+    { id: ids.connections[0], fromNode: wire.fromNode, fromPin: wire.fromPin, toNode: knot.id, toPin: 'in' },
+    { id: ids.connections[1], fromNode: knot.id, fromPin: 'out', toNode: wire.toNode, toPin: wire.toPin }
+  );
+  return knot;
+}
+
+export function addSequencePin(node: GraphNode): void {
+  node.properties.pins = sequencePinCount(node) + 1;
+}
+
+// Removes one Then output, as Unreal's "Remove execution pin": its wires go, and later outputs
+// move up one (Then 3 becomes Then 2) keeping their wires. Sequence keeps at least one output.
+export function removeSequencePin(graph: GraphContent, node: GraphNode, pinId: string): boolean {
+  const count = sequencePinCount(node);
+  const index = Number(/^then(\d+)$/.exec(pinId)?.[1]);
+  if (count <= 1 || !Number.isInteger(index) || index >= count) return false;
+  graph.connections = graph.connections.filter((c) => !(c.fromNode === node.id && c.fromPin === pinId));
+  for (const c of graph.connections) {
+    const later = c.fromNode === node.id ? Number(/^then(\d+)$/.exec(c.fromPin)?.[1]) : NaN;
+    if (later > index) c.fromPin = `then${later - 1}`;
+  }
+  node.properties.pins = count - 1;
+  return true;
+}

@@ -1,12 +1,14 @@
 // User actions that change the graph, plus the pointer gestures that lead to them.
 import { copyNodes, pasteNodes } from '../core/clipboard';
 import * as editing from '../core/editing';
+import { SEQUENCE } from '../core/resolve';
 import { GraphNode, PinDefinition } from '../core/model';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } from './document';
 import { dom, eventElement, pinElement, setStatus } from './dom';
 import { newConnectionId } from './host';
 import { clearCommentSelection } from './comments';
 import { hideContextMenu } from './menus';
+import { MenuItem, showFloatingMenu } from './floating-menu';
 import { renderMyBlueprint } from './my-blueprint';
 import { renderInspector, renderPalette } from './panels';
 import { render, renderEdges, syncSelectionClasses } from './render';
@@ -170,6 +172,48 @@ export function pasteText(text: string, at: Point): boolean {
   }
   setStatus(`Pasted ${ids.length} node${ids.length === 1 ? '' : 's'}.`);
   return true;
+}
+
+export function insertRerouteAt(connectionId: string, clientX: number, clientY: number): void {
+  if (!state.graph) return;
+  const at = screenToWorld(clientX, clientY);
+  const knot = editing.insertReroute(state.graph, lookupDefinition, connectionId, { x: at.x - 18, y: at.y - 9 },
+    { node: editing.nodeIdFor('reroute'), connections: [newConnectionId(), newConnectionId()] });
+  if (!knot) return;
+  state.selectedNodeIds = new Set([knot.id]);
+  state.selectedNodeId = knot.id;
+  markDirty();
+  render();
+}
+
+export function addSequenceOutput(node: GraphNode): void {
+  editing.addSequencePin(node);
+  markDirty();
+  render();
+}
+
+// A pin's right-click menu, as in Unreal: break its links, and remove it where pins can be removed.
+export function showPinMenu(nodeId: string, pinId: string, clientX: number, clientY: number): void {
+  const graph = state.graph;
+  const node = graph?.nodes.find((n) => n.id === nodeId);
+  if (!graph || !node) return;
+  const items: MenuItem[] = [];
+  if (graph.connections.some((c) => (c.fromNode === nodeId && c.fromPin === pinId) || (c.toNode === nodeId && c.toPin === pinId))) {
+    items.push({ label: 'Break Link(s)', action: () => disconnectPin(nodeId, pinId) });
+  }
+  if (node.type === SEQUENCE && /^then\d+$/.test(pinId)) {
+    items.push({
+      label: 'Remove Execution Pin',
+      danger: true,
+      action: () => {
+        if (editing.removeSequencePin(graph, node, pinId)) {
+          markDirty();
+          render();
+        } else setStatus('A Sequence needs at least one output.');
+      }
+    });
+  }
+  if (items.length) showFloatingMenu(items, clientX, clientY);
 }
 
 // Arrow keys move the selection, as in Unreal.

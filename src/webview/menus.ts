@@ -2,6 +2,7 @@
 import { PinAddress, definitionFor } from '../core/editing';
 import { PinKind } from '../core/model';
 import { addNode, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected } from './actions';
+import { alignSelection, distributeSelection, straightenConnections } from './align';
 import { PaletteEntry, lookupDefinition, searchText } from './document';
 import { dom, escapeHtml } from './dom';
 import { headerColor } from './style';
@@ -73,6 +74,17 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
       <button data-action="select-connected">Select Connected Nodes</button>
       <button data-action="center">Center View</button>
       <div class="context-separator"></div>
+      <div class="context-heading">Alignment</div>
+      <button data-action="straighten" title="Q">Straighten Connections</button>
+      <button data-action="align-top" title="Shift+W">Align Top</button>
+      <button data-action="align-middle">Align Middle</button>
+      <button data-action="align-bottom" title="Shift+S">Align Bottom</button>
+      <button data-action="align-left" title="Shift+A">Align Left</button>
+      <button data-action="align-center">Align Center</button>
+      <button data-action="align-right" title="Shift+D">Align Right</button>
+      <button data-action="distribute-horizontal">Distribute Horizontally</button>
+      <button data-action="distribute-vertical">Distribute Vertically</button>
+      <div class="context-separator"></div>
       <button data-action="delete" class="context-danger">Delete Node</button>`;
   state.context = { kind: 'node', nodeId };
   dom.contextMenu.hidden = false;
@@ -82,7 +94,16 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
     disconnect: disconnectSelected,
     'select-connected': () => selectConnected(nodeId),
     center: () => centerOnNode(nodeId),
-    delete: deleteSelected
+    delete: deleteSelected,
+    straighten: straightenConnections,
+    'align-top': () => alignSelection('top'),
+    'align-middle': () => alignSelection('middle'),
+    'align-bottom': () => alignSelection('bottom'),
+    'align-left': () => alignSelection('left'),
+    'align-center': () => alignSelection('center'),
+    'align-right': () => alignSelection('right'),
+    'distribute-horizontal': () => distributeSelection('horizontal'),
+    'distribute-vertical': () => distributeSelection('vertical')
   };
   dom.contextMenu.querySelectorAll<HTMLButtonElement>('button[data-action]').forEach((button) => {
     button.addEventListener('click', () => {

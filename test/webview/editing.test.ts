@@ -3,7 +3,7 @@ import { after, afterEach, before, describe, test, TestContext } from 'node:test
 import assert from 'node:assert/strict';
 import { Browser } from 'playwright-core';
 import { Graph } from '../../src/core/model';
-import { EditorPage, launchBrowser } from './harness';
+import { EditorPage, launchBrowser, sampleDefinitions, sampleDocument } from './harness';
 
 describe('editing tools', () => {
   let browser: Browser | undefined;
@@ -144,5 +144,69 @@ describe('editing tools', () => {
     await e.drag({ x: handle.x + 7, y: handle.y + 7 }, { x: handle.x + 107, y: handle.y + 57 });
     const after = (await e.page.locator('.comment').boundingBox())!;
     assert.ok(after.width > before.width + 90 && after.height > before.height + 40);
+  });
+
+  test('double-clicking a wire inserts a reroute knot of the same kind', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const exec = await e.wireMidpoint('c1');
+    await e.page.mouse.dblclick(exec.x, exec.y);
+    // Partway along: the middle of this wire passes under the Branch node.
+    const data = await e.wireMidpoint('c7', 0.2);
+    await e.page.mouse.dblclick(data.x, data.y);
+    const g = await savedGraph(e, (graph) => graph.nodes.filter((n) => n.type === 'core:reroute').length === 2);
+    const knots = g.nodes.filter((n) => n.type === 'core:reroute');
+    assert.deepEqual(knots.map((k) => k.properties), [{ kind: 'exec' }, { kind: 'data', type: { id: 'float' } }]);
+    assert.ok(!g.connections.some((c) => c.id === 'c1' || c.id === 'c7'));
+    assert.ok(g.connections.some((c) => c.fromNode === 'add_1' && c.toNode === knots[1].id));
+    assert.ok(g.connections.some((c) => c.fromNode === knots[1].id && c.toNode === 'print_true' && c.toPin === 'value'));
+    assert.equal(await e.count('.node.knot'), 2);
+  });
+
+  test('Sequence grows with Add pin and shrinks from a pin menu', async (t) => {
+    if (!browser) return t.skip(skipReason);
+    editor = await EditorPage.open(browser);
+    const document = sampleDocument();
+    document.graphs[0].nodes.push({ id: 'seq', type: 'core:flow.sequence', position: { x: 400, y: 380 }, properties: {} });
+    await editor.send({ type: 'init', document, definitions: sampleDefinitions(), saveDelay: 0 });
+    const e = editor;
+    const thenPins = () => e.page.$$eval('.pin[data-node="seq"][data-direction="output"]', (els) => els.map((el) => (el as HTMLElement).dataset.pin));
+    assert.deepEqual(await thenPins(), ['then0', 'then1', 'then2']);
+    await e.page.click('.node[data-node="seq"] .add-pin');
+    assert.deepEqual(await thenPins(), ['then0', 'then1', 'then2', 'then3']);
+    const pin = await e.pinCenter('seq', 'then1');
+    await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
+    await e.page.locator('#floating-menu button', { hasText: 'Remove Execution Pin' }).dispatchEvent('mousedown');
+    assert.deepEqual(await thenPins(), ['then0', 'then1', 'then2']);
+  });
+
+  test('Shift+W aligns the selection to the top; Q straightens a wire', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    await e.page.click(header('start_1'));
+    await e.page.click(header('add_1'), { modifiers: ['Shift'] });
+    await e.page.keyboard.press('Shift+W');
+    let g = await savedGraph(e, (graph) => graph.nodes.find((n) => n.id === 'start_1')!.position.y === 145);
+    assert.equal(g.nodes.find((n) => n.id === 'add_1')!.position.y, 145);
+
+    await e.page.click(header('print_true'));
+    await e.page.keyboard.press('q');
+    g = await savedGraph(e, (graph) => graph.nodes.find((n) => n.id === 'print_true')!.position.y !== 80);
+    const from = await e.pinCenter('branch_1', 'true');
+    const to = await e.pinCenter('print_true', 'execIn');
+    assert.ok(Math.abs(from.y - to.y) < 1, `pins level after straightening (${from.y} vs ${to.y})`);
+  });
+
+  test('the node menu distributes three nodes evenly', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    for (const [i, id] of ['start_1', 'add_1', 'branch_1'].entries()) await e.page.click(header(id), i ? { modifiers: ['Shift'] } : undefined);
+    const box = (await e.page.locator('.node[data-node="add_1"]').boundingBox())!;
+    await e.page.mouse.click(box.x + 60, box.y + 10, { button: 'right' });
+    await e.page.click('#context-menu button[data-action="distribute-horizontal"]');
+    const boxes = await Promise.all(['start_1', 'add_1', 'branch_1'].map((id) => e.page.locator(`.node[data-node="${id}"]`).boundingBox()));
+    const gap1 = boxes[1]!.x - (boxes[0]!.x + boxes[0]!.width);
+    const gap2 = boxes[2]!.x - (boxes[1]!.x + boxes[1]!.width);
+    assert.ok(Math.abs(gap1 - gap2) < 1, `equal gaps (${gap1} vs ${gap2})`);
   });
 });

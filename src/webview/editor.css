@@ -174,3 +174,11 @@ button, input { font: inherit; color: inherit; }
 .comment-title:active { cursor: grabbing; }
 .comment-rename { width: 100%; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--accent); padding: 0 4px; }
 .comment-resize { pointer-events: auto; position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, color-mix(in srgb, var(--comment-color) 45%, transparent) 50%); border-radius: 0 0 3px 0; }
+
+.context-heading { padding: 6px 8px 2px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+/* Reroute knots: a small pill where the wire enters and leaves; the middle is the grab handle. */
+.node.knot { min-width: 0; border-radius: 10px; border-color: color-mix(in srgb, var(--node-color) 60%, transparent); box-shadow: none; }
+.knot-body { display: flex; align-items: center; gap: 2px; padding: 3px 4px; }
+.knot-grip { width: 8px; height: 12px; cursor: grab; border-left: 1px dotted var(--muted); border-right: 1px dotted var(--muted); }
+.add-pin { display: block; margin: 0 8px 6px auto; border: 0; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; padding: 1px 4px; border-radius: 3px; }
+.add-pin:hover { color: var(--fg); background: var(--vscode-list-hoverBackground); }

@@ -44,8 +44,9 @@ export interface Panning {
   // Right-button presses pan when dragged and open a context menu when not (as in Unreal).
   button: number;
   moved: boolean;
-  // The node under a right-button press, for its context menu.
+  // The node and pin under a right-button press, for their context menus.
   nodeId: string | null;
+  pin: PinAddress | null;
 }
 
 // Marquee modes, as in Unreal: drag replaces, Shift+drag adds, Ctrl+drag removes.

@@ -53,6 +53,8 @@ class Lowerer {
   private readonly blocks = new Map<string, IrBlock>();
 
   private readonly resolve: NodeResolver;
+  // Reroute nodes being followed for the current input, to catch reroute loops.
+  private readonly rerouting = new Set<string>();
 
   constructor(private readonly doc: GraphDocument, private readonly options: LowerOptions) {
     this.resolve = createResolver(options.registry, doc.variables);
@@ -212,7 +214,10 @@ class Lowerer {
       case 'branch':
         return [{ kind: 'if', condition: { kind: 'toBoolean', value: input('condition') }, then: next('true'), else: next('false'), source }];
       case 'sequence':
-        return ['then0', 'then1', 'then2'].flatMap(next);
+        return def.outputs.filter((p) => p.kind === 'exec').map((p) => p.id).flatMap(next);
+      case 'reroute':
+        // Exec reroutes pass execution straight on.
+        return next('out');
       case 'set-variable': {
         const member = this.variableMember(info, node, def);
         if (!member) return next('execOut');
@@ -261,6 +266,17 @@ class Lowerer {
     if (!sourceNode || !sourceDef) return { kind: 'default', type: pin?.type };
     // Get is pure, and Set's output is the variable's new value: both read the member where used.
     const operation = nativeOperation(sourceDef);
+    // Reroutes are transparent: read whatever feeds them.
+    if (operation === 'reroute') {
+      if (this.rerouting.has(sourceNode.id)) {
+        this.error('data-cycle', 'Reroute nodes are wired in a loop.', info.graph.id, sourceNode.id);
+        return { kind: 'default', type: pin?.type };
+      }
+      this.rerouting.add(sourceNode.id);
+      const value = this.inputExpr(info, sourceNode, sourceDef, 'in');
+      this.rerouting.delete(sourceNode.id);
+      return value;
+    }
     if (operation === 'get-variable' || operation === 'set-variable') {
       const member = this.variableMember(info, sourceNode, sourceDef);
       return member ? { kind: 'member', member: member.id } : { kind: 'default', type: pin?.type };

@@ -119,7 +119,10 @@ export class GraphRuntime {
         continueFrom(toBoolean(input('condition')) ? 'true' : 'false');
         break;
       case 'sequence':
-        ['then0', 'then1', 'then2'].forEach((pin) => continueFrom(pin));
+        definition.outputs.filter((p) => p.kind === 'exec').forEach((p) => continueFrom(p.id));
+        break;
+      case 'reroute':
+        continueFrom('out');
         break;
       case 'set-variable': {
         const id = this.variableId(context, node);
@@ -166,20 +169,31 @@ export class GraphRuntime {
     if (output) setOutput(output.id, result);
   }
 
-  private inputValue(context: GraphContext, node: GraphNode, definition: NodeDefinition, pinId: string): unknown {
+  private inputValue(context: GraphContext, node: GraphNode, definition: NodeDefinition, pinId: string, rerouting = new Set<string>()): unknown {
     const { graph } = context;
     const pin = definition.inputs.find((p) => p.id === pinId);
     const connection = graph.connections.find((c) => c.toNode === node.id && c.toPin === pinId);
     const source = connection && graph.nodes.find((n) => n.id === connection.fromNode);
     if (!connection || !source) return unconnectedValue(node, pin, pinId);
-    return this.outputValue(context, source, connection.fromPin);
+    return this.outputValue(context, source, connection.fromPin, rerouting);
   }
 
-  private outputValue(context: GraphContext, node: GraphNode, pinId: string): unknown {
+  // `rerouting` holds the reroute nodes being followed for one input, to catch reroute loops.
+  private outputValue(context: GraphContext, node: GraphNode, pinId: string, rerouting: Set<string>): unknown {
     const definition = context.run.resolve(node) ?? this.fail(context, node, `Unknown node type: ${node.type}`);
     const operation = nativeOperation(definition);
     // Get is pure and read on every use; Set's output is the variable's current value.
     if (operation === 'get-variable' || operation === 'set-variable') return context.run.variables.get(this.variableId(context, node)) ?? null;
+    // Reroutes pass through whatever feeds them.
+    if (operation === 'reroute') {
+      if (rerouting.has(node.id)) this.fail(context, node, 'Reroute nodes are wired in a loop.');
+      rerouting.add(node.id);
+      try {
+        return this.inputValue(context, node, definition, 'in', rerouting);
+      } finally {
+        rerouting.delete(node.id);
+      }
+    }
 
     // Impure: the value from the node's latest run, or the type default before it has run.
     const pin = definition.outputs.find((p) => p.id === pinId);

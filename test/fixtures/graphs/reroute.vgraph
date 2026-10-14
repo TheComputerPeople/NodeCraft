@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 3,
+  "name": "Reroute",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        { "id": "start", "type": "core:event.start", "position": { "x": 0, "y": 0 }, "properties": {} },
+        { "id": "add", "type": "core:math.add", "position": { "x": 200, "y": 0 }, "properties": { "pin:a": 2, "pin:b": 3 } },
+        { "id": "seq", "type": "core:flow.sequence", "position": { "x": 450, "y": 0 }, "properties": { "pins": 4 } },
+        { "id": "exec_knot", "type": "core:reroute", "position": { "x": 650, "y": -40 }, "properties": { "kind": "exec" } },
+        { "id": "first", "type": "core:console.print", "position": { "x": 800, "y": -40 }, "properties": { "pin:value": "first" } },
+        { "id": "data_knot", "type": "core:reroute", "position": { "x": 650, "y": 200 }, "properties": { "kind": "data", "type": { "id": "float" } } },
+        { "id": "sum", "type": "core:console.print", "position": { "x": 800, "y": 120 }, "properties": {} }
+      ],
+      "connections": [
+        { "id": "c1", "fromNode": "start", "fromPin": "execOut", "toNode": "add", "toPin": "execIn" },
+        { "id": "c2", "fromNode": "add", "fromPin": "execOut", "toNode": "seq", "toPin": "execIn" },
+        { "id": "c3", "fromNode": "seq", "fromPin": "then0", "toNode": "exec_knot", "toPin": "in" },
+        { "id": "c4", "fromNode": "exec_knot", "fromPin": "out", "toNode": "first", "toPin": "execIn" },
+        { "id": "c5", "fromNode": "seq", "fromPin": "then3", "toNode": "sum", "toPin": "execIn" },
+        { "id": "c6", "fromNode": "add", "fromPin": "result", "toNode": "data_knot", "toPin": "in" },
+        { "id": "c7", "fromNode": "data_knot", "fromPin": "out", "toNode": "sum", "toPin": "value" }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: exec and data reroute nodes pass through unchanged; a Sequence with a fourth output added.",
+    "expectedOutput": ["first", "5"]
+  }
+}

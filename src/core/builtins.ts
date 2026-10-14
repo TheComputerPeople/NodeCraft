@@ -51,10 +51,19 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
       outputs: [dataOutput('value', 'Value', 'any')], implementation: { kind: 'native', operation: 'get-variable' }
     },
     {
+      // The number of Then outputs comes from the node's `pins` property (src/core/resolve.ts).
       type: 'core:flow.sequence', version: 1, displayName: 'Sequence', category: 'Flow',
-      description: 'Run execution outputs in order.', color: '#e6b450', inputs: [execInput()],
+      description: 'Run execution outputs in order.', color: '#e6b450', inputs: [execInput()], keywords: ['then', 'order', 'series'],
       outputs: [execOutput('then0', 'Then 0'), execOutput('then1', 'Then 1'), execOutput('then2', 'Then 2')],
       implementation: { kind: 'native', operation: 'sequence' }
+    },
+    {
+      // A knot that passes a wire through unchanged, for tidying wires (Unreal's reroute node).
+      // Its pins match the wire it was placed on: `kind` is exec or data, `type` the data type.
+      type: 'core:reroute', version: 1, displayName: 'Reroute Node', category: 'Utilities', keywords: ['knot', 'reroute', 'wire'],
+      description: 'Route a wire through a point, without changing what it carries.',
+      inputs: [dataInput('in', '', 'wildcard')], outputs: [dataOutput('out', '', 'wildcard')],
+      implementation: { kind: 'native', operation: 'reroute' }
     },
     {
       type: 'core:flow.end', version: 1, displayName: 'End', category: 'Flow',

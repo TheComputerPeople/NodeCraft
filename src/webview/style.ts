@@ -28,7 +28,7 @@ export function pinColor(pin: PinDefinition | undefined): string {
   return pin?.kind === 'exec' ? EXEC_COLOR : typeColor(pin?.type);
 }
 
-export type NodeKind = 'event' | 'function' | 'pure' | 'flow' | 'variable-get' | 'variable-set';
+export type NodeKind = 'event' | 'function' | 'pure' | 'flow' | 'variable-get' | 'variable-set' | 'reroute';
 
 const FLOW_OPERATIONS = new Set(['branch', 'sequence', 'end']);
 
@@ -36,6 +36,7 @@ export function nodeKind(def: NodeDefinition): NodeKind {
   const operation = def.implementation?.kind === 'native' ? def.implementation.operation : '';
   if (operation === 'get-variable') return 'variable-get';
   if (operation === 'set-variable') return 'variable-set';
+  if (operation === 'reroute') return 'reroute';
   if (def.type.startsWith('core:event.')) return 'event';
   if (FLOW_OPERATIONS.has(operation)) return 'flow';
   const hasExec = [...def.inputs, ...def.outputs].some((p) => p.kind === 'exec');
@@ -49,12 +50,13 @@ const KIND_COLORS: Record<NodeKind, string> = {
   pure: '#3f7f2a',
   flow: '#5a5a5a',
   'variable-get': NEUTRAL,
-  'variable-set': NEUTRAL
+  'variable-set': NEUTRAL,
+  reroute: NEUTRAL
 };
 
 export function headerColor(def: NodeDefinition): string {
   const kind = nodeKind(def);
-  if (kind === 'variable-get' || kind === 'variable-set') {
+  if (kind === 'variable-get' || kind === 'variable-set' || kind === 'reroute') {
     const data = [...def.inputs, ...def.outputs].find((p) => p.kind === 'data');
     return typeColor(data?.type);
   }

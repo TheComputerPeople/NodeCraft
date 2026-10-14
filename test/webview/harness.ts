@@ -107,14 +107,14 @@ export class EditorPage {
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   }
 
-  // Screen position of the middle of a wire.
-  async wireMidpoint(connectionId: string): Promise<Point> {
-    return this.page.evaluate((id) => {
+  // Screen position of a point along a wire (the middle by default).
+  async wireMidpoint(connectionId: string, fraction = 0.5): Promise<Point> {
+    return this.page.evaluate(([id, f]) => {
       const path = document.querySelector<SVGPathElement>(`.edge-hit[data-connection-id="${id}"]`);
       if (!path) throw new Error(`No wire ${id}`);
-      const p = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM()!);
+      const p = path.getPointAtLength(path.getTotalLength() * f).matrixTransform(path.getScreenCTM()!);
       return { x: p.x, y: p.y };
-    }, connectionId);
+    }, [connectionId, fraction] as const);
   }
 
   async drag(from: Point, to: Point): Promise<void> {
