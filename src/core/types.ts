@@ -4,7 +4,8 @@
 // Type ids:
 //   bool, int, float, string       primitives
 //   any                            accepts any value (a dynamic/top type in each language)
-//   wildcard                       adopts the type of whatever it is first connected to
+//   wildcard, wildcard:value       adopt the type of whatever is first connected to them (a node's
+//                                  element or key type, and a map's value type)
 //   struct:<Name>, enum:<Name>     user-defined types
 //   object:<Class>                 a reference to an instance of a class
 //   native:<qualified name>        a type imported from user code with no canonical equivalent;
@@ -34,7 +35,8 @@ const LEGACY_TYPE_IDS: Record<string, string> = { number: 'float' };
 
 export function parseTypeId(id: string): { category: TypeCategory; name: string } {
   if ((PRIMITIVE_TYPES as readonly string[]).includes(id)) return { category: 'primitive', name: id };
-  if (id === 'any' || id === 'wildcard') return { category: id, name: id };
+  if (id === 'any') return { category: 'any', name: id };
+  if (id === 'wildcard' || id === 'wildcard:value') return { category: 'wildcard', name: 'wildcard' };
   const separator = id.indexOf(':');
   const prefix = id.slice(0, separator);
   if (separator > 0 && (NAMED_CATEGORIES as readonly string[]).includes(prefix)) {
@@ -60,7 +62,7 @@ export function canConnect(from: TypeRef | undefined, to: TypeRef | undefined): 
 }
 
 function elementsConnect(from: string, to: string): boolean {
-  if (from === to || from === 'wildcard' || to === 'wildcard') return true;
+  if (from === to || from.startsWith('wildcard') || to.startsWith('wildcard')) return true;
   // Numeric pins connect both ways until Phase 2 adds Unreal-style conversion nodes.
   return (from === 'int' && to === 'float') || (from === 'float' && to === 'int');
 }

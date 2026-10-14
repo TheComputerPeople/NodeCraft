@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 public class Features
 {
@@ -49,8 +50,60 @@ public class Features
         double d => FormatNumber(d),
         float f => FormatNumber(f),
         int or long or short or byte or sbyte or uint or ulong or ushort or decimal => FormatNumber(Convert.ToDouble(value, CultureInfo.InvariantCulture)),
-        _ => System.Text.Json.JsonSerializer.Serialize(value, new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })
+        _ => ToJson(value)
     };
+
+    // Containers print as JSON, numbers by the rules below: sets in ascending order (they have no
+    // order of their own), dictionaries in the order their keys were added.
+    private static string ToJson(object? value)
+    {
+        switch (value)
+        {
+            case null:
+                return "null";
+            case bool b:
+                return b ? "true" : "false";
+            case string s:
+                return JsonString(s);
+            case double or float or int or long or short or byte or sbyte or uint or ulong or ushort or decimal:
+                double number = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+                return double.IsFinite(number) ? FormatNumber(number) : "null";
+            case System.Collections.IDictionary map:
+                var entries = new List<string>();
+                foreach (System.Collections.DictionaryEntry entry in map) entries.Add(JsonString(entry.Key is string key ? key : FormatValue(entry.Key)) + ":" + ToJson(entry.Value));
+                return "{" + string.Join(",", entries) + "}";
+            case System.Collections.IEnumerable items:
+                var list = new List<object?>();
+                foreach (var item in items) list.Add(item);
+                if (value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() == typeof(HashSet<>)) list.Sort(Comparer<object?>.Default);
+                return "[" + string.Join(",", list.ConvertAll(ToJson)) + "]";
+            default:
+                return JsonString(value.ToString() ?? "");
+        }
+    }
+
+    private static string JsonString(string text)
+    {
+        var json = new System.Text.StringBuilder("\"");
+        foreach (char c in text)
+        {
+            switch (c)
+            {
+                case '"': json.Append("\""); break;
+                case '\\': json.Append("\\"); break;
+                case '\n': json.Append("\n"); break;
+                case '\r': json.Append("\r"); break;
+                case '\t': json.Append("\t"); break;
+                case '\b': json.Append("\b"); break;
+                case '\f': json.Append("\f"); break;
+                default:
+                    if (c < 0x20) json.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                    else json.Append(c);
+                    break;
+            }
+        }
+        return json.Append('"').ToString();
+    }
 
     // JavaScript's number-to-text rules, so every target language prints numbers the same way.
     private static string FormatNumber(double x)

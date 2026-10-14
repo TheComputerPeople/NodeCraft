@@ -219,8 +219,8 @@ export function insertRerouteAt(connectionId: string, clientX: number, clientY: 
   render();
 }
 
-export function addOutputPin(node: GraphNode): void {
-  editing.addOutputPin(node);
+export function addPin(node: GraphNode): void {
+  editing.addPin(node);
   markDirty();
   render();
 }
@@ -239,15 +239,16 @@ export function pinMenuItems(nodeId: string, pinId: string): MenuItem[] {
   if (pin?.kind === 'data' && state.document?.kind === 'class') {
     items.push({ label: 'Promote to Variable', action: () => promoteToVariable(nodeId, pinId) });
   }
-  if (editing.canAddPin(node) && /^(then|out|case)\d+$/.test(pinId)) {
+  const element = /^(item|key|value)\d+$/.test(pinId);
+  if (editing.canAddPin(node) && (element || /^(then|out|case)\d+$/.test(pinId))) {
     items.push({
-      label: 'Remove Execution Pin',
+      label: element ? 'Remove Element Pin' : 'Remove Execution Pin',
       danger: true,
       action: () => {
-        if (editing.removeOutputPin(graph, node, pinId)) {
+        if (editing.removePin(graph, node, pinId)) {
           markDirty();
           render();
-        } else setStatus(`${lookupDefinition(node)?.displayName ?? 'This node'} needs at least one output.`);
+        } else setStatus(`${lookupDefinition(node)?.displayName ?? 'This node'} needs at least one ${element ? 'element' : 'output'}.`);
       }
     });
   }

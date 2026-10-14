@@ -6,7 +6,7 @@ import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, Runtime
 import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { NodeResolver, createResolver, isPure } from './resolve';
-import { defaultValue, formatValue, toBoolean, toNumber } from './values';
+import { defaultValue, formatValue, fromStored, toBoolean, toNumber } from './values';
 
 interface RunState {
   // Member variables by id, shared by every graph in the run.
@@ -43,7 +43,7 @@ export class GraphRuntime {
   // called, which arrives with Phase 4.
   run(doc: GraphDocument): void {
     const run: RunState = { variables: new Map(), outputs: new Map(), state: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc.variables, doc.importedFunctions) };
-    for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue ?? defaultValue(variable.type));
+    for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue !== undefined ? fromStored(variable.defaultValue, variable.type) : defaultValue(variable.type));
 
     const entries = doc.graphs
       .filter((g) => g.kind === 'event')
@@ -210,6 +210,26 @@ export class GraphRuntime {
         }
         continueFrom('completed');
         return true;
+      case 'for-each': {
+        if (entry === 'break') {
+          set('stop', true);
+          return true;
+        }
+        set('stop', false);
+        // The array is read before each pass, as Unreal's For Each Loop reads it.
+        let index = 0;
+        for (; ; index++) {
+          const array = input('array');
+          if (!Array.isArray(array) || index >= array.length || get('stop')) break;
+          pass();
+          setOutput('index', index);
+          setOutput('element', array[index]);
+          continueFrom('loopBody');
+        }
+        setOutput('index', index);
+        continueFrom('completed');
+        return true;
+      }
       case 'do-once':
         if (entry === 'reset') {
           set('closed', false);
@@ -313,6 +333,15 @@ export class GraphRuntime {
     if (operation === 'get-variable' || operation === 'set-variable') return context.run.variables.get(this.variableId(context, node)) ?? null;
     // Pure conversion: evaluated on every read.
     if (operation === 'to-string') return formatValue(this.inputValue(context, node, definition, 'value', following));
+    // Make Array/Set/Map: a new container on every read.
+    if (operation === 'make-array' || operation === 'make-set' || operation === 'make-map') {
+      const items = definition.inputs.filter((p) => p.kind === 'data').map((p) => this.inputValue(context, node, definition, p.id, following));
+      if (operation === 'make-array') return items;
+      if (operation === 'make-set') return new Set(items);
+      const map = new Map<unknown, unknown>();
+      for (let i = 0; i + 1 < items.length; i += 2) map.set(items[i], items[i + 1]);
+      return map;
+    }
     const follow = (loopMessage: string, value: () => unknown): unknown => {
       if (following.has(node.id)) this.fail(context, node, loopMessage);
       following.add(node.id);
@@ -347,8 +376,8 @@ export class GraphRuntime {
 
 function unconnectedValue(node: GraphNode, pin: PinDefinition | undefined, pinId: string): unknown {
   const stored = node.properties[`pin:${pinId}`];
-  if (stored !== undefined) return stored;
-  if (pin?.defaultValue !== undefined) return pin.defaultValue;
+  if (stored !== undefined) return fromStored(stored, pin?.type);
+  if (pin?.defaultValue !== undefined) return fromStored(pin.defaultValue, pin?.type);
   return defaultValue(pin?.type);
 }
 

@@ -91,7 +91,7 @@ class TypeScriptEmitter {
     out.line(`${esm ? 'export ' : ''}class ${this.className} {`);
     out.indent();
 
-    for (const m of this.program.members) this.field(this.memberNames.get(m.id)!, m.type, this.expr(m.initial), false);
+    for (const m of this.program.members) this.field(this.memberNames.get(m.id)!, m.type, this.coerce(m.initial, m.type), false);
     for (const s of this.program.slots) this.field(this.slotNames.get(s.id)!, s.type, this.defaultFor(s.type), true);
     if (this.program.members.length || this.program.slots.length) out.line();
 
@@ -246,6 +246,20 @@ class TypeScriptEmitter {
         out.dedent();
         out.line('}');
         break;
+      case 'forEach': {
+        // The array is read before each pass, as Unreal's For Each Loop reads it.
+        const index = `this.${this.slotNames.get(s.index)}`;
+        const element = this.program.slots.find((x) => x.id === s.element);
+        const array = this.coerce(s.array, element?.type ? { ...element.type, container: 'array' } : undefined);
+        const stop = s.stop ? ` && !this.${this.slotNames.get(s.stop)}` : '';
+        out.line(`for (${index} = 0; ${index} < ${array}.length${stop}; ${index}++) {`);
+        out.indent();
+        out.line(`this.${this.slotNames.get(s.element)} = ${array}[${index}];`);
+        this.statements(s.body);
+        out.dedent();
+        out.line('}');
+        break;
+      }
       case 'call': {
         const call = this.call(s.callee, s.args);
         out.line(s.resultSlot ? `this.${this.slotNames.get(s.resultSlot)} = ${call};` : `${call};`);
@@ -285,6 +299,17 @@ class TypeScriptEmitter {
       }
       case 'not':
         return `!${this.operand(e.value)}`;
+      case 'makeContainer': {
+        const element = { id: e.type.id };
+        if (e.type.container === 'map') {
+          const pairs: string[] = [];
+          for (let i = 0; i + 1 < e.items.length; i += 2) pairs.push(`[${this.coerce(e.items[i], element)}, ${this.coerce(e.items[i + 1], e.type.valueType)}]`);
+          return `new Map${this.flavor.typed ? this.containerTypeArgs(e.type) : ''}(${pairs.length ? `[${pairs.join(', ')}]` : ''})`;
+        }
+        const items = e.items.map((item) => this.coerce(item, element));
+        if (e.type.container === 'set') return `new Set${this.flavor.typed ? this.containerTypeArgs(e.type) : ''}(${items.length ? `[${items.join(', ')}]` : ''})`;
+        return this.flavor.typed && !items.length ? `[] as ${this.typeName(e.type)}` : `[${items.join(', ')}]`;
+      }
     }
   }
 
@@ -310,9 +335,26 @@ class TypeScriptEmitter {
 
   // TypeScript needs a cast when a value of unknown type flows into a typed slot.
   private coerce(e: IrExpr, target: TypeRef | undefined): string {
+    // A container default (JSON: an array, or a map's [key, value] pairs) becomes the container.
+    if (e.kind === 'literal' && target?.container && Array.isArray(e.value)) return this.containerLiteral(e.value, target);
     const text = this.expr(e);
     if (!this.flavor.typed || !target || target.id === 'any') return text;
     return this.typeOf(e) ? text : `(${text} as ${this.typeName(target)})`;
+  }
+
+  private containerLiteral(value: unknown[], type: TypeRef): string {
+    const json = (v: unknown) => JSON.stringify(v) ?? 'null';
+    if (type.container === 'array') return this.flavor.typed && !value.length ? `[] as ${this.typeName(type)}` : `[${value.map(json).join(', ')}]`;
+    const generic = this.flavor.typed ? this.containerTypeArgs(type) : '';
+    if (type.container === 'set') return `new Set${generic}(${value.length ? `[${value.map(json).join(', ')}]` : ''})`;
+    const pairs = value.filter((p): p is unknown[] => Array.isArray(p) && p.length === 2);
+    return `new Map${generic}(${pairs.length ? `[${pairs.map(([k, v]) => `[${json(k)}, ${json(v)}]`).join(', ')}]` : ''})`;
+  }
+
+  // `<number>` for a set of numbers, `<string, number>` for a map of strings to numbers.
+  private containerTypeArgs(type: TypeRef): string {
+    const element = this.flavor.mapType({ id: type.id });
+    return type.container === 'map' ? `<${element}, ${this.flavor.mapType(type.valueType ?? { id: 'any' })}>` : `<${element}>`;
   }
 
   private defaultFor(type: TypeRef | undefined): string {
@@ -357,7 +399,9 @@ class TypeScriptEmitter {
     out.line(`if (value === null || value === undefined) return "";`);
     out.line(`if (typeof value === "string") return value;`);
     out.line(`if (typeof value === "number" || typeof value === "boolean") return String(value);`);
-    out.line(`return JSON.stringify(value) ?? "";`);
+    // Containers print as JSON: sets in ascending order (they have no order of their own), maps as
+    // objects in the order their keys were added.
+    out.line(`return JSON.stringify(value, (_key, v) => v instanceof Set ? [...v].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)) : v instanceof Map ? Object.fromEntries(v) : v) ?? "";`);
     out.dedent();
     out.line('}');
   }

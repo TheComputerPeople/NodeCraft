@@ -45,7 +45,34 @@ def _format_value(value: Any) -> str:
         return _format_number(float(value))
     if isinstance(value, str):
         return value
-    return json.dumps(value, separators=(",", ":"))
+    return _to_json(value)
+
+
+# Containers print as JSON, numbers by the rules above: sets in ascending order (they have no
+# order of their own), dicts in the order their keys were added.
+def _to_json(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        number = float(value)
+        return _format_number(number) if number == number and number not in (float("inf"), float("-inf")) else "null"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, (set, frozenset)):
+        return "[" + ",".join(_to_json(item) for item in sorted(value)) + "]"
+    if isinstance(value, dict):
+        return "{" + ",".join(json.dumps(_key_text(k), ensure_ascii=False) + ":" + _to_json(v) for k, v in value.items()) + "}"
+    if isinstance(value, (list, tuple)):
+        return "[" + ",".join(_to_json(item) for item in value) + "]"
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def _key_text(key: Any) -> str:
+    if isinstance(key, str):
+        return key
+    return _format_value(key)
 
 
 def _format_number(x: float) -> str:

@@ -287,3 +287,17 @@ describe('lowerDocument: flow control', () => {
     assert.deepEqual(shape(result.program!.start), ['store:sw', { if: { then: ['print:a'], else: [{ if: { then: ['print:b'], else: [] } }] } }]);
   });
 });
+
+describe('lowerDocument: containers', () => {
+  test('a wildcard node that never got a type is an error, as in Unreal', () => {
+    const result = lower(doc([node('s', 'core:event.start'), node('m', 'core:array.make'), node('p', 'core:console.print')], [wire('s', 'execOut', 'p', 'execIn'), wire('m', 'array', 'p', 'value')]));
+    assert.deepEqual(codes(result.diagnostics, 'error'), ['wildcard-unresolved']);
+  });
+
+  test('a code node used with two element types gets a helper for each', () => {
+    const add = (id: string, element: string) => node(id, 'core:array.length', { wildcards: { wildcard: element } });
+    const result = lower(doc([node('s', 'core:event.start'), add('a', 'int'), add('b', 'string'), node('p1', 'core:console.print'), node('p2', 'core:console.print')],
+      [wire('s', 'execOut', 'p1', 'execIn'), wire('p1', 'execOut', 'p2', 'execIn'), wire('a', 'returnValue', 'p1', 'value'), wire('b', 'returnValue', 'p2', 'value')]));
+    assert.deepEqual(result.program!.helpers.map((h) => h.params[0].type), [{ id: 'int', container: 'array' }, { id: 'string', container: 'array' }]);
+  });
+});

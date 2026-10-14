@@ -1,4 +1,5 @@
 import { NodeDefinition, PinDefinition, TypeRef } from './model';
+import { containerDefinitions } from './containers';
 import { flowControlDefinitions } from './flow-control';
 import { standardLibraryDefinitions } from './stdlib';
 
@@ -81,6 +82,7 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
       implementation: { kind: 'native', operation: 'end' }
     },
     ...flowControlDefinitions(),
+    ...containerDefinitions(),
     ...standardLibraryDefinitions()
   ];
 }

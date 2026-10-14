@@ -1,5 +1,5 @@
 // The document being edited, the node definitions it uses, and syncing changes back to the host.
-import { pinDefinition } from '../core/editing';
+import { pinDefinition, releaseWildcards } from '../core/editing';
 import { GraphDocument, GraphNode, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
 import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions } from '../core/imported-functions';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
@@ -128,6 +128,8 @@ function copyDocument(doc: GraphDocument): GraphDocument {
 }
 
 export function markDirty(): void {
+  // A wildcard node with no wire left on its wildcard pins can take another type, as in Unreal.
+  if (state.graph && releaseWildcards(state.graph, lookupDefinition)) render();
   state.dirty = true;
   setStatus('Unsaved changes');
   markCompileDirty();

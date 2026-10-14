@@ -2,7 +2,7 @@ import { canAddPin, definitionFor } from '../core/editing';
 import { GraphConnection, GraphNode, PinDefinition } from '../core/model';
 import { formatType } from '../core/types';
 import { SEQUENCE } from '../core/resolve';
-import { addOutputPin, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
+import { addPin, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
 import { functionProblem, lookupDefinition, markDirty, pinDef } from './document';
@@ -113,7 +113,7 @@ function renderNode(node: GraphNode): HTMLElement {
       add.textContent = 'Add pin +';
       add.title = 'Add an output';
       add.addEventListener('mousedown', (e) => e.stopPropagation());
-      add.addEventListener('click', () => addOutputPin(node));
+      add.addEventListener('click', () => addPin(node));
       el.appendChild(add);
     }
   }

@@ -31,8 +31,60 @@ const HELPERS: Record<'format' | 'number' | 'boolean' | 'as', string[]> = {
     '    double d => FormatNumber(d),',
     '    float f => FormatNumber(f),',
     '    int or long or short or byte or sbyte or uint or ulong or ushort or decimal => FormatNumber(Convert.ToDouble(value, CultureInfo.InvariantCulture)),',
-    '    _ => System.Text.Json.JsonSerializer.Serialize(value, new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })',
+    '    _ => ToJson(value)',
     '};',
+    '',
+    '// Containers print as JSON, numbers by the rules below: sets in ascending order (they have no',
+    '// order of their own), dictionaries in the order their keys were added.',
+    'private static string ToJson(object? value)',
+    '{',
+    '    switch (value)',
+    '    {',
+    '        case null:',
+    '            return "null";',
+    '        case bool b:',
+    '            return b ? "true" : "false";',
+    '        case string s:',
+    '            return JsonString(s);',
+    '        case double or float or int or long or short or byte or sbyte or uint or ulong or ushort or decimal:',
+    '            double number = Convert.ToDouble(value, CultureInfo.InvariantCulture);',
+    '            return double.IsFinite(number) ? FormatNumber(number) : "null";',
+    '        case System.Collections.IDictionary map:',
+    '            var entries = new List<string>();',
+    '            foreach (System.Collections.DictionaryEntry entry in map) entries.Add(JsonString(entry.Key is string key ? key : FormatValue(entry.Key)) + ":" + ToJson(entry.Value));',
+    '            return "{" + string.Join(",", entries) + "}";',
+    '        case System.Collections.IEnumerable items:',
+    '            var list = new List<object?>();',
+    '            foreach (var item in items) list.Add(item);',
+    '            if (value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() == typeof(HashSet<>)) list.Sort(Comparer<object?>.Default);',
+    '            return "[" + string.Join(",", list.ConvertAll(ToJson)) + "]";',
+    '        default:',
+    '            return JsonString(value.ToString() ?? "");',
+    '    }',
+    '}',
+    '',
+    'private static string JsonString(string text)',
+    '{',
+    '    var json = new System.Text.StringBuilder("\\"");',
+    '    foreach (char c in text)',
+    '    {',
+    '        switch (c)',
+    '        {',
+    '            case \'"\': json.Append("\\\""); break;',
+    '            case \'\\\\\': json.Append("\\\\"); break;',
+    '            case \'\\n\': json.Append("\\n"); break;',
+    '            case \'\\r\': json.Append("\\r"); break;',
+    '            case \'\\t\': json.Append("\\t"); break;',
+    '            case \'\\b\': json.Append("\\b"); break;',
+    '            case \'\\f\': json.Append("\\f"); break;',
+    '            default:',
+    '                if (c < 0x20) json.Append("\\\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));',
+    '                else json.Append(c);',
+    '                break;',
+    '        }',
+    '    }',
+    '    return json.Append(\'"\').ToString();',
+    '}',
     '',
     '// JavaScript\'s number-to-text rules, so every target language prints numbers the same way.',
     'private static string FormatNumber(double x)',
@@ -239,6 +291,7 @@ class CSharpEmitter {
     header.line('using System;');
     header.line('using System.Collections.Generic;');
     header.line('using System.Globalization;');
+    header.line('using System.Linq;');
     header.line();
     if (this.options.namespace) {
       header.line(`namespace ${this.options.namespace};`);
@@ -338,6 +391,21 @@ class CSharpEmitter {
         out.line(`while (${this.expr(s.condition)})`);
         this.block(s.body);
         break;
+      case 'forEach': {
+        // The array is read before each pass, as Unreal's For Each Loop reads it.
+        const index = this.slotNames.get(s.index)!;
+        const element = this.program.slots.find((x) => x.id === s.element);
+        const array = this.coerce(s.array, element?.type ? { ...element.type, container: 'array' } : undefined);
+        const stop = s.stop ? ` && !${this.slotNames.get(s.stop)}` : '';
+        out.line(`for (${index} = 0; ${index} < ${array}.Count${stop}; ${index}++)`);
+        out.line('{');
+        out.indent();
+        out.line(`${this.slotNames.get(s.element)} = ${array}[${index}];`);
+        this.statements(s.body);
+        out.dedent();
+        out.line('}');
+        break;
+      }
       case 'call': {
         const call = this.call(s.callee, s.args);
         if (!s.resultSlot) {
@@ -400,6 +468,16 @@ class CSharpEmitter {
       }
       case 'not':
         return `!${this.operand(e.value)}`;
+      case 'makeContainer': {
+        const element = { id: e.type.id };
+        const type = this.typeName({ ...e.type, nullable: false });
+        if (e.type.container === 'map') {
+          const pairs: string[] = [];
+          for (let i = 0; i + 1 < e.items.length; i += 2) pairs.push(`[${this.coerce(e.items[i], element)}] = ${this.coerce(e.items[i + 1], e.type.valueType)}`);
+          return `new ${type} { ${pairs.join(', ')} }`.replace('{  }', '()');
+        }
+        return `new ${type} { ${e.items.map((item) => this.coerce(item, element)).join(', ')} }`.replace('{  }', '()');
+      }
     }
   }
 
@@ -431,8 +509,18 @@ class CSharpEmitter {
     return `FormatValue(${this.expr(e)})`;
   }
 
-  // An expression for a slot, member or parameter of type `target`.
+  // An expression for a slot, member or parameter of type `target`. A container default (JSON: an
+  // array, or a map's [key, value] pairs) becomes the container.
   private coerce(e: IrExpr, target: TypeRef | undefined): string {
+    if (e.kind === 'literal' && target?.container && Array.isArray(e.value)) {
+      const type = this.typeName({ ...target, nullable: false });
+      const element = (v: unknown, t: TypeRef | undefined) => this.cast(literal(v), literalTypeOf(v), t, true);
+      if (target.container === 'map') {
+        const pairs = e.value.filter((p): p is unknown[] => Array.isArray(p) && p.length === 2);
+        return pairs.length ? `new ${type} { ${pairs.map(([k, v]) => `[${element(k, { id: target.id })}] = ${element(v, target.valueType)}`).join(', ')} }` : `new ${type}()`;
+      }
+      return e.value.length ? `new ${type} { ${e.value.map((v) => element(v, { id: target.id })).join(', ')} }` : `new ${type}()`;
+    }
     return this.cast(this.expr(e), this.typeOf(e), target, e.kind === 'literal');
   }
 
@@ -468,14 +556,22 @@ class CSharpEmitter {
 
   private typeName(type: TypeRef | undefined): string {
     const name = mapType(type ?? { id: 'any' });
-    // Object-like types start out null, so they must admit it.
-    return this.defaultFor(type) === 'null' && !name.endsWith('?') ? `${name}?` : name;
+    // Object-like types start out null, so they must admit it (containers start out empty).
+    const startsNull = !type || (!type.container && !['bool', 'int', 'float', 'string'].includes(type.id));
+    return startsNull && !name.endsWith('?') ? `${name}?` : name;
   }
 
   private typeOf(e: IrExpr): TypeRef | undefined {
     const type = exprType(e, this.program);
     return type?.id === 'any' ? undefined : type;
   }
+}
+
+function literalTypeOf(value: unknown): TypeRef | undefined {
+  if (typeof value === 'number') return { id: Number.isInteger(value) ? 'int' : 'float' };
+  if (typeof value === 'string') return { id: 'string' };
+  if (typeof value === 'boolean') return { id: 'bool' };
+  return undefined;
 }
 
 // A JSON value as a C# literal.

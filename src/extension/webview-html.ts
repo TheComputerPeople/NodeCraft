@@ -56,7 +56,7 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
       <header><span id="find-title">Find Results</span><input id="find-input" class="find-input" placeholder="Search this graph file" aria-label="Find"><label class="find-scope"><input type="checkbox" id="find-all"> All files</label><button id="find-close" title="Close">×</button></header>
       <ul id="find-list"></ul>
     </section>
-    <div id="help">Drag pins to connect · Alt+click a pin breaks its links · Ctrl+drag a pin moves them · Right-click for menus, right-drag to pan · Hold B, S, P, G, M, N or O and click to place · F7 compiles</div>
+    <div id="help">Drag pins to connect · Alt+click a pin breaks its links · Ctrl+drag a pin moves them · Right-click for menus, right-drag to pan · Hold B, S, P, F, G, M, N or O and click to place · F7 compiles</div>
   </main>
   <aside id="inspector" class="panel">
     <div class="panel-title">Details</div>

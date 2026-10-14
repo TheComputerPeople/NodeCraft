@@ -260,14 +260,16 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Nodes | Separate right-click menus for the background, a node, a pin (pin actions above node actions) and a comment | ✅ | — |
 | Nodes | Hold-key + click placement: B, S, C, P | ✅ | — |
 | Nodes | Hold-key + click placement: G, M, N, O | ✅ | — |
-| Nodes | Hold-key + click placement: F, D (need For Each Loop and Delay) | ⬜ | 4 |
+| Nodes | Hold-key + click placement: F | ✅ | — |
+| Nodes | Hold-key + click placement: D (needs Delay) | ⬜ | 4 |
 | Nodes | Cut/copy/paste (also between graphs and files, as text), Ctrl+D duplicate | ✅ | — |
 | Nodes | Arrow keys move the selection; F2 renames comments, variables and graphs | ✅ | — |
 | Nodes | C wraps the selection in a comment; comments move their nodes, resize, rename | ✅ | — |
 | Nodes | Collapse to function/macro | ⬜ | 4 (needs callable functions) |
 | Nodes | Inline default values on pins | ✅ | — |
 | Nodes | Add-pin (+) on Sequence, MultiGate and Switch; remove a pin from its menu | ✅ (Sequence starts with 3 outputs, Unreal's with 2) | — |
-| Nodes | Make Array, wildcard pins, split struct pins | ⬜ | 4 (needs container and struct operations) |
+| Nodes | Make Array/Set/Map, wildcard pins | ✅ | — |
+| Nodes | Split struct pins | ⬜ | 4 (with structs) |
 | Nodes | Automatic conversion nodes | ✅ (bool/int/float → string via To String) | — |
 | Visuals | Exec pins white arrows, data pins and wires colored by type | ✅ | — |
 | Visuals | Title styles for event/function/pure/macro; compact variable getters | ✅ | — |
@@ -276,14 +278,14 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Variables | Get/Set nodes bound to a variable | ✅ | — |
 | Variables | Ctrl-drag → Get, Alt-drag → Set, drag onto a pin | ✅ | — |
 | Variables | Promote pin to variable | ✅ | — |
-| Variables | Container types (array/set/map) | 🟡 (type picker; container defaults and operations need Phase 4) | 4 |
+| Variables | Container types (array/set/map), defaults edited in Details, Unreal's array/set/map functions | ✅ | — |
 | Search | Find in Blueprint (Ctrl+F) / Find in All Blueprints (Ctrl+Shift+F) | ✅ | — |
 | Palette | Favorites | ⬜ (per-user, needs settings storage) | later |
 | Compile | Compile button, Compiler Results, error badges on nodes | ✅ | — |
 | Compile | F7 compiles | ✅ | — |
 | Structure | Functions, macros, local variables | ⬜ | 4 |
 | Structure | Flow-control library: For Loop (with Break), While Loop, Do Once, Do N, Gate, MultiGate, Flip Flop, Switch on Int/String | ✅ (MultiGate's Is Random later) | — |
-| Structure | For Each Loop | ⬜ | 4 (with containers) |
+| Structure | For Each Loop (with Break) | ✅ | — |
 | Structure | Structs, enums, Make/Break | ⬜ | 4 |
 | Structure | Classes, inheritance, interfaces, Cast To | ⬜ | 4 |
 | Structure | Event dispatchers, custom events | ⬜ | 4 |

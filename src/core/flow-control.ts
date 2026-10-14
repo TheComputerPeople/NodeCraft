@@ -56,6 +56,7 @@ export function flowControlDefinitions(): NodeDefinition[] {
 // Close, Toggle). Wiring back into them from downstream is not a cycle.
 const STATE_INPUTS: Record<string, string[]> = {
   'for-loop': ['break'],
+  'for-each': ['break'],
   'do-once': ['reset'],
   'do-n': ['reset'],
   gate: ['open', 'close', 'toggle'],

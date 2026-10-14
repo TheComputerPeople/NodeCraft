@@ -4,7 +4,7 @@ import { Graph, GraphDocument, GraphKind, GraphVariable } from './model';
 import { VARIABLE_GET, VARIABLE_SET } from './resolve';
 import { createGraph } from './serializer';
 import { TypeRef } from './types';
-import { defaultValue } from './values';
+import { storedDefault } from './values';
 
 // The first of `base`, `base_1`, `base_2`, ... not in `taken`, following Unreal's naming.
 export function uniqueName(base: string, taken: Iterable<string>): string {
@@ -51,7 +51,7 @@ export function deleteGraph(doc: GraphDocument, graphId: string): string | undef
 export function addVariable(doc: GraphDocument, type: TypeRef = { id: 'bool' }): GraphVariable {
   if (doc.kind !== 'class') throw new Error('Only classes have variables.');
   const name = uniqueName('NewVar', doc.variables.map((v) => v.name));
-  const variable: GraphVariable = { id: uniqueId('var_', name, doc.variables.map((v) => v.id)), name, type, defaultValue: defaultValue(type) };
+  const variable: GraphVariable = { id: uniqueId('var_', name, doc.variables.map((v) => v.id)), name, type, defaultValue: storedDefault(type) };
   doc.variables.push(variable);
   return variable;
 }
@@ -71,7 +71,7 @@ export function setVariableType(doc: GraphDocument, id: string, type: TypeRef): 
   const variable = doc.variables.find((v) => v.id === id);
   if (!variable) return;
   variable.type = type;
-  variable.defaultValue = defaultValue(type);
+  variable.defaultValue = storedDefault(type);
 }
 
 // Deletes the variable and, as Unreal does, every Get/Set node that uses it. Returns how many

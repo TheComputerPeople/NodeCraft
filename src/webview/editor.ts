@@ -20,11 +20,10 @@ const RUN_TRAIL_MS = 1500;
 
 // Nodes placed by holding a key and clicking the canvas, as in Unreal (P places BeginPlay, which
 // is our Start event). C, for comments, arrives with comment boxes.
-// Hold a key and click to place, as in Unreal (F For Each Loop and D Delay arrive with containers
-// and latent actions).
+// Hold a key and click to place, as in Unreal (D Delay arrives with latent actions).
 const PLACEMENT_KEYS: Record<string, string> = {
   b: 'core:flow.branch', s: 'core:flow.sequence', p: 'core:event.start',
-  g: 'core:flow.gate', m: 'core:flow.multigate', n: 'core:flow.do-n', o: 'core:flow.do-once'
+  g: 'core:flow.gate', m: 'core:flow.multigate', n: 'core:flow.do-n', o: 'core:flow.do-once', f: 'core:flow.for-each-loop'
 };
 const ALIGN_KEYS: Record<string, AlignEdge> = { w: 'top', a: 'left', s: 'bottom', d: 'right' };
 // Distance, in world units, that an arrow key moves the selection.

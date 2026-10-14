@@ -38,11 +38,13 @@ Sources:
 | Rename a node or edit a comment | F2, or click the title | Epic |
 | Go to the graph a node refers to | Double-click the node | Epic |
 | Comment around the selection | C | Epic |
-| Place a node | Hold a key and click: B Branch, S Sequence, C Comment, P BeginPlay (our Start), G Gate, M MultiGate, N Do N, O Do Once; F For Each Loop and D Delay arrive with containers and latent actions | Epic |
+| Place a node | Hold a key and click: B Branch, S Sequence, C Comment, P BeginPlay (our Start), F For Each Loop, G Gate, M MultiGate, N Do N, O Do Once; D Delay arrives with latent actions | Epic |
 | Align (top, middle, bottom, left, center, right), straighten connections | Node context menu → Alignment | Epic (menu) |
 | Align top / left / bottom / right | Shift + W / A / S / D | Community |
 | Straighten connections | Q | Community |
 | Add a reroute node | Double-click a wire | Community |
+| Add an element pin to Make Array, Make Set or Make Map; remove one | "Add pin +" on the node; right-click the pin → Remove Element Pin | Epic |
+| Wildcard pins take the type of the first wire connected to them | Connect a wire | Engine behavior |
 | Refresh Node: update a node whose function's signature changed | Node context menu | Engine behavior |
 | Refresh All Nodes | Command Palette → Refresh All Nodes (Unreal: File menu) | Epic (menu) |
 | Replace a node whose function was renamed or moved | Node context menu → Replace with … | Ours: Unreal has no equivalent for code nodes |

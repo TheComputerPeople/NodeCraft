@@ -41,8 +41,18 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
   - null prints as an empty string;
   - booleans print as `true` and `false`;
   - numbers print in their shortest exact form, using JavaScript's rules: `30`, `0.1`, `1e-7`, `1e+21`, `NaN`, `Infinity`. Integral values have no decimal point. (Unreal prints `30.0` for floats; matching that needs type information that `any` pins don't carry, so it is deferred.)
-  - strings print unchanged; anything else prints as compact JSON.
+  - strings print unchanged; arrays, sets and maps print as compact JSON, with numbers by the rules above. Sets print in ascending order (they have no order of their own); maps print as objects in the order their keys were added.
 - **Add** converts its inputs to numbers (a missing value counts as 0) and adds them.
+
+## Containers
+
+- Arrays, sets and maps are references, as in Unreal: a Get of an array variable and the variable are the same array, so adding to one adds to the other.
+- **Make Array**, **Make Set** and **Make Map** are pure: each read makes a new container.
+- **For Each Loop** reads its Array before each pass, as Unreal's macro does, and runs Loop Body with Array Element and Array Index for each position, then Completed. **For Each Loop with Break** stops as For Loop with Break does.
+- Getting, setting, inserting at or removing an index out of range stops the run with an error. So does Find on a map without the key (check with Contains first). Unreal returns a default and logs a warning instead; an error is easier to find and is what each language does anyway.
+- Add Unique returns -1 when the item is already there, as in Unreal. Remove Item removes every copy. Set's To Array is in ascending order. A map's Keys and Values follow the order the keys were added.
+- Equality of elements (Find, Contains, Remove Item) is the language's own for numbers, text and booleans.
+- **Wildcard pins** take the element type of the first wire connected to them, and pass it along wires to other wildcard nodes; a node whose wildcard pins have no type is a compile error.
 
 ## Variables
 

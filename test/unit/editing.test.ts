@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as editing from '../../src/core/editing';
 import { GraphNode } from '../../src/core/model';
 import { NodeRegistry } from '../../src/core/registry';
+import { createResolver } from '../../src/core/resolve';
 import { parseDocument, primaryGraph } from '../../src/core/serializer';
 import { doc, graphOf, node, readRepoFile, wire } from './helpers';
 
@@ -194,16 +195,16 @@ describe('Sequence pins', () => {
     const g = graphOf(doc([node('q', 'core:flow.sequence'), node('a', 'x'), node('b', 'x'), node('c', 'x')],
       [wire('q', 'then0', 'a', 'in'), wire('q', 'then1', 'b', 'in'), wire('q', 'then2', 'c', 'in')]));
     const q = g.nodes[0];
-    editing.addOutputPin(q);
+    editing.addPin(q);
     assert.equal(q.properties.pins, 4);
-    assert.equal(editing.removeOutputPin(g, q, 'then1'), true);
+    assert.equal(editing.removePin(g, q, 'then1'), true);
     assert.equal(q.properties.pins, 3);
     assert.deepEqual(g.connections.map((c) => `${c.fromPin}->${c.toNode}`), ['then0->a', 'then1->c']);
   });
 
   test('a Sequence keeps at least one output', () => {
     const g = graphOf(doc([node('q', 'core:flow.sequence', { pins: 1 })], []));
-    assert.equal(editing.removeOutputPin(g, g.nodes[0], 'then0'), false);
+    assert.equal(editing.removePin(g, g.nodes[0], 'then0'), false);
   });
 });
 
@@ -237,9 +238,9 @@ describe('growing outputs', () => {
   test('Switch on String: Add pin adds a case to name; removing one moves later wires up', () => {
     const sw = node('sw', 'core:flow.switch-string', { cases: ['red', 'green', 'blue'] });
     const g = graphOf(doc([sw, node('a', 'core:console.print'), node('b', 'core:console.print')], [wire('sw', 'case1', 'a', 'execIn'), wire('sw', 'case2', 'b', 'execIn')]));
-    editing.addOutputPin(sw);
+    editing.addPin(sw);
     assert.deepEqual(sw.properties.cases, ['red', 'green', 'blue', 'Case 3']);
-    assert.equal(editing.removeOutputPin(g, sw, 'case1'), true);
+    assert.equal(editing.removePin(g, sw, 'case1'), true);
     assert.deepEqual(sw.properties.cases, ['red', 'blue', 'Case 3']);
     assert.deepEqual(g.connections.map((c) => `${c.fromPin}->${c.toNode}`), ['case1->b']);
   });
@@ -248,8 +249,51 @@ describe('growing outputs', () => {
     const mg = node('mg', 'core:flow.multigate', { pins: 1 });
     const ss = node('ss', 'core:flow.switch-string', { cases: ['only'] });
     const g = graphOf(doc([mg, ss], []));
-    assert.equal(editing.removeOutputPin(g, mg, 'out0'), false);
-    assert.equal(editing.removeOutputPin(g, ss, 'case0'), true);
+    assert.equal(editing.removePin(g, mg, 'out0'), false);
+    assert.equal(editing.removePin(g, ss, 'case0'), true);
     assert.deepEqual(ss.properties.cases, []);
+  });
+});
+
+describe('wildcard pins', () => {
+  const registry = new NodeRegistry();
+  const resolve = (variables: { id: string; name: string; type: { id: string; container?: 'array' } }[] = []) => createResolver(registry, variables);
+
+  test('connecting a typed pin gives a wildcard node its type, which passes on to wildcard nodes it is wired to', () => {
+    const variables = [{ id: 'scores', name: 'Scores', type: { id: 'int', container: 'array' as const } }];
+    const g = graphOf(doc([node('get', 'core:variable.get', { variable: 'scores' }), node('len', 'core:array.length'), node('make', 'core:array.make'), node('add', 'core:array.add')], [], variables));
+    const lookup = resolve(variables);
+    editing.connect(g, lookup, { fromNode: 'make', fromPin: 'array', toNode: 'add', toPin: 'target' }, 'c1');
+    assert.equal(g.nodes[2].properties.wildcards, undefined, 'wildcard to wildcard teaches nothing');
+    editing.connect(g, lookup, { fromNode: 'get', fromPin: 'value', toNode: 'len', toPin: 'target' }, 'c2');
+    assert.deepEqual(g.nodes[1].properties.wildcards, { wildcard: 'int' });
+    editing.connect(g, lookup, { fromNode: 'add', fromPin: 'returnValue', toNode: 'len', toPin: 'target' }, 'c3');
+    assert.deepEqual(lookup(g.nodes[1])?.inputs[0].type, { id: 'int', container: 'array' });
+  });
+
+  test('the type passes along wires: typing Add types the Make Array feeding it', () => {
+    const g = graphOf(doc([node('make', 'core:array.make'), node('add', 'core:array.add'), node('n', 'core:math.add')], []));
+    const lookup = resolve();
+    editing.connect(g, lookup, { fromNode: 'make', fromPin: 'array', toNode: 'add', toPin: 'target' }, 'c1');
+    editing.connect(g, lookup, { fromNode: 'n', fromPin: 'result', toNode: 'add', toPin: 'item' }, 'c2');
+    assert.deepEqual(g.nodes[1].properties.wildcards, { wildcard: 'float' });
+    assert.deepEqual(g.nodes[0].properties.wildcards, { wildcard: 'float' });
+  });
+
+  test('removing the last wildcard wire releases the type', () => {
+    const g = graphOf(doc([node('n', 'core:math.add'), node('make', 'core:array.make', { wildcards: { wildcard: 'float' } })], [wire('n', 'result', 'make', 'item0')]));
+    const lookup = resolve();
+    assert.equal(editing.releaseWildcards(g, lookup), false);
+    g.connections = [];
+    assert.equal(editing.releaseWildcards(g, lookup), true);
+    assert.equal(g.nodes[1].properties.wildcards, undefined);
+  });
+
+  test('removing a Make Array item moves later wires and values up', () => {
+    const make = node('make', 'core:array.make', { pins: 3, 'pin:item0': 'a', 'pin:item1': 'b', 'pin:item2': 'c' });
+    const g = graphOf(doc([make, node('t', 'core:convert.to-string')], [wire('t', 'returnValue', 'make', 'item2')]));
+    assert.equal(editing.removePin(g, make, 'item1'), true);
+    assert.deepEqual([make.properties.pins, make.properties['pin:item0'], make.properties['pin:item1'], make.properties['pin:item2']], [2, 'a', 'c', undefined]);
+    assert.equal(g.connections[0].toPin, 'item1');
   });
 });

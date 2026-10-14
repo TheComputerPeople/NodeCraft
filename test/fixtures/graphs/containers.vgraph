@@ -1,0 +1,1973 @@
+{
+  "schemaVersion": 3,
+  "name": "Containers",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [
+    {
+      "id": "scores",
+      "name": "Scores",
+      "type": {
+        "id": "int",
+        "container": "array"
+      },
+      "defaultValue": [
+        10,
+        20
+      ]
+    },
+    {
+      "id": "tags",
+      "name": "Tags",
+      "type": {
+        "id": "string",
+        "container": "set"
+      },
+      "defaultValue": [
+        "b",
+        "a"
+      ]
+    },
+    {
+      "id": "ages",
+      "name": "Ages",
+      "type": {
+        "id": "string",
+        "container": "map",
+        "valueType": {
+          "id": "int"
+        }
+      },
+      "defaultValue": [
+        [
+          "ann",
+          30
+        ]
+      ]
+    }
+  ],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "n1",
+          "type": "core:event.start",
+          "position": {
+            "x": 30,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "core:array.make",
+          "position": {
+            "x": 60,
+            "y": 0
+          },
+          "properties": {
+            "pins": 3,
+            "pin:item0": 3,
+            "pin:item1": 1,
+            "pin:item2": 2,
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n3",
+          "type": "core:console.print",
+          "position": {
+            "x": 90,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "core:set.make",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {
+            "pins": 3,
+            "pin:item0": "b",
+            "pin:item1": "a",
+            "pin:item2": "b",
+            "wildcards": {
+              "wildcard": "string"
+            }
+          }
+        },
+        {
+          "id": "n5",
+          "type": "core:console.print",
+          "position": {
+            "x": 150,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n6",
+          "type": "core:map.make",
+          "position": {
+            "x": 180,
+            "y": 0
+          },
+          "properties": {
+            "pins": 1,
+            "pin:key0": 1,
+            "pin:value0": "one",
+            "wildcards": {
+              "wildcard": "int",
+              "wildcard:value": "string"
+            }
+          }
+        },
+        {
+          "id": "n7",
+          "type": "core:console.print",
+          "position": {
+            "x": 210,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n8",
+          "type": "core:array.add",
+          "position": {
+            "x": 240,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item": 30
+          }
+        },
+        {
+          "id": "n9",
+          "type": "core:variable.get",
+          "position": {
+            "x": 270,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n10",
+          "type": "core:console.print",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n11",
+          "type": "core:variable.get",
+          "position": {
+            "x": 330,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n12",
+          "type": "core:console.print",
+          "position": {
+            "x": 360,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n13",
+          "type": "core:array.length",
+          "position": {
+            "x": 390,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n14",
+          "type": "core:variable.get",
+          "position": {
+            "x": 420,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n15",
+          "type": "core:console.print",
+          "position": {
+            "x": 450,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n16",
+          "type": "core:array.get",
+          "position": {
+            "x": 480,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:index": 1
+          }
+        },
+        {
+          "id": "n17",
+          "type": "core:variable.get",
+          "position": {
+            "x": 510,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n18",
+          "type": "core:console.print",
+          "position": {
+            "x": 540,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n19",
+          "type": "core:array.contains",
+          "position": {
+            "x": 570,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item": 20
+          }
+        },
+        {
+          "id": "n20",
+          "type": "core:variable.get",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n21",
+          "type": "core:console.print",
+          "position": {
+            "x": 630,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n22",
+          "type": "core:array.find",
+          "position": {
+            "x": 660,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item": 99
+          }
+        },
+        {
+          "id": "n23",
+          "type": "core:variable.get",
+          "position": {
+            "x": 690,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n24",
+          "type": "core:console.print",
+          "position": {
+            "x": 720,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n25",
+          "type": "core:array.add-unique",
+          "position": {
+            "x": 750,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item": 20
+          }
+        },
+        {
+          "id": "n26",
+          "type": "core:variable.get",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n27",
+          "type": "core:console.print",
+          "position": {
+            "x": 810,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n28",
+          "type": "core:array.remove-item",
+          "position": {
+            "x": 840,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item": 10
+          }
+        },
+        {
+          "id": "n29",
+          "type": "core:variable.get",
+          "position": {
+            "x": 870,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n30",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n31",
+          "type": "core:array.insert",
+          "position": {
+            "x": 930,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item": 5,
+            "pin:index": 0
+          }
+        },
+        {
+          "id": "n32",
+          "type": "core:variable.get",
+          "position": {
+            "x": 960,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n33",
+          "type": "core:variable.get",
+          "position": {
+            "x": 990,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n34",
+          "type": "core:console.print",
+          "position": {
+            "x": 1020,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n35",
+          "type": "core:array.remove-index",
+          "position": {
+            "x": 1050,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:index": 1
+          }
+        },
+        {
+          "id": "n36",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1080,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n37",
+          "type": "core:array.set",
+          "position": {
+            "x": 1110,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:index": 0,
+            "pin:item": 7
+          }
+        },
+        {
+          "id": "n38",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1140,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n39",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1170,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n40",
+          "type": "core:console.print",
+          "position": {
+            "x": 1200,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n41",
+          "type": "core:array.last-index",
+          "position": {
+            "x": 1230,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n42",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1260,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n43",
+          "type": "core:console.print",
+          "position": {
+            "x": 1290,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n44",
+          "type": "core:array.is-valid-index",
+          "position": {
+            "x": 1320,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:index": 2
+          }
+        },
+        {
+          "id": "n45",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1350,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n46",
+          "type": "core:console.print",
+          "position": {
+            "x": 1380,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n47",
+          "type": "core:array.clear",
+          "position": {
+            "x": 1410,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n48",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1440,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n49",
+          "type": "core:array.is-empty",
+          "position": {
+            "x": 1470,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n50",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1500,
+            "y": 0
+          },
+          "properties": {
+            "variable": "scores"
+          }
+        },
+        {
+          "id": "n51",
+          "type": "core:console.print",
+          "position": {
+            "x": 1530,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n52",
+          "type": "core:set.add",
+          "position": {
+            "x": 1560,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string"
+            },
+            "pin:item": "c"
+          }
+        },
+        {
+          "id": "n53",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1590,
+            "y": 0
+          },
+          "properties": {
+            "variable": "tags"
+          }
+        },
+        {
+          "id": "n54",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1620,
+            "y": 0
+          },
+          "properties": {
+            "variable": "tags"
+          }
+        },
+        {
+          "id": "n55",
+          "type": "core:console.print",
+          "position": {
+            "x": 1650,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n56",
+          "type": "core:set.contains",
+          "position": {
+            "x": 1680,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string"
+            },
+            "pin:item": "a"
+          }
+        },
+        {
+          "id": "n57",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1710,
+            "y": 0
+          },
+          "properties": {
+            "variable": "tags"
+          }
+        },
+        {
+          "id": "n58",
+          "type": "core:console.print",
+          "position": {
+            "x": 1740,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n59",
+          "type": "core:set.remove",
+          "position": {
+            "x": 1770,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string"
+            },
+            "pin:item": "z"
+          }
+        },
+        {
+          "id": "n60",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1800,
+            "y": 0
+          },
+          "properties": {
+            "variable": "tags"
+          }
+        },
+        {
+          "id": "n61",
+          "type": "core:console.print",
+          "position": {
+            "x": 1830,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n62",
+          "type": "core:set.length",
+          "position": {
+            "x": 1860,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string"
+            }
+          }
+        },
+        {
+          "id": "n63",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1890,
+            "y": 0
+          },
+          "properties": {
+            "variable": "tags"
+          }
+        },
+        {
+          "id": "n64",
+          "type": "core:console.print",
+          "position": {
+            "x": 1920,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n65",
+          "type": "core:set.to-array",
+          "position": {
+            "x": 1950,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string"
+            }
+          }
+        },
+        {
+          "id": "n66",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1980,
+            "y": 0
+          },
+          "properties": {
+            "variable": "tags"
+          }
+        },
+        {
+          "id": "n67",
+          "type": "core:console.print",
+          "position": {
+            "x": 2010,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n68",
+          "type": "core:map.add",
+          "position": {
+            "x": 2040,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            },
+            "pin:key": "bob",
+            "pin:value": 25
+          }
+        },
+        {
+          "id": "n69",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2070,
+            "y": 0
+          },
+          "properties": {
+            "variable": "ages"
+          }
+        },
+        {
+          "id": "n70",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2100,
+            "y": 0
+          },
+          "properties": {
+            "variable": "ages"
+          }
+        },
+        {
+          "id": "n71",
+          "type": "core:console.print",
+          "position": {
+            "x": 2130,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n72",
+          "type": "core:map.find",
+          "position": {
+            "x": 2160,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            },
+            "pin:key": "bob"
+          }
+        },
+        {
+          "id": "n73",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2190,
+            "y": 0
+          },
+          "properties": {
+            "variable": "ages"
+          }
+        },
+        {
+          "id": "n74",
+          "type": "core:console.print",
+          "position": {
+            "x": 2220,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n75",
+          "type": "core:map.contains",
+          "position": {
+            "x": 2250,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            },
+            "pin:key": "cy"
+          }
+        },
+        {
+          "id": "n76",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2280,
+            "y": 0
+          },
+          "properties": {
+            "variable": "ages"
+          }
+        },
+        {
+          "id": "n77",
+          "type": "core:console.print",
+          "position": {
+            "x": 2310,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n78",
+          "type": "core:map.keys",
+          "position": {
+            "x": 2340,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            }
+          }
+        },
+        {
+          "id": "n79",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2370,
+            "y": 0
+          },
+          "properties": {
+            "variable": "ages"
+          }
+        },
+        {
+          "id": "n80",
+          "type": "core:console.print",
+          "position": {
+            "x": 2400,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n81",
+          "type": "core:map.values",
+          "position": {
+            "x": 2430,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            }
+          }
+        },
+        {
+          "id": "n82",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2460,
+            "y": 0
+          },
+          "properties": {
+            "variable": "ages"
+          }
+        },
+        {
+          "id": "n83",
+          "type": "core:console.print",
+          "position": {
+            "x": 2490,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n84",
+          "type": "core:map.remove",
+          "position": {
+            "x": 2520,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            },
+            "pin:key": "ann"
+          }
+        },
+        {
+          "id": "n85",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2550,
+            "y": 0
+          },
+          "properties": {
+            "variable": "ages"
+          }
+        },
+        {
+          "id": "n86",
+          "type": "core:console.print",
+          "position": {
+            "x": 2580,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n87",
+          "type": "core:map.length",
+          "position": {
+            "x": 2610,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            }
+          }
+        },
+        {
+          "id": "n88",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2640,
+            "y": 0
+          },
+          "properties": {
+            "variable": "ages"
+          }
+        },
+        {
+          "id": "n89",
+          "type": "core:console.print",
+          "position": {
+            "x": 2670,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n90",
+          "type": "core:array.make",
+          "position": {
+            "x": 2700,
+            "y": 0
+          },
+          "properties": {
+            "pins": 2,
+            "pin:item0": "x",
+            "pin:item1": "y",
+            "wildcards": {
+              "wildcard": "string"
+            }
+          }
+        },
+        {
+          "id": "n91",
+          "type": "core:flow.for-each-loop",
+          "position": {
+            "x": 2730,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string"
+            }
+          }
+        },
+        {
+          "id": "n92",
+          "type": "core:console.print",
+          "position": {
+            "x": 2760,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n93",
+          "type": "core:array.make",
+          "position": {
+            "x": 2790,
+            "y": 0
+          },
+          "properties": {
+            "pins": 4,
+            "pin:item0": 1,
+            "pin:item1": 2,
+            "pin:item2": 3,
+            "pin:item3": 4,
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n94",
+          "type": "core:flow.for-each-loop-with-break",
+          "position": {
+            "x": 2820,
+            "y": 0
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n95",
+          "type": "core:console.print",
+          "position": {
+            "x": 2850,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n96",
+          "type": "core:flow.branch",
+          "position": {
+            "x": 2880,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n97",
+          "type": "core:math.greater-equal",
+          "position": {
+            "x": 2910,
+            "y": 0
+          },
+          "properties": {
+            "pin:b": 2
+          }
+        },
+        {
+          "id": "n98",
+          "type": "core:console.print",
+          "position": {
+            "x": 2940,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "n2",
+          "fromPin": "array",
+          "toNode": "n3",
+          "toPin": "value"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "execOut",
+          "toNode": "n3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n4",
+          "fromPin": "set",
+          "toNode": "n5",
+          "toPin": "value"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n3",
+          "fromPin": "execOut",
+          "toNode": "n5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w5",
+          "fromNode": "n6",
+          "fromPin": "map",
+          "toNode": "n7",
+          "toPin": "value"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n5",
+          "fromPin": "execOut",
+          "toNode": "n7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n9",
+          "fromPin": "value",
+          "toNode": "n8",
+          "toPin": "target"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n7",
+          "fromPin": "execOut",
+          "toNode": "n8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w9",
+          "fromNode": "n8",
+          "fromPin": "returnValue",
+          "toNode": "n10",
+          "toPin": "value"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n8",
+          "fromPin": "execOut",
+          "toNode": "n10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w11",
+          "fromNode": "n11",
+          "fromPin": "value",
+          "toNode": "n12",
+          "toPin": "value"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n10",
+          "fromPin": "execOut",
+          "toNode": "n12",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w13",
+          "fromNode": "n14",
+          "fromPin": "value",
+          "toNode": "n13",
+          "toPin": "target"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n13",
+          "fromPin": "returnValue",
+          "toNode": "n15",
+          "toPin": "value"
+        },
+        {
+          "id": "w15",
+          "fromNode": "n12",
+          "fromPin": "execOut",
+          "toNode": "n15",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n17",
+          "fromPin": "value",
+          "toNode": "n16",
+          "toPin": "target"
+        },
+        {
+          "id": "w17",
+          "fromNode": "n16",
+          "fromPin": "returnValue",
+          "toNode": "n18",
+          "toPin": "value"
+        },
+        {
+          "id": "w18",
+          "fromNode": "n15",
+          "fromPin": "execOut",
+          "toNode": "n18",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w19",
+          "fromNode": "n20",
+          "fromPin": "value",
+          "toNode": "n19",
+          "toPin": "target"
+        },
+        {
+          "id": "w20",
+          "fromNode": "n19",
+          "fromPin": "returnValue",
+          "toNode": "n21",
+          "toPin": "value"
+        },
+        {
+          "id": "w21",
+          "fromNode": "n18",
+          "fromPin": "execOut",
+          "toNode": "n21",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w22",
+          "fromNode": "n23",
+          "fromPin": "value",
+          "toNode": "n22",
+          "toPin": "target"
+        },
+        {
+          "id": "w23",
+          "fromNode": "n22",
+          "fromPin": "returnValue",
+          "toNode": "n24",
+          "toPin": "value"
+        },
+        {
+          "id": "w24",
+          "fromNode": "n21",
+          "fromPin": "execOut",
+          "toNode": "n24",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w25",
+          "fromNode": "n26",
+          "fromPin": "value",
+          "toNode": "n25",
+          "toPin": "target"
+        },
+        {
+          "id": "w26",
+          "fromNode": "n24",
+          "fromPin": "execOut",
+          "toNode": "n25",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w27",
+          "fromNode": "n25",
+          "fromPin": "returnValue",
+          "toNode": "n27",
+          "toPin": "value"
+        },
+        {
+          "id": "w28",
+          "fromNode": "n25",
+          "fromPin": "execOut",
+          "toNode": "n27",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w29",
+          "fromNode": "n29",
+          "fromPin": "value",
+          "toNode": "n28",
+          "toPin": "target"
+        },
+        {
+          "id": "w30",
+          "fromNode": "n27",
+          "fromPin": "execOut",
+          "toNode": "n28",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w31",
+          "fromNode": "n28",
+          "fromPin": "returnValue",
+          "toNode": "n30",
+          "toPin": "value"
+        },
+        {
+          "id": "w32",
+          "fromNode": "n28",
+          "fromPin": "execOut",
+          "toNode": "n30",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w33",
+          "fromNode": "n32",
+          "fromPin": "value",
+          "toNode": "n31",
+          "toPin": "target"
+        },
+        {
+          "id": "w34",
+          "fromNode": "n30",
+          "fromPin": "execOut",
+          "toNode": "n31",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w35",
+          "fromNode": "n33",
+          "fromPin": "value",
+          "toNode": "n34",
+          "toPin": "value"
+        },
+        {
+          "id": "w36",
+          "fromNode": "n31",
+          "fromPin": "execOut",
+          "toNode": "n34",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w37",
+          "fromNode": "n36",
+          "fromPin": "value",
+          "toNode": "n35",
+          "toPin": "target"
+        },
+        {
+          "id": "w38",
+          "fromNode": "n34",
+          "fromPin": "execOut",
+          "toNode": "n35",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w39",
+          "fromNode": "n38",
+          "fromPin": "value",
+          "toNode": "n37",
+          "toPin": "target"
+        },
+        {
+          "id": "w40",
+          "fromNode": "n35",
+          "fromPin": "execOut",
+          "toNode": "n37",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w41",
+          "fromNode": "n39",
+          "fromPin": "value",
+          "toNode": "n40",
+          "toPin": "value"
+        },
+        {
+          "id": "w42",
+          "fromNode": "n37",
+          "fromPin": "execOut",
+          "toNode": "n40",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w43",
+          "fromNode": "n42",
+          "fromPin": "value",
+          "toNode": "n41",
+          "toPin": "target"
+        },
+        {
+          "id": "w44",
+          "fromNode": "n41",
+          "fromPin": "returnValue",
+          "toNode": "n43",
+          "toPin": "value"
+        },
+        {
+          "id": "w45",
+          "fromNode": "n40",
+          "fromPin": "execOut",
+          "toNode": "n43",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w46",
+          "fromNode": "n45",
+          "fromPin": "value",
+          "toNode": "n44",
+          "toPin": "target"
+        },
+        {
+          "id": "w47",
+          "fromNode": "n44",
+          "fromPin": "returnValue",
+          "toNode": "n46",
+          "toPin": "value"
+        },
+        {
+          "id": "w48",
+          "fromNode": "n43",
+          "fromPin": "execOut",
+          "toNode": "n46",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w49",
+          "fromNode": "n48",
+          "fromPin": "value",
+          "toNode": "n47",
+          "toPin": "target"
+        },
+        {
+          "id": "w50",
+          "fromNode": "n46",
+          "fromPin": "execOut",
+          "toNode": "n47",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w51",
+          "fromNode": "n50",
+          "fromPin": "value",
+          "toNode": "n49",
+          "toPin": "target"
+        },
+        {
+          "id": "w52",
+          "fromNode": "n49",
+          "fromPin": "returnValue",
+          "toNode": "n51",
+          "toPin": "value"
+        },
+        {
+          "id": "w53",
+          "fromNode": "n47",
+          "fromPin": "execOut",
+          "toNode": "n51",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w54",
+          "fromNode": "n53",
+          "fromPin": "value",
+          "toNode": "n52",
+          "toPin": "target"
+        },
+        {
+          "id": "w55",
+          "fromNode": "n51",
+          "fromPin": "execOut",
+          "toNode": "n52",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w56",
+          "fromNode": "n54",
+          "fromPin": "value",
+          "toNode": "n55",
+          "toPin": "value"
+        },
+        {
+          "id": "w57",
+          "fromNode": "n52",
+          "fromPin": "execOut",
+          "toNode": "n55",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w58",
+          "fromNode": "n57",
+          "fromPin": "value",
+          "toNode": "n56",
+          "toPin": "target"
+        },
+        {
+          "id": "w59",
+          "fromNode": "n56",
+          "fromPin": "returnValue",
+          "toNode": "n58",
+          "toPin": "value"
+        },
+        {
+          "id": "w60",
+          "fromNode": "n55",
+          "fromPin": "execOut",
+          "toNode": "n58",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w61",
+          "fromNode": "n60",
+          "fromPin": "value",
+          "toNode": "n59",
+          "toPin": "target"
+        },
+        {
+          "id": "w62",
+          "fromNode": "n58",
+          "fromPin": "execOut",
+          "toNode": "n59",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w63",
+          "fromNode": "n59",
+          "fromPin": "returnValue",
+          "toNode": "n61",
+          "toPin": "value"
+        },
+        {
+          "id": "w64",
+          "fromNode": "n59",
+          "fromPin": "execOut",
+          "toNode": "n61",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w65",
+          "fromNode": "n63",
+          "fromPin": "value",
+          "toNode": "n62",
+          "toPin": "target"
+        },
+        {
+          "id": "w66",
+          "fromNode": "n62",
+          "fromPin": "returnValue",
+          "toNode": "n64",
+          "toPin": "value"
+        },
+        {
+          "id": "w67",
+          "fromNode": "n61",
+          "fromPin": "execOut",
+          "toNode": "n64",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w68",
+          "fromNode": "n66",
+          "fromPin": "value",
+          "toNode": "n65",
+          "toPin": "target"
+        },
+        {
+          "id": "w69",
+          "fromNode": "n65",
+          "fromPin": "returnValue",
+          "toNode": "n67",
+          "toPin": "value"
+        },
+        {
+          "id": "w70",
+          "fromNode": "n64",
+          "fromPin": "execOut",
+          "toNode": "n67",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w71",
+          "fromNode": "n69",
+          "fromPin": "value",
+          "toNode": "n68",
+          "toPin": "target"
+        },
+        {
+          "id": "w72",
+          "fromNode": "n67",
+          "fromPin": "execOut",
+          "toNode": "n68",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w73",
+          "fromNode": "n70",
+          "fromPin": "value",
+          "toNode": "n71",
+          "toPin": "value"
+        },
+        {
+          "id": "w74",
+          "fromNode": "n68",
+          "fromPin": "execOut",
+          "toNode": "n71",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w75",
+          "fromNode": "n73",
+          "fromPin": "value",
+          "toNode": "n72",
+          "toPin": "target"
+        },
+        {
+          "id": "w76",
+          "fromNode": "n72",
+          "fromPin": "returnValue",
+          "toNode": "n74",
+          "toPin": "value"
+        },
+        {
+          "id": "w77",
+          "fromNode": "n71",
+          "fromPin": "execOut",
+          "toNode": "n74",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w78",
+          "fromNode": "n76",
+          "fromPin": "value",
+          "toNode": "n75",
+          "toPin": "target"
+        },
+        {
+          "id": "w79",
+          "fromNode": "n75",
+          "fromPin": "returnValue",
+          "toNode": "n77",
+          "toPin": "value"
+        },
+        {
+          "id": "w80",
+          "fromNode": "n74",
+          "fromPin": "execOut",
+          "toNode": "n77",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w81",
+          "fromNode": "n79",
+          "fromPin": "value",
+          "toNode": "n78",
+          "toPin": "target"
+        },
+        {
+          "id": "w82",
+          "fromNode": "n78",
+          "fromPin": "returnValue",
+          "toNode": "n80",
+          "toPin": "value"
+        },
+        {
+          "id": "w83",
+          "fromNode": "n77",
+          "fromPin": "execOut",
+          "toNode": "n80",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w84",
+          "fromNode": "n82",
+          "fromPin": "value",
+          "toNode": "n81",
+          "toPin": "target"
+        },
+        {
+          "id": "w85",
+          "fromNode": "n81",
+          "fromPin": "returnValue",
+          "toNode": "n83",
+          "toPin": "value"
+        },
+        {
+          "id": "w86",
+          "fromNode": "n80",
+          "fromPin": "execOut",
+          "toNode": "n83",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w87",
+          "fromNode": "n85",
+          "fromPin": "value",
+          "toNode": "n84",
+          "toPin": "target"
+        },
+        {
+          "id": "w88",
+          "fromNode": "n83",
+          "fromPin": "execOut",
+          "toNode": "n84",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w89",
+          "fromNode": "n84",
+          "fromPin": "returnValue",
+          "toNode": "n86",
+          "toPin": "value"
+        },
+        {
+          "id": "w90",
+          "fromNode": "n84",
+          "fromPin": "execOut",
+          "toNode": "n86",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w91",
+          "fromNode": "n88",
+          "fromPin": "value",
+          "toNode": "n87",
+          "toPin": "target"
+        },
+        {
+          "id": "w92",
+          "fromNode": "n87",
+          "fromPin": "returnValue",
+          "toNode": "n89",
+          "toPin": "value"
+        },
+        {
+          "id": "w93",
+          "fromNode": "n86",
+          "fromPin": "execOut",
+          "toNode": "n89",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w94",
+          "fromNode": "n90",
+          "fromPin": "array",
+          "toNode": "n91",
+          "toPin": "array"
+        },
+        {
+          "id": "w95",
+          "fromNode": "n89",
+          "fromPin": "execOut",
+          "toNode": "n91",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w96",
+          "fromNode": "n91",
+          "fromPin": "loopBody",
+          "toNode": "n92",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w97",
+          "fromNode": "n91",
+          "fromPin": "element",
+          "toNode": "n92",
+          "toPin": "value"
+        },
+        {
+          "id": "w98",
+          "fromNode": "n93",
+          "fromPin": "array",
+          "toNode": "n94",
+          "toPin": "array"
+        },
+        {
+          "id": "w99",
+          "fromNode": "n91",
+          "fromPin": "completed",
+          "toNode": "n94",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w100",
+          "fromNode": "n94",
+          "fromPin": "loopBody",
+          "toNode": "n95",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w101",
+          "fromNode": "n94",
+          "fromPin": "element",
+          "toNode": "n95",
+          "toPin": "value"
+        },
+        {
+          "id": "w102",
+          "fromNode": "n95",
+          "fromPin": "execOut",
+          "toNode": "n96",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w103",
+          "fromNode": "n94",
+          "fromPin": "element",
+          "toNode": "n97",
+          "toPin": "a"
+        },
+        {
+          "id": "w104",
+          "fromNode": "n97",
+          "fromPin": "returnValue",
+          "toNode": "n96",
+          "toPin": "condition"
+        },
+        {
+          "id": "w105",
+          "fromNode": "n96",
+          "fromPin": "true",
+          "toNode": "n94",
+          "toPin": "break"
+        },
+        {
+          "id": "w106",
+          "fromNode": "n94",
+          "fromPin": "index",
+          "toNode": "n98",
+          "toPin": "value"
+        },
+        {
+          "id": "w107",
+          "fromNode": "n94",
+          "fromPin": "completed",
+          "toNode": "n98",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: Make Array/Set/Map, array/set/map variables with defaults, every container function, and For Each (with Break).",
+    "expectedOutput": [
+      "[3,1,2]",
+      "[\"a\",\"b\"]",
+      "{\"1\":\"one\"}",
+      "2",
+      "[10,20,30]",
+      "3",
+      "20",
+      "true",
+      "-1",
+      "-1",
+      "true",
+      "[5,20,30]",
+      "[7,30]",
+      "1",
+      "false",
+      "true",
+      "[\"a\",\"b\",\"c\"]",
+      "true",
+      "false",
+      "3",
+      "[\"a\",\"b\",\"c\"]",
+      "{\"ann\":30,\"bob\":25}",
+      "25",
+      "false",
+      "[\"ann\",\"bob\"]",
+      "[30,25]",
+      "true",
+      "1",
+      "x",
+      "y",
+      "1",
+      "2",
+      "2"
+    ]
+  }
+}

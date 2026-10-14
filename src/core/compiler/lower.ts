@@ -4,7 +4,8 @@ import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from '
 import { NodeRegistry } from '../registry';
 import { describeFunction, functionStatus, isFunctionType } from '../imported-functions';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from '../flow-control';
-import { NodeResolver, createResolver, isPure } from '../resolve';
+import { hasWildcard } from '../containers';
+import { NodeResolver, REROUTE, createResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
@@ -127,6 +128,10 @@ class Lowerer {
       const def = this.resolve(node);
       if (def) info.definitions.set(node.id, def);
       else if (!isFunctionType(node.type)) this.error('unknown-node-type', `Unknown node type "${node.type}". Its node library may be missing.`, graph.id, node.id);
+      // Unreal: "The type of … is undetermined. Connect something to it."
+      if (def && node.type !== REROUTE && [...def.inputs, ...def.outputs].some((p) => hasWildcard(p.type))) {
+        this.error('wildcard-unresolved', `"${def.displayName}" doesn't know its type yet. Connect a wire to one of its gray pins.`, graph.id, node.id);
+      }
     }
 
     for (const c of graph.connections) {
@@ -304,6 +309,13 @@ class Lowerer {
     const operation = nativeOperation(sourceDef);
     // Pure conversions are inlined where their value is used.
     if (operation === 'to-string') return { kind: 'toText', value: this.inputExpr(info, sourceNode, sourceDef, 'value') };
+    // Make Array/Set/Map is pure: a new container wherever its value is used, as in Unreal.
+    if (operation === 'make-array' || operation === 'make-set' || operation === 'make-map') {
+      const type = sourceDef.outputs[0]?.type ?? { id: 'any', container: 'array' };
+      return this.follow(info, sourceNode, 'Pure nodes are wired in a loop.', pin, () => ({
+        kind: 'makeContainer', type, items: sourceDef.inputs.filter((p) => p.kind === 'data').map((p) => this.inputExpr(info, sourceNode, sourceDef, p.id))
+      }));
+    }
     // Reroutes are transparent: read whatever feeds them.
     if (operation === 'reroute') {
       return this.follow(info, sourceNode, 'Reroute nodes are wired in a loop.', pin, () => this.inputExpr(info, sourceNode, sourceDef, 'in'));
@@ -359,6 +371,18 @@ class Lowerer {
       }
       case 'while-loop':
         return [{ kind: 'while', condition: truthy(input('condition')), body: next('loopBody'), source }, ...next('completed')];
+      case 'for-each': {
+        const stop = def.inputs.some((p) => p.id === 'break') ? state('stop', 'bool') : undefined;
+        if (entry === 'break') return stop ? [store(stop, bool(true))] : [];
+        return [
+          ...(stop ? [store(stop, bool(false))] : []),
+          {
+            kind: 'forEach', array: input('array'), index: this.slot(info, node, def, 'index'), element: this.slot(info, node, def, 'element'),
+            ...(stop ? { stop } : {}), body: next('loopBody'), source
+          },
+          ...next('completed')
+        ];
+      }
       case 'do-once': {
         const closed = state('closed', 'bool');
         if (entry === 'reset') return [store(closed, bool(false))];
@@ -502,7 +526,9 @@ class Lowerer {
   }
 
   private codeHelper(info: GraphInfo, node: GraphNode, def: NodeDefinition): IrCodeHelper | undefined {
-    const existing = this.helpers.get(def.type);
+    // A wildcard node (Add on an array of int, or of string) needs a helper per element type.
+    const key = JSON.stringify([def.type, dataInputs(def).map((p) => p.type ?? null), def.outputs.find((p) => p.kind === 'data')?.type ?? null]);
+    const existing = this.helpers.get(key);
     if (existing) return existing;
     if (def.implementation?.kind !== 'code') return undefined;
     const sources = def.implementation.languages;
@@ -513,14 +539,14 @@ class Lowerer {
       return undefined;
     }
     const helper: IrCodeHelper = {
-      id: def.type,
+      id: key,
       // "core:math.clamp" becomes math_clamp: the namespace adds nothing to a method name.
       name: def.type.replace(/^[\w-]+:/, ''),
       params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
       returns: def.outputs.find((p) => p.kind === 'data')?.type,
       code: sources[language]
     };
-    this.helpers.set(def.type, helper);
+    this.helpers.set(key, helper);
     return helper;
   }
 

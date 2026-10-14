@@ -1,6 +1,7 @@
 // Graph-editing operations shared by the webview and tests. Everything here is pure data
 // manipulation: no DOM, no rendering, no persistence. Functions that change the graph mutate the
 // object passed in and report whether anything changed so callers can decide to save and redraw.
+import { MAKE_ARRAY, MAKE_MAP, MAKE_SET, adoptedTypes, hasWildcard, inferWildcards, makeItemCount } from './containers';
 import { DEFAULT_MULTIGATE_PINS, DEFAULT_SWITCH_INT_PINS, MULTIGATE, SWITCH_INT, SWITCH_STRING, pinCount, switchStringCases } from './flow-control';
 import { GraphConnection, GraphNode, NodeDefinition, PinDefinition } from './model';
 import { REROUTE, SEQUENCE, sequencePinCount } from './resolve';
@@ -76,7 +77,52 @@ export function connect(graph: GraphContent, lookup: DefinitionLookup, endpoints
   graph.connections = graph.connections.filter((c) => !replaced(c));
   const connection = { id: connectionId, ...endpoints };
   graph.connections.push(connection);
+  adoptWildcards(graph, lookup, connection);
   return connection;
+}
+
+// Unreal gives a wildcard pin the type of the first wire connected to it: the node records the
+// element (and map value) type, and passes it on through wires to other wildcard nodes.
+export function adoptWildcards(graph: GraphContent, lookup: DefinitionLookup, first: GraphConnection): void {
+  const queue = [first];
+  const seen = new Set<string>();
+  while (queue.length) {
+    const c = queue.shift()!;
+    if (seen.has(c.id)) continue;
+    seen.add(c.id);
+    const from = pinDefinition(graph, lookup, c.fromNode, c.fromPin);
+    const to = pinDefinition(graph, lookup, c.toNode, c.toPin);
+    if (!from || !to || from.kind !== 'data') continue;
+    for (const [nodeId, wild, concrete] of [[c.toNode, to, from], [c.fromNode, from, to]] as const) {
+      if (!hasWildcard(wild.type)) continue;
+      const node = graph.nodes.find((n) => n.id === nodeId);
+      if (!node || node.type === REROUTE) continue;
+      const learned = inferWildcards(wild.type!, concrete.type);
+      const adopted = adoptedTypes(node);
+      const fresh = Object.entries(learned).filter(([id]) => !adopted[id]);
+      if (!fresh.length) continue;
+      node.properties.wildcards = { ...adopted, ...Object.fromEntries(fresh) };
+      // Its other wires may now teach wildcard nodes at their far end.
+      queue.push(...graph.connections.filter((x) => x.id !== c.id && (x.fromNode === nodeId || x.toNode === nodeId)));
+    }
+  }
+}
+
+// Drops the adopted types of wildcard nodes with no wire left on their wildcard pins, so they can
+// take another type, as in Unreal. Returns whether anything changed.
+export function releaseWildcards(graph: GraphContent, lookup: DefinitionLookup): boolean {
+  let changed = false;
+  for (const node of graph.nodes) {
+    if (!Object.keys(adoptedTypes(node)).length) continue;
+    const generic = lookup({ ...node, properties: { ...node.properties, wildcards: undefined } });
+    const wildPins = new Set([...(generic?.inputs ?? []), ...(generic?.outputs ?? [])].filter((p) => hasWildcard(p.type)).map((p) => p.id));
+    const wired = graph.connections.some((c) => (c.fromNode === node.id && wildPins.has(c.fromPin)) || (c.toNode === node.id && wildPins.has(c.toPin)));
+    if (!wired) {
+      delete node.properties.wildcards;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 // Moves one end of an existing connection to another pin. Returns false (leaving the graph
@@ -194,6 +240,30 @@ export function nodeIdFor(type: string, random: () => number = Math.random): str
 }
 
 
+// Removes item N of a Make node (Make Map's key N and value N together).
+function removeMakeItem(graph: GraphContent, node: GraphNode, pinId: string): boolean {
+  const index = Number(/^(?:item|key|value)(\d+)$/.exec(pinId)?.[1]);
+  const count = makeItemCount(node);
+  if (count <= 1 || !Number.isInteger(index) || index >= count) return false;
+  const prefixes = node.type === MAKE_MAP ? ['key', 'value'] : ['item'];
+  const numberOf = (pin: string) => Number(/^(?:item|key|value)(\d+)$/.exec(pin)?.[1]);
+  graph.connections = graph.connections.filter((c) => !(c.toNode === node.id && numberOf(c.toPin) === index));
+  for (const c of graph.connections) {
+    if (c.toNode !== node.id) continue;
+    const n = numberOf(c.toPin);
+    if (n > index) c.toPin = c.toPin.replace(/\d+$/, String(n - 1));
+  }
+  for (const prefix of prefixes) {
+    for (let i = index; i < count; i++) {
+      const next = node.properties[`pin:${prefix}${i + 1}`];
+      if (next === undefined) delete node.properties[`pin:${prefix}${i}`];
+      else node.properties[`pin:${prefix}${i}`] = next;
+    }
+  }
+  node.properties.pins = count - 1;
+  return true;
+}
+
 // Splits a wire with a reroute node at `position`; the knot carries the wire's kind and type.
 // Returns the new node, or undefined when the wire doesn't exist.
 export function insertReroute(
@@ -221,7 +291,11 @@ export function insertReroute(
 const GROWABLE: Record<string, string> = { [SEQUENCE]: 'then', [MULTIGATE]: 'out', [SWITCH_INT]: 'case', [SWITCH_STRING]: 'case' };
 
 export function canAddPin(node: GraphNode): boolean {
-  return node.type in GROWABLE;
+  return node.type in GROWABLE || isMakeNode(node);
+}
+
+function isMakeNode(node: GraphNode): boolean {
+  return node.type === MAKE_ARRAY || node.type === MAKE_SET || node.type === MAKE_MAP;
 }
 
 function outputCount(node: GraphNode): number {
@@ -237,9 +311,12 @@ function outputCount(node: GraphNode): number {
   }
 }
 
-// Adds an output: the next Then, Out or case (Switch on String gets a new case name to edit).
-export function addOutputPin(node: GraphNode): void {
-  if (node.type === SWITCH_STRING) {
+// Adds a pin: the next Then, Out or case output (Switch on String gets a new case name to edit),
+// or the next item input of Make Array/Set (a key and value of Make Map).
+export function addPin(node: GraphNode): void {
+  if (isMakeNode(node)) {
+    node.properties.pins = makeItemCount(node) + 1;
+  } else if (node.type === SWITCH_STRING) {
     const cases = switchStringCases(node);
     let n = cases.length;
     while (cases.includes(`Case ${n}`)) n++;
@@ -249,10 +326,12 @@ export function addOutputPin(node: GraphNode): void {
   }
 }
 
-// Removes one numbered output, as Unreal's "Remove execution pin": its wires go, and later outputs
-// move up one (Then 3 becomes Then 2) keeping their wires. Sequence, MultiGate and Switch on Int
-// keep at least one; Switch on String may have none (Default remains).
-export function removeOutputPin(graph: GraphContent, node: GraphNode, pinId: string): boolean {
+// Removes one numbered pin, as Unreal's "Remove execution pin" and "Remove array element pin": its
+// wires go, and later pins move up one (Then 3 becomes Then 2) keeping their wires and values.
+// Sequence, MultiGate, Switch on Int and the Make nodes keep at least one; Switch on String may
+// have none (Default remains).
+export function removePin(graph: GraphContent, node: GraphNode, pinId: string): boolean {
+  if (isMakeNode(node)) return removeMakeItem(graph, node, pinId);
   const prefix = GROWABLE[node.type];
   if (!prefix) return false;
   const count = outputCount(node);

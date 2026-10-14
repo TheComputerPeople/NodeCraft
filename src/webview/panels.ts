@@ -6,7 +6,7 @@ import { GraphNode, GraphVariable } from '../core/model';
 import { ContainerKind } from '../core/types';
 import { defaultValue } from '../core/values';
 import { formatType } from '../core/types';
-import { addNode, addOutputPin } from './actions';
+import { addNode, addPin } from './actions';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText } from './document';
 import { dom, escapeHtml, setStatus } from './dom';
 import { renderMyBlueprint } from './my-blueprint';
@@ -100,7 +100,7 @@ function switchCasesEditor(node: GraphNode): HTMLElement {
   const add = document.createElement('button');
   add.textContent = 'Add case';
   add.addEventListener('click', () => {
-    addOutputPin(node);
+    addPin(node);
   });
   section.appendChild(add);
   return section;
@@ -236,17 +236,80 @@ function renderVariableDetails(variableId: string): boolean {
   return true;
 }
 
+// A container variable's default, one row per element (a key and a value per row for a map), as
+// Unreal's Details lists them. Stored as a JSON array; a map as [key, value] pairs.
+function containerDefaultEditor(variable: GraphVariable): HTMLElement {
+  const type = variable.type;
+  const list = document.createElement('div');
+  list.className = 'container-default';
+  const rows = (): unknown[] => (Array.isArray(variable.defaultValue) ? [...variable.defaultValue] : []);
+  const save = (values: unknown[]): void => {
+    variable.defaultValue = values;
+    markDirty();
+  };
+  const redraw = (): void => {
+    list.replaceWith(containerDefaultEditor(variable));
+  };
+  rows().forEach((row, i) => {
+    const line = document.createElement('div');
+    line.className = 'container-row';
+    const set = (column: 0 | 1, value: unknown): void => {
+      const values = rows();
+      values[i] = type.container === 'map' ? (column === 0 ? [value, (values[i] as unknown[])?.[1]] : [(values[i] as unknown[])?.[0], value]) : value;
+      save(values);
+    };
+    if (type.container === 'map') {
+      const pair = Array.isArray(row) ? row : [undefined, undefined];
+      line.append(elementEditor(type.id, pair[0], (v) => set(0, v), `Key ${i}`), elementEditor(type.valueType?.id ?? 'any', pair[1], (v) => set(1, v), `Value ${i}`));
+    } else {
+      line.append(elementEditor(type.id, row, (v) => set(0, v), `Element ${i}`));
+    }
+    const remove = document.createElement('button');
+    remove.textContent = '×';
+    remove.title = 'Remove this element';
+    remove.addEventListener('click', () => {
+      save(rows().filter((_, j) => j !== i));
+      redraw();
+    });
+    line.appendChild(remove);
+    list.appendChild(line);
+  });
+  const add = document.createElement('button');
+  add.textContent = 'Add element';
+  add.addEventListener('click', () => {
+    const blank = defaultValue({ id: type.id });
+    save([...rows(), type.container === 'map' ? [blank, defaultValue(type.valueType)] : blank]);
+    redraw();
+  });
+  list.appendChild(add);
+  return list;
+}
+
+// An editor for one value of a primitive type.
+function elementEditor(typeId: string, value: unknown, change: (value: unknown) => void, label: string): HTMLInputElement {
+  const input = document.createElement('input');
+  input.setAttribute('aria-label', label);
+  if (typeId === 'bool') {
+    input.type = 'checkbox';
+    input.checked = Boolean(value);
+  } else if (typeId === 'int' || typeId === 'float') {
+    input.type = 'number';
+    input.step = typeId === 'int' ? '1' : 'any';
+    input.value = String(value ?? 0);
+  } else {
+    input.value = value === undefined || value === null ? '' : String(value);
+  }
+  input.addEventListener('change', () => change(input.type === 'checkbox' ? input.checked
+    : input.type === 'number' ? (typeId === 'int' ? Math.trunc(Number(input.value)) : Number(input.value))
+    : input.value));
+  return input;
+}
+
 function defaultValueEditor(variable: GraphVariable): HTMLElement {
   const input = document.createElement('input');
   input.setAttribute('aria-label', 'Default Value');
   const type = variable.type;
-  if (type.container) {
-    // Editing container defaults arrives with container operations (Phase 4).
-    input.type = 'text';
-    input.value = JSON.stringify(variable.defaultValue ?? defaultValue(type));
-    input.disabled = true;
-    return input;
-  }
+  if (type.container) return containerDefaultEditor(variable);
   if (type.id === 'bool') {
     input.type = 'checkbox';
     input.checked = Boolean(variable.defaultValue);

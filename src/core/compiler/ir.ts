@@ -29,7 +29,9 @@ export type IrExpr =
   | { kind: 'call'; callee: IrCallee; args: IrExpr[] }
   // Comparisons and logic on values whose types already match (flow control's own bookkeeping).
   | { kind: 'binary'; op: BinaryOp; left: IrExpr; right: IrExpr }
-  | { kind: 'not'; value: IrExpr };
+  | { kind: 'not'; value: IrExpr }
+  // A new array, set or map (`type`) of the items; for a map, items alternate key and value.
+  | { kind: 'makeContainer'; type: TypeRef; items: IrExpr[] };
 
 // `+` and `-` are integer arithmetic on counters; the rest give booleans.
 export type BinaryOp = '<' | '<=' | '>=' | '==' | '!=' | '&&' | '||' | '+' | '-';
@@ -48,6 +50,9 @@ export type IrStatement =
   // each pass, as Unreal does). The loop also ends when `stop` (a bool slot) is set by Break.
   | { kind: 'for'; counter: string; first: IrExpr; last: IrExpr; stop?: string; body: IrStatement[]; source: SourceRef }
   | { kind: 'while'; condition: IrExpr; body: IrStatement[]; source: SourceRef }
+  // For Each Loop: `index` and `element` (slots) take each position of `array`, which is read
+  // before each pass, as Unreal does; `stop` as for `for`.
+  | { kind: 'forEach'; array: IrExpr; index: string; element: string; stop?: string; body: IrStatement[]; source: SourceRef }
   // Runs a shared block: a node reached by more than one exec wire, plus everything after it.
   | { kind: 'callBlock'; block: string; source: SourceRef };
 
@@ -136,6 +141,8 @@ export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefin
       return expr.op === '+' || expr.op === '-' ? exprType(expr.left, program) : { id: 'bool' };
     case 'not':
       return { id: 'bool' };
+    case 'makeContainer':
+      return expr.type;
   }
 }
 

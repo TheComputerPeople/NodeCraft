@@ -40,7 +40,34 @@ const HELPERS: Record<'format' | 'number' | 'boolean', string[]> = {
     '        return _format_number(float(value))',
     '    if isinstance(value, str):',
     '        return value',
-    '    return json.dumps(value, separators=(",", ":"))',
+    '    return _to_json(value)',
+    '',
+    '',
+    '# Containers print as JSON, numbers by the rules above: sets in ascending order (they have no',
+    '# order of their own), dicts in the order their keys were added.',
+    'def _to_json(value: Any) -> str:',
+    '    if value is None:',
+    '        return "null"',
+    '    if isinstance(value, bool):',
+    '        return "true" if value else "false"',
+    '    if isinstance(value, (int, float)):',
+    '        number = float(value)',
+    '        return _format_number(number) if number == number and number not in (float("inf"), float("-inf")) else "null"',
+    '    if isinstance(value, str):',
+    '        return json.dumps(value, ensure_ascii=False)',
+    '    if isinstance(value, (set, frozenset)):',
+    '        return "[" + ",".join(_to_json(item) for item in sorted(value)) + "]"',
+    '    if isinstance(value, dict):',
+    '        return "{" + ",".join(json.dumps(_key_text(k), ensure_ascii=False) + ":" + _to_json(v) for k, v in value.items()) + "}"',
+    '    if isinstance(value, (list, tuple)):',
+    '        return "[" + ",".join(_to_json(item) for item in value) + "]"',
+    '    return json.dumps(str(value), ensure_ascii=False)',
+    '',
+    '',
+    'def _key_text(key: Any) -> str:',
+    '    if isinstance(key, str):',
+    '        return key',
+    '    return _format_value(key)',
     '',
     '',
     'def _format_number(x: float) -> str:',
@@ -151,7 +178,7 @@ class PythonEmitter {
     body.line(`class ${this.className}:`);
     body.indent();
     const fields = [
-      ...this.program.members.map((m) => ({ name: this.memberNames.get(m.id)!, type: m.type, initial: this.expr(m.initial) })),
+      ...this.program.members.map((m) => ({ name: this.memberNames.get(m.id)!, type: m.type, initial: this.value(m.initial, m.type) })),
       ...this.program.slots.map((s) => ({ name: this.slotNames.get(s.id)!, type: s.type, initial: this.defaultFor(s.type) }))
     ];
     if (fields.length) {
@@ -261,9 +288,11 @@ class PythonEmitter {
       case 'store':
         out.line(`self.${this.slotNames.get(s.slot)} = ${this.expr(s.value)}`);
         break;
-      case 'setMember':
-        out.line(`self.${this.memberNames.get(s.member)} = ${this.expr(s.value)}`);
+      case 'setMember': {
+        const member = this.program.members.find((m) => m.id === s.member);
+        out.line(`self.${this.memberNames.get(s.member)} = ${this.value(s.value, member?.type)}`);
         break;
+      }
       case 'if': {
         out.line(`if ${this.expr(s.condition)}:`);
         this.block(() => this.statements(s.then));
@@ -290,6 +319,20 @@ class PythonEmitter {
         this.block(() => {
           this.statements(s.body);
           out.line(`${counter} += 1`);
+        });
+        break;
+      }
+      case 'forEach': {
+        // The array is read before each pass, as Unreal's For Each Loop reads it.
+        const index = `self.${this.slotNames.get(s.index)}`;
+        const stop = s.stop ? ` and not self.${this.slotNames.get(s.stop)}` : '';
+        const array = this.expr(s.array);
+        out.line(`${index} = 0`);
+        out.line(`while ${index} < len(${array})${stop}:`);
+        this.block(() => {
+          out.line(`self.${this.slotNames.get(s.element)} = ${array}[${index}]`);
+          this.statements(s.body);
+          out.line(`${index} += 1`);
         });
         break;
       }
@@ -342,12 +385,34 @@ class PythonEmitter {
       }
       case 'not':
         return `not ${this.operand(e.value)}`;
+      case 'makeContainer': {
+        if (e.type.container === 'map') {
+          const pairs: string[] = [];
+          for (let i = 0; i + 1 < e.items.length; i += 2) pairs.push(`${this.expr(e.items[i])}: ${this.expr(e.items[i + 1])}`);
+          return `{${pairs.join(', ')}}`;
+        }
+        const items = e.items.map((item) => this.expr(item));
+        if (e.type.container === 'set') return items.length ? `{${items.join(', ')}}` : 'set()';
+        return `[${items.join(', ')}]`;
+      }
     }
   }
 
   private call(callee: IrCallee, args: IrExpr[]): string {
     const list = args.map((a) => this.expr(a)).join(', ');
     return callee.kind === 'helper' ? `self.${this.helperNames.get(callee.id)}(${list})` : `${this.importNames.get(callee.id)}(${list})`;
+  }
+
+  // An expression for a member or slot of `type`: a container default (JSON: an array, or a map's
+  // [key, value] pairs) becomes the container.
+  private value(e: IrExpr, type: TypeRef | undefined): string {
+    if (e.kind !== 'literal' || !type?.container || !Array.isArray(e.value)) return this.expr(e);
+    if (type.container === 'set') return e.value.length ? `{${e.value.map(literal).join(', ')}}` : 'set()';
+    if (type.container === 'map') {
+      const pairs = e.value.filter((p): p is unknown[] => Array.isArray(p) && p.length === 2);
+      return `{${pairs.map(([k, v]) => `${literal(k)}: ${literal(v)}`).join(', ')}}`;
+    }
+    return literal(e.value);
   }
 
   private operand(e: IrExpr): string {

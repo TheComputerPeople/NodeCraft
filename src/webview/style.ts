@@ -30,7 +30,8 @@ export function pinColor(pin: PinDefinition | undefined): string {
 
 export type NodeKind = 'event' | 'function' | 'pure' | 'flow' | 'variable-get' | 'variable-set' | 'reroute';
 
-const FLOW_OPERATIONS = new Set(['branch', 'sequence', 'end']);
+// Unreal draws its flow-control macros with a gray title bar.
+const FLOW_OPERATIONS = new Set(['branch', 'sequence', 'end', 'for-loop', 'while-loop', 'for-each', 'do-once', 'do-n', 'gate', 'multigate', 'flip-flop', 'switch']);
 
 export function nodeKind(def: NodeDefinition): NodeKind {
   const operation = def.implementation?.kind === 'native' ? def.implementation.operation : '';

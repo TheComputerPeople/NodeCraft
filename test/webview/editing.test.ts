@@ -209,6 +209,40 @@ describe('editing tools', () => {
     assert.deepEqual(saved.nodes.find((n) => n.id === 'ss')!.properties.cases, ['Case 1']);
   });
 
+  test('wiring a typed array into Length gives its wildcard pins the array\'s type', async (t) => {
+    if (!browser) return t.skip(skipReason);
+    const document = sampleDocument();
+    document.variables.push({ id: 'scores', name: 'Scores', type: { id: 'int', container: 'array' }, defaultValue: [] });
+    document.graphs[0].nodes.push(
+      { id: 'get', type: 'core:variable.get', position: { x: 400, y: 380 }, properties: { variable: 'scores' } },
+      { id: 'len', type: 'core:array.length', position: { x: 700, y: 380 }, properties: {} }
+    );
+    editor = await EditorPage.open(browser);
+    await editor.send({ type: 'init', document, definitions: sampleDefinitions(), saveDelay: 0 });
+    const e = editor;
+    const color = () => e.page.$eval('.pin[data-node="len"][data-pin="target"]', (el) => (el as HTMLElement).style.getPropertyValue('--pin-color'));
+    assert.equal(await color(), '#8c8484', 'gray while it is a wildcard');
+    await e.drag(await e.pinCenter('get', 'value'), await e.pinCenter('len', 'target'));
+    assert.equal(await color(), '#1fe3aa', 'int teal once wired');
+    const saved = await savedGraph(e, (g) => !!g.nodes.find((n) => n.id === 'len')!.properties.wildcards);
+    assert.deepEqual(saved.nodes.find((n) => n.id === 'len')!.properties.wildcards, { wildcard: 'int' });
+  });
+
+  test('a container variable\'s default is edited element by element in Details', async (t) => {
+    if (!browser) return t.skip(skipReason);
+    const document = sampleDocument();
+    document.variables.push({ id: 'scores', name: 'Scores', type: { id: 'int', container: 'array' }, defaultValue: [1] });
+    editor = await EditorPage.open(browser);
+    await editor.send({ type: 'init', document, definitions: sampleDefinitions(), saveDelay: 0 });
+    const e = editor;
+    await e.page.click('.mb-item[data-kind="variable"]');
+    await e.page.click('#inspector-content button:has-text("Add element")');
+    await e.page.fill('#inspector-content input[aria-label="Element 1"]', '5');
+    await e.page.press('#inspector-content input[aria-label="Element 1"]', 'Enter');
+    await e.page.waitForFunction(() => (window as unknown as { __posted: { type: string; document?: { variables: { id: string; defaultValue?: unknown }[] } }[] }).__posted
+      .some((m) => m.type === 'applyDocument' && JSON.stringify(m.document!.variables.find((v) => v.id === 'scores')?.defaultValue) === '[1,5]'));
+  });
+
   test('Shift+W aligns the selection to the top; Q straightens a wire', async (t) => {
     const e = await open(t);
     if (!e) return;
