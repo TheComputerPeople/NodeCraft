@@ -1,8 +1,9 @@
 // A language pack is the unit of language support: everything the extension knows about one
 // target language lives behind this interface, so the graph model and editor stay language-neutral.
-// Symbol import and debugging members arrive with Phases 3 and 5.
+// Debugging members arrive with Phase 5.
 import { IrProgram } from './compiler/ir';
 import { NodeLine } from './compiler/writer';
+import { ModuleScan } from './importing/symbols';
 import { TypeRef } from './types';
 
 // What the language can express. The editor hides features a graph's language can't support
@@ -70,6 +71,14 @@ export interface CodeGenerator {
   runner?: CodeRunner;
 }
 
+// Reads the functions in the language's source files, for exposing them as nodes
+// (docs/code-as-nodes.md).
+export interface SymbolImporter {
+  // Extensions of the source files it reads, with the dot.
+  extensions: string[];
+  scan(source: string): ModuleScan;
+}
+
 export interface LanguagePack {
   // The value of a graph's `language` field, e.g. "typescript".
   id: string;
@@ -83,6 +92,7 @@ export interface LanguagePack {
   mapType(type: TypeRef): string;
   simulator?: CodeSimulator;
   generator?: CodeGenerator;
+  importer?: SymbolImporter;
 }
 
 export class LanguagePackRegistry {

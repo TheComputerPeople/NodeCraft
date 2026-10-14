@@ -2,6 +2,7 @@
 // JavaScript runtime and can execute JavaScript snippets directly.
 import { CodeSimulator, LanguagePack } from '../language-pack';
 import { TypeRef, parseTypeId } from '../types';
+import { scanTypeScript } from '../importing/typescript-scanner';
 import { typescriptGenerator } from './typescript-codegen';
 
 const javascriptSimulator: CodeSimulator = {
@@ -56,7 +57,8 @@ export const typescriptPack: LanguagePack = {
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true },
   mapType,
   simulator: javascriptSimulator,
-  generator: typescriptGenerator({ typed: true, mapType })
+  generator: typescriptGenerator({ typed: true, mapType }),
+  importer: { extensions: ['.ts', '.mts', '.cts'], scan: (source) => scanTypeScript(source) }
 };
 
 export const javascriptPack: LanguagePack = {
@@ -67,5 +69,6 @@ export const javascriptPack: LanguagePack = {
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: false, generics: false, async: true, exceptions: true },
   mapType,
   simulator: javascriptSimulator,
-  generator: typescriptGenerator({ typed: false, mapType })
+  generator: typescriptGenerator({ typed: false, mapType }),
+  importer: { extensions: ['.js', '.mjs', '.cjs'], scan: (source) => scanTypeScript(source, true) }
 };

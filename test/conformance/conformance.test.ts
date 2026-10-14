@@ -9,6 +9,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { compileDocument } from '../../src/core/compiler';
+import { exposeFunctions } from '../../src/core/importing/symbols';
 import { GenerateOptions } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { GraphDocument, NodeDefinition, RuntimeLogEvent } from '../../src/core/model';
@@ -135,42 +136,67 @@ describe('generated code type-checks', () => {
 describe('project functions', () => {
   // Start → Add To Total(5) → Print(Double(its result)) → Add To Total(7) → Print(its result).
   // Add To Total keeps a running total, so an extra call would show up in the output.
+  const jsModule = (exports: string, typed: boolean): string => [
+    'let total = 0;',
+    '/**',
+    ' * @blueprint',
+    ...(typed ? [] : [' * @param {number} amount', ' * @returns {number}']),
+    ' */',
+    `${exports === 'esm' ? 'export ' : ''}function addToTotal(amount${typed ? ': number): number' : ')'} {`,
+    '  total += amount;',
+    '  return total;',
+    '}',
+    '/**',
+    ' * @blueprint pure',
+    ...(typed ? [] : [' * @param {number} value', ' * @returns {number}']),
+    ' */',
+    `${exports === 'esm' ? 'export ' : ''}function double(value${typed ? ': number): number' : ')'} {`,
+    '  return value * 2;',
+    '}',
+    ...(exports === 'commonjs' ? ['module.exports = { addToTotal, double };'] : []),
+    ''
+  ].join('\n');
   const MODULES: Record<string, { path: string; text: string }> = {
-    typescript: {
-      path: 'lib/score.ts',
-      text: 'let total = 0;\nexport function addToTotal(amount: number): number {\n  total += amount;\n  return total;\n}\nexport function double(value: number): number {\n  return value * 2;\n}\n'
-    },
-    'javascript-esm': {
-      path: 'lib/score.mjs',
-      text: 'let total = 0;\n/** @param {number} amount @returns {number} */\nexport function addToTotal(amount) {\n  total += amount;\n  return total;\n}\n/** @param {number} value @returns {number} */\nexport function double(value) {\n  return value * 2;\n}\n'
-    },
-    'javascript-commonjs': {
-      path: 'lib/score.cjs',
-      text: 'let total = 0;\n/** @param {number} amount @returns {number} */\nfunction addToTotal(amount) {\n  total += amount;\n  return total;\n}\n/** @param {number} value @returns {number} */\nfunction double(value) {\n  return value * 2;\n}\nmodule.exports = { addToTotal, double };\n'
-    },
+    typescript: { path: 'lib/score.ts', text: jsModule('esm', true) },
+    'javascript-esm': { path: 'lib/score.mjs', text: jsModule('esm', false) },
+    'javascript-commonjs': { path: 'lib/score.cjs', text: jsModule('commonjs', false) },
     // Next to the generated file: its folder is the working directory, so it is on sys.path.
     python: {
       path: 'graphs/score.py',
-      text: 'total = 0\n\n\ndef add_to_total(amount: float) -> float:\n    global total\n    total += amount\n    return total\n\n\ndef double(value: float) -> float:\n    return value * 2\n'
+      text: [
+        'total = 0', '', '',
+        'def add_to_total(amount: float) -> float:', '    """@blueprint"""', '    global total', '    total += amount', '    return total', '', '',
+        'def double(value: float) -> float:', '    """@blueprint pure"""', '    return value * 2', ''
+      ].join('\n')
     }
   };
 
-  function project(language: string, key: string): { registry: NodeRegistry; document: GraphDocument } {
+  // Node definitions for the module, as the workspace importer makes them: scanned from the code.
+  // (Python is written out until its scanner arrives.)
+  function definitions(language: string, key: string): NodeDefinition[] {
     const modulePath = MODULES[key].path;
-    const fn = (name: string, pure: boolean): NodeDefinition => ({
+    const importer = languages.get(language)?.importer;
+    if (importer) return exposeFunctions(importer.scan(MODULES[key].text), { language, path: modulePath, exposeAll: false }).definitions;
+    const fn = (name: string, pin: string, pure: boolean): NodeDefinition => ({
       type: `fn:${language}:${modulePath}#${name}`, version: 1, displayName: name, category: 'Project',
       inputs: [
         ...(pure ? [] : [{ id: 'execIn', name: '', kind: 'exec' as const, direction: 'input' as const }]),
-        { id: 'value', name: 'Value', kind: 'data', direction: 'input', type: { id: 'float' } }
+        { id: pin, name: pin, kind: 'data', direction: 'input', type: { id: 'float' } }
       ],
       outputs: [
         ...(pure ? [] : [{ id: 'execOut', name: '', kind: 'exec' as const, direction: 'output' as const }]),
         { id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', type: { id: 'float' } }
       ],
-      implementation: { kind: 'function', language, path: modulePath, name, ...(language === 'python' ? { module: 'score' } : {}) }
+      implementation: { kind: 'function', language, path: modulePath, name, module: 'score' }
     });
-    const add = fn(language === 'python' ? 'add_to_total' : 'addToTotal', false);
-    const double = fn('double', true);
+    return [fn('add_to_total', 'amount', false), fn('double', 'value', true)];
+  }
+
+  function project(language: string, key: string): { registry: NodeRegistry; document: GraphDocument } {
+    const defs = definitions(language, key);
+    const add = defs.find((d) => !d.type.endsWith('#double'));
+    const double = defs.find((d) => d.type.endsWith('#double'));
+    assert.ok(add && double, `the module exposes both functions: ${defs.map((d) => d.type).join(', ')}`);
     const r = registry();
     r.registerMany([add, double]);
     const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
@@ -180,8 +206,8 @@ describe('project functions', () => {
       graphs: [{
         id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
         nodes: [
-          n('s', 'core:event.start'), n('a1', add.type, { 'pin:value': 5 }), n('d', double.type), n('p1', 'core:console.print'),
-          n('a2', add.type, { 'pin:value': 7 }), n('p2', 'core:console.print')
+          n('s', 'core:event.start'), n('a1', add.type, { 'pin:amount': 5 }), n('d', double.type), n('p1', 'core:console.print'),
+          n('a2', add.type, { 'pin:amount': 7 }), n('p2', 'core:console.print')
         ],
         connections: [
           w('s', 'execOut', 'a1', 'execIn'), w('a1', 'execOut', 'p1', 'execIn'), w('p1', 'execOut', 'a2', 'execIn'), w('a2', 'execOut', 'p2', 'execIn'),
