@@ -357,7 +357,8 @@ window.addEventListener('mousemove', (e) => {
 });
 
 dom.canvasWrap.addEventListener('wheel', (e) => {
-  if (e.ctrlKey) return;
+  // Over the action or node menu, the wheel scrolls the menu, as in Unreal.
+  if (e.ctrlKey || eventElement(e)?.closest('#context-menu')) return;
   zoomAt(e.clientX, e.clientY, e.deltaY <= 0);
   e.preventDefault();
 }, { passive: false });

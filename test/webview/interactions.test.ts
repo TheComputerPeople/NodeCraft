@@ -150,6 +150,27 @@ describe('Unreal gestures and shortcuts', () => {
     assert.equal(await e.count('.node'), 8);
   });
 
+  test('the wheel scrolls an open menu instead of zooming', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    for (const target of ['background', 'node']) {
+      if (target === 'background') await e.page.mouse.click(700, 650, { button: 'right' });
+      else {
+        const box = (await e.page.locator('.node[data-node="start_1"]').boundingBox())!;
+        await e.page.mouse.click(box.x + 40, box.y + 10, { button: 'right' });
+      }
+      // A short menu doesn't scroll; limit its height so this one must.
+      await e.page.$eval('#context-menu', (el) => { (el as HTMLElement).style.maxHeight = '120px'; });
+      const menu = (await e.page.locator('#context-menu').boundingBox())!;
+      const before = await transform(e);
+      await e.page.mouse.move(menu.x + menu.width / 2, menu.y + menu.height / 2);
+      await e.page.mouse.wheel(0, 200);
+      await e.page.waitForFunction(() => document.getElementById('context-menu')!.scrollTop > 0);
+      assert.equal(await transform(e), before, `wheel over the ${target} menu did not zoom`);
+      await e.page.keyboard.press('Escape');
+    }
+  });
+
   test('Home zooms to fit the selection', async (t) => {
     const e = await open(t);
     if (!e) return;
