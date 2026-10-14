@@ -1,7 +1,7 @@
 // Edits to a document's structure: its graphs and member variables (Unreal's My Blueprint panel).
 // Pure data operations shared by the editor and tests; each mutates the document passed in.
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables } from './functions';
-import { Graph, GraphDocument, GraphKind, GraphPin, GraphVariable } from './model';
+import { Graph, GraphConnection, GraphDocument, GraphKind, GraphNode, GraphPin, GraphVariable, NodeDefinition } from './model';
 import { VARIABLE_GET, VARIABLE_SET } from './resolve';
 import { createGraph } from './serializer';
 import { TypeRef } from './types';
@@ -205,4 +205,124 @@ export function setFunctionPure(doc: GraphDocument, graphId: string, pure: boole
 // How many nodes call a function, across all graphs.
 export function functionUses(doc: GraphDocument, graphId: string): number {
   return doc.graphs.reduce((n, g) => n + g.nodes.filter((node) => node.type === FUNCTION_CALL && node.properties.graph === graphId).length, 0);
+}
+
+// ---- Collapse to Function (Unreal's node menu command) ----------------------------------------
+
+export interface CollapseResult {
+  function: Graph;
+  call: GraphNode;
+}
+
+// Moves the selected nodes of `graph` into a new function and calls it in their place, as Unreal's
+// Collapse to Function does. Wires that crossed the selection become the function's inputs (one per
+// outside output feeding it) and outputs (one per inside output used outside). Execution must enter
+// the selection at one pin and leave it from one; a selection with no exec pins becomes a pure
+// function. Returns the new function and call node, or why the selection can't be collapsed.
+export function collapseToFunction(
+  doc: GraphDocument,
+  graph: Graph,
+  nodeIds: ReadonlySet<string>,
+  lookup: (node: GraphNode) => NodeDefinition | undefined,
+  connectionId: () => string
+): CollapseResult | string {
+  if (!allowedGraphKinds(doc).includes('function')) return 'Only blueprints that hold functions can collapse nodes into one.';
+  const inside = graph.nodes.filter((n) => nodeIds.has(n.id));
+  if (!inside.length) return 'Select the nodes to collapse.';
+  if (inside.some((n) => n.type.startsWith('core:event.') || n.type === FUNCTION_ENTRY || n.type === FUNCTION_RETURN)) return "Events, entry and return nodes can't be collapsed into a function.";
+  const localIds = new Set(allLocalVariables({ graphs: [graph] }).map((v) => v.id));
+  if (inside.some((n) => localIds.has(String(n.properties.variable)))) return "The selection uses the function's local variables, which the new function couldn't see.";
+
+  const isInside = (id: string) => nodeIds.has(id);
+  const pinOf = (nodeId: string, pinId: string, side: 'inputs' | 'outputs') => {
+    const node = graph.nodes.find((n) => n.id === nodeId);
+    return node ? lookup(node)?.[side].find((p) => p.id === pinId) : undefined;
+  };
+  const incoming = graph.connections.filter((c) => !isInside(c.fromNode) && isInside(c.toNode));
+  const outgoing = graph.connections.filter((c) => isInside(c.fromNode) && !isInside(c.toNode));
+  const internal = graph.connections.filter((c) => isInside(c.fromNode) && isInside(c.toNode));
+  const isExec = (c: GraphConnection) => pinOf(c.fromNode, c.fromPin, 'outputs')?.kind === 'exec';
+
+  // Classified now: the moved nodes leave the graph before the wires are redone.
+  const execIn = incoming.filter(isExec);
+  const execOut = outgoing.filter(isExec);
+  const dataIn = incoming.filter((c) => !isExec(c));
+  const dataOut = outgoing.filter((c) => !isExec(c));
+  const execEntries = [...new Set(execIn.map((c) => `${c.toNode}\u0000${c.toPin}`))];
+  const execExits = [...new Set(execOut.map((c) => `${c.fromNode}\u0000${c.fromPin}`))];
+  if (execEntries.length > 1) return 'Execution enters the selection in more than one place; a function has one way in.';
+  if (execExits.length > 1) return 'Execution leaves the selection from more than one place; a function has one way out.';
+  const pure = !inside.some((n) => [...(lookup(n)?.inputs ?? []), ...(lookup(n)?.outputs ?? [])].some((p) => p.kind === 'exec'));
+
+  // The function and its signature: an input per outside output feeding the selection, an output per
+  // inside output used outside.
+  const fn = addGraph(doc, 'function');
+  const signature = (fn.signature ??= { inputs: [], outputs: [] });
+  if (pure) signature.pure = true;
+  const taken = new Set<string>();
+  const newPin = (name: string, type: GraphPin['type']): GraphPin => {
+    const pinName = uniqueName(name || 'Value', [...signature.inputs, ...signature.outputs].map((p) => p.name));
+    const id = uniqueId('', pinName, taken);
+    taken.add(id);
+    return { id, name: pinName, kind: 'data', ...(type ? { type } : {}) };
+  };
+  const inputBySource = new Map<string, GraphPin>();
+  for (const c of dataIn) {
+    const key = `${c.fromNode}\u0000${c.fromPin}`;
+    if (inputBySource.has(key)) continue;
+    const pin = newPin(pinOf(c.toNode, c.toPin, 'inputs')?.name ?? '', pinOf(c.fromNode, c.fromPin, 'outputs')?.type);
+    signature.inputs.push(pin);
+    inputBySource.set(key, pin);
+  }
+  const outputBySource = new Map<string, GraphPin>();
+  for (const c of dataOut) {
+    const key = `${c.fromNode}\u0000${c.fromPin}`;
+    if (outputBySource.has(key)) continue;
+    const source = pinOf(c.fromNode, c.fromPin, 'outputs');
+    const pin = newPin(source?.name ?? '', source?.type);
+    signature.outputs.push(pin);
+    outputBySource.set(key, pin);
+  }
+
+  // Move the nodes, keeping their layout, to the right of the entry node.
+  const minX = Math.min(...inside.map((n) => n.position.x));
+  const minY = Math.min(...inside.map((n) => n.position.y));
+  const center = { x: inside.reduce((sum, n) => sum + n.position.x, 0) / inside.length, y: inside.reduce((sum, n) => sum + n.position.y, 0) / inside.length };
+  const entry = fn.nodes[0];
+  const moved = inside.map((n) => ({ ...n, position: { x: n.position.x - minX + 350, y: n.position.y - minY } }));
+  const ids = new Set(moved.map((n) => n.id));
+  if (ids.has(entry.id)) entry.id = uniqueName('entry', ids);
+  fn.nodes.push(...moved);
+  fn.connections.push(...internal);
+  const wireIn = (fromNode: string, fromPin: string, toNode: string, toPin: string) => fn.connections.push({ id: connectionId(), fromNode, fromPin, toNode, toPin });
+
+  for (const c of dataIn) wireIn(entry.id, inputBySource.get(`${c.fromNode}\u0000${c.fromPin}`)!.id, c.toNode, c.toPin);
+  if (execIn.length) wireIn(entry.id, 'execOut', execIn[0].toNode, execIn[0].toPin);
+  const needsReturn = signature.outputs.length > 0 || execOut.length > 0;
+  if (needsReturn) {
+    const ret: GraphNode = { id: uniqueName('return', [...ids, entry.id]), type: FUNCTION_RETURN, position: { x: Math.max(...moved.map((n) => n.position.x)) + 350, y: 0 }, properties: { graph: fn.id } };
+    fn.nodes.push(ret);
+    for (const [key, pin] of outputBySource) {
+      const [node, out] = key.split('\u0000');
+      wireIn(node, out, ret.id, pin.id);
+    }
+    if (execOut.length) wireIn(execOut[0].fromNode, execOut[0].fromPin, ret.id, 'execIn');
+    // Only pure nodes: the return follows the entry directly.
+    else if (pure) wireIn(entry.id, 'execOut', ret.id, 'execIn');
+  }
+
+  // In the original graph: the call takes the nodes' place and their outside wires.
+  const call: GraphNode = { id: uniqueName(`call_${fn.id}`, graph.nodes.map((n) => n.id)), type: FUNCTION_CALL, position: center, properties: { graph: fn.id } };
+  graph.nodes = graph.nodes.filter((n) => !isInside(n.id));
+  graph.nodes.push(call);
+  graph.connections = graph.connections.filter((c) => !isInside(c.fromNode) && !isInside(c.toNode));
+  const wireOut = (fromNode: string, fromPin: string, toNode: string, toPin: string) => graph.connections.push({ id: connectionId(), fromNode, fromPin, toNode, toPin });
+  for (const [key, pin] of inputBySource) {
+    const [node, out] = key.split('\u0000');
+    wireOut(node, out, call.id, pin.id);
+  }
+  for (const c of execIn) wireOut(c.fromNode, c.fromPin, call.id, 'execIn');
+  for (const c of dataOut) wireOut(call.id, outputBySource.get(`${c.fromNode}\u0000${c.fromPin}`)!.id, c.toNode, c.toPin);
+  for (const c of execOut) wireOut(call.id, 'execOut', c.toNode, c.toPin);
+  return { function: fn, call };
 }

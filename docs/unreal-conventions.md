@@ -69,6 +69,7 @@ Sources:
 | Choose Get or Set | Drag the variable into the graph (a menu asks) | Epic |
 | Get or Set as appropriate | Drag the variable onto a compatible pin | Epic |
 | Call a function | Drag the function from My Blueprint into a graph, or pick it in the action menu | Epic |
+| Collapse to Function | Node context menu, with the nodes selected | Epic |
 | A function's inputs, outputs, Pure, Description and Category | Details, with the function open (or its entry node selected) | Epic |
 | A function's local variables | My Blueprint → Local Variables, with the function open | Epic |
 

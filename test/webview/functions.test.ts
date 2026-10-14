@@ -110,6 +110,23 @@ describe('functions', () => {
     assert.ok((await names()).includes('NewFunction'), 'calls to functions are offered');
   });
 
+  test('Collapse to Function moves the selection into a new function and calls it in its place', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    // The sample: Add's result feeds the Branch and a Print outside the selection.
+    await e.page.click('.node[data-node="add_1"] .node-header');
+    const box = (await e.page.locator('.node[data-node="add_1"] .node-header').boundingBox())!;
+    await e.page.mouse.click(box.x + 30, box.y + 8, { button: 'right' });
+    await e.page.locator('#context-menu button', { hasText: 'Collapse to Function' }).click();
+    assert.equal(await e.page.isVisible('.mb-item[data-kind="graph"] input'), true, 'the new function is ready to name');
+    await e.page.keyboard.press('Escape');
+    const doc = await saved(e, (d) => d.graphs.some((g) => g.kind === 'function'));
+    const fn = doc.graphs.find((g) => g.kind === 'function')!;
+    assert.deepEqual(fn.nodes.map((n) => n.type).sort(), ['core:function.entry', 'core:function.return', 'core:math.add']);
+    assert.ok(doc.graphs[0].nodes.some((n) => n.type === 'core:function.call' && n.properties.graph === fn.id));
+    assert.ok(!doc.graphs[0].nodes.some((n) => n.id === 'add_1'));
+  });
+
   test('the entry node cannot be deleted', async (t) => {
     const e = await open(t);
     if (!e) return;

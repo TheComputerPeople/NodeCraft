@@ -2,7 +2,7 @@
 // (its pin actions above the node's) and a comment.
 import { PinAddress, definitionFor } from '../core/editing';
 import { PinKind } from '../core/model';
-import { addNode, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected, refreshFunctionNodes, replaceFunctionNode } from './actions';
+import { addNode, collapseToFunction, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected, refreshFunctionNodes, replaceFunctionNode } from './actions';
 import { alignSelection, distributeSelection, straightenConnections } from './align';
 import { PaletteEntry, functionProblem, lookupDefinition, paletteEntries, searchText } from './document';
 import { dom, escapeHtml } from './dom';
@@ -105,6 +105,7 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
       <button data-action="disconnect">Disconnect All Connections</button>
       <button data-action="select-connected">Select Connected Nodes</button>
       <button data-action="center">Center View</button>
+      <button data-action="collapse-function">Collapse to Function</button>
       <div class="context-separator"></div>
       <div class="context-heading">Alignment</div>
       <button data-action="straighten" title="Q">Straighten Connections</button>
@@ -126,6 +127,7 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
     disconnect: disconnectSelected,
     'select-connected': () => selectConnected(nodeId),
     center: () => centerOnNode(nodeId),
+    'collapse-function': collapseToFunction,
     delete: deleteSelected,
     straighten: straightenConnections,
     'align-top': () => alignSelection('top'),

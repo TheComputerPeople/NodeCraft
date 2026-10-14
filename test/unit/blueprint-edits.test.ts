@@ -2,8 +2,12 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as edits from '../../src/core/blueprint-edits';
 import { GraphDocument } from '../../src/core/model';
+import { compileDocument } from '../../src/core/compiler';
+import { builtinLanguagePacks } from '../../src/core/languages';
+import { NodeRegistry } from '../../src/core/registry';
+import { createResolver } from '../../src/core/resolve';
 import { createEmptyDocument } from '../../src/core/serializer';
-import { node, wire } from './helpers';
+import { logs, node, run, wire } from './helpers';
 
 const fresh = (): GraphDocument => createEmptyDocument('Test');
 
@@ -142,5 +146,61 @@ describe('function signatures', () => {
     assert.equal(edits.deleteVariable(doc, local.id), 1);
     assert.deepEqual(fn.localVariables, []);
     assert.throws(() => edits.addLocalVariable(doc, doc.graphs[0].id), /Only functions/);
+  });
+});
+
+describe('Collapse to Function', () => {
+  // Start → Add(10, 20) → Print(Add) → Print(Max(Add, 25)) → End.
+  const program = (): GraphDocument => {
+    const doc = fresh();
+    doc.language = 'typescript';
+    const g = doc.graphs[0];
+    g.nodes = [
+      node('s', 'core:event.start'), node('add', 'core:math.add'), node('p1', 'core:console.print'),
+      node('max', 'core:math.max', { 'pin:b': 25 }), node('p2', 'core:console.print'), node('end', 'core:flow.end')
+    ];
+    g.connections = [
+      wire('s', 'execOut', 'add', 'execIn'), wire('add', 'execOut', 'p1', 'execIn'), wire('p1', 'execOut', 'p2', 'execIn'), wire('p2', 'execOut', 'end', 'execIn'),
+      wire('add', 'result', 'p1', 'value'), wire('add', 'result', 'max', 'a'), wire('max', 'returnValue', 'p2', 'value')
+    ];
+    return doc;
+  };
+  const registry = new NodeRegistry();
+  let n = 0;
+  const ids = () => `c${++n}`;
+  const collapse = (doc: GraphDocument, selection: string[]) => edits.collapseToFunction(doc, doc.graphs[0], new Set(selection), createResolver(registry, doc), ids);
+  const runs = (doc: GraphDocument) => logs(run(doc, registry));
+  const compiles = (doc: GraphDocument) => compileDocument(doc, { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'x.vgraph' } }).diagnostics.filter((d) => d.severity === 'error');
+
+  test('a chain with exec in and out: the program does the same', () => {
+    const doc = program();
+    const before = runs(doc);
+    const result = collapse(doc, ['add', 'p1']);
+    assert.ok(typeof result !== 'string', String(result));
+    assert.deepEqual(result.function.signature!.inputs, []);
+    assert.deepEqual(result.function.signature!.outputs.map((p) => p.name), ['Result'], 'Add feeds Max outside');
+    assert.deepEqual(doc.graphs[0].nodes.map((x) => x.id).sort(), ['call_NewFunction', 'end', 'max', 'p2', 's']);
+    assert.deepEqual(runs(doc), before);
+    assert.deepEqual(compiles(doc), []);
+  });
+
+  test('pure nodes become a pure function with an input per outside value', () => {
+    const doc = program();
+    const before = runs(doc);
+    const result = collapse(doc, ['max']);
+    assert.ok(typeof result !== 'string', String(result));
+    assert.equal(result.function.signature!.pure, true);
+    assert.deepEqual(result.function.signature!.inputs.map((p) => p.name), ['A']);
+    assert.deepEqual(runs(doc), before);
+    assert.deepEqual(compiles(doc), []);
+  });
+
+  test('selections that cannot be collapsed say why', () => {
+    assert.match(String(collapse(program(), ['s', 'add'])), /Events/);
+    const branchy = program();
+    branchy.graphs[0].nodes.push(node('q', 'core:flow.sequence', { pins: 2 }));
+    branchy.graphs[0].connections = branchy.graphs[0].connections.filter((c) => c.toNode !== 'p2' || c.toPin !== 'execIn');
+    branchy.graphs[0].connections.push(wire('q', 'then0', 'add', 'execIn'), wire('q', 'then1', 'p2', 'execIn'));
+    assert.match(String(collapse(branchy, ['add', 'p2'])), /more than one place/);
   });
 });

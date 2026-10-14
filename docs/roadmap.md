@@ -265,7 +265,8 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Nodes | Cut/copy/paste (also between graphs and files, as text), Ctrl+D duplicate | ✅ | — |
 | Nodes | Arrow keys move the selection; F2 renames comments, variables and graphs | ✅ | — |
 | Nodes | C wraps the selection in a comment; comments move their nodes, resize, rename | ✅ | — |
-| Nodes | Collapse to function/macro | ⬜ | 4 (needs callable functions) |
+| Nodes | Collapse to Function | ✅ (one exec way in and out, as in Unreal) | — |
+| Nodes | Collapse to Macro | ⬜ | 4 (with macros) |
 | Nodes | Inline default values on pins | ✅ | — |
 | Nodes | Add-pin (+) on Sequence, MultiGate and Switch; remove a pin from its menu | ✅ (Sequence starts with 3 outputs, Unreal's with 2) | — |
 | Nodes | Make Array/Set/Map, wildcard pins | ✅ | — |

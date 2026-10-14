@@ -1,6 +1,7 @@
 // User actions that change the graph, plus the pointer gestures that lead to them.
 import { copyNodes, pasteNodes } from '../core/clipboard';
 import * as editing from '../core/editing';
+import * as edits from '../core/blueprint-edits';
 import { addVariable, uniqueName } from '../core/blueprint-edits';
 import { FUNCTION_ENTRY } from '../core/functions';
 import { functionStatus, isFunctionType, rebindFunctionNode } from '../core/imported-functions';
@@ -12,7 +13,7 @@ import { newConnectionId } from './host';
 import { clearCommentSelection } from './comments';
 import { hideContextMenu } from './menus';
 import { MenuItem } from './floating-menu';
-import { renderMyBlueprint } from './my-blueprint';
+import { renderMyBlueprint, startRename } from './my-blueprint';
 import { renderInspector, renderPalette } from './panels';
 import { render, renderEdges, syncSelectionClasses } from './render';
 import { selectNode } from './selection';
@@ -46,6 +47,26 @@ export function deleteSelected(): void {
   state.selectedNodeId = null;
   markDirty();
   render();
+}
+
+// Unreal's Collapse to Function: the selection becomes a new function, called where it was.
+export function collapseToFunction(): void {
+  const doc = state.document;
+  const graph = state.graph;
+  if (!doc || !graph) return;
+  const result = edits.collapseToFunction(doc, graph, new Set(state.selectedNodeIds), lookupDefinition, newConnectionId);
+  if (typeof result === 'string') {
+    setStatus(result);
+    return;
+  }
+  state.selectedNodeIds = new Set([result.call.id]);
+  state.selectedNodeId = result.call.id;
+  markDirty();
+  render();
+  renderMyBlueprint();
+  renderPalette();
+  setStatus(`Collapsed into ${result.function.name}. Name it in My Blueprint.`);
+  startRename('graph', result.function.id);
 }
 
 export function duplicateSelected(): void {
