@@ -6,6 +6,7 @@ import { MAKE_ARRAY, MAKE_MAP, MAKE_SET, makeDefinition, resolveWildcards } from
 import { MULTIGATE, SWITCH_INT, SWITCH_STRING, flowControlDefinition } from './flow-control';
 import { isFunctionType, signatureChanges } from './imported-functions';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables, functionNodeDefinition } from './functions';
+import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS, macroNodeDefinition } from './macros';
 import { Graph, GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
 
 export type NodeResolver = (node: GraphNode) => NodeDefinition | undefined;
@@ -54,13 +55,13 @@ export function createResolver(registry: ResolveContext, doc: ResolverDocument):
     if (!base) return undefined;
     if (node.type === VARIABLE_GET || node.type === VARIABLE_SET) return variableDefinition(base, node, variables);
     if (node.type === FUNCTION_ENTRY || node.type === FUNCTION_RETURN || node.type === FUNCTION_CALL) return functionNodeDefinition(base, node, doc.graphs);
+    if (node.type === MACRO_INPUTS || node.type === MACRO_OUTPUTS || node.type === MACRO_INSTANCE) return macroNodeDefinition(base, node, doc.graphs);
     if (node.type === SEQUENCE) return { ...base, outputs: Array.from({ length: sequencePinCount(node) }, (_, i) => execPin(`then${i}`, `Then ${i}`, 'output')) };
     if (node.type === REROUTE) return rerouteDefinition(base, node);
     if (node.type === MULTIGATE || node.type === SWITCH_INT || node.type === SWITCH_STRING) return flowControlDefinition(base, node);
     // Wildcard pins take the element types the node adopted (src/core/containers.ts).
     if (node.type === MAKE_ARRAY || node.type === MAKE_SET || node.type === MAKE_MAP) return resolveWildcards(makeDefinition(base, node), node);
     return resolveWildcards(base, node);
-    return base;
   };
 }
 

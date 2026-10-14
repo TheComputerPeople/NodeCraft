@@ -7,7 +7,7 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 - **Start** nodes in event graphs are the entry points. Running a class runs every Start node: graphs in document order, then Start nodes in node order within each graph.
 - In generated code, all Start nodes together become one `start()` method on the generated class (named per language convention).
 - All event graphs share the class's member variables.
-- Function graphs run when called; macro graphs arrive later in Phase 4.
+- Function graphs run when called; macro graphs run where they are used (see "Macros").
 
 ## Execution flow
 
@@ -62,6 +62,12 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 - Simulate stops a chain of more than 1,000 nested calls with an error; generated code runs until the language's own stack runs out.
 - In generated code a function is a method of the class: one output is its return value; several are an object with a field per output (TypeScript and JavaScript), a tuple (Python) or a named tuple (C#).
 - A **function library**'s functions behave the same when called from another graph file. They have no member variables, and each call has its own locals and node state. In generated code they are module functions (a static class in C#) that callers import.
+
+## Macros
+
+- A macro instance behaves exactly as if the macro's nodes were placed in its stead: execution entering one of its exec inputs continues from the Inputs tunnel's pin of that name, and reaching one of the Outputs tunnel's exec pins continues from the instance's pin of that name. Data inputs are read where the macro's nodes read them (an unwired input uses the value typed on the instance, else the pin's default).
+- Each instance has its own copy of the macro's nodes: their outputs and remembered state (Do Once, Gate…) belong to that instance. Member variables are shared, as everywhere in the object.
+- In generated code a macro's nodes are written out where it is used.
 
 ## Variables
 

@@ -36,7 +36,21 @@ export type NodeImplementation =
   | { kind: 'native'; operation: string }
   | { kind: 'code'; languages: Record<string, string>; defaultLanguage?: string }
   | { kind: 'subgraph'; graph: string }
-  | FunctionImplementation;
+  | FunctionImplementation
+  | MacroImplementation;
+
+// A macro of a macro library (src/core/libraries.ts): its graph, with the library's other macros
+// already expanded in it, so it can be expanded anywhere (src/core/macros.ts).
+export interface MacroImplementation {
+  kind: 'macro';
+  graph: Graph;
+  // The library's .vgraph file (workspace-relative) and the macro's graph id.
+  source: { document: string; graph: string };
+  // The library's language: graphs in other languages can't use it. Absent: any language.
+  language?: string;
+  // Why the macro can't be used, e.g. it uses itself.
+  error?: string;
+}
 
 // A function in the project's own code, which generated code imports (docs/code-as-nodes.md).
 export interface FunctionImplementation {

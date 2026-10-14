@@ -257,6 +257,39 @@ test('the functions of a function library graph become nodes that other graphs i
   assert.match(await readText(workspaceFile('uses-lib.vgraph.ts')), /^import \{ doubleIt \} from "\.\/mathlib\/Helpers\.vgraph\.ts";$/m);
 });
 
+test('the macros of a macro library graph are expanded in the graphs that use them', async () => {
+  const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const wire = (id: string, fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id, fromNode, fromPin, toNode, toPin });
+  await write('mathlib/Shared.vgraph', JSON.stringify({
+    schemaVersion: 3, name: 'Shared', kind: 'macroLibrary', language: 'typescript', variables: [],
+    graphs: [{
+      id: 'Announce', name: 'Announce', kind: 'macro', comments: [],
+      signature: { inputs: [{ id: 'in', name: 'In', kind: 'exec' }], outputs: [{ id: 'out', name: 'Out', kind: 'exec' }] },
+      nodes: [node('inputs', 'core:macro.inputs', { graph: 'Announce' }), node('print', 'core:console.print', { 'pin:value': 'from the library' }), node('outputs', 'core:macro.outputs', { graph: 'Announce' })],
+      connections: [wire('c1', 'inputs', 'in', 'print', 'execIn'), wire('c2', 'print', 'execOut', 'outputs', 'out')]
+    }]
+  }, null, 2));
+  const caller = workspaceFile('uses-macro.vgraph');
+  await write('uses-macro.vgraph', JSON.stringify({
+    schemaVersion: 3, name: 'UsesMacro', kind: 'class', language: 'typescript', variables: [],
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('m', 'macro:mathlib/Shared.vgraph#Announce')],
+      connections: [wire('c1', 's', 'execOut', 'm', 'in')]
+    }]
+  }, null, 2));
+  const deadline = Date.now() + 15000;
+  for (;;) {
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', caller);
+    const problems = vscode.languages.getDiagnostics(caller);
+    if (!problems.length) break;
+    if (Date.now() > deadline) throw new Error(`The macro library was never found: ${problems.map((p) => p.message).join('; ')}`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  assert.match(await readText(workspaceFile('uses-macro.vgraph.ts')), /\/\/ Announce: Print \(m\)\n\s*console\.log\("from the library"\);/);
+});
+
 export async function run(): Promise<void> {
   const failures: string[] = [];
   for (const { name, run: body } of tests) {

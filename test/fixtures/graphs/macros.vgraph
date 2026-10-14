@@ -1,0 +1,943 @@
+{
+  "schemaVersion": 3,
+  "name": "Macros",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "core:flow.for-loop",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {
+            "pin:firstIndex": 1,
+            "pin:lastIndex": 3
+          }
+        },
+        {
+          "id": "classify",
+          "type": "core:macro.instance",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Classify"
+          }
+        },
+        {
+          "id": "n2",
+          "type": "core:console.print",
+          "position": {
+            "x": 80,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:console.print",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "small"
+          }
+        },
+        {
+          "id": "n4",
+          "type": "core:flow.for-loop",
+          "position": {
+            "x": 160,
+            "y": 0
+          },
+          "properties": {
+            "pin:firstIndex": 1,
+            "pin:lastIndex": 2
+          }
+        },
+        {
+          "id": "onceA",
+          "type": "core:macro.instance",
+          "position": {
+            "x": 160,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Once"
+          }
+        },
+        {
+          "id": "n5",
+          "type": "core:console.print",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "A"
+          }
+        },
+        {
+          "id": "onceB",
+          "type": "core:macro.instance",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Once"
+          }
+        },
+        {
+          "id": "n6",
+          "type": "core:console.print",
+          "position": {
+            "x": 240,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "B"
+          }
+        },
+        {
+          "id": "power",
+          "type": "core:macro.instance",
+          "position": {
+            "x": 240,
+            "y": 0
+          },
+          "properties": {
+            "graph": "FourthPower",
+            "pin:value": 3
+          }
+        },
+        {
+          "id": "n7",
+          "type": "core:console.print",
+          "position": {
+            "x": 280,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "powerDefault",
+          "type": "core:macro.instance",
+          "position": {
+            "x": 280,
+            "y": 0
+          },
+          "properties": {
+            "graph": "FourthPower"
+          }
+        },
+        {
+          "id": "n8",
+          "type": "core:console.print",
+          "position": {
+            "x": 320,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n9",
+          "type": "core:function.call",
+          "position": {
+            "x": 360,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Report",
+            "pin:n": 5
+          }
+        },
+        {
+          "id": "n10",
+          "type": "core:function.call",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Report",
+            "pin:n": 0
+          }
+        },
+        {
+          "id": "pass",
+          "type": "core:macro.instance",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Pass",
+            "pin:text": "through"
+          }
+        },
+        {
+          "id": "n11",
+          "type": "core:console.print",
+          "position": {
+            "x": 440,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "n1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "loopBody",
+          "toNode": "classify",
+          "toPin": "in"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n1",
+          "fromPin": "index",
+          "toNode": "classify",
+          "toPin": "value"
+        },
+        {
+          "id": "w4",
+          "fromNode": "classify",
+          "fromPin": "big",
+          "toNode": "n2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w5",
+          "fromNode": "classify",
+          "fromPin": "doubled",
+          "toNode": "n2",
+          "toPin": "value"
+        },
+        {
+          "id": "w6",
+          "fromNode": "classify",
+          "fromPin": "small",
+          "toNode": "n3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n1",
+          "fromPin": "completed",
+          "toNode": "n4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n4",
+          "fromPin": "loopBody",
+          "toNode": "onceA",
+          "toPin": "in"
+        },
+        {
+          "id": "w9",
+          "fromNode": "onceA",
+          "fromPin": "out",
+          "toNode": "n5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n5",
+          "fromPin": "execOut",
+          "toNode": "onceB",
+          "toPin": "in"
+        },
+        {
+          "id": "w11",
+          "fromNode": "onceB",
+          "fromPin": "out",
+          "toNode": "n6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n4",
+          "fromPin": "completed",
+          "toNode": "n7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w13",
+          "fromNode": "power",
+          "fromPin": "result",
+          "toNode": "n7",
+          "toPin": "value"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n7",
+          "fromPin": "execOut",
+          "toNode": "n8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w15",
+          "fromNode": "powerDefault",
+          "fromPin": "result",
+          "toNode": "n8",
+          "toPin": "value"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n8",
+          "fromPin": "execOut",
+          "toNode": "n9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w17",
+          "fromNode": "n9",
+          "fromPin": "execOut",
+          "toNode": "n10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w18",
+          "fromNode": "n10",
+          "fromPin": "execOut",
+          "toNode": "pass",
+          "toPin": "in"
+        },
+        {
+          "id": "w19",
+          "fromNode": "pass",
+          "fromPin": "out",
+          "toNode": "n11",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w20",
+          "fromNode": "pass",
+          "fromPin": "result",
+          "toNode": "n11",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "Report",
+      "name": "Report",
+      "kind": "function",
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Report"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:macro.instance",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Classify"
+          }
+        },
+        {
+          "id": "n2",
+          "type": "core:console.print",
+          "position": {
+            "x": 80,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "big"
+          }
+        },
+        {
+          "id": "n3",
+          "type": "core:console.print",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "small"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "n1",
+          "toPin": "in"
+        },
+        {
+          "id": "w2",
+          "fromNode": "entry",
+          "fromPin": "n",
+          "toNode": "n1",
+          "toPin": "value"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n1",
+          "fromPin": "big",
+          "toNode": "n2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n1",
+          "fromPin": "small",
+          "toNode": "n3",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "n",
+            "name": "N",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ],
+        "outputs": []
+      }
+    },
+    {
+      "id": "Classify",
+      "name": "Classify",
+      "kind": "macro",
+      "nodes": [
+        {
+          "id": "inputs",
+          "type": "core:macro.inputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Classify"
+          }
+        },
+        {
+          "id": "outputs",
+          "type": "core:macro.outputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Classify"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:math.greater",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {
+            "pin:b": 1
+          }
+        },
+        {
+          "id": "n2",
+          "type": "core:flow.branch",
+          "position": {
+            "x": 80,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:math.multiply",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {
+            "pin:b": 2
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "inputs",
+          "fromPin": "in",
+          "toNode": "n2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "inputs",
+          "fromPin": "value",
+          "toNode": "n1",
+          "toPin": "a"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "n2",
+          "toPin": "condition"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n2",
+          "fromPin": "true",
+          "toNode": "outputs",
+          "toPin": "big"
+        },
+        {
+          "id": "w5",
+          "fromNode": "n2",
+          "fromPin": "false",
+          "toNode": "outputs",
+          "toPin": "small"
+        },
+        {
+          "id": "w6",
+          "fromNode": "inputs",
+          "fromPin": "value",
+          "toNode": "n3",
+          "toPin": "a"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "outputs",
+          "toPin": "doubled"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "in",
+            "name": "In",
+            "kind": "exec"
+          },
+          {
+            "id": "value",
+            "name": "Value",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "big",
+            "name": "Big",
+            "kind": "exec"
+          },
+          {
+            "id": "small",
+            "name": "Small",
+            "kind": "exec"
+          },
+          {
+            "id": "doubled",
+            "name": "Doubled",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "Once",
+      "name": "Once",
+      "kind": "macro",
+      "nodes": [
+        {
+          "id": "inputs",
+          "type": "core:macro.inputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Once"
+          }
+        },
+        {
+          "id": "outputs",
+          "type": "core:macro.outputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Once"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:flow.do-once",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "inputs",
+          "fromPin": "in",
+          "toNode": "n1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "completed",
+          "toNode": "outputs",
+          "toPin": "out"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "in",
+            "name": "In",
+            "kind": "exec"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "kind": "exec"
+          }
+        ]
+      }
+    },
+    {
+      "id": "Square",
+      "name": "Square",
+      "kind": "macro",
+      "nodes": [
+        {
+          "id": "inputs",
+          "type": "core:macro.inputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Square"
+          }
+        },
+        {
+          "id": "outputs",
+          "type": "core:macro.outputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Square"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:math.multiply",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "inputs",
+          "fromPin": "value",
+          "toNode": "n1",
+          "toPin": "a"
+        },
+        {
+          "id": "w2",
+          "fromNode": "inputs",
+          "fromPin": "value",
+          "toNode": "n1",
+          "toPin": "b"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "outputs",
+          "toPin": "result"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "value",
+            "name": "Value",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "Result",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "FourthPower",
+      "name": "Fourth Power",
+      "kind": "macro",
+      "nodes": [
+        {
+          "id": "inputs",
+          "type": "core:macro.inputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "FourthPower"
+          }
+        },
+        {
+          "id": "outputs",
+          "type": "core:macro.outputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "FourthPower"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:macro.instance",
+          "position": {
+            "x": 40,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Square"
+          }
+        },
+        {
+          "id": "n2",
+          "type": "core:macro.instance",
+          "position": {
+            "x": 80,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Square"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "inputs",
+          "fromPin": "value",
+          "toNode": "n1",
+          "toPin": "value"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "result",
+          "toNode": "n2",
+          "toPin": "value"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n2",
+          "fromPin": "result",
+          "toNode": "outputs",
+          "toPin": "result"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "value",
+            "name": "Value",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            },
+            "defaultValue": 2
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "Result",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "Pass",
+      "name": "Pass",
+      "kind": "macro",
+      "nodes": [
+        {
+          "id": "inputs",
+          "type": "core:macro.inputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Pass"
+          }
+        },
+        {
+          "id": "outputs",
+          "type": "core:macro.outputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Pass"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "inputs",
+          "fromPin": "in",
+          "toNode": "outputs",
+          "toPin": "out"
+        },
+        {
+          "id": "w2",
+          "fromNode": "inputs",
+          "fromPin": "text",
+          "toNode": "outputs",
+          "toPin": "result"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "in",
+            "name": "In",
+            "kind": "exec"
+          },
+          {
+            "id": "text",
+            "name": "Text",
+            "kind": "data",
+            "type": {
+              "id": "string"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "kind": "exec"
+          },
+          {
+            "id": "result",
+            "name": "Result",
+            "kind": "data",
+            "type": {
+              "id": "string"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: macros with several exec outputs, a pure macro, a macro using another, Do Once inside a macro used twice, a macro in a function, input defaults, and wires passed straight through a macro.",
+    "expectedOutput": [
+      "small",
+      "4",
+      "6",
+      "A",
+      "B",
+      "81",
+      "16",
+      "big",
+      "small",
+      "through"
+    ]
+  }
+}

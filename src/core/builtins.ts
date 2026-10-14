@@ -2,6 +2,7 @@ import { NodeDefinition, PinDefinition, TypeRef } from './model';
 import { containerDefinitions } from './containers';
 import { flowControlDefinitions } from './flow-control';
 import { functionDefinitions } from './functions';
+import { macroDefinitions } from './macros';
 import { standardLibraryDefinitions } from './stdlib';
 
 const t = (id: string): TypeRef => ({ id });
@@ -85,6 +86,7 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
     ...flowControlDefinitions(),
     ...containerDefinitions(),
     ...functionDefinitions(),
+    ...macroDefinitions(),
     ...standardLibraryDefinitions()
   ];
 }

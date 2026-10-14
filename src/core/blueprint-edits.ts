@@ -1,6 +1,7 @@
 // Edits to a document's structure: its graphs and member variables (Unreal's My Blueprint panel).
 // Pure data operations shared by the editor and tests; each mutates the document passed in.
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables } from './functions';
+import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from './macros';
 import { Graph, GraphConnection, GraphDocument, GraphKind, GraphNode, GraphPin, GraphVariable, NodeDefinition } from './model';
 import { VARIABLE_GET, VARIABLE_SET } from './resolve';
 import { createGraph } from './serializer';
@@ -29,8 +30,14 @@ export function addGraph(doc: GraphDocument, kind: GraphKind): Graph {
   if (!allowedGraphKinds(doc).includes(kind)) throw new Error(`A ${doc.kind} can't contain ${kind} graphs.`);
   const name = uniqueName(DEFAULT_GRAPH_NAMES[kind], doc.graphs.map((g) => g.name));
   const graph = { ...createGraph(name, kind), id: uniqueId('', name, doc.graphs.map((g) => g.id)) };
-  // A new function starts with its entry node, as in Unreal.
+  // A new function starts with its entry node, and a macro with its Inputs and Outputs, as in Unreal.
   if (kind === 'function') graph.nodes.push({ id: 'entry', type: FUNCTION_ENTRY, position: { x: 0, y: 0 }, properties: { graph: graph.id } });
+  if (kind === 'macro') {
+    graph.nodes.push(
+      { id: 'inputs', type: MACRO_INPUTS, position: { x: 0, y: 0 }, properties: { graph: graph.id } },
+      { id: 'outputs', type: MACRO_OUTPUTS, position: { x: 500, y: 0 }, properties: { graph: graph.id } }
+    );
+  }
   doc.graphs.push(graph);
   return graph;
 }
@@ -121,27 +128,31 @@ export function variableUses(doc: GraphDocument, id: string): number {
   return doc.graphs.reduce((n, g) => n + g.nodes.filter((node) => (node.type === VARIABLE_GET || node.type === VARIABLE_SET) && node.properties.variable === id).length, 0);
 }
 
-// ---- Function signatures (Unreal's Inputs and Outputs in a function's Details) -------------------
+// ---- Function and macro signatures (Unreal's Inputs and Outputs in their Details) ----------------
 
 export type SignatureSide = 'inputs' | 'outputs';
 
+// A pin's type in a signature; macros may also have exec pins.
+export type SignatureType = TypeRef | 'exec';
+
 function signatureOf(doc: GraphDocument, graphId: string): Graph['signature'] & object | undefined {
-  const graph = doc.graphs.find((g) => g.id === graphId && g.kind === 'function');
+  const graph = doc.graphs.find((g) => g.id === graphId && (g.kind === 'function' || g.kind === 'macro'));
   if (!graph) return undefined;
   return (graph.signature ??= { inputs: [], outputs: [] });
 }
 
 // Adds an input or output (a bool named NewParam, as Unreal does). A function's first output also
 // gets a Return Node, wired after the entry if nothing follows it yet.
-export function addSignaturePin(doc: GraphDocument, graphId: string, side: SignatureSide, type: TypeRef = { id: 'bool' }): GraphPin | undefined {
+export function addSignaturePin(doc: GraphDocument, graphId: string, side: SignatureSide, type: SignatureType = { id: 'bool' }): GraphPin | undefined {
   const signature = signatureOf(doc, graphId);
   const graph = doc.graphs.find((g) => g.id === graphId);
   if (!signature || !graph) return undefined;
   const pins = signature[side];
   const name = uniqueName('NewParam', pins.map((p) => p.name));
-  const pin: GraphPin = { id: uniqueId('', name, [...signature.inputs, ...signature.outputs].map((p) => p.id)), name, kind: 'data', type };
+  const id = uniqueId('', name, [...signature.inputs, ...signature.outputs].map((p) => p.id));
+  const pin: GraphPin = type === 'exec' ? { id, name, kind: 'exec' } : { id, name, kind: 'data', type };
   pins.push(pin);
-  if (side === 'outputs' && !graph.nodes.some((n) => n.type === FUNCTION_RETURN)) {
+  if (graph.kind === 'function' && side === 'outputs' && !graph.nodes.some((n) => n.type === FUNCTION_RETURN)) {
     const entry = graph.nodes.find((n) => n.type === FUNCTION_ENTRY);
     const id = uniqueName('return', graph.nodes.map((n) => n.id));
     graph.nodes.push({ id, type: FUNCTION_RETURN, position: { x: (entry?.position.x ?? 0) + 400, y: entry?.position.y ?? 0 }, properties: { graph: graphId } });
@@ -162,12 +173,19 @@ export function renameSignaturePin(doc: GraphDocument, graphId: string, side: Si
   return undefined;
 }
 
-// Changes a parameter's type; its wires (on the entry, return and call nodes) are removed, as their
-// other ends no longer fit, and so is any value typed on call nodes.
-export function setSignaturePinType(doc: GraphDocument, graphId: string, side: SignatureSide, pinId: string, type: TypeRef): void {
+// Changes a parameter's type (or, in a macro, makes it an exec pin); its wires (on the entry, return
+// and call nodes, or the tunnels and instances) are removed, as their other ends no longer fit, and
+// so is any value typed on call nodes.
+export function setSignaturePinType(doc: GraphDocument, graphId: string, side: SignatureSide, pinId: string, type: SignatureType): void {
   const pin = signatureOf(doc, graphId)?.[side].find((p) => p.id === pinId);
   if (!pin) return;
-  pin.type = type;
+  if (type === 'exec') {
+    pin.kind = 'exec';
+    delete pin.type;
+  } else {
+    pin.kind = 'data';
+    pin.type = type;
+  }
   delete pin.defaultValue;
   forgetSignaturePin(doc, graphId, side, pinId);
 }
@@ -180,10 +198,12 @@ export function removeSignaturePin(doc: GraphDocument, graphId: string, side: Si
 }
 
 // Removes the wires and stored values of a parameter on every node that shows it: the function's
-// entry (inputs) or return nodes (outputs), and its call nodes anywhere.
+// entry (inputs) or return nodes (outputs), or the macro's tunnel, and its call or instance nodes
+// anywhere.
 function forgetSignaturePin(doc: GraphDocument, graphId: string, side: SignatureSide, pinId: string): void {
+  const own = side === 'inputs' ? [FUNCTION_ENTRY, MACRO_INPUTS] : [FUNCTION_RETURN, MACRO_OUTPUTS];
   for (const graph of doc.graphs) {
-    const nodes = new Set(graph.nodes.filter((n) => n.properties.graph === graphId && (n.type === FUNCTION_CALL || (graph.id === graphId && n.type === (side === 'inputs' ? FUNCTION_ENTRY : FUNCTION_RETURN)))).map((n) => n.id));
+    const nodes = new Set(graph.nodes.filter((n) => n.properties.graph === graphId && (n.type === FUNCTION_CALL || n.type === MACRO_INSTANCE || (graph.id === graphId && own.includes(n.type)))).map((n) => n.id));
     graph.connections = graph.connections.filter((c) => !((nodes.has(c.toNode) && c.toPin === pinId) || (nodes.has(c.fromNode) && c.fromPin === pinId)));
     for (const node of graph.nodes) if (nodes.has(node.id)) delete node.properties[`pin:${pinId}`];
   }
@@ -202,9 +222,9 @@ export function setFunctionPure(doc: GraphDocument, graphId: string, pure: boole
   }
 }
 
-// How many nodes call a function, across all graphs.
+// How many nodes call a function or use a macro, across all graphs.
 export function functionUses(doc: GraphDocument, graphId: string): number {
-  return doc.graphs.reduce((n, g) => n + g.nodes.filter((node) => node.type === FUNCTION_CALL && node.properties.graph === graphId).length, 0);
+  return doc.graphs.reduce((n, g) => n + g.nodes.filter((node) => (node.type === FUNCTION_CALL || node.type === MACRO_INSTANCE) && node.properties.graph === graphId).length, 0);
 }
 
 // ---- Collapse to Function (Unreal's node menu command) ----------------------------------------
@@ -325,4 +345,112 @@ export function collapseToFunction(
   for (const c of dataOut) wireOut(call.id, outputBySource.get(`${c.fromNode}\u0000${c.fromPin}`)!.id, c.toNode, c.toPin);
   for (const c of execOut) wireOut(call.id, 'execOut', c.toNode, c.toPin);
   return { function: fn, call };
+}
+
+// ---- Collapse to Macro (Unreal's node menu command) -------------------------------------------
+
+export interface CollapseToMacroResult {
+  macro: Graph;
+  instance: GraphNode;
+}
+
+// Moves the selected nodes of `graph` into a new macro and uses it in their place, as Unreal's
+// Collapse to Macro does. Like Collapse to Function, but execution may enter and leave the
+// selection anywhere: each exec input wired from outside becomes an exec input of the macro, and
+// each exec output wired to the outside an exec output.
+export function collapseToMacro(
+  doc: GraphDocument,
+  graph: Graph,
+  nodeIds: ReadonlySet<string>,
+  lookup: (node: GraphNode) => NodeDefinition | undefined,
+  connectionId: () => string
+): CollapseToMacroResult | string {
+  if (!allowedGraphKinds(doc).includes('macro')) return 'Only blueprints that hold macros can collapse nodes into one.';
+  const inside = graph.nodes.filter((n) => nodeIds.has(n.id));
+  if (!inside.length) return 'Select the nodes to collapse.';
+  if (inside.some((n) => n.type.startsWith('core:event.') || [FUNCTION_ENTRY, FUNCTION_RETURN, MACRO_INPUTS, MACRO_OUTPUTS].includes(n.type))) {
+    return "Events, entry, return, Inputs and Outputs nodes can't be collapsed into a macro.";
+  }
+  const localIds = new Set(allLocalVariables({ graphs: [graph] }).map((v) => v.id));
+  if (inside.some((n) => localIds.has(String(n.properties.variable)))) return "The selection uses the function's local variables, which a macro can't see.";
+
+  const isInside = (id: string) => nodeIds.has(id);
+  const pinOf = (nodeId: string, pinId: string, side: 'inputs' | 'outputs') => {
+    const node = graph.nodes.find((n) => n.id === nodeId);
+    return node ? lookup(node)?.[side].find((p) => p.id === pinId) : undefined;
+  };
+  const incoming = graph.connections.filter((c) => !isInside(c.fromNode) && isInside(c.toNode));
+  const outgoing = graph.connections.filter((c) => isInside(c.fromNode) && !isInside(c.toNode));
+  const internal = graph.connections.filter((c) => isInside(c.fromNode) && isInside(c.toNode));
+  const isExec = (c: GraphConnection) => pinOf(c.fromNode, c.fromPin, 'outputs')?.kind === 'exec';
+
+  const macro = addGraph(doc, 'macro');
+  const signature = (macro.signature ??= { inputs: [], outputs: [] });
+  const taken = new Set<string>();
+  const newPin = (side: SignatureSide, name: string, fallback: string, type: GraphPin['type'] | 'exec'): GraphPin => {
+    const pinName = uniqueName(name || fallback, signature[side].map((p) => p.name));
+    const id = uniqueId('', pinName, taken);
+    taken.add(id);
+    const pin: GraphPin = type === 'exec' ? { id, name: pinName, kind: 'exec' } : { id, name: pinName, kind: 'data', ...(type ? { type } : {}) };
+    signature[side].push(pin);
+    return pin;
+  };
+  // A macro pin per inside exec input entered from outside, per outside output feeding the
+  // selection, per inside exec output leaving it, and per inside output used outside.
+  const inputs = new Map<string, GraphPin>();
+  for (const c of incoming) {
+    const exec = isExec(c);
+    const key = exec ? `${c.toNode}\u0000${c.toPin}` : `${c.fromNode}\u0000${c.fromPin}`;
+    if (!inputs.has(key)) inputs.set(key, newPin('inputs', pinOf(c.toNode, c.toPin, 'inputs')?.name ?? '', exec ? 'In' : 'Value', exec ? 'exec' : pinOf(c.fromNode, c.fromPin, 'outputs')?.type));
+  }
+  const outputs = new Map<string, GraphPin>();
+  for (const c of outgoing) {
+    const key = `${c.fromNode}\u0000${c.fromPin}`;
+    const source = pinOf(c.fromNode, c.fromPin, 'outputs');
+    if (!outputs.has(key)) outputs.set(key, newPin('outputs', source?.name ?? '', isExec(c) ? 'Out' : 'Value', isExec(c) ? 'exec' : source?.type));
+  }
+  const inputKey = (c: GraphConnection) => (isExec(c) ? `${c.toNode}\u0000${c.toPin}` : `${c.fromNode}\u0000${c.fromPin}`);
+  const incomingPins = incoming.map((c) => ({ c, pin: inputs.get(inputKey(c))! }));
+  const outgoingPins = outgoing.map((c) => ({ c, pin: outputs.get(`${c.fromNode}\u0000${c.fromPin}`)! }));
+
+  // Move the nodes, keeping their layout, between the tunnels.
+  const minX = Math.min(...inside.map((n) => n.position.x));
+  const minY = Math.min(...inside.map((n) => n.position.y));
+  const center = { x: inside.reduce((sum, n) => sum + n.position.x, 0) / inside.length, y: inside.reduce((sum, n) => sum + n.position.y, 0) / inside.length };
+  const moved = inside.map((n) => ({ ...n, position: { x: n.position.x - minX + 350, y: n.position.y - minY } }));
+  const ids = new Set(moved.map((n) => n.id));
+  const [inputsTunnel, outputsTunnel] = macro.nodes;
+  if (ids.has(inputsTunnel.id)) inputsTunnel.id = uniqueName('inputs', ids);
+  if (ids.has(outputsTunnel.id)) outputsTunnel.id = uniqueName('outputs', [...ids, inputsTunnel.id]);
+  outputsTunnel.position = { x: Math.max(...moved.map((n) => n.position.x)) + 350, y: 0 };
+  macro.nodes.push(...moved);
+  macro.connections.push(...internal);
+  const wireIn = (fromNode: string, fromPin: string, toNode: string, toPin: string) => macro.connections.push({ id: connectionId(), fromNode, fromPin, toNode, toPin });
+  const wiredIn = new Set<string>();
+  for (const { c, pin } of incomingPins) {
+    // One wire per inside pin: several outside wires into one exec input share it.
+    const key = `${pin.id}\u0000${c.toNode}\u0000${c.toPin}`;
+    if (!wiredIn.has(key)) wireIn(inputsTunnel.id, pin.id, c.toNode, c.toPin);
+    wiredIn.add(key);
+  }
+  for (const [key, pin] of outputs) {
+    const [node, out] = key.split('\u0000');
+    wireIn(node, out, outputsTunnel.id, pin.id);
+  }
+
+  // In the original graph: the instance takes the nodes' place and their outside wires.
+  const instance: GraphNode = { id: uniqueName(`macro_${macro.id}`, graph.nodes.map((n) => n.id)), type: MACRO_INSTANCE, position: center, properties: { graph: macro.id } };
+  graph.nodes = graph.nodes.filter((n) => !isInside(n.id));
+  graph.nodes.push(instance);
+  graph.connections = graph.connections.filter((c) => !isInside(c.fromNode) && !isInside(c.toNode));
+  const wireOut = (fromNode: string, fromPin: string, toNode: string, toPin: string) => graph.connections.push({ id: connectionId(), fromNode, fromPin, toNode, toPin });
+  const wiredOut = new Set<string>();
+  for (const { c, pin } of incomingPins) {
+    // A data source feeding several inside pins needs one wire to the instance.
+    const key = `${c.fromNode}\u0000${c.fromPin}\u0000${pin.id}`;
+    if (!wiredOut.has(key)) wireOut(c.fromNode, c.fromPin, instance.id, pin.id);
+    wiredOut.add(key);
+  }
+  for (const { c, pin } of outgoingPins) wireOut(instance.id, pin.id, c.toNode, c.toPin);
+  return { macro, instance };
 }

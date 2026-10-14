@@ -266,7 +266,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Nodes | Arrow keys move the selection; F2 renames comments, variables and graphs | ✅ | — |
 | Nodes | C wraps the selection in a comment; comments move their nodes, resize, rename | ✅ | — |
 | Nodes | Collapse to Function | ✅ (one exec way in and out, as in Unreal) | — |
-| Nodes | Collapse to Macro | ⬜ | 4 (with macros) |
+| Nodes | Collapse to Macro | ✅ (several exec ways in and out) | — |
 | Nodes | Inline default values on pins | ✅ | — |
 | Nodes | Add-pin (+) on Sequence, MultiGate and Switch; remove a pin from its menu | ✅ (Sequence starts with 3 outputs, Unreal's with 2) | — |
 | Nodes | Make Array/Set/Map, wildcard pins | ✅ | — |
@@ -286,7 +286,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Compile | F7 compiles | ✅ | — |
 | Structure | Functions: entry and return nodes, inputs and outputs, pure functions, local variables, recursion | ✅ | — |
 | Structure | Function libraries, called from any graph in the same language | ✅ | — |
-| Structure | Macros | ⬜ | 4 |
+| Structure | Macros: tunnels with exec and data pins, expanded where used, macro libraries | ✅ | — |
 | Structure | Flow-control library: For Loop (with Break), While Loop, Do Once, Do N, Gate, MultiGate, Flip Flop, Switch on Int/String | ✅ (MultiGate's Is Random later) | — |
 | Structure | For Each Loop (with Break) | ✅ | — |
 | Structure | Structs, enums, Make/Break | ⬜ | 4 |

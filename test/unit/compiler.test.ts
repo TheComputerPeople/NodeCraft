@@ -264,10 +264,14 @@ describe('lowerDocument: pure nodes and project functions', () => {
 });
 
 describe('lowerDocument: graph kinds', () => {
-  test('macro graphs with nodes are skipped with a warning (macros arrive later)', () => {
-    const d = doc([], []);
+  test('a macro nobody uses adds no code, but its wiring is checked', () => {
+    const d = doc([node('s', 'core:event.start')], []);
     d.graphs.push({ id: 'Helper', name: 'Helper', kind: 'macro', signature: { inputs: [], outputs: [] }, comments: [], nodes: [node('p', 'core:console.print')], connections: [] });
-    assert.ok(codes(lower(d).diagnostics, 'warning').includes('graph-not-compiled'));
+    const result = lower(d);
+    assert.deepEqual(result.diagnostics, []);
+    assert.deepEqual(result.program?.start, []);
+    d.graphs[1].connections.push(wire('p', 'execOut', 'p', 'value'));
+    assert.deepEqual(codes(lower(d).diagnostics, 'error'), ['pin-kind-mismatch']);
   });
 
   test('a function needs exactly one entry node, and no events', () => {

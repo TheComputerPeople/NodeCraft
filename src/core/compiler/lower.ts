@@ -10,6 +10,7 @@ import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
+import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isExpandedNode, macroLookup, visibleNodeId } from '../macros';
 
 export interface LowerOptions {
   registry: NodeRegistry;
@@ -63,11 +64,19 @@ class Lowerer {
   private currentFunction: string | undefined;
 
   private readonly resolve: NodeResolver;
+  private readonly macros: MacroLookup;
   // Reroute and pure nodes being followed for the current input, to catch data loops.
   private readonly following = new Set<string>();
+  // While checking a graph with macros expanded in it: problems with the macros' own nodes were
+  // reported in the macro graphs, so they aren't repeated at each use.
+  private quietInner = false;
+  // The macro each expanded instance uses, by graph and node id: code from inside a macro is
+  // marked "Macro: Node".
+  private readonly macroNames = new Map<string, string>();
 
   constructor(private readonly doc: GraphDocument, private readonly options: LowerOptions) {
     this.resolve = createResolver(options.registry, doc);
+    this.macros = macroLookup(doc.graphs, (type) => options.registry.get(type));
   }
 
   run(): LowerResult {
@@ -106,10 +115,13 @@ class Lowerer {
     const eventGraphs: GraphInfo[] = [];
     const functionGraphs: GraphInfo[] = [];
     for (const graph of this.doc.graphs) {
-      if (graph.kind === 'event') eventGraphs.push(this.analyze(graph));
-      else if (graph.kind === 'function') functionGraphs.push(this.analyze(graph));
-      else if (graph.nodes.length) this.warning('graph-not-compiled', `Macro "${graph.name}" isn't compiled yet; macros arrive in a later version.`, graph.id);
+      if (graph.kind === 'event') eventGraphs.push(this.analyzeExpanded(graph));
+      else if (graph.kind === 'function') functionGraphs.push(this.analyzeExpanded(graph));
+      // Macros compile where they are used; their own wiring is checked here.
+      else this.analyze(graph);
     }
+    // A macro library only holds macros: there is no code to generate.
+    if (this.doc.kind === 'macroLibrary') return { diagnostics: this.diagnostics };
 
     const entries = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === START).map((start) => ({ info, start })));
     if (!entries.length && this.doc.kind === 'class') this.warning('no-start', 'The graph has no Start event, so the generated start method does nothing.');
@@ -172,7 +184,23 @@ class Lowerer {
 
   // ---- Validation ----------------------------------------------------------------------------
 
-  private analyze(graph: Graph): GraphInfo {
+  // A graph with the macros it uses expanded in place (src/core/macros.ts).
+  private analyzeExpanded(graph: Graph): GraphInfo {
+    const expansion = expandMacros(graph, this.macros);
+    for (const problem of expansion.problems) this.error('macro-invalid', problem.message, graph.id, problem.nodeId);
+    for (const [id, name] of expansion.macros) this.macroNames.set(JSON.stringify([graph.id, id]), name);
+    // The wires of an instance that couldn't be expanded aren't checked: the instance is reported.
+    const unexpanded = new Set(expansion.problems.map((p) => p.nodeId).filter((id) => expansion.graph.nodes.some((n) => n.id === id)));
+    if (expansion.graph === graph) return this.analyze(graph, unexpanded);
+    this.quietInner = true;
+    try {
+      return this.analyze(expansion.graph, unexpanded);
+    } finally {
+      this.quietInner = false;
+    }
+  }
+
+  private analyze(graph: Graph, unchecked: ReadonlySet<string> = new Set()): GraphInfo {
     const info: GraphInfo = { graph, nodes: new Map(), definitions: new Map(), execTargets: new Map(), execIndegree: new Map(), dataSources: new Map() };
     for (const node of graph.nodes) {
       if (info.nodes.has(node.id)) {
@@ -181,9 +209,13 @@ class Lowerer {
       }
       info.nodes.set(node.id, node);
       if (isFunctionType(node.type)) this.checkFunction(graph, node);
+      if ((node.type === MACRO_INPUTS || node.type === MACRO_OUTPUTS) && graph.kind !== 'macro') {
+        this.error('tunnel-outside-macro', 'Inputs and Outputs nodes belong in macro graphs.', graph.id, node.id);
+      }
       const def = this.resolve(node);
       if (def) info.definitions.set(node.id, def);
-      else if (!isFunctionType(node.type)) this.error('unknown-node-type', `Unknown node type "${node.type}". Its node library may be missing.`, graph.id, node.id);
+      // A missing macro library is reported where the macro is expanded.
+      else if (!isFunctionType(node.type) && !node.type.startsWith('macro:')) this.error('unknown-node-type', `Unknown node type "${node.type}". Its node library may be missing.`, graph.id, node.id);
       // Unreal: "The type of … is undetermined. Connect something to it."
       if (def && node.type !== REROUTE && [...def.inputs, ...def.outputs].some((p) => hasWildcard(p.type))) {
         this.error('wildcard-unresolved', `"${def.displayName}" doesn't know its type yet. Connect a wire to one of its gray pins.`, graph.id, node.id);
@@ -198,7 +230,7 @@ class Lowerer {
         continue;
       }
       // Wires on unknown nodes were already reported with the node.
-      if (!fromDef || !toDef) continue;
+      if (!fromDef || !toDef || unchecked.has(c.fromNode) || unchecked.has(c.toNode)) continue;
       const from = fromDef.outputs.find((p) => p.id === c.fromPin);
       const to = toDef.inputs.find((p) => p.id === c.toPin);
       if (!from || !to) {
@@ -279,7 +311,7 @@ class Lowerer {
     const def = info.definitions.get(nodeId);
     if (!node || !def) return [];
     const pin = entry ?? mainExecInput(def);
-    const source: SourceRef = { graphId: info.graph.id, nodeId, title: def.displayName };
+    const source = this.sourceRef(info, nodeId, def);
     const key = JSON.stringify([info.graph.id, nodeId, pin]);
     // Inside a function, shared code is written out on each path instead: a block method couldn't
     // see the call's locals.
@@ -341,6 +373,11 @@ class Lowerer {
         return [{ kind: 'setMember', member: member.id, value, source }, ...next('execOut')];
       }
       case 'end':
+        return [];
+      // Expanded away, or reported: a macro that can't be expanded, a tunnel outside a macro.
+      case 'macro-instance':
+      case 'macro-inputs':
+      case 'macro-outputs':
         return [];
     }
 
@@ -536,7 +573,7 @@ class Lowerer {
   private stateSlot(info: GraphInfo, node: GraphNode, def: NodeDefinition, name: string, type: string): string {
     const id = JSON.stringify([info.graph.id, node.id, `state:${name}`]);
     if (!this.slots.has(id)) {
-      this.slots.set(id, { id, name: `${node.id}_${name}`, type: { id: type }, source: { graphId: info.graph.id, nodeId: node.id, title: def.displayName }, ...this.scope(info) });
+      this.slots.set(id, { id, name: `${node.id}_${name}`, type: { id: type }, source: this.sourceRef(info, node.id, def), ...this.scope(info) });
     }
     return id;
   }
@@ -583,7 +620,7 @@ class Lowerer {
     const id = JSON.stringify([info.graph.id, node.id, pinId]);
     if (!this.slots.has(id)) {
       const pin = def.outputs.find((p) => p.id === pinId);
-      this.slots.set(id, { id, name: `${node.id}_${pinId}`, type: pin?.type, source: { graphId: info.graph.id, nodeId: node.id, title: def.displayName }, ...this.scope(info) });
+      this.slots.set(id, { id, name: `${node.id}_${pinId}`, type: pin?.type, source: this.sourceRef(info, node.id, def), ...this.scope(info) });
     }
     return id;
   }
@@ -656,12 +693,27 @@ class Lowerer {
     return { members: [...this.members.values()], slots: [...this.slots.values()], helpers: [...this.helpers.values()], imports: [...this.imports.values()], functions: this.functions };
   }
 
+  // Where IR came from: a node inside an expanded macro is its instance node, the one the user sees.
+  private sourceRef(info: GraphInfo, nodeId: string, def: NodeDefinition): SourceRef {
+    const visible = visibleNodeId(nodeId);
+    const macro = visible !== nodeId ? this.macroNames.get(JSON.stringify([info.graph.id, visible])) : undefined;
+    return { graphId: info.graph.id, nodeId: visible, title: macro ? `${macro}: ${def.displayName}` : def.displayName };
+  }
+
+  // A node inside an expanded macro is reported as its instance node, the one the user sees.
   private error(code: string, message: string, graphId?: string, nodeId?: string): void {
-    this.diagnostics.push({ severity: 'error', code, message, ...(graphId ? { graphId } : {}), ...(nodeId ? { nodeId } : {}) });
+    this.report('error', code, message, graphId, nodeId);
   }
 
   private warning(code: string, message: string, graphId?: string, nodeId?: string): void {
-    this.diagnostics.push({ severity: 'warning', code, message, ...(graphId ? { graphId } : {}), ...(nodeId ? { nodeId } : {}) });
+    this.report('warning', code, message, graphId, nodeId);
+  }
+
+  private report(severity: CompileDiagnostic['severity'], code: string, message: string, graphId?: string, nodeId?: string): void {
+    if (nodeId && isExpandedNode(nodeId) && this.quietInner) return;
+    const visible = nodeId && visibleNodeId(nodeId);
+    const diagnostic: CompileDiagnostic = { severity, code, message, ...(graphId ? { graphId } : {}), ...(visible ? { nodeId: visible } : {}) };
+    if (!this.diagnostics.some((d) => d.severity === severity && d.code === code && d.message === message && d.graphId === diagnostic.graphId && d.nodeId === diagnostic.nodeId)) this.diagnostics.push(diagnostic);
   }
 }
 

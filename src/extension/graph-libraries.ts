@@ -1,11 +1,12 @@
-// Finds the workspace's function libraries (.vgraph files of kind "functionLibrary") and turns their
-// functions into nodes (src/core/libraries.ts), keeping the registry up to date as library files
-// change. Graphs call them through the libraries' generated files.
+// Finds the workspace's function and macro libraries (.vgraph files of kind "functionLibrary" or
+// "macroLibrary") and turns their functions and macros into nodes (src/core/libraries.ts), keeping
+// the registry up to date as library files change. Graphs call library functions through the
+// libraries' generated files; library macros are expanded where they are used.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { LanguagePackRegistry } from '../core/language-pack';
-import { libraryDefinitions } from '../core/libraries';
+import { libraryDefinitions, macroLibraryDefinitions } from '../core/libraries';
 import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
@@ -84,7 +85,7 @@ export class GraphLibraries implements vscode.Disposable {
     this.publish();
   }
 
-  // The library's function nodes, or undefined when the file isn't a function library.
+  // The library's nodes, or undefined when the file isn't a library.
   private async scan(uri: vscode.Uri): Promise<LibraryFile | undefined> {
     const folder = vscode.workspace.getWorkspaceFolder(uri);
     if (uri.scheme !== 'file' || !folder) return undefined;
@@ -95,16 +96,17 @@ export class GraphLibraries implements vscode.Disposable {
       return undefined;
     }
     // Most graphs are classes; skip parsing them.
-    if (!text.includes('functionLibrary')) return undefined;
+    if (!text.includes('functionLibrary') && !text.includes('macroLibrary')) return undefined;
     let doc: GraphDocument;
     try {
       doc = parseDocument(text, path.basename(uri.fsPath, '.vgraph')).document;
     } catch {
       return undefined;
     }
+    const root = folder.uri.fsPath;
+    if (doc.kind === 'macroLibrary') return { path: relative(root, uri.fsPath), definitions: macroLibraryDefinitions(doc, relative(root, uri.fsPath)) };
     const generator = doc.language ? this.languages.get(doc.language)?.generator : undefined;
     if (doc.kind !== 'functionLibrary' || !generator) return undefined;
-    const root = folder.uri.fsPath;
     const dir = path.dirname(uri.fsPath);
     const generated = path.join(dir, generator.outputFileName(path.basename(uri.fsPath)));
     const functions = doc.graphs.filter((g) => g.kind === 'function').map((g) => ({ id: g.id, name: g.name }));

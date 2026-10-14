@@ -3,6 +3,7 @@ import { pinDefinition, releaseWildcards } from '../core/editing';
 import { GraphDocument, GraphNode, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
 import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions } from '../core/imported-functions';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/functions';
+import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
 import { primaryGraph } from '../core/serializer';
 import { markCompileDirty, renderLanguagePicker } from './compile-results';
@@ -31,18 +32,25 @@ export interface PaletteEntry {
 // ("Get Score", "Set Score"), as in Unreal's action menu, and project functions only when the
 // graph's language can call them.
 export function paletteEntries(): PaletteEntry[] {
-  const inFunction = state.graph?.kind === 'function';
+  const kind = state.graph?.kind;
   const entries: PaletteEntry[] = state.definitions
     .filter((d) => d.type !== VARIABLE_GET && d.type !== VARIABLE_SET && callable(d))
-    // A function has one entry node, calls are offered per function, Return Nodes only fit in
-    // functions, and events don't (as in Unreal's action menu).
-    .filter((d) => d.type !== FUNCTION_ENTRY && d.type !== FUNCTION_CALL && (inFunction ? !d.type.startsWith('core:event.') : d.type !== FUNCTION_RETURN))
+    // A function has one entry node and a macro one pair of tunnels; calls and macros are offered
+    // one by one; Return Nodes only fit in functions, and events only in event graphs (as in
+    // Unreal's action menu).
+    .filter((d) => ![FUNCTION_ENTRY, FUNCTION_CALL, MACRO_INPUTS, MACRO_OUTPUTS, MACRO_INSTANCE].includes(d.type))
+    .filter((d) => (kind === 'event' || !kind ? d.type !== FUNCTION_RETURN : !d.type.startsWith('core:event.') && (kind === 'function' || d.type !== FUNCTION_RETURN)))
+    // A macro library's macro can't use itself.
+    .filter((d) => !(d.implementation?.kind === 'macro' && kind === 'macro' && d.implementation.source.graph === state.graph?.id && state.document?.kind === 'macroLibrary'))
     .map((d) => ({ key: d.type, type: d.type, properties: {}, definition: d }));
   for (const graph of state.document?.graphs ?? []) {
-    if (graph.kind !== 'function') continue;
+    if (graph.kind !== 'function' && graph.kind !== 'macro') continue;
+    // A macro can't use itself.
+    if (graph.kind === 'macro' && graph.id === state.graph?.id) continue;
+    const type = graph.kind === 'function' ? FUNCTION_CALL : MACRO_INSTANCE;
     const properties = { graph: graph.id };
-    const definition = lookupDefinition({ id: '', type: FUNCTION_CALL, position: { x: 0, y: 0 }, properties });
-    if (definition) entries.push({ key: `${FUNCTION_CALL}:${graph.id}`, type: FUNCTION_CALL, properties, definition });
+    const definition = lookupDefinition({ id: '', type, position: { x: 0, y: 0 }, properties });
+    if (definition) entries.push({ key: `${type}:${graph.id}`, type, properties, definition });
   }
   const locals = state.graph?.localVariables ?? [];
   for (const variable of [...(state.document?.variables ?? []), ...locals]) {
@@ -57,6 +65,8 @@ export function paletteEntries(): PaletteEntry[] {
 
 function callable(definition: NodeDefinition): boolean {
   const implementation = definition.implementation;
+  // A macro library's macros are for graphs in its language.
+  if (implementation?.kind === 'macro') return !implementation.language || !state.document?.language || implementation.language === state.document.language;
   if (implementation?.kind !== 'function') return true;
   const language = state.languages.find((l) => l.id === state.document?.language);
   return !language || language.callable.includes(implementation.language);

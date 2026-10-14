@@ -30,8 +30,11 @@ export function pinColor(pin: PinDefinition | undefined): string {
 
 export type NodeKind = 'event' | 'function' | 'pure' | 'flow' | 'variable-get' | 'variable-set' | 'reroute';
 
-// Unreal draws its flow-control macros with a gray title bar.
-const FLOW_OPERATIONS = new Set(['branch', 'sequence', 'end', 'for-loop', 'while-loop', 'for-each', 'do-once', 'do-n', 'gate', 'multigate', 'flip-flop', 'switch']);
+// Unreal draws its flow-control macros, and macros and their tunnels, with a gray title bar.
+const FLOW_OPERATIONS = new Set([
+  'branch', 'sequence', 'end', 'for-loop', 'while-loop', 'for-each', 'do-once', 'do-n', 'gate', 'multigate', 'flip-flop', 'switch',
+  'macro-instance', 'macro-inputs', 'macro-outputs'
+]);
 
 export function nodeKind(def: NodeDefinition): NodeKind {
   const operation = def.implementation?.kind === 'native' ? def.implementation.operation : '';
@@ -39,7 +42,7 @@ export function nodeKind(def: NodeDefinition): NodeKind {
   if (operation === 'set-variable') return 'variable-set';
   if (operation === 'reroute') return 'reroute';
   if (def.type.startsWith('core:event.')) return 'event';
-  if (FLOW_OPERATIONS.has(operation)) return 'flow';
+  if (FLOW_OPERATIONS.has(operation) || def.implementation?.kind === 'macro') return 'flow';
   const hasExec = [...def.inputs, ...def.outputs].some((p) => p.kind === 'exec');
   return hasExec ? 'function' : 'pure';
 }

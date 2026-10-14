@@ -6,6 +6,7 @@ import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, Runtime
 import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
+import { expandDocument, isExpandedNode, macroProblemKey, visibleNodeId } from './macros';
 import { NodeResolver, createResolver, isPure } from './resolve';
 import { defaultValue, formatValue, fromStored, toBoolean, toNumber } from './values';
 
@@ -17,6 +18,8 @@ interface RunState {
   language: string;
   // A function library's file (workspace-relative), when the run is in another document.
   document?: string;
+  // Why macro instances that couldn't be expanded can't be (src/core/macros.ts).
+  macroProblems: Map<string, string>;
 }
 
 // What one run of a graph keeps: the event graphs share one frame (the object's), and each call
@@ -66,11 +69,11 @@ export class GraphRuntime {
 
   // Runs every Start node in the document's event graphs. Function graphs only run when called.
   run(doc: GraphDocument): void {
-    const run: RunState = { doc, variables: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc) };
+    const run = this.runState(doc);
     const objectFrame: Frame = { outputs: new Map(), state: new Map(), params: new Map(), locals: new Map(), depth: 0 };
     for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue !== undefined ? fromStored(variable.defaultValue, variable.type) : defaultValue(variable.type));
 
-    const entries = doc.graphs
+    const entries = run.doc.graphs
       .filter((g) => g.kind === 'event')
       .flatMap((graph) => graph.nodes.filter((n) => n.type === 'core:event.start').map((start) => ({ graph, start })));
     if (entries.length === 0) {
@@ -88,7 +91,12 @@ export class GraphRuntime {
   }
 
   private report(context: GraphContext, event: RuntimeLogEvent): void {
-    this.emit({ graphId: context.graph.id, ...(context.run.document ? { document: context.run.document } : {}), ...event });
+    const inner = event.nodeId !== undefined && isExpandedNode(event.nodeId);
+    const { values, ...rest } = event;
+    this.emit({
+      graphId: context.graph.id, ...(context.run.document ? { document: context.run.document } : {}), ...rest,
+      ...(inner ? { nodeId: visibleNodeId(event.nodeId!) } : values !== undefined ? { values } : {})
+    });
   }
 
   // Reports an error on `node` and stops the run.
@@ -136,6 +144,13 @@ export class GraphRuntime {
     };
 
     switch (nativeOperation(definition)) {
+      case 'macro-instance':
+        this.fail(context, node, this.macroProblem(context, node));
+        return;
+      case 'macro-inputs':
+      case 'macro-outputs':
+        this.fail(context, node, 'Inputs and Outputs nodes belong in macro graphs.');
+        return;
       case 'function-entry':
         continueFrom('execOut');
         exit();
@@ -357,8 +372,15 @@ export class GraphRuntime {
   private callLibrary(context: GraphContext, node: GraphNode, source: { document: string; graph: string }, input: (pinId: string) => unknown): Map<string, unknown> {
     const doc = this.loadDocument?.(source.document) ?? this.fail(context, node, `Simulate can't read the function library ${source.document}.`);
     const graph = doc.graphs.find((g) => g.id === source.graph && g.kind === 'function') ?? this.fail(context, node, `${source.document} no longer has this function.`);
-    const run: RunState = { doc, variables: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc), document: source.document };
-    return this.runFunction(context, node, run, graph, input);
+    const run = this.runState(doc, source.document);
+    const expanded = run.doc.graphs.find((g) => g.id === graph.id) ?? graph;
+    return this.runFunction(context, node, run, expanded, input);
+  }
+
+  // A run of `doc`, with the macros it uses expanded (each use is a copy of the macro's nodes).
+  private runState(original: GraphDocument, document?: string): RunState {
+    const { doc, problems } = expandDocument(original, (type) => this.registry.get(type));
+    return { doc, variables: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc), macroProblems: problems, ...(document ? { document } : {}) };
   }
 
   private runFunction(context: GraphContext, node: GraphNode, run: RunState, graph: Graph, input: (pinId: string) => unknown): Map<string, unknown> {
@@ -424,6 +446,7 @@ export class GraphRuntime {
       const id = this.variableId(context, node);
       return this.variables(context, id).get(id) ?? null;
     }
+    if (operation === 'macro-instance') this.fail(context, node, this.macroProblem(context, node));
     // A function's inputs, read from its entry node.
     if (operation === 'function-entry') return context.frame.params.get(pinId) ?? defaultValue(definition.outputs.find((p) => p.id === pinId)?.type);
     // A pure function's call: called on every read.
@@ -468,6 +491,10 @@ export class GraphRuntime {
     const pin = definition.outputs.find((p) => p.id === pinId);
     const key = outputKey(context.graph, node, pinId);
     return context.frame.outputs.has(key) ? context.frame.outputs.get(key) : defaultValue(pin?.type);
+  }
+
+  private macroProblem(context: GraphContext, node: GraphNode): string {
+    return context.run.macroProblems.get(macroProblemKey(context.graph.id, node.id)) ?? 'This macro can\'t be used.';
   }
 
   // The id of the variable a Get/Set node is bound to (src/core/resolve.ts).

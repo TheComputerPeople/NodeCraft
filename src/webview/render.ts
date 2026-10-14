@@ -7,6 +7,9 @@ import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
 import { functionProblem, lookupDefinition, markDirty, pinDef } from './document';
 import { dom } from './dom';
+import { openGraph } from './my-blueprint';
+import { FUNCTION_CALL } from '../core/functions';
+import { MACRO_INSTANCE } from '../core/macros';
 import { renderInspector } from './panels';
 import { Point, state } from './state';
 import { applyTransform, screenPointToWorld } from './view';
@@ -121,6 +124,14 @@ function renderNode(node: GraphNode): HTMLElement {
   // The whole node body is draggable. Pin mousedown stops propagation and therefore
   // remains exclusively responsible for drawing a connection.
   el.addEventListener('mousedown', (e) => onNodeMouseDown(node, e));
+  // Double-clicking a function call or macro opens its graph, as in Unreal.
+  if (node.type === FUNCTION_CALL || node.type === MACRO_INSTANCE) {
+    el.addEventListener('dblclick', (e) => {
+      const graphId = node.properties.graph;
+      if ((e.target as Element).closest('input, select, textarea, button') || typeof graphId !== 'string' || !state.document?.graphs.some((g) => g.id === graphId)) return;
+      openGraph(graphId);
+    });
+  }
   return el;
 }
 

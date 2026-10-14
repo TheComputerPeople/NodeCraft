@@ -4,6 +4,7 @@ import * as editing from '../core/editing';
 import * as edits from '../core/blueprint-edits';
 import { addVariable, uniqueName } from '../core/blueprint-edits';
 import { FUNCTION_ENTRY } from '../core/functions';
+import { MACRO_INPUTS, MACRO_OUTPUTS } from '../core/macros';
 import { functionStatus, isFunctionType, rebindFunctionNode } from '../core/imported-functions';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { GraphNode, NodeDefinition, PinDefinition } from '../core/model';
@@ -35,11 +36,11 @@ export function addNode(type: string, position: Point, properties: Record<string
 
 export function deleteSelected(): void {
   if (!state.graph || !state.selectedNodeIds.size) return;
-  // A function's entry node can't be deleted, as in Unreal.
-  const entry = state.graph.nodes.find((n) => n.type === FUNCTION_ENTRY && state.selectedNodeIds.has(n.id));
-  if (entry) {
-    state.selectedNodeIds.delete(entry.id);
-    setStatus("A function's entry node can't be deleted.");
+  // A function's entry node and a macro's Inputs and Outputs can't be deleted, as in Unreal.
+  const fixed = state.graph.nodes.filter((n) => [FUNCTION_ENTRY, MACRO_INPUTS, MACRO_OUTPUTS].includes(n.type) && state.selectedNodeIds.has(n.id));
+  if (fixed.length) {
+    for (const node of fixed) state.selectedNodeIds.delete(node.id);
+    setStatus(fixed[0].type === FUNCTION_ENTRY ? "A function's entry node can't be deleted." : "A macro's Inputs and Outputs nodes can't be deleted.");
     if (!state.selectedNodeIds.size) return;
   }
   editing.deleteNodes(state.graph, new Set(state.selectedNodeIds));
@@ -67,6 +68,26 @@ export function collapseToFunction(): void {
   renderPalette();
   setStatus(`Collapsed into ${result.function.name}. Name it in My Blueprint.`);
   startRename('graph', result.function.id);
+}
+
+// Unreal's Collapse to Macro: the selection becomes a new macro, used where it was.
+export function collapseToMacro(): void {
+  const doc = state.document;
+  const graph = state.graph;
+  if (!doc || !graph) return;
+  const result = edits.collapseToMacro(doc, graph, new Set(state.selectedNodeIds), lookupDefinition, newConnectionId);
+  if (typeof result === 'string') {
+    setStatus(result);
+    return;
+  }
+  state.selectedNodeIds = new Set([result.instance.id]);
+  state.selectedNodeId = result.instance.id;
+  markDirty();
+  render();
+  renderMyBlueprint();
+  renderPalette();
+  setStatus(`Collapsed into ${result.macro.name}. Name it in My Blueprint.`);
+  startRename('graph', result.macro.id);
 }
 
 export function duplicateSelected(): void {

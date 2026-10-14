@@ -3,6 +3,7 @@
 import * as edits from '../core/blueprint-edits';
 import * as editing from '../core/editing';
 import { FUNCTION_CALL } from '../core/functions';
+import { MACRO_INSTANCE } from '../core/macros';
 import { GraphKind, GraphVariable } from '../core/model';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { formatType } from '../core/types';
@@ -43,9 +44,9 @@ export function renderMyBlueprint(): void {
       const item = itemElement(graph.name, 'graph', graph.id);
       item.classList.toggle('active', graph.id === state.graph?.id);
       item.title = graph.kind === 'event' ? 'Open this event graph'
-        : graph.kind === 'function' ? 'Click to open; drag onto a graph to call it.' : `Open this ${graph.kind}. Using macros arrives in a later version.`;
+        : graph.kind === 'function' ? 'Click to open; drag onto a graph to call it.' : 'Click to open; drag onto a graph to use it.';
       item.addEventListener('click', () => openGraph(graph.id));
-      if (graph.kind === 'function') {
+      if (graph.kind === 'function' || graph.kind === 'macro') {
         item.addEventListener('mousedown', (e) => {
           if (e.button !== 0 || eventElement(e)?.closest('input')) return;
           state.variableDrag = { variableId: '', functionId: graph.id, startX: e.clientX, startY: e.clientY, moved: false };
@@ -288,8 +289,14 @@ export function finishVariableDrag(e: MouseEvent): void {
   const target = eventElement(e);
   if (!target?.closest('#canvas-wrap')) return;
   const position = screenToWorld(e.clientX, e.clientY);
-  // A function: place a call to it.
+  // A function: place a call to it. A macro: place an instance of it, except in itself.
   if (drag.functionId) {
+    const graph = state.document?.graphs.find((g) => g.id === drag.functionId);
+    if (graph?.kind === 'macro') {
+      if (graph.id === state.graph.id) setStatus("A macro can't use itself.");
+      else addNode(MACRO_INSTANCE, position, { graph: graph.id });
+      return;
+    }
     addNode(FUNCTION_CALL, position, { graph: drag.functionId });
     return;
   }

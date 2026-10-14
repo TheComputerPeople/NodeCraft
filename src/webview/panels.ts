@@ -3,6 +3,7 @@ import {
   addSignaturePin, findVariable, functionUses, removeSignaturePin, renameGraph, renameSignaturePin, renameVariable, setFunctionPure, setSignaturePinType, setVariableType, variableUses
 } from '../core/blueprint-edits';
 import { FUNCTION_ENTRY } from '../core/functions';
+import { MACRO_INPUTS, MACRO_OUTPUTS } from '../core/macros';
 import { definitionFor } from '../core/editing';
 import { SWITCH_INT, SWITCH_STRING, switchIntCases, switchStringCases } from '../core/flow-control';
 import { Graph, GraphNode, GraphVariable } from '../core/model';
@@ -56,8 +57,10 @@ export function renderInspector(): void {
   const graph = state.graph;
   const node = graph?.nodes.find((n) => n.id === state.selectedNodeId);
   if (!node && state.selectedVariableId && renderVariableDetails(state.selectedVariableId)) return;
-  // A function's settings: when its graph is open with nothing selected, or its entry is selected.
-  if (graph?.kind === 'function' && ((!node && state.selectedNodeIds.size === 0) || node?.type === FUNCTION_ENTRY)) {
+  // A function's or macro's settings: when its graph is open with nothing selected, or its entry
+  // (or a tunnel) is selected.
+  const own = graph?.kind === 'function' ? [FUNCTION_ENTRY] : [MACRO_INPUTS, MACRO_OUTPUTS];
+  if (graph && graph.kind !== 'event' && ((!node && state.selectedNodeIds.size === 0) || (node && own.includes(node.type)))) {
     renderFunctionDetails(graph);
     return;
   }
@@ -132,11 +135,13 @@ function switchStartEditor(node: GraphNode): HTMLElement {
   return section;
 }
 
-// ---- Function details (Unreal's Details for a function: Inputs, Outputs, Pure, Description) --------
+// ---- Function and macro details (Unreal's Details: Inputs, Outputs, Pure, Description) ------------
 
 function renderFunctionDetails(graph: Graph): void {
   const doc = state.document;
   if (!doc) return;
+  const macro = graph.kind === 'macro';
+  const noun = macro ? 'Macro' : 'Function';
   const signature = graph.signature ?? { inputs: [], outputs: [] };
   const refresh = (): void => {
     markDirty();
@@ -147,13 +152,13 @@ function renderFunctionDetails(graph: Graph): void {
   };
   const wrapper = document.createElement('div');
   wrapper.className = 'details';
-  wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(graph.name)}</div><div class="muted inspector-type">Function</div>`;
+  wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(graph.name)}</div><div class="muted inspector-type">${noun}</div>`;
   const fields = document.createElement('div');
   fields.className = 'details-fields';
 
   const name = document.createElement('input');
   name.value = graph.name;
-  name.setAttribute('aria-label', 'Function Name');
+  name.setAttribute('aria-label', `${noun} Name`);
   name.addEventListener('change', () => {
     const error = renameGraph(doc, graph.id, name.value);
     if (error) {
@@ -165,7 +170,7 @@ function renderFunctionDetails(graph: Graph): void {
     renderMyBlueprint();
     refresh();
   });
-  fields.appendChild(field('Function Name', name));
+  fields.appendChild(field(`${noun} Name`, name));
 
   const description = document.createElement('textarea');
   description.rows = 2;
@@ -198,7 +203,8 @@ function renderFunctionDetails(graph: Graph): void {
     setFunctionPure(doc, graph.id, pure.checked);
     refresh();
   });
-  fields.appendChild(field('Pure', pure));
+  // A macro is pure when it has no exec pins.
+  if (!macro) fields.appendChild(field('Pure', pure));
 
   for (const side of ['inputs', 'outputs'] as const) {
     fields.insertAdjacentHTML('beforeend', `<div class="details-heading">${side === 'inputs' ? 'Inputs' : 'Outputs'}</div>`);
@@ -215,10 +221,10 @@ function renderFunctionDetails(graph: Graph): void {
           pinName.value = pin.name;
         } else refresh();
       });
-      const type = typePicker(pin.type ?? { id: 'any' }, `${pin.name} Type`, (t) => {
+      const type = typePicker(pin.kind === 'exec' ? 'exec' : pin.type ?? { id: 'any' }, `${pin.name} Type`, (t) => {
         setSignaturePinType(doc, graph.id, side, pin.id, t);
         refresh();
-      });
+      }, macro);
       const remove = document.createElement('button');
       remove.textContent = '×';
       remove.title = `Remove ${pin.name}`;
@@ -239,21 +245,28 @@ function renderFunctionDetails(graph: Graph): void {
   }
 
   const uses = functionUses(doc, graph.id);
-  fields.insertAdjacentHTML('beforeend', `<div class="muted">${uses ? `Called by ${uses} node${uses === 1 ? '' : 's'}.` : 'Not called yet: drag it from My Blueprint onto a graph.'}</div>`);
+  const usage = uses ? `${macro ? 'Used' : 'Called'} by ${uses} node${uses === 1 ? '' : 's'}.` : `Not ${macro ? 'used' : 'called'} yet: drag it from My Blueprint onto a graph.`;
+  fields.insertAdjacentHTML('beforeend', `<div class="muted">${usage}</div>`);
   wrapper.appendChild(fields);
   dom.inspector.innerHTML = '';
   dom.inspector.appendChild(wrapper);
 }
 
-// Unreal's pin type picker: a type, a container, and a map's value type.
-function typePicker(type: TypeRef, label: string, apply: (type: TypeRef) => void): HTMLElement {
+// Unreal's pin type picker: a type, a container, and a map's value type. Macros also offer Exec.
+function typePicker<T extends TypeRef | 'exec'>(type: T, label: string, apply: (type: T | TypeRef) => void, allowExec = false): HTMLElement {
   const row = document.createElement('div');
   row.className = 'type-row';
-  const elementType = select(VARIABLE_TYPES, type.id, label);
-  const container = select(CONTAINERS, type.container ?? '', `${label} Container`);
-  const valueType = select(VARIABLE_TYPES, type.valueType?.id ?? 'any', `${label} Map Value`);
-  valueType.hidden = type.container !== 'map';
+  const data = type === 'exec' ? undefined : (type as TypeRef);
+  const elementType = select(allowExec ? [{ id: 'exec', label: 'Exec' }, ...VARIABLE_TYPES] : VARIABLE_TYPES, data?.id ?? 'exec', label);
+  const container = select(CONTAINERS, data?.container ?? '', `${label} Container`);
+  const valueType = select(VARIABLE_TYPES, data?.valueType?.id ?? 'any', `${label} Map Value`);
+  container.hidden = !data;
+  valueType.hidden = data?.container !== 'map';
   const change = (): void => {
+    if (elementType.value === 'exec') {
+      apply('exec' as T);
+      return;
+    }
     const kind = container.value as '' | ContainerKind;
     apply({ id: elementType.value, ...(kind ? { container: kind } : {}), ...(kind === 'map' ? { valueType: { id: valueType.value } } : {}) });
   };

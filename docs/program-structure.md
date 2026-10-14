@@ -55,11 +55,12 @@ Unreal's standard macros, as built-in nodes with Unreal's pins:
 
 ## Macros
 
-- A **macro graph** has an Inputs tunnel and an Outputs tunnel with any number of exec and data pins (several exec outputs are what makes macros useful, as Unreal's flow-control macros show).
-- Macros are **expanded inline** where they are used, at compile time and in Simulate; there is no macro method in generated code. Each use is a separate copy, so state nodes inside a macro (Do Once…) are separate per use.
-- A macro may not use itself, directly or through other macros (a compile error).
-- **Macro libraries** (`kind: macroLibrary`) work like function libraries, but their macros are expanded where used, so nothing is imported.
-- **Collapse to Macro**, as Collapse to Function.
+- A **macro graph** has an **Inputs** and an **Outputs** tunnel node (they can't be deleted) with any number of exec and data pins: in Details, a macro pin's type can be **Exec** (several exec outputs are what makes macros useful, as Unreal's flow-control macros show). A macro without exec pins is pure. Macros have no Pure setting and no local variables.
+- Using a macro: drag it from My Blueprint, or pick it from the action menu. Double-clicking an instance (or a function call) opens its graph, as in Unreal.
+- Macros are **expanded inline** where they are used, at compile time and in Simulate (src/core/macros.ts); there is no macro method in generated code. Each use is a separate copy, so state nodes inside a macro (Do Once…) are separate per use. Wires into an instance continue from the Inputs tunnel's matching pin; an input with no wire passes on the value typed on the instance (else the pin's default). Inner nodes get ids "instance/inner", and diagnostics, generated-code markers ("Macro: Node") and Simulate's events point at the instance.
+- A macro's own wiring is checked in the macro graph, even when nothing uses it; problems that only show where it is used (it uses itself, directly or through other macros; a missing macro) are reported on the instance. A macro may not hold events, a Function Entry or Return Nodes.
+- **Macro libraries** (`kind: macroLibrary`) generate no code. Their macros appear in the palette of graphs in the library's language, and are expanded where used, so nothing is imported. The library's node definitions embed each macro's graph (with the library's own macros already expanded), so compiling and Simulate need nothing else.
+- **Collapse to Macro** (node menu), as Collapse to Function, except that execution may enter and leave the selection in several places: each becomes an exec pin of the macro.
 
 ## Structs and enums
 
