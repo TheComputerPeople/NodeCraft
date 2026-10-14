@@ -1156,6 +1156,92 @@ describe('Main', () => {
   }
 });
 
+// Phase 4's exit program (docs/program-structure.md, "Exit check"): sample/arena, built only in
+// graphs, in each language from the same files.
+describe('exit program (sample/arena)', () => {
+  const FILES = ['Team', 'Stats', 'Fighter', 'Knight', 'Game'];
+  const read = (name: string, language: string): GraphDocument => ({ ...parseDocument(fs.readFileSync(path.join(repoRoot, 'sample/arena', `${name}.vgraph`), 'utf8')).document, language });
+  const EXPECTED = read('Game', 'typescript').metadata!.expectedOutput as string[];
+
+  // The workspace as the extension sees it: each file's types and classes, generated into arena/.
+  function registryFor(language: string): NodeRegistry {
+    const r = registry();
+    const generator = languages.get(language)!.generator!;
+    for (const name of FILES) {
+      const doc = read(name, language);
+      const fileName = generator.outputFileName(`${name}.vgraph`);
+      const module = language === 'python' ? fileName.replace(/\.py$/, '') : language === 'csharp' ? 'Arena' : undefined;
+      const source = { document: `arena/${name}.vgraph`, generatedPath: `arena/${fileName}`, ...(module ? { module } : {}) };
+      const type = declaredType(doc, source);
+      if (type) r.registerMany(userTypeDefinitions(type));
+      const cls = declaredClass(doc, source);
+      if (cls) r.registerMany(classDefinitions(cls));
+    }
+    return r;
+  }
+
+  test('Simulate', () => {
+    const events: RuntimeLogEvent[] = [];
+    const load = (file: string) => (file.startsWith('arena/') ? read(path.basename(file, '.vgraph'), 'typescript') : undefined);
+    new GraphRuntime(registryFor('typescript'), (e) => events.push(e), languages, load).run(read('Game', 'typescript'));
+    assert.deepEqual(events.filter((e) => e.kind === 'error'), []);
+    assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), EXPECTED);
+  });
+
+  function build(key: string, language: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; files: string[]; importRoots?: string[] } {
+    const dir = path.join(workDir, `arena-${key}`, 'arena');
+    fs.mkdirSync(dir, { recursive: true });
+    const r = registryFor(language);
+    let game: { file: string; className: string; importRoots?: string[] } | undefined;
+    const files = FILES.map((name) => {
+      const result = compileDocument(read(name, language), { registry: r, languages, generate: { sourceFileName: `${name}.vgraph`, outputDir: 'arena', namespace: 'Arena', ...generate } });
+      assert.deepEqual(result.diagnostics, [], name);
+      const file = path.join(dir, result.output!.fileName);
+      fs.writeFileSync(file, result.output!.text);
+      if (name === 'Game') game = { file, className: result.output!.className, importRoots: result.output!.importRoots?.map((root) => path.join(dir, '..', root)) };
+      return file;
+    });
+    return { ...game!, dir, files };
+  }
+
+  for (const target of [
+    { label: 'TypeScript', key: 'typescript', language: 'typescript' },
+    { label: 'JavaScript (ES modules)', key: 'javascript-esm', language: 'javascript', moduleFormat: 'esm' as const },
+    { label: 'JavaScript (CommonJS)', key: 'javascript-commonjs', language: 'javascript', moduleFormat: 'commonjs' as const },
+    { label: 'Python', key: 'python', language: 'python' },
+    { label: 'C#', key: 'csharp', language: 'csharp' }
+  ]) {
+    test(target.label, async (t) => {
+      const { file, className, dir, files, importRoots } = build(target.key, target.language, { moduleFormat: target.moduleFormat });
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? files.filter((f) => f !== file) : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: dir, importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), EXPECTED, `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  for (const { language, flags } of [
+    { language: 'typescript', flags: { allowImportingTsExtensions: true } },
+    { language: 'javascript', flags: { allowJs: true, checkJs: true } }
+  ]) {
+    test(`${language} type-checks under --strict`, () => {
+      const { dir, files } = build(`typecheck-${language}`, language);
+      fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
+        files: files.map((f) => path.relative(dir, f))
+      }));
+      const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+      const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    });
+  }
+});
+
 // Save String to File then Load File to String, in a scratch folder, on every target.
 describe('file nodes', () => {
   function fileGraph(file: string, language: string): GraphDocument {

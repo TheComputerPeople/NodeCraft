@@ -293,20 +293,20 @@ test('the macros of a macro library graph are expanded in the graphs that use th
 test('structs and enums in the workspace become types and nodes that graphs import', async () => {
   const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
   const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
-  const team = workspaceFile('types/Team.vgraph');
-  await write('types/Team.vgraph', JSON.stringify({
-    schemaVersion: 3, name: 'Team', kind: 'enumeration', language: 'typescript', variables: [], graphs: [],
+  const team = workspaceFile('types/Faction.vgraph');
+  await write('types/Faction.vgraph', JSON.stringify({
+    schemaVersion: 3, name: 'Faction', kind: 'enumeration', language: 'typescript', variables: [], graphs: [],
     enumerators: [{ id: 'red', name: 'Red' }, { id: 'blue', name: 'Light Blue' }]
   }, null, 2));
   await vscode.commands.executeCommand('blueprintVisualScripting.compile', team);
-  assert.match(await readText(workspaceFile('types/Team.vgraph.ts')), /^export const Team = \{$/m);
+  assert.match(await readText(workspaceFile('types/Faction.vgraph.ts')), /^export const Faction = \{$/m);
 
   const caller = workspaceFile('uses-team.vgraph');
   await write('uses-team.vgraph', JSON.stringify({
-    schemaVersion: 3, name: 'UsesTeam', kind: 'class', language: 'typescript', variables: [{ id: 'side', name: 'Side', type: { id: 'enum:Team' }, defaultValue: 'blue' }],
+    schemaVersion: 3, name: 'UsesTeam', kind: 'class', language: 'typescript', variables: [{ id: 'side', name: 'Side', type: { id: 'enum:Faction' }, defaultValue: 'blue' }],
     graphs: [{
       id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
-      nodes: [node('s', 'core:event.start'), node('get', 'core:variable.get', { variable: 'side' }), node('switch', 'enum:Team.switch'), node('p', 'core:console.print', { 'pin:value': 'blue' })],
+      nodes: [node('s', 'core:event.start'), node('get', 'core:variable.get', { variable: 'side' }), node('switch', 'enum:Faction.switch'), node('p', 'core:console.print', { 'pin:value': 'blue' })],
       connections: [
         { id: 'c1', fromNode: 's', fromPin: 'execOut', toNode: 'switch', toPin: 'execIn' },
         { id: 'c2', fromNode: 'get', fromPin: 'value', toNode: 'switch', toPin: 'selection' },
@@ -316,8 +316,8 @@ test('structs and enums in the workspace become types and nodes that graphs impo
   }, null, 2));
   await compileOnceFound(caller);
   const text = await readText(workspaceFile('uses-team.vgraph.ts'));
-  assert.match(text, /^import \{ Team \} from "\.\/types\/Team\.vgraph\.ts";$/m);
-  assert.match(text, /Side: Team = Team\.LightBlue;/);
+  assert.match(text, /^import \{ Faction \} from "\.\/types\/Faction\.vgraph\.ts";$/m);
+  assert.match(text, /Side: Faction = Faction\.LightBlue;/);
 });
 
 export async function run(): Promise<void> {

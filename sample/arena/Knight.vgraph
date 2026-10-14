@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 3,
+  "language": "typescript",
+  "name": "Knight",
+  "kind": "class",
+  "parent": "object:Fighter",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [],
+      "connections": [],
+      "comments": []
+    },
+    {
+      "id": "AttackPower",
+      "name": "Attack Power",
+      "kind": "function",
+      "signature": {
+        "pure": true,
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "power",
+            "name": "Power",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ]
+      },
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "AttackPower"
+          }
+        },
+        {
+          "id": "parent",
+          "type": "core:object.parent",
+          "position": {
+            "x": 0,
+            "y": 160
+          },
+          "properties": {
+            "function": "Attack Power"
+          }
+        },
+        {
+          "id": "double",
+          "type": "core:math.multiply",
+          "position": {
+            "x": 240,
+            "y": 140
+          },
+          "properties": {
+            "pin:b": 2
+          }
+        },
+        {
+          "id": "ret",
+          "type": "core:function.return",
+          "position": {
+            "x": 460,
+            "y": 0
+          },
+          "properties": {
+            "graph": "AttackPower"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "ret",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "parent",
+          "fromPin": "power",
+          "toNode": "double",
+          "toPin": "a"
+        },
+        {
+          "id": "w3",
+          "fromNode": "double",
+          "fromPin": "returnValue",
+          "toNode": "ret",
+          "toPin": "power"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

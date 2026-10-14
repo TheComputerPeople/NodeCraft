@@ -162,6 +162,10 @@ Goal: the full set of Blueprint authoring concepts, each enabled per language th
 
 Exit: a non-trivial program (classes, functions, events, async) is built entirely in graphs and runs correctly from generated TypeScript, Python and C#.
 
+Status: complete (October 2026), with the deferrals below. The exit program, sample/arena, is built only in graphs: an enum, a struct, a class with a function of several outputs and an event dispatcher, a subclass that overrides a function and calls its parent, and a Game that constructs both, binds a custom event to the dispatcher, fights in a For Loop with Break with a macro, switches on the enum and ends after a Delay. The conformance suite runs it in Simulate and as generated TypeScript, JavaScript (ES modules and CommonJS), Python and C# with identical output, and type-checks the TypeScript and JavaScript under `--strict`.
+
+- **Deferred:** classes from the project's code as parent classes (Phase 3's deferral stands), Test Case events (Phase 5, with debugging), sets and map keys of structs or enums, a pure Cast To, and MultiGate's Is Random.
+
 Design: [program-structure.md](program-structure.md). Steps, one commit each (large steps may take several):
 
 1. Design and plan (this list).
