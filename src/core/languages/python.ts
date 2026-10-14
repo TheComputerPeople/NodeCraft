@@ -271,6 +271,8 @@ class PythonEmitter {
         if (isNumeric(this.typeOf(e.value))) return this.expr(e.value);
         this.helpersUsed.add('number');
         return `_to_number(${this.expr(e.value)})`;
+      case 'toText':
+        return this.text(e.value);
       case 'toBoolean': {
         const type = this.typeOf(e.value);
         if (type?.id === 'bool' && !type.container) return this.expr(e.value);

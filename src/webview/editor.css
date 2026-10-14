@@ -182,3 +182,5 @@ button, input { font: inherit; color: inherit; }
 .knot-grip { width: 8px; height: 12px; cursor: grab; border-left: 1px dotted var(--muted); border-right: 1px dotted var(--muted); }
 .add-pin { display: block; margin: 0 8px 6px auto; border: 0; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; padding: 1px 4px; border-radius: 3px; }
 .add-pin:hover { color: var(--fg); background: var(--vscode-list-hoverBackground); }
+.context-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.context-sensitive { display: inline-flex; align-items: center; gap: 4px; font-weight: 400; font-size: 11px; cursor: pointer; }

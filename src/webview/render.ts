@@ -64,9 +64,10 @@ function renderNode(node: GraphNode): HTMLElement {
     def.outputs.forEach((pin) => body.appendChild(renderPin(node, pin, false)));
     el.appendChild(body);
   } else if (def.compact) {
-    // Variable getters: the variable's name beside its output pin, no title bar.
+    // Compact nodes (variable getters, conversions): pins either side of the title, no title bar.
     const body = document.createElement('div');
     body.className = 'compact-body';
+    def.inputs.forEach((pin) => body.appendChild(renderPin(node, pin, false)));
     const title = document.createElement('span');
     title.className = 'node-title';
     title.textContent = def.displayName;

@@ -1,7 +1,8 @@
 // User actions that change the graph, plus the pointer gestures that lead to them.
 import { copyNodes, pasteNodes } from '../core/clipboard';
 import * as editing from '../core/editing';
-import { SEQUENCE } from '../core/resolve';
+import { addVariable, uniqueName } from '../core/blueprint-edits';
+import { SEQUENCE, VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { GraphNode, PinDefinition } from '../core/model';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } from './document';
 import { dom, eventElement, pinElement, setStatus } from './dom';
@@ -99,11 +100,42 @@ export function compatibleEntriesForDraft(): PaletteEntry[] {
 export function completeConnection(targetNodeId: string, targetPinId: string): void {
   const draft = state.draftConnection;
   if (!draft || !state.graph) return;
-  const endpoints = editing.resolveConnection(state.graph, lookupDefinition, { node: draft.node, pin: draft.pin }, { node: targetNodeId, pin: targetPinId });
-  if (!endpoints) return;
-  editing.connect(state.graph, lookupDefinition, endpoints, newConnectionId());
+  const plan = editing.planConnection(state.graph, lookupDefinition, { node: draft.node, pin: draft.pin }, { node: targetNodeId, pin: targetPinId });
+  if (!plan) return;
+  if (plan.convert) {
+    // Unreal inserts a conversion node rather than refusing a bool or number → string wire.
+    editing.connectThroughToString(state.graph, lookupDefinition, plan.endpoints, { node: editing.nodeIdFor(editing.TO_STRING), connections: [newConnectionId(), newConnectionId()] });
+  } else {
+    editing.connect(state.graph, lookupDefinition, plan.endpoints, newConnectionId());
+  }
   markDirty();
   render();
+  if (plan.convert) setStatus('Added a To String conversion.');
+}
+
+// Unreal's "Promote to Variable": a new variable of the pin's type, with a Get wired into an input
+// pin or a Set wired from an output pin.
+export function promoteToVariable(nodeId: string, pinId: string): void {
+  const doc = state.document;
+  const graph = state.graph;
+  const pin = pinDef(nodeId, pinId);
+  const node = graph?.nodes.find((n) => n.id === nodeId);
+  if (!doc || !graph || !pin || !node || pin.kind !== 'data' || doc.kind !== 'class') return;
+  const variable = addVariable(doc, pin.type ?? { id: 'any' });
+  const name = uniqueName((pin.name || pin.id).replace(/[^A-Za-z0-9_]+/g, ''), doc.variables.filter((v) => v.id !== variable.id).map((v) => v.name));
+  if (name) variable.name = name;
+  if (pin.direction === 'input' && node.properties[`pin:${pinId}`] !== undefined) variable.defaultValue = node.properties[`pin:${pinId}`];
+  const input = pin.direction === 'input';
+  const placed = editing.createNode(input ? VARIABLE_GET : VARIABLE_SET, undefined, { x: node.position.x + (input ? -200 : 300), y: node.position.y + 60 }, editing.nodeIdFor('variable'), { variable: variable.id });
+  graph.nodes.push(placed);
+  editing.connect(graph, lookupDefinition, input
+    ? { fromNode: placed.id, fromPin: 'value', toNode: nodeId, toPin: pinId }
+    : { fromNode: nodeId, fromPin: pinId, toNode: placed.id, toPin: 'value' }, newConnectionId());
+  markDirty();
+  render();
+  renderMyBlueprint();
+  renderPalette();
+  setStatus(`Promoted ${pin.name || pin.id} to variable ${variable.name}.`);
 }
 
 // Selection follows Unreal: click selects, Shift+click adds, Ctrl+click toggles.
@@ -200,6 +232,10 @@ export function showPinMenu(nodeId: string, pinId: string, clientX: number, clie
   const items: MenuItem[] = [];
   if (graph.connections.some((c) => (c.fromNode === nodeId && c.fromPin === pinId) || (c.toNode === nodeId && c.toPin === pinId))) {
     items.push({ label: 'Break Link(s)', action: () => disconnectPin(nodeId, pinId) });
+  }
+  const pin = pinDef(nodeId, pinId);
+  if (pin?.kind === 'data' && state.document?.kind === 'class') {
+    items.push({ label: 'Promote to Variable', action: () => promoteToVariable(nodeId, pinId) });
   }
   if (node.type === SEQUENCE && /^then\d+$/.test(pinId)) {
     items.push({

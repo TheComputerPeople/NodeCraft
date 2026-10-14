@@ -234,3 +234,37 @@ export function removeSequencePin(graph: GraphContent, node: GraphNode, pinId: s
   node.properties.pins = count - 1;
   return true;
 }
+
+export const TO_STRING = 'core:convert.to-string';
+
+// When a wire would join a bool or number output to a string input, Unreal inserts a conversion
+// node instead of refusing. Returns the endpoints in output → input order and whether a To String
+// node is needed between them; undefined when the pins can't be joined even with a conversion.
+export function planConnection(graph: GraphContent, lookup: DefinitionLookup, a: PinAddress, b: PinAddress): { endpoints: Endpoints; convert: boolean } | undefined {
+  const direct = resolveConnection(graph, lookup, a, b);
+  if (direct) return { endpoints: direct, convert: false };
+  const aDef = pinDefinition(graph, lookup, a.node, a.pin);
+  const bDef = pinDefinition(graph, lookup, b.node, b.pin);
+  if (!aDef || !bDef || aDef.kind !== 'data' || bDef.kind !== 'data' || aDef.direction === bDef.direction) return undefined;
+  const [from, fromDef, to, toDef] = aDef.direction === 'output' ? [a, aDef, b, bDef] : [b, bDef, a, aDef];
+  const convertible = !fromDef.type?.container && ['bool', 'int', 'float'].includes(fromDef.type?.id ?? '')
+    && !toDef.type?.container && toDef.type?.id === 'string';
+  return convertible ? { endpoints: { fromNode: from.node, fromPin: from.pin, toNode: to.node, toPin: to.pin }, convert: true } : undefined;
+}
+
+// Wires `endpoints` through a new To String node placed between the two nodes.
+export function connectThroughToString(
+  graph: GraphContent,
+  lookup: DefinitionLookup,
+  endpoints: Endpoints,
+  ids: { node: string; connections: [string, string] }
+): GraphNode {
+  const from = graph.nodes.find((n) => n.id === endpoints.fromNode);
+  const to = graph.nodes.find((n) => n.id === endpoints.toNode);
+  const position = from && to ? { x: (from.position.x + to.position.x) / 2, y: (from.position.y + to.position.y) / 2 + 60 } : { x: 0, y: 0 };
+  const node: GraphNode = { id: ids.node, type: TO_STRING, position, properties: {} };
+  graph.nodes.push(node);
+  connect(graph, lookup, { fromNode: endpoints.fromNode, fromPin: endpoints.fromPin, toNode: node.id, toPin: 'value' }, ids.connections[0]);
+  connect(graph, lookup, { fromNode: node.id, fromPin: 'result', toNode: endpoints.toNode, toPin: endpoints.toPin }, ids.connections[1]);
+  return node;
+}

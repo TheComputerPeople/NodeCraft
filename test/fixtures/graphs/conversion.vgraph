@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 3,
+  "name": "Conversion",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [
+    { "id": "v_label", "name": "Label", "type": { "id": "string" }, "defaultValue": "" }
+  ],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        { "id": "start", "type": "core:event.start", "position": { "x": 0, "y": 0 }, "properties": {} },
+        { "id": "add", "type": "core:math.add", "position": { "x": 200, "y": 0 }, "properties": { "pin:a": 1.5, "pin:b": 1 } },
+        { "id": "float_text", "type": "core:convert.to-string", "position": { "x": 450, "y": 120 }, "properties": {} },
+        { "id": "set_label", "type": "core:variable.set", "position": { "x": 600, "y": 0 }, "properties": { "variable": "v_label" } },
+        { "id": "get_label", "type": "core:variable.get", "position": { "x": 800, "y": 120 }, "properties": { "variable": "v_label" } },
+        { "id": "print_label", "type": "core:console.print", "position": { "x": 950, "y": 0 }, "properties": {} },
+        { "id": "bool_text", "type": "core:convert.to-string", "position": { "x": 1100, "y": 120 }, "properties": { "pin:value": true } },
+        { "id": "print_bool", "type": "core:console.print", "position": { "x": 1250, "y": 0 }, "properties": {} }
+      ],
+      "connections": [
+        { "id": "c1", "fromNode": "start", "fromPin": "execOut", "toNode": "add", "toPin": "execIn" },
+        { "id": "c2", "fromNode": "add", "fromPin": "execOut", "toNode": "set_label", "toPin": "execIn" },
+        { "id": "c3", "fromNode": "add", "fromPin": "result", "toNode": "float_text", "toPin": "value" },
+        { "id": "c4", "fromNode": "float_text", "fromPin": "result", "toNode": "set_label", "toPin": "value" },
+        { "id": "c5", "fromNode": "set_label", "fromPin": "execOut", "toNode": "print_label", "toPin": "execIn" },
+        { "id": "c6", "fromNode": "get_label", "fromPin": "value", "toNode": "print_label", "toPin": "value" },
+        { "id": "c7", "fromNode": "print_label", "fromPin": "execOut", "toNode": "print_bool", "toPin": "execIn" },
+        { "id": "c8", "fromNode": "bool_text", "fromPin": "result", "toNode": "print_bool", "toPin": "value" }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: To String converts numbers and booleans by the shared text rules and feeds a string variable.",
+    "expectedOutput": ["2.5", "true"]
+  }
+}

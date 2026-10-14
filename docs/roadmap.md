@@ -216,7 +216,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Wiring | Hovering a pin highlights its wires | ✅ | — |
 | Wiring | Double-click a wire adds a reroute node (community) | ✅ | — |
 | Wiring | Alignment menu; Q straightens, Shift+W/A/S/D align (community) | ✅ | — |
-| Nodes | Right-click action menu with "Context Sensitive" toggle; keyword search | 🟡 (menu and keywords, no toggle) | 2 |
+| Nodes | Right-click action menu with "Context Sensitive" toggle; keyword search | ✅ | — |
 | Nodes | Hold-key + click placement: B, S, C, P | ✅ | — |
 | Nodes | Hold-key + click placement: D, G, F, M, N, O (need Phase 4 nodes) | ⬜ | 4 |
 | Nodes | Cut/copy/paste (also between graphs and files, as text), Ctrl+D duplicate | ✅ | — |
@@ -226,16 +226,17 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Nodes | Inline default values on pins | ✅ | — |
 | Nodes | Add-pin (+) on Sequence; remove a pin from its menu | ✅ (Sequence starts with 3 outputs, Unreal's with 2) | — |
 | Nodes | Make Array, wildcard pins, split struct pins | ⬜ | 4 (needs container and struct operations) |
-| Nodes | Automatic conversion nodes | ⬜ | 2 |
+| Nodes | Automatic conversion nodes | ✅ (bool/int/float → string via To String) | — |
 | Visuals | Exec pins white arrows, data pins and wires colored by type | ✅ | — |
 | Visuals | Title styles for event/function/pure/macro; compact variable getters | ✅ | — |
 | Panels | Details panel (node details, variable settings) | ✅ | — |
 | Panels | My Blueprint panel: graphs, functions, macros, variables | ✅ (event dispatchers and local variables need Phase 4) | — |
 | Variables | Get/Set nodes bound to a variable | ✅ | — |
 | Variables | Ctrl-drag → Get, Alt-drag → Set, drag onto a pin | ✅ | — |
-| Variables | Promote pin to variable | ⬜ | 2 |
+| Variables | Promote pin to variable | ✅ | — |
 | Variables | Container types (array/set/map) | 🟡 (type picker; container defaults and operations need Phase 4) | 4 |
 | Search | Find in Blueprint (Ctrl+F) / Find in All Blueprints (Ctrl+Shift+F) | ⬜ | 2 |
+| Palette | Favorites | ⬜ (per-user, needs settings storage) | later |
 | Compile | Compile button, Compiler Results, error badges on nodes | ✅ | — |
 | Compile | F7 compiles | ✅ | — |
 | Structure | Functions, macros, local variables | ⬜ | 4 |

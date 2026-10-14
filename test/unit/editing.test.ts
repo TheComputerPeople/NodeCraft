@@ -206,3 +206,29 @@ describe('Sequence pins', () => {
     assert.equal(editing.removeSequencePin(g, g.nodes[0], 'then0'), false);
   });
 });
+
+describe('automatic conversion', () => {
+  const g = () => graphOf(doc([node('add', 'core:math.add'), node('br', 'core:flow.branch'), node('set', 'core:variable.set', { variable: 'v' })], [],
+    [{ id: 'v', name: 'Label', type: { id: 'string' } }]));
+  const resolve = (d: ReturnType<typeof g>) => (n: GraphNode) => {
+    const base = registry.get(n.type);
+    if (n.type !== 'core:variable.set' || !base) return base;
+    return { ...base, inputs: base.inputs.map((p) => (p.kind === 'data' ? { ...p, type: { id: 'string' } } : p)) };
+  };
+
+  test('a number into a string input goes through To String', () => {
+    const graph = g();
+    const plan = editing.planConnection(graph, resolve(graph), { node: 'add', pin: 'result' }, { node: 'set', pin: 'value' });
+    assert.deepEqual(plan, { endpoints: { fromNode: 'add', fromPin: 'result', toNode: 'set', toPin: 'value' }, convert: true });
+    const conv = editing.connectThroughToString(graph, resolve(graph), plan!.endpoints, { node: 'conv', connections: ['k1', 'k2'] });
+    assert.equal(conv.type, editing.TO_STRING);
+    assert.deepEqual(graph.connections.map((c) => `${c.fromNode}.${c.fromPin}->${c.toNode}.${c.toPin}`), ['add.result->conv.value', 'conv.result->set.value']);
+  });
+
+  test('compatible pins connect directly and impossible ones are refused', () => {
+    const graph = g();
+    assert.equal(editing.planConnection(graph, resolve(graph), { node: 'add', pin: 'execOut' }, { node: 'br', pin: 'execIn' })?.convert, false);
+    // A number can't become a bool automatically.
+    assert.equal(editing.planConnection(graph, resolve(graph), { node: 'add', pin: 'result' }, { node: 'br', pin: 'condition' }), undefined);
+  });
+});

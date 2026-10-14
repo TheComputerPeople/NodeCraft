@@ -201,6 +201,8 @@ class TypeScriptEmitter {
         return `${this.operand(e.left)} + ${this.operand(e.right)}`;
       case 'toNumber':
         return isNumeric(this.typeOf(e.value)) ? this.expr(e.value) : `Number(${this.expr(e.value)} ?? 0)`;
+      case 'toText':
+        return this.text(e.value);
       case 'toBoolean':
         return this.typeOf(e.value)?.id === 'bool' && !this.typeOf(e.value)?.container ? this.expr(e.value) : `Boolean(${this.expr(e.value)})`;
     }

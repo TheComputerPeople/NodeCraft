@@ -184,6 +184,8 @@ export class GraphRuntime {
     const operation = nativeOperation(definition);
     // Get is pure and read on every use; Set's output is the variable's current value.
     if (operation === 'get-variable' || operation === 'set-variable') return context.run.variables.get(this.variableId(context, node)) ?? null;
+    // Pure conversion: evaluated on every read.
+    if (operation === 'to-string') return formatValue(this.inputValue(context, node, definition, 'value', rerouting));
     // Reroutes pass through whatever feeds them.
     if (operation === 'reroute') {
       if (rerouting.has(node.id)) this.fail(context, node, 'Reroute nodes are wired in a loop.');

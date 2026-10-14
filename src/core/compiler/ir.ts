@@ -22,7 +22,9 @@ export type IrExpr =
   // Conversions from docs/semantics.md ("Values"); generators skip them when the static type
   // already matches.
   | { kind: 'toNumber'; value: IrExpr }
-  | { kind: 'toBoolean'; value: IrExpr };
+  | { kind: 'toBoolean'; value: IrExpr }
+  // The value as text, following docs/semantics.md ("Values").
+  | { kind: 'toText'; value: IrExpr };
 
 export type IrStatement =
   | { kind: 'print'; value: IrExpr; source: SourceRef }
@@ -93,6 +95,8 @@ export function exprType(expr: IrExpr, program: Pick<IrProgram, 'members' | 'slo
       return { id: 'float' };
     case 'toBoolean':
       return { id: 'bool' };
+    case 'toText':
+      return { id: 'string' };
   }
 }
 

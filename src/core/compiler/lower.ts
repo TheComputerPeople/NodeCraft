@@ -266,6 +266,8 @@ class Lowerer {
     if (!sourceNode || !sourceDef) return { kind: 'default', type: pin?.type };
     // Get is pure, and Set's output is the variable's new value: both read the member where used.
     const operation = nativeOperation(sourceDef);
+    // Pure conversions are inlined where their value is used.
+    if (operation === 'to-string') return { kind: 'toText', value: this.inputExpr(info, sourceNode, sourceDef, 'value') };
     // Reroutes are transparent: read whatever feeds them.
     if (operation === 'reroute') {
       if (this.rerouting.has(sourceNode.id)) {

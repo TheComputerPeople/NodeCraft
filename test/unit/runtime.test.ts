@@ -105,7 +105,7 @@ describe('GraphRuntime: variables', () => {
   test("a Set node's output is the variable's new value", () => {
     const events = run(doc(
       [node('s', 'core:event.start'), node('set', 'core:variable.set', { variable: 'v_score', 'pin:value': 7 }), node('p', 'core:console.print')],
-      [wire('s', 'execOut', 'set', 'execIn'), wire('set', 'execOut', 'p', 'execIn'), wire('set', 'value', 'p', 'value')],
+      [wire('s', 'execOut', 'set', 'execIn'), wire('set', 'execOut', 'p', 'execIn'), wire('set', 'result', 'p', 'value')],
       [score]
     ));
     assert.deepEqual(logs(events), ['7']);

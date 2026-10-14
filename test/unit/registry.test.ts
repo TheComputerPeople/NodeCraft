@@ -54,3 +54,12 @@ describe('parseNodeDefinition', () => {
     assert.equal(parseNodeDefinition('null'), undefined);
   });
 });
+
+describe('built-in node definitions', () => {
+  test('every pin id is unique within its node, so wires are unambiguous', () => {
+    for (const def of new NodeRegistry().all()) {
+      const ids = [...def.inputs, ...def.outputs].map((p) => p.id);
+      assert.equal(new Set(ids).size, ids.length, `${def.type} repeats a pin id: ${ids.join(', ')}`);
+    }
+  });
+});

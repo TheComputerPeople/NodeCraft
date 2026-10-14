@@ -209,4 +209,47 @@ describe('editing tools', () => {
     const gap2 = boxes[2]!.x - (boxes[1]!.x + boxes[1]!.width);
     assert.ok(Math.abs(gap1 - gap2) < 1, `equal gaps (${gap1} vs ${gap2})`);
   });
+
+  test('wiring a number into a string input inserts a To String node', async (t) => {
+    if (!browser) return t.skip(skipReason);
+    editor = await EditorPage.open(browser);
+    const document = sampleDocument();
+    document.variables.push({ id: 'v_label', name: 'Label', type: { id: 'string' } });
+    document.graphs[0].nodes.push({ id: 'set_label', type: 'core:variable.set', position: { x: 400, y: 380 }, properties: { variable: 'v_label' } });
+    await editor.send({ type: 'init', document, definitions: sampleDefinitions(), saveDelay: 0 });
+    const e = editor;
+    await e.drag(await e.pinCenter('add_1', 'result'), await e.pinCenter('set_label', 'value'));
+    const g = await savedGraph(e, (graph) => graph.nodes.some((n) => n.type === 'core:convert.to-string'));
+    const conv = g.nodes.find((n) => n.type === 'core:convert.to-string')!;
+    assert.ok(g.connections.some((c) => c.fromNode === 'add_1' && c.toNode === conv.id));
+    assert.ok(g.connections.some((c) => c.fromNode === conv.id && c.toNode === 'set_label' && c.toPin === 'value'));
+    assert.equal(await e.page.textContent('#status'), 'Added a To String conversion.');
+  });
+
+  test('unchecking Context Sensitive lists every node when dragging from a pin', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const from = await e.pinCenter('add_1', 'result');
+    await e.drag(from, { x: from.x + 40, y: from.y + 380 });
+    const names = () => e.page.$$eval('#context-results strong', (els) => els.map((el) => el.textContent));
+    assert.ok(!(await names()).includes('Start'));
+    await e.page.uncheck('#context-sensitive');
+    assert.ok((await names()).includes('Start'));
+  });
+
+  test('Promote to Variable makes a typed variable with a wired Get', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const pin = await e.pinCenter('print_false', 'value');
+    await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
+    await e.page.locator('#floating-menu button', { hasText: 'Promote to Variable' }).dispatchEvent('mousedown');
+    const saved = (await e.posted()).filter((m) => m.type === 'applyDocument').pop()!.document!;
+    const variable = saved.variables.find((v) => v.name === 'Value')!;
+    assert.deepEqual(variable.type, { id: 'any' });
+    assert.equal(variable.defaultValue, 'False branch: graph did not execute.', 'the pin value becomes the default');
+    const graph = saved.graphs[0];
+    const get = graph.nodes.find((n) => n.type === 'core:variable.get' && n.properties.variable === variable.id)!;
+    assert.ok(graph.connections.some((c) => c.fromNode === get.id && c.toNode === 'print_false' && c.toPin === 'value'));
+    assert.deepEqual(await e.page.$$eval('.mb-item[data-kind="variable"] .mb-name', (els) => els.map((el) => el.textContent)), ['Value']);
+  });
 });

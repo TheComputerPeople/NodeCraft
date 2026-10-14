@@ -61,7 +61,7 @@ export interface GroupSelection {
 }
 
 export type MenuContext =
-  | { kind: 'add-node'; position: Point; entries: PaletteEntry[]; title: string; source: (PinAddress & { kind: PinKind }) | null }
+  | { kind: 'add-node'; position: Point; entries: PaletteEntry[]; allEntries: PaletteEntry[]; title: string; source: (PinAddress & { kind: PinKind }) | null }
   | { kind: 'node'; nodeId: string };
 
 export interface EditorState {
@@ -100,6 +100,8 @@ export interface EditorState {
   hoverPin: PinAddress | null;
   // A placement key held down (B, S, P, ...): clicking the canvas places that node.
   heldKey: string | null;
+  // The action menu's "Context Sensitive" checkbox, remembered while the editor is open.
+  contextSensitive: boolean;
   // The variable selected in My Blueprint (its settings show in Details), if any.
   selectedVariableId: string | null;
   // A variable being dragged from My Blueprint onto the canvas.
@@ -135,6 +137,7 @@ export const state: EditorState = {
   compileState: 'unknown',
   hoverPin: null,
   heldKey: null,
+  contextSensitive: true,
   selectedVariableId: null,
   variableDrag: null,
   viewByGraph: new Map()

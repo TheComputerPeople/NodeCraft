@@ -3,7 +3,7 @@ import { PinAddress, definitionFor } from '../core/editing';
 import { PinKind } from '../core/model';
 import { addNode, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected } from './actions';
 import { alignSelection, distributeSelection, straightenConnections } from './align';
-import { PaletteEntry, lookupDefinition, searchText } from './document';
+import { PaletteEntry, lookupDefinition, paletteEntries, searchText } from './document';
 import { dom, escapeHtml } from './dom';
 import { headerColor } from './style';
 import { selectConnected } from './selection';
@@ -23,11 +23,17 @@ export function showAddNodeMenu(
   if (!state.graph) return;
   const unique = [...new Map(entries.map((entry) => [entry.key, entry])).values()];
   if (!unique.length) return;
-  state.context = { kind: 'add-node', position, entries: unique, title, source };
+  state.context = { kind: 'add-node', position, entries: unique, allEntries: paletteEntries(), title, source };
+  // Unreal's "Context Sensitive" checkbox: when dragging from a pin, unchecking it shows every node.
   dom.contextMenu.innerHTML = `
-      <div class="context-title">${escapeHtml(title)}</div>
+      <div class="context-title"><span>${escapeHtml(title)}</span>${source ? `<label class="context-sensitive"><input type="checkbox" id="context-sensitive"${state.contextSensitive ? ' checked' : ''}> Context Sensitive</label>` : ''}</div>
       <input id="context-search" class="context-search" placeholder="Search nodes…" aria-label="Search nodes">
       <div id="context-results"></div>`;
+  const toggle = dom.contextMenu.querySelector<HTMLInputElement>('#context-sensitive');
+  toggle?.addEventListener('change', () => {
+    state.contextSensitive = toggle.checked;
+    renderContextNodeResults(dom.contextMenu.querySelector<HTMLInputElement>('#context-search')?.value ?? '');
+  });
   dom.contextMenu.hidden = false;
   positionContextMenu(clientX, clientY);
   const input = dom.contextMenu.querySelector<HTMLInputElement>('#context-search')!;
@@ -42,7 +48,8 @@ function renderContextNodeResults(query: string): void {
   const result = dom.contextMenu.querySelector<HTMLDivElement>('#context-results');
   if (!result) return;
   const q = query.trim().toLowerCase();
-  const entries = context.entries.filter((entry) => searchText(entry.definition).includes(q)).slice(0, MAX_RESULTS);
+  const pool = context.source && !state.contextSensitive ? context.allEntries : context.entries;
+  const entries = pool.filter((entry) => searchText(entry.definition).includes(q)).slice(0, MAX_RESULTS);
   result.innerHTML = '';
   if (!entries.length) {
     result.innerHTML = '<div class="context-empty">No matching nodes</div>';

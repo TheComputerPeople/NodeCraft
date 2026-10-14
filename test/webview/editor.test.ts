@@ -103,7 +103,7 @@ describe('webview editor', () => {
     const from = await e.pinCenter('add_1', 'result');
     await e.drag(from, { x: from.x + 40, y: from.y + 380 });
     assert.equal(await e.page.isVisible('#context-menu'), true);
-    assert.equal(await e.page.textContent('#context-menu .context-title'), 'Add Connected Node');
+    assert.equal(await e.page.textContent('#context-menu .context-title > span'), 'Add Connected Node');
     const offered = await e.page.$$eval('#context-results strong', (els) => els.map((el) => el.textContent));
     assert.ok(offered.includes('Print'));
     assert.ok(!offered.includes('Start'), 'Start has no inputs, so it cannot take the wire');

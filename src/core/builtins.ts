@@ -43,7 +43,7 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
       type: 'core:variable.set', version: 1, displayName: 'Set Variable', category: 'Variables',
       description: 'Set a variable.', color: '#ff8b7b',
       inputs: [execInput(), dataInput('value', 'Value', 'any')],
-      outputs: [execOutput(), dataOutput('value', 'Value', 'any')], implementation: { kind: 'native', operation: 'set-variable' }
+      outputs: [execOutput(), dataOutput('result', 'Value', 'any')], implementation: { kind: 'native', operation: 'set-variable' }
     },
     {
       type: 'core:variable.get', version: 1, displayName: 'Get Variable', category: 'Variables',
@@ -56,6 +56,14 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
       description: 'Run execution outputs in order.', color: '#e6b450', inputs: [execInput()], keywords: ['then', 'order', 'series'],
       outputs: [execOutput('then0', 'Then 0'), execOutput('then1', 'Then 1'), execOutput('then2', 'Then 2')],
       implementation: { kind: 'native', operation: 'sequence' }
+    },
+    {
+      // Pure conversion, placed automatically when a bool or number is wired into a string input
+      // (Unreal's auto-conversion nodes). Formats the value as Print does (docs/semantics.md).
+      type: 'core:convert.to-string', version: 1, displayName: 'To String', category: 'Utilities', compact: true,
+      description: 'Convert a value to text.', keywords: ['conversion', 'convert', 'text', 'string'],
+      inputs: [dataInput('value', 'Value', 'any')], outputs: [dataOutput('result', 'Result', 'string')],
+      implementation: { kind: 'native', operation: 'to-string' }
     },
     {
       // A knot that passes a wire through unchanged, for tidying wires (Unreal's reroute node).
