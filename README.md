@@ -7,7 +7,8 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 - A `.vgraph` custom editor that looks and behaves like Unreal Engine's Blueprint editor: the same gestures, shortcuts, pin colors and node styles, so Blueprint users can start without relearning (see the reference below).
 - **Blueprints**: a `.vgraph` file is a class, function library or macro library holding graphs, functions, macros and variables, managed in the **My Blueprint** panel.
 - **Execution and data pins**, with Unreal's wiring rules, inline values for unconnected inputs, automatic **To String** conversion, reroute nodes, comment boxes, copy and paste, alignment tools and Find.
-- Built-in Flow, Math, Debug and Variable nodes: Start, Add, Branch, Sequence, Print, Get and Set, To String, End.
+- **Your code as nodes**, the equivalent of Unreal's `BlueprintCallable`: functions marked `@blueprint` in the project's TypeScript, JavaScript or Python code appear in the palette, generated code imports them, and nodes notice when the code changes (see below).
+- Built-in Flow, Debug and Variable nodes (Start, Branch, Sequence, Print, Get and Set, To String, End), and Unreal's **standard library** of math, string, utility and file nodes, with the same meaning in every language.
 - Workspace `*.node.json` user node libraries, with a code snippet per language. Example: `Double`.
 - **Code generation**: each graph compiles to readable source code in its target language, written next to the graph and meant to be committed. TypeScript, JavaScript and Python are supported.
 - Unreal-style **Compile** (F7) and **Compiler Results**, with error and warning badges on nodes and entries in the Problems panel.
@@ -43,8 +44,8 @@ The browser tests drive the real webview bundle in an installed Microsoft Edge o
 
 Source layout:
 
-- `src/core/`: the graph model, serializer, node registry, reference runtime and graph-editing operations. It must not import `vscode` or Node built-ins, so it can be shared with the webview and tested in plain Node (a unit test enforces this).
-- `src/extension/`: VS Code integration (activation, the custom editor, workspace node-library loading, webview markup).
+- `src/core/`: the graph model, serializer, node registry, reference runtime, graph-editing operations, the compiler and language packs, and the declaration scanners that read project functions (`src/core/importing/`). It must not import `vscode` or Node built-ins, so it can be shared with the webview and tested in plain Node (a unit test enforces this).
+- `src/extension/`: VS Code integration (activation, the custom editor, compiling and running, workspace node libraries and project functions, webview markup).
 - `src/webview/`: the graph editor UI, written in TypeScript and bundled by esbuild. It has no runtime dependencies.
 - `test/unit/`: unit tests for `src/core`.
 - `test/webview/`: browser tests for the editor UI.
@@ -52,6 +53,36 @@ Source layout:
 - `test/integration/`: tests that run inside a real VS Code.
 
 The integration tests download the minimum supported VS Code version (from `engines.vscode`) into `.vscode-test/` on first run, and open a VS Code window while they run. They work from a VS Code terminal too: the launcher clears `ELECTRON_RUN_AS_NODE`, which VS Code sets for its child processes.
+
+## Your code as nodes
+
+As Unreal exposes C++ functions marked `UFUNCTION(BlueprintCallable)`, the extension exposes functions whose documentation comment contains `@blueprint`:
+
+```ts
+/**
+ * Subtracts damage from health, never going below zero.
+ * @blueprint
+ * @category Combat
+ */
+export function applyDamage(health: number, amount = 10): number {
+  return Math.max(0, health - amount);
+}
+```
+
+```python
+def is_alive(health: float) -> bool:
+    """@blueprint pure"""
+    return health > 0
+```
+
+- `@blueprint` makes a node with exec pins (`BlueprintCallable`); `@blueprint pure` makes one without (`BlueprintPure`). `@category`, `@displayName` and `@keywords` work as Unreal's metadata does. Parameters become input pins (literal defaults become pin values) and the return value becomes **Return Value**.
+- TypeScript and JavaScript functions must be exported; Python functions are top-level `def`s. The palette shows only the functions the graph's language can call (a TypeScript graph can also call JavaScript).
+- Generated code imports each function the way the project does: relative TypeScript imports follow `tsconfig.json`, JavaScript uses the module's own extension, and Python imports by module name. **Run** finds them too.
+- Functions that can't be nodes (async functions, generators, rest parameters, generics, …) are listed in the **Blueprint Visual Scripting** output channel with the reason.
+- When a function's signature changes, its nodes keep their old pins and show a warning until you choose **Refresh Node** in the node's menu, or **Refresh All Nodes** in the Command Palette. A renamed or moved function shows an error, and the node menu offers **Replace with …** when it can tell where the function went.
+- The setting `blueprintVisualScripting.exposeAllFunctions` exposes every exported or public function without markers.
+
+The sample workspace has two marked functions in `sample/lib/combat.js`. The full design is in [docs/code-as-nodes.md](docs/code-as-nodes.md).
 
 ## Custom node libraries
 
@@ -100,6 +131,7 @@ VS Code Custom Text Editor
                     +--> Type System
                     +--> Runtime / Debug Events
                     +--> Visual IR --> Code Generators (language packs)
+                    +--> Declaration scanners --> project functions as nodes
 ```
 
 The extension uses VS Code's `CustomTextEditorProvider`, which is the intended API for editable text-based custom formats. See:

@@ -119,6 +119,12 @@ Exit: a Blueprint user, given no instructions, can build the sample graph from s
 
 ### Phase 3: Your code as nodes
 
+Status: complete (October 2026). In a TypeScript and a Python workspace, a marked function appears as a node, a graph calls it, the generated code imports and runs it, and renaming it in code is detected (integration and conformance tests).
+
+- **Changed from the plan:** declarations are read by scanners in `src/core` rather than the TypeScript compiler API or Python's `ast`; they are checked against `ast` and `tsc` in the tests. Tier 2 import through a language server moves to Phase 6.
+- **Deferred to Phase 4:** methods and classes as nodes, async functions as latent nodes, generic functions, functions with several outputs (Unreal's out parameters, and the success flags of the file nodes), and collection nodes.
+- **Deferred to Phase 5:** Simulate can't call project functions; Run does.
+
 Goal: the equivalent of `BlueprintCallable`. The user's existing code shows up in the palette.
 
 - Tier 1 packs import precisely (TypeScript compiler API, Python `ast`/type hints, Roslyn for C#).
@@ -265,7 +271,9 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Classes, inheritance, interfaces, Cast To | ⬜ | 4 |
 | Structure | Event dispatchers, custom events | ⬜ | 4 |
 | Structure | Latent actions (Delay) | ⬜ | 4 |
-| Interop | Native functions appear as nodes (`BlueprintCallable`) | 🟡 (hand-written `*.node.json`) | 3 |
+| Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python; methods with Phase 4 classes) | — |
+| Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
+| Library | Standard math, string, utility and file nodes | ✅ (collection nodes need Phase 4) | — |
 | Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ⬜ | 5 |
 | Debugging | Pin value hover, Watch this value | ⬜ | 5 |
 | Debugging | Execution flow highlighting | 🟡 (run trail) | 5 |
