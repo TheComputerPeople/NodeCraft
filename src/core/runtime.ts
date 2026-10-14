@@ -4,6 +4,7 @@ import { LanguagePackRegistry } from './language-pack';
 import { DEFAULT_LANGUAGE, builtinLanguagePacks } from './languages';
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent } from './model';
 import { NodeRegistry } from './registry';
+import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { NodeResolver, createResolver, isPure } from './resolve';
 import { defaultValue, formatValue, toBoolean, toNumber } from './values';
 
@@ -13,6 +14,8 @@ interface RunState {
   resolve: NodeResolver;
   // Latest output values of impure nodes, keyed by graph, node and pin.
   outputs: Map<string, unknown>;
+  // What flow-control nodes remember between runs (Do Once's closed flag, …), keyed like outputs.
+  state: Map<string, unknown>;
   language: string;
 }
 
@@ -22,6 +25,9 @@ interface GraphContext {
   // Nodes currently on the execution call stack; reaching one again is an exec cycle.
   executing: Set<string>;
 }
+
+// Simulate stops a loop after this many passes, as Unreal's editor does; generated code has no limit.
+export const MAX_LOOP_PASSES = 1_000_000;
 
 // Thrown after an error has been reported, to stop the whole run (docs/semantics.md, "Errors").
 class RunStopped extends Error {}
@@ -36,7 +42,7 @@ export class GraphRuntime {
   // Runs every Start node in the document's event graphs. Function and macro graphs only run when
   // called, which arrives with Phase 4.
   run(doc: GraphDocument): void {
-    const run: RunState = { variables: new Map(), outputs: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc.variables, doc.importedFunctions) };
+    const run: RunState = { variables: new Map(), outputs: new Map(), state: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc.variables, doc.importedFunctions) };
     for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue ?? defaultValue(variable.type));
 
     const entries = doc.graphs
@@ -66,19 +72,24 @@ export class GraphRuntime {
     throw new RunStopped(message);
   }
 
-  private executeNode(context: GraphContext, node: GraphNode): void {
-    if (context.executing.has(node.id)) this.fail(context, node, `Execution cycle through ${node.id}: exec wires loop back to a node that is still running.`);
-    context.executing.add(node.id);
+  // Runs `node` through its exec input `entry` (its main one by default). Re-entering a node that
+  // is still running is a cycle, except through an input that only changes its state (a loop's
+  // Break, Gate's Close, …), as in Unreal.
+  private executeNode(context: GraphContext, node: GraphNode, entry?: string): void {
+    const definition = context.run.resolve(node) ?? this.fail(context, node, `Unknown node type: ${node.type}`);
+    const pin = entry ?? mainExecInput(definition);
+    const reentering = context.executing.has(node.id);
+    if (reentering && !isStateInput(definition, pin)) this.fail(context, node, `Execution cycle through ${node.id}: exec wires loop back to a node that is still running.`);
+    if (!reentering) context.executing.add(node.id);
     try {
-      this.runNode(context, node);
+      this.runNode(context, node, definition, pin);
     } finally {
-      context.executing.delete(node.id);
+      if (!reentering) context.executing.delete(node.id);
     }
   }
 
-  private runNode(context: GraphContext, node: GraphNode): void {
+  private runNode(context: GraphContext, node: GraphNode, definition: NodeDefinition, entry: string): void {
     const { graph } = context;
-    const definition = context.run.resolve(node) ?? this.fail(context, node, `Unknown node type: ${node.type}`);
     this.report(context, { kind: 'node.enter', nodeId: node.id, nodeType: node.type });
 
     let exited = false;
@@ -95,9 +106,14 @@ export class GraphRuntime {
       for (const c of graph.connections) {
         if (c.fromNode !== node.id || c.fromPin !== pinId) continue;
         const next = graph.nodes.find((n) => n.id === c.toNode);
-        if (next) this.executeNode(context, next);
+        if (next) this.executeNode(context, next, c.toPin);
       }
     };
+
+    if (this.runFlowControl(context, node, definition, entry, input, setOutput, continueFrom)) {
+      exit();
+      return;
+    }
 
     switch (nativeOperation(definition)) {
       case 'start':
@@ -145,6 +161,118 @@ export class GraphRuntime {
     }
 
     exit();
+  }
+
+  // Flow-control nodes (docs/program-structure.md, "Flow control"); the compiler lowers them to the
+  // same rules (src/core/compiler/lower.ts). Returns false for other nodes.
+  private runFlowControl(
+    context: GraphContext, node: GraphNode, definition: NodeDefinition, entry: string,
+    input: (pinId: string) => unknown, setOutput: (pinId: string, value: unknown) => void, continueFrom: (pinId: string) => void
+  ): boolean {
+    const key = (name: string) => JSON.stringify([context.graph.id, node.id, name]);
+    const get = (name: string): unknown => context.run.state.get(key(name));
+    const set = (name: string, value: unknown): void => {
+      context.run.state.set(key(name), value);
+    };
+    const output = (pinId: string): unknown => context.run.outputs.get(outputKey(context.graph, node, pinId));
+    // Runs `init` the first time any of the node's inputs runs.
+    const initOnce = (init: () => void): void => {
+      if (get('initialized')) return;
+      set('initialized', true);
+      init();
+    };
+    let passes = 0;
+    const pass = (): void => {
+      if (++passes > MAX_LOOP_PASSES) this.fail(context, node, `Infinite loop detected: the loop ran ${MAX_LOOP_PASSES.toLocaleString('en-US')} times.`);
+    };
+
+    switch (nativeOperation(definition)) {
+      case 'for-loop': {
+        if (entry === 'break') {
+          set('stop', true);
+          return true;
+        }
+        set('stop', false);
+        let index = toNumber(input('firstIndex'));
+        for (; index <= toNumber(input('lastIndex')) && !get('stop'); index++) {
+          pass();
+          setOutput('index', index);
+          continueFrom('loopBody');
+        }
+        setOutput('index', index);
+        continueFrom('completed');
+        return true;
+      }
+      case 'while-loop':
+        while (toBoolean(input('condition'))) {
+          pass();
+          continueFrom('loopBody');
+        }
+        continueFrom('completed');
+        return true;
+      case 'do-once':
+        if (entry === 'reset') {
+          set('closed', false);
+          return true;
+        }
+        initOnce(() => set('closed', toBoolean(input('startClosed'))));
+        if (!get('closed')) {
+          set('closed', true);
+          continueFrom('completed');
+        }
+        return true;
+      case 'do-n': {
+        if (entry === 'reset') {
+          setOutput('counter', 0);
+          return true;
+        }
+        const counter = Number(output('counter') ?? 0);
+        if (counter < toNumber(input('n'))) {
+          setOutput('counter', counter + 1);
+          continueFrom('exit');
+        }
+        return true;
+      }
+      case 'gate':
+        initOnce(() => set('open', !toBoolean(input('startClosed'))));
+        if (entry === 'open') set('open', true);
+        else if (entry === 'close') set('open', false);
+        else if (entry === 'toggle') set('open', !get('open'));
+        else if (get('open')) continueFrom('exit');
+        return true;
+      case 'flip-flop': {
+        const isA = !output('isA');
+        setOutput('isA', isA);
+        continueFrom(isA ? 'a' : 'b');
+        return true;
+      }
+      case 'multigate': {
+        if (entry === 'reset') {
+          set('initialized', false);
+          return true;
+        }
+        const outputs = definition.outputs.filter((p) => p.kind === 'exec').map((p) => p.id);
+        initOnce(() => {
+          const start = toNumber(input('startIndex'));
+          set('next', start >= 0 ? start : 0);
+        });
+        if (Number(get('next')) >= outputs.length && toBoolean(input('loop'))) set('next', 0);
+        const current = Number(get('next'));
+        if (current < outputs.length) {
+          set('next', current + 1);
+          continueFrom(outputs[current]);
+        }
+        return true;
+      }
+      case 'switch': {
+        const selection = input('selection');
+        const cases: unknown[] = node.type === SWITCH_STRING ? switchStringCases(node) : switchIntCases(node);
+        const match = cases.findIndex((value) => (node.type === SWITCH_STRING ? String(selection ?? '') === value : toNumber(selection) === value));
+        continueFrom(match >= 0 ? `case${match}` : 'default');
+        return true;
+      }
+    }
+    return false;
   }
 
   // Runs a code node's snippet and returns its first data output. Project functions can't run

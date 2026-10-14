@@ -2,6 +2,7 @@
 // some take their pins from context, as in Unreal: a variable Get/Set node shows the variable's
 // name and type. Everything that needs a node's pins (editor, compiler, Simulate) goes through
 // this, so they always agree.
+import { MULTIGATE, SWITCH_INT, SWITCH_STRING, flowControlDefinition } from './flow-control';
 import { isFunctionType, signatureChanges } from './imported-functions';
 import { GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
 
@@ -43,6 +44,7 @@ export function createResolver(registry: ResolveContext, variables: readonly Gra
     if (node.type === VARIABLE_GET || node.type === VARIABLE_SET) return variableDefinition(base, node, variables);
     if (node.type === SEQUENCE) return { ...base, outputs: Array.from({ length: sequencePinCount(node) }, (_, i) => execPin(`then${i}`, `Then ${i}`, 'output')) };
     if (node.type === REROUTE) return rerouteDefinition(base, node);
+    if (node.type === MULTIGATE || node.type === SWITCH_INT || node.type === SWITCH_STRING) return flowControlDefinition(base, node);
     return base;
   };
 }

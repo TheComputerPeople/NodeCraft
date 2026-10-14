@@ -26,7 +26,13 @@ export type IrExpr =
   // The value as text, following docs/semantics.md ("Values").
   | { kind: 'toText'; value: IrExpr }
   // A pure node: the callee is evaluated where the value is used, every time.
-  | { kind: 'call'; callee: IrCallee; args: IrExpr[] };
+  | { kind: 'call'; callee: IrCallee; args: IrExpr[] }
+  // Comparisons and logic on values whose types already match (flow control's own bookkeeping).
+  | { kind: 'binary'; op: BinaryOp; left: IrExpr; right: IrExpr }
+  | { kind: 'not'; value: IrExpr };
+
+// `+` and `-` are integer arithmetic on counters; the rest give booleans.
+export type BinaryOp = '<' | '<=' | '>=' | '==' | '!=' | '&&' | '||' | '+' | '-';
 
 // What a call runs: a code node's snippet (a helper) or a function the generated file imports.
 export type IrCallee = { kind: 'helper' | 'import'; id: string };
@@ -38,6 +44,10 @@ export type IrStatement =
   | { kind: 'if'; condition: IrExpr; then: IrStatement[]; else: IrStatement[]; source: SourceRef }
   // Runs an impure node's snippet or function; its first data output, if any, goes to `resultSlot`.
   | { kind: 'call'; callee: IrCallee; args: IrExpr[]; resultSlot?: string; source: SourceRef }
+  // For Loop: `counter` (a slot) runs from `first` to `last` (both included; `last` is read before
+  // each pass, as Unreal does). The loop also ends when `stop` (a bool slot) is set by Break.
+  | { kind: 'for'; counter: string; first: IrExpr; last: IrExpr; stop?: string; body: IrStatement[]; source: SourceRef }
+  | { kind: 'while'; condition: IrExpr; body: IrStatement[]; source: SourceRef }
   // Runs a shared block: a node reached by more than one exec wire, plus everything after it.
   | { kind: 'callBlock'; block: string; source: SourceRef };
 
@@ -122,6 +132,10 @@ export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefin
       return { id: 'string' };
     case 'call':
       return calleeSignature(expr.callee, program)?.returns;
+    case 'binary':
+      return expr.op === '+' || expr.op === '-' ? exprType(expr.left, program) : { id: 'bool' };
+    case 'not':
+      return { id: 'bool' };
   }
 }
 

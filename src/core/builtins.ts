@@ -1,4 +1,5 @@
 import { NodeDefinition, PinDefinition, TypeRef } from './model';
+import { flowControlDefinitions } from './flow-control';
 import { standardLibraryDefinitions } from './stdlib';
 
 const t = (id: string): TypeRef => ({ id });
@@ -79,6 +80,7 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
       description: 'End a branch of execution.', color: '#7bd88f', inputs: [execInput()], outputs: [],
       implementation: { kind: 'native', operation: 'end' }
     },
+    ...flowControlDefinitions(),
     ...standardLibraryDefinitions()
   ];
 }

@@ -1,0 +1,1015 @@
+{
+  "schemaVersion": 3,
+  "name": "Loops",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [
+    {
+      "id": "count",
+      "name": "Count",
+      "type": {
+        "id": "int"
+      },
+      "defaultValue": 0
+    }
+  ],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 30,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "main",
+          "type": "core:flow.sequence",
+          "position": {
+            "x": 60,
+            "y": 0
+          },
+          "properties": {
+            "pins": 11
+          }
+        },
+        {
+          "id": "f1",
+          "type": "core:flow.for-loop",
+          "position": {
+            "x": 90,
+            "y": 0
+          },
+          "properties": {
+            "pin:firstIndex": 1,
+            "pin:lastIndex": 3
+          }
+        },
+        {
+          "id": "p1",
+          "type": "core:console.print",
+          "position": {
+            "x": 120,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "p1done",
+          "type": "core:console.print",
+          "position": {
+            "x": 150,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "done"
+          }
+        },
+        {
+          "id": "f2",
+          "type": "core:flow.for-loop-with-break",
+          "position": {
+            "x": 180,
+            "y": 0
+          },
+          "properties": {
+            "pin:firstIndex": 0,
+            "pin:lastIndex": 10
+          }
+        },
+        {
+          "id": "p2",
+          "type": "core:console.print",
+          "position": {
+            "x": 210,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "b2",
+          "type": "core:flow.branch",
+          "position": {
+            "x": 240,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "ge2",
+          "type": "core:math.greater-equal",
+          "position": {
+            "x": 270,
+            "y": 0
+          },
+          "properties": {
+            "pin:b": 2
+          }
+        },
+        {
+          "id": "p2done",
+          "type": "core:console.print",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "broke"
+          }
+        },
+        {
+          "id": "w3",
+          "type": "core:flow.while-loop",
+          "position": {
+            "x": 330,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "get3",
+          "type": "core:variable.get",
+          "position": {
+            "x": 360,
+            "y": 0
+          },
+          "properties": {
+            "variable": "count"
+          }
+        },
+        {
+          "id": "lt3",
+          "type": "core:math.less",
+          "position": {
+            "x": 390,
+            "y": 0
+          },
+          "properties": {
+            "pin:b": 3
+          }
+        },
+        {
+          "id": "add3",
+          "type": "core:math.add",
+          "position": {
+            "x": 420,
+            "y": 0
+          },
+          "properties": {
+            "pin:b": 1
+          }
+        },
+        {
+          "id": "set3",
+          "type": "core:variable.set",
+          "position": {
+            "x": 450,
+            "y": 0
+          },
+          "properties": {
+            "variable": "count"
+          }
+        },
+        {
+          "id": "p3",
+          "type": "core:console.print",
+          "position": {
+            "x": 480,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "p3done",
+          "type": "core:console.print",
+          "position": {
+            "x": 510,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "while done"
+          }
+        },
+        {
+          "id": "q4",
+          "type": "core:flow.sequence",
+          "position": {
+            "x": 540,
+            "y": 0
+          },
+          "properties": {
+            "pins": 4
+          }
+        },
+        {
+          "id": "d4",
+          "type": "core:flow.do-once",
+          "position": {
+            "x": 570,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "p4",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "once"
+          }
+        },
+        {
+          "id": "q5",
+          "type": "core:flow.sequence",
+          "position": {
+            "x": 630,
+            "y": 0
+          },
+          "properties": {
+            "pins": 3
+          }
+        },
+        {
+          "id": "n5",
+          "type": "core:flow.do-n",
+          "position": {
+            "x": 660,
+            "y": 0
+          },
+          "properties": {
+            "pin:n": 2
+          }
+        },
+        {
+          "id": "p5",
+          "type": "core:console.print",
+          "position": {
+            "x": 690,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "q6",
+          "type": "core:flow.sequence",
+          "position": {
+            "x": 720,
+            "y": 0
+          },
+          "properties": {
+            "pins": 5
+          }
+        },
+        {
+          "id": "g6",
+          "type": "core:flow.gate",
+          "position": {
+            "x": 750,
+            "y": 0
+          },
+          "properties": {
+            "pin:startClosed": true
+          }
+        },
+        {
+          "id": "p6",
+          "type": "core:console.print",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "gate"
+          }
+        },
+        {
+          "id": "q7",
+          "type": "core:flow.sequence",
+          "position": {
+            "x": 810,
+            "y": 0
+          },
+          "properties": {
+            "pins": 3
+          }
+        },
+        {
+          "id": "ff7",
+          "type": "core:flow.flip-flop",
+          "position": {
+            "x": 840,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "p7a",
+          "type": "core:console.print",
+          "position": {
+            "x": 870,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "A"
+          }
+        },
+        {
+          "id": "p7b",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "B"
+          }
+        },
+        {
+          "id": "q8",
+          "type": "core:flow.sequence",
+          "position": {
+            "x": 930,
+            "y": 0
+          },
+          "properties": {
+            "pins": 3
+          }
+        },
+        {
+          "id": "m8",
+          "type": "core:flow.multigate",
+          "position": {
+            "x": 960,
+            "y": 0
+          },
+          "properties": {
+            "pin:loop": true
+          }
+        },
+        {
+          "id": "p8a",
+          "type": "core:console.print",
+          "position": {
+            "x": 990,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "m0"
+          }
+        },
+        {
+          "id": "p8b",
+          "type": "core:console.print",
+          "position": {
+            "x": 1020,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "m1"
+          }
+        },
+        {
+          "id": "s9",
+          "type": "core:flow.switch-int",
+          "position": {
+            "x": 1050,
+            "y": 0
+          },
+          "properties": {
+            "pin:selection": 1
+          }
+        },
+        {
+          "id": "s9zero",
+          "type": "core:console.print",
+          "position": {
+            "x": 1080,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "zero"
+          }
+        },
+        {
+          "id": "s9one",
+          "type": "core:console.print",
+          "position": {
+            "x": 1110,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "one"
+          }
+        },
+        {
+          "id": "s9default",
+          "type": "core:console.print",
+          "position": {
+            "x": 1140,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "default"
+          }
+        },
+        {
+          "id": "s9b",
+          "type": "core:flow.switch-int",
+          "position": {
+            "x": 1170,
+            "y": 0
+          },
+          "properties": {
+            "pin:selection": 5
+          }
+        },
+        {
+          "id": "s9bzero",
+          "type": "core:console.print",
+          "position": {
+            "x": 1200,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "zero"
+          }
+        },
+        {
+          "id": "s9bone",
+          "type": "core:console.print",
+          "position": {
+            "x": 1230,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "one"
+          }
+        },
+        {
+          "id": "s9bdefault",
+          "type": "core:console.print",
+          "position": {
+            "x": 1260,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "default"
+          }
+        },
+        {
+          "id": "t10",
+          "type": "core:flow.switch-string",
+          "position": {
+            "x": 1290,
+            "y": 0
+          },
+          "properties": {
+            "cases": [
+              "red",
+              "green"
+            ],
+            "pin:selection": "green"
+          }
+        },
+        {
+          "id": "t10red",
+          "type": "core:console.print",
+          "position": {
+            "x": 1320,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "red"
+          }
+        },
+        {
+          "id": "t10green",
+          "type": "core:console.print",
+          "position": {
+            "x": 1350,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "green"
+          }
+        },
+        {
+          "id": "t10none",
+          "type": "core:console.print",
+          "position": {
+            "x": 1380,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "none"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "main",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "f1",
+          "fromPin": "loopBody",
+          "toNode": "p1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w3",
+          "fromNode": "f1",
+          "fromPin": "index",
+          "toNode": "p1",
+          "toPin": "value"
+        },
+        {
+          "id": "w4",
+          "fromNode": "f1",
+          "fromPin": "completed",
+          "toNode": "p1done",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w5",
+          "fromNode": "main",
+          "fromPin": "then0",
+          "toNode": "f1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "f2",
+          "fromPin": "loopBody",
+          "toNode": "p2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w7",
+          "fromNode": "f2",
+          "fromPin": "index",
+          "toNode": "p2",
+          "toPin": "value"
+        },
+        {
+          "id": "w8",
+          "fromNode": "p2",
+          "fromPin": "execOut",
+          "toNode": "b2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w9",
+          "fromNode": "f2",
+          "fromPin": "index",
+          "toNode": "ge2",
+          "toPin": "a"
+        },
+        {
+          "id": "w10",
+          "fromNode": "ge2",
+          "fromPin": "returnValue",
+          "toNode": "b2",
+          "toPin": "condition"
+        },
+        {
+          "id": "w11",
+          "fromNode": "b2",
+          "fromPin": "true",
+          "toNode": "f2",
+          "toPin": "break"
+        },
+        {
+          "id": "w12",
+          "fromNode": "f2",
+          "fromPin": "completed",
+          "toNode": "p2done",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w13",
+          "fromNode": "main",
+          "fromPin": "then1",
+          "toNode": "f2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w14",
+          "fromNode": "get3",
+          "fromPin": "value",
+          "toNode": "lt3",
+          "toPin": "a"
+        },
+        {
+          "id": "w15",
+          "fromNode": "lt3",
+          "fromPin": "returnValue",
+          "toNode": "w3",
+          "toPin": "condition"
+        },
+        {
+          "id": "w16",
+          "fromNode": "w3",
+          "fromPin": "loopBody",
+          "toNode": "add3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w17",
+          "fromNode": "get3",
+          "fromPin": "value",
+          "toNode": "add3",
+          "toPin": "a"
+        },
+        {
+          "id": "w18",
+          "fromNode": "add3",
+          "fromPin": "execOut",
+          "toNode": "set3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w19",
+          "fromNode": "add3",
+          "fromPin": "result",
+          "toNode": "set3",
+          "toPin": "value"
+        },
+        {
+          "id": "w20",
+          "fromNode": "set3",
+          "fromPin": "execOut",
+          "toNode": "p3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w21",
+          "fromNode": "get3",
+          "fromPin": "value",
+          "toNode": "p3",
+          "toPin": "value"
+        },
+        {
+          "id": "w22",
+          "fromNode": "w3",
+          "fromPin": "completed",
+          "toNode": "p3done",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w23",
+          "fromNode": "main",
+          "fromPin": "then2",
+          "toNode": "w3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w24",
+          "fromNode": "q4",
+          "fromPin": "then0",
+          "toNode": "d4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w25",
+          "fromNode": "q4",
+          "fromPin": "then1",
+          "toNode": "d4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w26",
+          "fromNode": "q4",
+          "fromPin": "then2",
+          "toNode": "d4",
+          "toPin": "reset"
+        },
+        {
+          "id": "w27",
+          "fromNode": "q4",
+          "fromPin": "then3",
+          "toNode": "d4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w28",
+          "fromNode": "d4",
+          "fromPin": "completed",
+          "toNode": "p4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w29",
+          "fromNode": "main",
+          "fromPin": "then3",
+          "toNode": "q4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w30",
+          "fromNode": "q5",
+          "fromPin": "then0",
+          "toNode": "n5",
+          "toPin": "enter"
+        },
+        {
+          "id": "w31",
+          "fromNode": "q5",
+          "fromPin": "then1",
+          "toNode": "n5",
+          "toPin": "enter"
+        },
+        {
+          "id": "w32",
+          "fromNode": "q5",
+          "fromPin": "then2",
+          "toNode": "n5",
+          "toPin": "enter"
+        },
+        {
+          "id": "w33",
+          "fromNode": "n5",
+          "fromPin": "exit",
+          "toNode": "p5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w34",
+          "fromNode": "n5",
+          "fromPin": "counter",
+          "toNode": "p5",
+          "toPin": "value"
+        },
+        {
+          "id": "w35",
+          "fromNode": "main",
+          "fromPin": "then4",
+          "toNode": "q5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w36",
+          "fromNode": "q6",
+          "fromPin": "then0",
+          "toNode": "g6",
+          "toPin": "enter"
+        },
+        {
+          "id": "w37",
+          "fromNode": "q6",
+          "fromPin": "then1",
+          "toNode": "g6",
+          "toPin": "open"
+        },
+        {
+          "id": "w38",
+          "fromNode": "q6",
+          "fromPin": "then2",
+          "toNode": "g6",
+          "toPin": "enter"
+        },
+        {
+          "id": "w39",
+          "fromNode": "q6",
+          "fromPin": "then3",
+          "toNode": "g6",
+          "toPin": "toggle"
+        },
+        {
+          "id": "w40",
+          "fromNode": "q6",
+          "fromPin": "then4",
+          "toNode": "g6",
+          "toPin": "enter"
+        },
+        {
+          "id": "w41",
+          "fromNode": "g6",
+          "fromPin": "exit",
+          "toNode": "p6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w42",
+          "fromNode": "main",
+          "fromPin": "then5",
+          "toNode": "q6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w43",
+          "fromNode": "q7",
+          "fromPin": "then0",
+          "toNode": "ff7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w44",
+          "fromNode": "q7",
+          "fromPin": "then1",
+          "toNode": "ff7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w45",
+          "fromNode": "q7",
+          "fromPin": "then2",
+          "toNode": "ff7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w46",
+          "fromNode": "ff7",
+          "fromPin": "a",
+          "toNode": "p7a",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w47",
+          "fromNode": "ff7",
+          "fromPin": "b",
+          "toNode": "p7b",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w48",
+          "fromNode": "main",
+          "fromPin": "then6",
+          "toNode": "q7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w49",
+          "fromNode": "q8",
+          "fromPin": "then0",
+          "toNode": "m8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w50",
+          "fromNode": "q8",
+          "fromPin": "then1",
+          "toNode": "m8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w51",
+          "fromNode": "q8",
+          "fromPin": "then2",
+          "toNode": "m8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w52",
+          "fromNode": "m8",
+          "fromPin": "out0",
+          "toNode": "p8a",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w53",
+          "fromNode": "m8",
+          "fromPin": "out1",
+          "toNode": "p8b",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w54",
+          "fromNode": "main",
+          "fromPin": "then7",
+          "toNode": "q8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w55",
+          "fromNode": "s9",
+          "fromPin": "case0",
+          "toNode": "s9zero",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w56",
+          "fromNode": "s9",
+          "fromPin": "case1",
+          "toNode": "s9one",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w57",
+          "fromNode": "s9",
+          "fromPin": "default",
+          "toNode": "s9default",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w58",
+          "fromNode": "main",
+          "fromPin": "then8",
+          "toNode": "s9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w59",
+          "fromNode": "s9b",
+          "fromPin": "case0",
+          "toNode": "s9bzero",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w60",
+          "fromNode": "s9b",
+          "fromPin": "case1",
+          "toNode": "s9bone",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w61",
+          "fromNode": "s9b",
+          "fromPin": "default",
+          "toNode": "s9bdefault",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w62",
+          "fromNode": "main",
+          "fromPin": "then9",
+          "toNode": "s9b",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w63",
+          "fromNode": "t10",
+          "fromPin": "case0",
+          "toNode": "t10red",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w64",
+          "fromNode": "t10",
+          "fromPin": "case1",
+          "toNode": "t10green",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w65",
+          "fromNode": "t10",
+          "fromPin": "default",
+          "toNode": "t10none",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w66",
+          "fromNode": "main",
+          "fromPin": "then10",
+          "toNode": "t10",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: For Loop, For Loop with Break (wired back into Break), While Loop, Do Once with Reset, Do N, Gate, Flip Flop, MultiGate with Loop, and Switch on Int and String.",
+    "expectedOutput": [
+      "1",
+      "2",
+      "3",
+      "done",
+      "0",
+      "1",
+      "2",
+      "broke",
+      "1",
+      "2",
+      "3",
+      "while done",
+      "once",
+      "once",
+      "1",
+      "2",
+      "gate",
+      "A",
+      "B",
+      "A",
+      "m0",
+      "m1",
+      "m0",
+      "one",
+      "default",
+      "green"
+    ]
+  }
+}

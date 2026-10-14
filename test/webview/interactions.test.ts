@@ -184,13 +184,17 @@ describe('Unreal gestures and shortcuts', () => {
     assert.ok(Math.abs(center.x - (canvas.x + canvas.width / 2)) < canvas.width / 4, 'the node is near the middle');
   });
 
-  test('holding B, S or P and clicking places Branch, Sequence or Start', async (t) => {
+  test('holding B, S, P, G, M, N or O and clicking places the node, as in Unreal', async (t) => {
     const e = await open(t);
     if (!e) return;
-    for (const [i, [key, type]] of [['b', 'core:flow.branch'], ['s', 'core:flow.sequence'], ['p', 'core:event.start']].entries()) {
+    const keys = [
+      ['b', 'core:flow.branch'], ['s', 'core:flow.sequence'], ['p', 'core:event.start'], ['g', 'core:flow.gate'],
+      ['m', 'core:flow.multigate'], ['n', 'core:flow.do-n'], ['o', 'core:flow.do-once']
+    ];
+    for (const [i, [key, type]] of keys.entries()) {
       await e.page.keyboard.down(key);
-      // Spaced apart so each click lands on empty canvas, not the node placed before it.
-      await e.page.mouse.click(300 + i * 320, 650);
+      // Spaced apart (two staggered rows) so each click lands on empty canvas, not a placed node.
+      await e.page.mouse.click(i < 4 ? 300 + i * 320 : 460 + (i - 4) * 320, i < 4 ? 560 : 760);
       await e.page.keyboard.up(key);
       // Saves are sent asynchronously; wait for the one that contains the placed node.
       await e.page.waitForFunction((t) => (window as unknown as { __posted: { type: string; document?: { graphs: { nodes: { type: string; position: { y: number } }[] }[] } }[] }).__posted

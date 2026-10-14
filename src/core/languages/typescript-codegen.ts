@@ -143,6 +143,7 @@ class TypeScriptEmitter {
 
   private method(name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | undefined, internal: boolean, body: () => void): void {
     const { out, flavor } = this;
+    out.endNode();
     if (flavor.typed) {
       const list = params.map((p) => `${p.name}: ${this.typeName(p.type)}`).join(', ');
       out.line(`${internal ? 'private ' : ''}${name}(${list}): ${returns ? this.typeName(returns) : 'void'} {`);
@@ -190,7 +191,8 @@ class TypeScriptEmitter {
 
   private statement(s: IrStatement): void {
     const { out } = this;
-    if (s.kind !== 'callBlock') out.node(s.source, (text) => `// ${text}`);
+    if (s.kind === 'callBlock') out.endNode();
+    else out.node(s.source, (text) => `// ${text}`);
     switch (s.kind) {
       case 'print':
         out.line(`console.log(${this.text(s.value)});`);
@@ -203,17 +205,45 @@ class TypeScriptEmitter {
         out.line(`this.${this.memberNames.get(s.member)} = ${this.coerce(s.value, member?.type)};`);
         break;
       }
-      case 'if':
+      case 'if': {
         out.line(`if (${this.expr(s.condition)}) {`);
         out.indent();
         this.statements(s.then);
         out.dedent();
-        if (s.else.length) {
+        // An if in the else branch from the same node (a Switch's cases) reads as `else if`.
+        let rest = s.else;
+        while (rest.length === 1 && rest[0].kind === 'if' && sameSource(rest[0], s)) {
+          const inner: Extract<IrStatement, { kind: 'if' }> = rest[0];
+          out.line(`} else if (${this.expr(inner.condition)}) {`);
+          out.indent();
+          this.statements(inner.then);
+          out.dedent();
+          rest = inner.else;
+        }
+        if (rest.length) {
           out.line('} else {');
           out.indent();
-          this.statements(s.else);
+          this.statements(rest);
           out.dedent();
         }
+        out.line('}');
+        break;
+      }
+      case 'for': {
+        const counter = `this.${this.slotNames.get(s.counter)}`;
+        const stop = s.stop ? ` && !this.${this.slotNames.get(s.stop)}` : '';
+        out.line(`for (${counter} = ${this.coerce(s.first, INT)}; ${counter} <= ${this.coerce(s.last, INT)}${stop}; ${counter}++) {`);
+        out.indent();
+        this.statements(s.body);
+        out.dedent();
+        out.line('}');
+        break;
+      }
+      case 'while':
+        out.line(`while (${this.expr(s.condition)}) {`);
+        out.indent();
+        this.statements(s.body);
+        out.dedent();
         out.line('}');
         break;
       case 'call': {
@@ -249,6 +279,12 @@ class TypeScriptEmitter {
         return this.typeOf(e.value)?.id === 'bool' && !this.typeOf(e.value)?.container ? this.expr(e.value) : `Boolean(${this.expr(e.value)})`;
       case 'call':
         return this.call(e.callee, e.args);
+      case 'binary': {
+        const op = e.op === '==' ? '===' : e.op === '!=' ? '!==' : e.op;
+        return `${this.operand(e.left)} ${op} ${this.operand(e.right)}`;
+      }
+      case 'not':
+        return `!${this.operand(e.value)}`;
     }
   }
 
@@ -260,7 +296,7 @@ class TypeScriptEmitter {
 
   private operand(e: IrExpr): string {
     const text = this.expr(e);
-    return e.kind === 'add' ? `(${text})` : text;
+    return e.kind === 'add' || e.kind === 'binary' ? `(${text})` : text;
   }
 
   // The value as text, per docs/semantics.md. Strings, numbers and booleans need no helper.
@@ -325,6 +361,12 @@ class TypeScriptEmitter {
     out.dedent();
     out.line('}');
   }
+}
+
+const INT: TypeRef = { id: 'int' };
+
+function sameSource(a: IrStatement, b: IrStatement): boolean {
+  return a.kind !== 'callBlock' && b.kind !== 'callBlock' && a.source.graphId === b.source.graphId && a.source.nodeId === b.source.nodeId;
 }
 
 function isNumeric(type: TypeRef | undefined): boolean {

@@ -209,6 +209,7 @@ class PythonEmitter {
   // ---- Class members ------------------------------------------------------------------------
 
   private method(name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | undefined, body: () => void): void {
+    this.out.endNode();
     const list = ['self', ...params.map((p) => `${p.name}: ${this.typeName(p.type)}`)].join(', ');
     this.out.line(`def ${name}(${list}) -> ${returns ? this.typeName(returns) : 'None'}:`);
     this.block(body);
@@ -251,7 +252,8 @@ class PythonEmitter {
 
   private statement(s: IrStatement): void {
     const { out } = this;
-    if (s.kind !== 'callBlock') out.node(s.source, (text) => `# ${text}`);
+    if (s.kind === 'callBlock') out.endNode();
+    else out.node(s.source, (text) => `# ${text}`);
     switch (s.kind) {
       case 'print':
         out.line(`print(${this.text(s.value)})`);
@@ -262,13 +264,38 @@ class PythonEmitter {
       case 'setMember':
         out.line(`self.${this.memberNames.get(s.member)} = ${this.expr(s.value)}`);
         break;
-      case 'if':
+      case 'if': {
         out.line(`if ${this.expr(s.condition)}:`);
         this.block(() => this.statements(s.then));
-        if (s.else.length) {
-          out.line('else:');
-          this.block(() => this.statements(s.else));
+        // An if in the else branch from the same node (a Switch's cases) reads as `elif`.
+        let rest = s.else;
+        while (rest.length === 1 && rest[0].kind === 'if' && sameSource(rest[0], s)) {
+          const inner: Extract<IrStatement, { kind: 'if' }> = rest[0];
+          out.line(`elif ${this.expr(inner.condition)}:`);
+          this.block(() => this.statements(inner.then));
+          rest = inner.else;
         }
+        if (rest.length) {
+          out.line('else:');
+          this.block(() => this.statements(rest));
+        }
+        break;
+      }
+      case 'for': {
+        // Python's range() would read Last Index once; Unreal reads it before each pass.
+        const counter = `self.${this.slotNames.get(s.counter)}`;
+        const stop = s.stop ? ` and not self.${this.slotNames.get(s.stop)}` : '';
+        out.line(`${counter} = ${this.expr(s.first)}`);
+        out.line(`while ${counter} <= ${this.expr(s.last)}${stop}:`);
+        this.block(() => {
+          this.statements(s.body);
+          out.line(`${counter} += 1`);
+        });
+        break;
+      }
+      case 'while':
+        out.line(`while ${this.expr(s.condition)}:`);
+        this.block(() => this.statements(s.body));
         break;
       case 'call': {
         const call = this.call(s.callee, s.args);
@@ -309,6 +336,12 @@ class PythonEmitter {
       }
       case 'call':
         return this.call(e.callee, e.args);
+      case 'binary': {
+        const op = e.op === '&&' ? 'and' : e.op === '||' ? 'or' : e.op;
+        return `${this.operand(e.left)} ${op} ${this.operand(e.right)}`;
+      }
+      case 'not':
+        return `not ${this.operand(e.value)}`;
     }
   }
 
@@ -319,7 +352,7 @@ class PythonEmitter {
 
   private operand(e: IrExpr): string {
     const text = this.expr(e);
-    return e.kind === 'add' ? `(${text})` : text;
+    return e.kind === 'add' || e.kind === 'binary' || e.kind === 'not' ? `(${text})` : text;
   }
 
   // The value as text, per docs/semantics.md. Only strings print as they are in Python.
@@ -369,6 +402,10 @@ function literal(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(literal).join(', ')}]`;
   if (typeof value === 'object') return `{${Object.entries(value).map(([k, v]) => `${JSON.stringify(k)}: ${literal(v)}`).join(', ')}}`;
   return 'None';
+}
+
+function sameSource(a: IrStatement, b: IrStatement): boolean {
+  return a.kind !== 'callBlock' && b.kind !== 'callBlock' && a.source.graphId === b.source.graphId && a.source.nodeId === b.source.nodeId;
 }
 
 function isNumeric(type: TypeRef | undefined): boolean {

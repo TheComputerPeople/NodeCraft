@@ -268,3 +268,19 @@ describe('GraphRuntime: documents', () => {
     assert.deepEqual(logs(run(d)), ['7']);
   });
 });
+
+describe('GraphRuntime: flow control', () => {
+  test('an endless While Loop stops with an error after a million passes', () => {
+    const events = run(doc([node('s', 'core:event.start'), node('w', 'core:flow.while-loop', { 'pin:condition': true })], [wire('s', 'execOut', 'w', 'execIn')]));
+    assert.match(events.find((e) => e.kind === 'error')?.message ?? '', /Infinite loop detected: the loop ran 1,000,000 times/);
+  });
+
+  test('re-entering a running node through an input that only changes state is allowed', () => {
+    const events = run(doc(
+      [node('s', 'core:event.start'), node('g', 'core:flow.gate'), node('p', 'core:console.print', { 'pin:value': 'through' })],
+      [wire('s', 'execOut', 'g', 'enter'), wire('g', 'exit', 'p', 'execIn'), wire('p', 'execOut', 'g', 'close')]
+    ));
+    assert.deepEqual(logs(events), ['through']);
+    assert.equal(events.some((e) => e.kind === 'error'), false);
+  });
+});

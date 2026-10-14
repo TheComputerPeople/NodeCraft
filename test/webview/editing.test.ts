@@ -180,6 +180,35 @@ describe('editing tools', () => {
     assert.deepEqual(await thenPins(), ['then0', 'then1', 'then2']);
   });
 
+  test('MultiGate grows with Add pin; Switch on String cases are named in Details and removed from a pin menu', async (t) => {
+    if (!browser) return t.skip(skipReason);
+    const document = sampleDocument();
+    document.graphs[0].nodes.push(
+      { id: 'mg', type: 'core:flow.multigate', position: { x: 400, y: 380 }, properties: {} },
+      { id: 'ss', type: 'core:flow.switch-string', position: { x: 700, y: 380 }, properties: {} }
+    );
+    editor = await EditorPage.open(browser);
+    await editor.send({ type: 'init', document, definitions: sampleDefinitions(), saveDelay: 0 });
+    const e = editor;
+    const outputs = (id: string) => e.page.$$eval(`.pin[data-node="${id}"][data-direction="output"]`, (els) => els.map((el) => (el as HTMLElement).dataset.pin));
+    await e.page.click('.node[data-node="mg"] .add-pin');
+    assert.deepEqual(await outputs('mg'), ['out0', 'out1', 'out2']);
+
+    await e.page.click('.node[data-node="ss"] .node-header');
+    await e.page.click('#inspector-content button:has-text("Add case")');
+    await e.page.click('#inspector-content button:has-text("Add case")');
+    await e.page.fill('#inspector-content input[aria-label="Case 0"]', 'red');
+    await e.page.press('#inspector-content input[aria-label="Case 0"]', 'Enter');
+    assert.deepEqual(await outputs('ss'), ['case0', 'case1', 'default']);
+    assert.equal(await e.page.textContent('.node[data-node="ss"] .pin-row.output:first-child .pin-label'), 'red');
+
+    const pin = await e.pinCenter('ss', 'case0');
+    await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
+    await e.page.locator('#context-menu button', { hasText: 'Remove Execution Pin' }).click();
+    const saved = await savedGraph(e, (g) => Array.isArray(g.nodes.find((n) => n.id === 'ss')!.properties.cases) && (g.nodes.find((n) => n.id === 'ss')!.properties.cases as string[]).length === 1);
+    assert.deepEqual(saved.nodes.find((n) => n.id === 'ss')!.properties.cases, ['Case 1']);
+  });
+
   test('Shift+W aligns the selection to the top; Q straightens a wire', async (t) => {
     const e = await open(t);
     if (!e) return;

@@ -1,8 +1,8 @@
-import { definitionFor } from '../core/editing';
+import { canAddPin, definitionFor } from '../core/editing';
 import { GraphConnection, GraphNode, PinDefinition } from '../core/model';
 import { formatType } from '../core/types';
 import { SEQUENCE } from '../core/resolve';
-import { addSequenceOutput, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
+import { addOutputPin, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
 import { functionProblem, lookupDefinition, markDirty, pinDef } from './document';
@@ -107,13 +107,13 @@ function renderNode(node: GraphNode): HTMLElement {
     body.append(left, right);
     el.appendChild(body);
     // Unreal's "Add pin +" on nodes whose outputs can grow.
-    if (node.type === SEQUENCE) {
+    if (canAddPin(node)) {
       const add = document.createElement('button');
       add.className = 'add-pin';
       add.textContent = 'Add pin +';
       add.title = 'Add an output';
       add.addEventListener('mousedown', (e) => e.stopPropagation());
-      add.addEventListener('click', () => addSequenceOutput(node));
+      add.addEventListener('click', () => addOutputPin(node));
       el.appendChild(add);
     }
   }

@@ -270,3 +270,20 @@ describe('lowerDocument: graph kinds', () => {
     assert.ok(codes(lower(d).diagnostics, 'warning').includes('graph-not-compiled'));
   });
 });
+
+describe('lowerDocument: flow control', () => {
+  test('a wire back into a loop\'s Break is not a cycle; into its main input it is', () => {
+    const graph = (target: string) => doc(
+      [node('s', 'core:event.start'), node('f', 'core:flow.for-loop-with-break'), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'f', 'execIn'), wire('f', 'loopBody', 'p', 'execIn'), wire('p', 'execOut', 'f', target)]
+    );
+    assert.deepEqual(codes(lower(graph('break')).diagnostics, 'error'), []);
+    assert.deepEqual(codes(lower(graph('execIn')).diagnostics, 'error'), ['exec-cycle']);
+  });
+
+  test('Switch cases become one if/else-if chain from the same node', () => {
+    const result = lower(doc([node('s', 'core:event.start'), node('sw', 'core:flow.switch-int', { 'pin:selection': 1 }), node('a', 'core:console.print'), node('b', 'core:console.print')],
+      [wire('s', 'execOut', 'sw', 'execIn'), wire('sw', 'case0', 'a', 'execIn'), wire('sw', 'case1', 'b', 'execIn')]));
+    assert.deepEqual(shape(result.program!.start), ['store:sw', { if: { then: ['print:a'], else: [{ if: { then: ['print:b'], else: [] } }] } }]);
+  });
+});

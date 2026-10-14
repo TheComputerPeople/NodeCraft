@@ -1,11 +1,12 @@
 // The node palette (left) and the Details panel (right).
 import { renameVariable, setVariableType, variableUses } from '../core/blueprint-edits';
 import { definitionFor } from '../core/editing';
-import { GraphVariable } from '../core/model';
+import { SWITCH_INT, SWITCH_STRING, switchIntCases, switchStringCases } from '../core/flow-control';
+import { GraphNode, GraphVariable } from '../core/model';
 import { ContainerKind } from '../core/types';
 import { defaultValue } from '../core/values';
 import { formatType } from '../core/types';
-import { addNode } from './actions';
+import { addNode, addOutputPin } from './actions';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText } from './document';
 import { dom, escapeHtml, setStatus } from './dom';
 import { renderMyBlueprint } from './my-blueprint';
@@ -73,8 +74,54 @@ export function renderInspector(): void {
     }
     wrapper.appendChild(list);
   }
+  if (node.type === SWITCH_STRING) wrapper.appendChild(switchCasesEditor(node));
+  if (node.type === SWITCH_INT) wrapper.appendChild(switchStartEditor(node));
   dom.inspector.innerHTML = '';
   dom.inspector.appendChild(wrapper);
+}
+
+// Switch on String's case names (Unreal's "Pin Names"), one field each.
+function switchCasesEditor(node: GraphNode): HTMLElement {
+  const section = document.createElement('div');
+  section.className = 'details-fields switch-cases';
+  section.insertAdjacentHTML('beforeend', '<div class="details-heading">Pin Names</div>');
+  const commit = (cases: string[]): void => {
+    node.properties.cases = cases;
+    markDirty();
+    render();
+  };
+  switchStringCases(node).forEach((value, i) => {
+    const input = document.createElement('input');
+    input.value = value;
+    input.setAttribute('aria-label', `Case ${i}`);
+    input.addEventListener('change', () => commit(switchStringCases(node).map((c, j) => (j === i ? input.value : c))));
+    section.appendChild(field(`Case ${i}`, input));
+  });
+  const add = document.createElement('button');
+  add.textContent = 'Add case';
+  add.addEventListener('click', () => {
+    addOutputPin(node);
+  });
+  section.appendChild(add);
+  return section;
+}
+
+// Switch on Int's Start Index: the first case's value.
+function switchStartEditor(node: GraphNode): HTMLElement {
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = '1';
+  input.value = String(switchIntCases(node)[0] ?? 0);
+  input.setAttribute('aria-label', 'Start Index');
+  input.addEventListener('change', () => {
+    node.properties.start = Math.trunc(Number(input.value) || 0);
+    markDirty();
+    render();
+  });
+  const section = document.createElement('div');
+  section.className = 'details-fields';
+  section.appendChild(field('Start Index', input));
+  return section;
 }
 
 const VARIABLE_TYPES: { id: string; label: string }[] = [

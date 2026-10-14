@@ -194,16 +194,16 @@ describe('Sequence pins', () => {
     const g = graphOf(doc([node('q', 'core:flow.sequence'), node('a', 'x'), node('b', 'x'), node('c', 'x')],
       [wire('q', 'then0', 'a', 'in'), wire('q', 'then1', 'b', 'in'), wire('q', 'then2', 'c', 'in')]));
     const q = g.nodes[0];
-    editing.addSequencePin(q);
+    editing.addOutputPin(q);
     assert.equal(q.properties.pins, 4);
-    assert.equal(editing.removeSequencePin(g, q, 'then1'), true);
+    assert.equal(editing.removeOutputPin(g, q, 'then1'), true);
     assert.equal(q.properties.pins, 3);
     assert.deepEqual(g.connections.map((c) => `${c.fromPin}->${c.toNode}`), ['then0->a', 'then1->c']);
   });
 
   test('a Sequence keeps at least one output', () => {
     const g = graphOf(doc([node('q', 'core:flow.sequence', { pins: 1 })], []));
-    assert.equal(editing.removeSequencePin(g, g.nodes[0], 'then0'), false);
+    assert.equal(editing.removeOutputPin(g, g.nodes[0], 'then0'), false);
   });
 });
 
@@ -230,5 +230,26 @@ describe('automatic conversion', () => {
     assert.equal(editing.planConnection(graph, resolve(graph), { node: 'add', pin: 'execOut' }, { node: 'br', pin: 'execIn' })?.convert, false);
     // A number can't become a bool automatically.
     assert.equal(editing.planConnection(graph, resolve(graph), { node: 'add', pin: 'result' }, { node: 'br', pin: 'condition' }), undefined);
+  });
+});
+
+describe('growing outputs', () => {
+  test('Switch on String: Add pin adds a case to name; removing one moves later wires up', () => {
+    const sw = node('sw', 'core:flow.switch-string', { cases: ['red', 'green', 'blue'] });
+    const g = graphOf(doc([sw, node('a', 'core:console.print'), node('b', 'core:console.print')], [wire('sw', 'case1', 'a', 'execIn'), wire('sw', 'case2', 'b', 'execIn')]));
+    editing.addOutputPin(sw);
+    assert.deepEqual(sw.properties.cases, ['red', 'green', 'blue', 'Case 3']);
+    assert.equal(editing.removeOutputPin(g, sw, 'case1'), true);
+    assert.deepEqual(sw.properties.cases, ['red', 'blue', 'Case 3']);
+    assert.deepEqual(g.connections.map((c) => `${c.fromPin}->${c.toNode}`), ['case1->b']);
+  });
+
+  test('MultiGate and Switch on Int keep at least one output; Switch on String may have none', () => {
+    const mg = node('mg', 'core:flow.multigate', { pins: 1 });
+    const ss = node('ss', 'core:flow.switch-string', { cases: ['only'] });
+    const g = graphOf(doc([mg, ss], []));
+    assert.equal(editing.removeOutputPin(g, mg, 'out0'), false);
+    assert.equal(editing.removeOutputPin(g, ss, 'case0'), true);
+    assert.deepEqual(ss.properties.cases, []);
   });
 });

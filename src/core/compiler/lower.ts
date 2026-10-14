@@ -3,6 +3,7 @@
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from '../model';
 import { NodeRegistry } from '../registry';
 import { describeFunction, functionStatus, isFunctionType } from '../imported-functions';
+import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from '../flow-control';
 import { NodeResolver, createResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
@@ -38,9 +39,9 @@ interface GraphInfo {
   graph: Graph;
   nodes: Map<string, GraphNode>;
   definitions: Map<string, NodeDefinition>;
-  // Exec targets of each node's exec outputs, in connection order.
-  execTargets: Map<string, Map<string, string[]>>;
-  // Number of exec wires into each node.
+  // The exec inputs each node's exec outputs are wired to, in connection order.
+  execTargets: Map<string, Map<string, PinRef[]>>;
+  // Number of exec wires into each exec input, keyed by `inputKey`.
   execIndegree: Map<string, number>;
   // The output wired into each data input, keyed by `inputKey`.
   dataSources: Map<string, PinRef>;
@@ -148,10 +149,11 @@ class Lowerer {
         continue;
       }
       if (from.kind === 'exec') {
-        const outputs = info.execTargets.get(c.fromNode) ?? new Map<string, string[]>();
-        outputs.set(c.fromPin, [...(outputs.get(c.fromPin) ?? []), c.toNode]);
+        const outputs = info.execTargets.get(c.fromNode) ?? new Map<string, PinRef[]>();
+        outputs.set(c.fromPin, [...(outputs.get(c.fromPin) ?? []), { node: c.toNode, pin: c.toPin }]);
         info.execTargets.set(c.fromNode, outputs);
-        info.execIndegree.set(c.toNode, (info.execIndegree.get(c.toNode) ?? 0) + 1);
+        const key = inputKey(c.toNode, c.toPin);
+        info.execIndegree.set(key, (info.execIndegree.get(key) ?? 0) + 1);
         continue;
       }
       if (!canConnect(from.type, to.type)) {
@@ -185,16 +187,20 @@ class Lowerer {
     }
   }
 
-  // Exec wires must not loop (docs/semantics.md, "Execution flow"). Reports each loop once.
+  // Exec wires must not loop (docs/semantics.md, "Execution flow"); loops come from loop nodes.
+  // Wires into inputs that only change a node's state (Break, Reset, Gate's Open and Close) don't
+  // continue, so they can't close a loop. Reports each loop once.
   private checkExecCycles(info: GraphInfo): void {
     const state = new Map<string, 'visiting' | 'done'>();
     const visit = (nodeId: string): void => {
       state.set(nodeId, 'visiting');
       for (const targets of info.execTargets.get(nodeId)?.values() ?? []) {
         for (const target of targets) {
-          const seen = state.get(target);
-          if (seen === 'visiting') this.error('exec-cycle', 'Exec wires loop back to this node. Loops need a loop node (arriving in a later version).', info.graph.id, target);
-          else if (!seen) visit(target);
+          const def = info.definitions.get(target.node);
+          if (def && isStateInput(def, target.pin)) continue;
+          const seen = state.get(target.node);
+          if (seen === 'visiting') this.error('exec-cycle', 'Exec wires loop back to this node. Use a loop node (For Loop, While Loop) to repeat.', info.graph.id, target.node);
+          else if (!seen) visit(target.node);
         }
       }
       state.set(nodeId, 'done');
@@ -204,25 +210,30 @@ class Lowerer {
 
   // ---- Statements ----------------------------------------------------------------------------
 
-  // Statements for `nodeId` and everything that runs after it. A node with several exec wires into
-  // it becomes a shared block, called from each path, so its code isn't duplicated.
-  private lowerNode(info: GraphInfo, nodeId: string, ownBlock?: string): IrStatement[] {
+  // Statements for running `nodeId` through its exec input `entry` (its main one by default), and
+  // everything that runs after it. An input with several exec wires into it becomes a shared
+  // block, called from each path, so its code isn't duplicated.
+  private lowerNode(info: GraphInfo, nodeId: string, entry?: string, ownBlock?: string): IrStatement[] {
     const node = info.nodes.get(nodeId);
     const def = info.definitions.get(nodeId);
     if (!node || !def) return [];
+    const pin = entry ?? mainExecInput(def);
     const source: SourceRef = { graphId: info.graph.id, nodeId, title: def.displayName };
-    const key = JSON.stringify([info.graph.id, nodeId]);
-    if ((info.execIndegree.get(nodeId) ?? 0) > 1 && ownBlock !== key) {
+    const key = JSON.stringify([info.graph.id, nodeId, pin]);
+    if ((info.execIndegree.get(inputKey(nodeId, pin)) ?? 0) > 1 && ownBlock !== key) {
       if (!this.blocks.has(key)) {
-        const block: IrBlock = { id: key, name: `run_${nodeId}`, body: [] };
+        const main = pin === mainExecInput(def);
+        const block: IrBlock = { id: key, name: main ? `run_${nodeId}` : `run_${nodeId}_${pin}`, body: [] };
         this.blocks.set(key, block);
-        block.body = this.lowerNode(info, nodeId, key);
+        block.body = this.lowerNode(info, nodeId, pin, key);
       }
       return [{ kind: 'callBlock', block: key, source }];
     }
 
-    const next = (pin: string): IrStatement[] => (info.execTargets.get(nodeId)?.get(pin) ?? []).flatMap((target) => this.lowerNode(info, target));
+    const next = (out: string): IrStatement[] => (info.execTargets.get(nodeId)?.get(out) ?? []).flatMap((target) => this.lowerNode(info, target.node, target.pin));
     const input = (pinId: string): IrExpr => this.inputExpr(info, node, def, pinId);
+    const flowStatements = this.lowerFlowControl(info, node, def, pin, next, input, source);
+    if (flowStatements) return flowStatements;
 
     switch (nativeOperation(def)) {
       case 'start':
@@ -311,6 +322,115 @@ class Lowerer {
       return member ? { kind: 'member', member: member.id } : { kind: 'default', type: pin?.type };
     }
     return { kind: 'output', slot: this.slot(info, sourceNode, sourceDef, source.pin) };
+  }
+
+  // ---- Flow control (docs/program-structure.md, "Flow control") -----------------------------
+
+  // Statements for a flow-control node entered through `entry`, or undefined for other nodes.
+  // Remembered state (Do Once's closed flag, Gate's open flag, …) lives in slots on the object.
+  private lowerFlowControl(
+    info: GraphInfo, node: GraphNode, def: NodeDefinition, entry: string,
+    next: (out: string) => IrStatement[], input: (pinId: string) => IrExpr, source: SourceRef
+  ): IrStatement[] | undefined {
+    const bool = (value: boolean): IrExpr => ({ kind: 'literal', value });
+    const int = (value: number): IrExpr => ({ kind: 'literal', value });
+    const read = (slot: string): IrExpr => ({ kind: 'output', slot });
+    const store = (slot: string, value: IrExpr): IrStatement => ({ kind: 'store', slot, value, source });
+    const when = (condition: IrExpr, then: IrStatement[], otherwise: IrStatement[] = []): IrStatement => ({ kind: 'if', condition, then, else: otherwise, source });
+    const state = (name: string, type: string) => this.stateSlot(info, node, def, name, type);
+    // Unconnected inputs are literals; folding keeps `!true` out of generated code.
+    const truthy = (value: IrExpr): IrExpr => (value.kind === 'literal' ? bool(Boolean(value.value)) : { kind: 'toBoolean', value });
+    const not = (value: IrExpr): IrExpr => (value.kind === 'literal' ? bool(!value.value) : { kind: 'not', value });
+    // Runs `init` the first time any of the node's inputs runs (Unreal reads Start Closed then).
+    const initOnce = (init: IrStatement[]): IrStatement => {
+      const done = state('initialized', 'bool');
+      return when(not(read(done)), [store(done, bool(true)), ...init]);
+    };
+
+    switch (nativeOperation(def)) {
+      case 'for-loop': {
+        const stop = def.inputs.some((p) => p.id === 'break') ? state('stop', 'bool') : undefined;
+        if (entry === 'break') return stop ? [store(stop, bool(true))] : [];
+        return [
+          ...(stop ? [store(stop, bool(false))] : []),
+          { kind: 'for', counter: this.slot(info, node, def, 'index'), first: input('firstIndex'), last: input('lastIndex'), ...(stop ? { stop } : {}), body: next('loopBody'), source },
+          ...next('completed')
+        ];
+      }
+      case 'while-loop':
+        return [{ kind: 'while', condition: truthy(input('condition')), body: next('loopBody'), source }, ...next('completed')];
+      case 'do-once': {
+        const closed = state('closed', 'bool');
+        if (entry === 'reset') return [store(closed, bool(false))];
+        return [
+          initOnce([store(closed, truthy(input('startClosed')))]),
+          when(not(read(closed)), [store(closed, bool(true)), ...next('completed')])
+        ];
+      }
+      case 'do-n': {
+        const counter = this.slot(info, node, def, 'counter');
+        if (entry === 'reset') return [store(counter, int(0))];
+        return [when({ kind: 'binary', op: '<', left: read(counter), right: input('n') }, [
+          store(counter, { kind: 'binary', op: '+', left: read(counter), right: int(1) }),
+          ...next('exit')
+        ])];
+      }
+      case 'gate': {
+        const open = state('open', 'bool');
+        const init = initOnce([store(open, not(truthy(input('startClosed'))))]);
+        switch (entry) {
+          case 'open':
+            return [init, store(open, bool(true))];
+          case 'close':
+            return [init, store(open, bool(false))];
+          case 'toggle':
+            return [init, store(open, not(read(open)))];
+          default:
+            return [init, when(read(open), next('exit'))];
+        }
+      }
+      case 'flip-flop': {
+        const isA = this.slot(info, node, def, 'isA');
+        return [store(isA, not(read(isA))), when(read(isA), next('a'), next('b'))];
+      }
+      case 'multigate': {
+        const initialized = state('initialized', 'bool');
+        const position = state('next', 'int');
+        if (entry === 'reset') return [store(initialized, bool(false))];
+        const outputs = def.outputs.filter((p) => p.kind === 'exec').map((p) => p.id);
+        const current = state('current', 'int');
+        // out0 if current is 0, else out1 if 1, …
+        const dispatch = outputs.reduceRight<IrStatement[]>((otherwise, out, i) => [when({ kind: 'binary', op: '==', left: read(current), right: int(i) }, next(out), otherwise)], []);
+        return [
+          initOnce([store(position, int(0)), when({ kind: 'binary', op: '>=', left: input('startIndex'), right: int(0) }, [store(position, input('startIndex'))])]),
+          when({ kind: 'binary', op: '&&', left: { kind: 'binary', op: '>=', left: read(position), right: int(outputs.length) }, right: truthy(input('loop')) }, [store(position, int(0))]),
+          when({ kind: 'binary', op: '<', left: read(position), right: int(outputs.length) }, [
+            store(current, read(position)),
+            store(position, { kind: 'binary', op: '+', left: read(position), right: int(1) }),
+            ...dispatch
+          ])
+        ];
+      }
+      case 'switch': {
+        const selection = state('selection', node.type === SWITCH_STRING ? 'string' : 'int');
+        const values: unknown[] = node.type === SWITCH_STRING ? switchStringCases(node) : switchIntCases(node);
+        const chain = values.reduceRight<IrStatement[]>(
+          (otherwise, value, i) => [when({ kind: 'binary', op: '==', left: read(selection), right: { kind: 'literal', value } }, next(`case${i}`), otherwise)],
+          next('default')
+        );
+        return [store(selection, input('selection')), ...chain];
+      }
+    }
+    return undefined;
+  }
+
+  // A slot for state a node remembers between runs (not one of its outputs).
+  private stateSlot(info: GraphInfo, node: GraphNode, def: NodeDefinition, name: string, type: string): string {
+    const id = JSON.stringify([info.graph.id, node.id, `state:${name}`]);
+    if (!this.slots.has(id)) {
+      this.slots.set(id, { id, name: `${node.id}_${name}`, type: { id: type }, source: { graphId: info.graph.id, nodeId: node.id, title: def.displayName } });
+    }
+    return id;
   }
 
   // Evaluates `value` for a node feeding an input, reporting a loop if that node is already being

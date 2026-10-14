@@ -11,6 +11,8 @@ export interface NodeLine {
 export class CodeWriter {
   private readonly lines: string[] = [];
   private depth = 0;
+  // The node whose comment was written last, so its following statements don't repeat it.
+  private currentNode: string | undefined;
   readonly nodeLines: NodeLine[] = [];
 
   constructor(private readonly indentUnit: string) {}
@@ -19,10 +21,19 @@ export class CodeWriter {
     this.lines.push(text ? this.indentUnit.repeat(this.depth) + text : '');
   }
 
-  // Writes a comment naming the node, then records the next line as the start of its code.
+  // Writes a comment naming the node and records the next line as the start of its code, unless
+  // the previous statement came from the same node.
   node(source: SourceRef, comment: (text: string) => string): void {
+    const key = JSON.stringify([source.graphId, source.nodeId]);
+    if (key === this.currentNode) return;
+    this.currentNode = key;
     this.line(comment(`${source.title} (${source.nodeId})`));
     this.nodeLines.push({ graphId: source.graphId, nodeId: source.nodeId, line: this.lines.length + 1 });
+  }
+
+  // Code that follows doesn't continue the last node's (a new method, a call to a shared block).
+  endNode(): void {
+    this.currentNode = undefined;
   }
 
   indent(): void {

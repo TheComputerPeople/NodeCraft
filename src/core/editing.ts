@@ -1,8 +1,9 @@
 // Graph-editing operations shared by the webview and tests. Everything here is pure data
 // manipulation: no DOM, no rendering, no persistence. Functions that change the graph mutate the
 // object passed in and report whether anything changed so callers can decide to save and redraw.
+import { DEFAULT_MULTIGATE_PINS, DEFAULT_SWITCH_INT_PINS, MULTIGATE, SWITCH_INT, SWITCH_STRING, pinCount, switchStringCases } from './flow-control';
 import { GraphConnection, GraphNode, NodeDefinition, PinDefinition } from './model';
-import { REROUTE, sequencePinCount } from './resolve';
+import { REROUTE, SEQUENCE, sequencePinCount } from './resolve';
 import { canConnect } from './types';
 
 export interface GraphContent {
@@ -216,22 +217,56 @@ export function insertReroute(
   return knot;
 }
 
-export function addSequencePin(node: GraphNode): void {
-  node.properties.pins = sequencePinCount(node) + 1;
+// Nodes whose outputs grow with Unreal's "Add pin +": the prefix of their numbered outputs.
+const GROWABLE: Record<string, string> = { [SEQUENCE]: 'then', [MULTIGATE]: 'out', [SWITCH_INT]: 'case', [SWITCH_STRING]: 'case' };
+
+export function canAddPin(node: GraphNode): boolean {
+  return node.type in GROWABLE;
 }
 
-// Removes one Then output, as Unreal's "Remove execution pin": its wires go, and later outputs
-// move up one (Then 3 becomes Then 2) keeping their wires. Sequence keeps at least one output.
-export function removeSequencePin(graph: GraphContent, node: GraphNode, pinId: string): boolean {
-  const count = sequencePinCount(node);
-  const index = Number(/^then(\d+)$/.exec(pinId)?.[1]);
-  if (count <= 1 || !Number.isInteger(index) || index >= count) return false;
+function outputCount(node: GraphNode): number {
+  switch (node.type) {
+    case SEQUENCE:
+      return sequencePinCount(node);
+    case MULTIGATE:
+      return pinCount(node, DEFAULT_MULTIGATE_PINS);
+    case SWITCH_INT:
+      return pinCount(node, DEFAULT_SWITCH_INT_PINS);
+    default:
+      return switchStringCases(node).length;
+  }
+}
+
+// Adds an output: the next Then, Out or case (Switch on String gets a new case name to edit).
+export function addOutputPin(node: GraphNode): void {
+  if (node.type === SWITCH_STRING) {
+    const cases = switchStringCases(node);
+    let n = cases.length;
+    while (cases.includes(`Case ${n}`)) n++;
+    node.properties.cases = [...cases, `Case ${n}`];
+  } else if (canAddPin(node)) {
+    node.properties.pins = outputCount(node) + 1;
+  }
+}
+
+// Removes one numbered output, as Unreal's "Remove execution pin": its wires go, and later outputs
+// move up one (Then 3 becomes Then 2) keeping their wires. Sequence, MultiGate and Switch on Int
+// keep at least one; Switch on String may have none (Default remains).
+export function removeOutputPin(graph: GraphContent, node: GraphNode, pinId: string): boolean {
+  const prefix = GROWABLE[node.type];
+  if (!prefix) return false;
+  const count = outputCount(node);
+  const number = (pin: string) => Number(new RegExp(`^${prefix}(\\d+)$`).exec(pin)?.[1]);
+  const index = number(pinId);
+  const minimum = node.type === SWITCH_STRING ? 0 : 1;
+  if (count <= minimum || !Number.isInteger(index) || index >= count) return false;
   graph.connections = graph.connections.filter((c) => !(c.fromNode === node.id && c.fromPin === pinId));
   for (const c of graph.connections) {
-    const later = c.fromNode === node.id ? Number(/^then(\d+)$/.exec(c.fromPin)?.[1]) : NaN;
-    if (later > index) c.fromPin = `then${later - 1}`;
+    const later = c.fromNode === node.id ? number(c.fromPin) : NaN;
+    if (later > index) c.fromPin = `${prefix}${later - 1}`;
   }
-  node.properties.pins = count - 1;
+  if (node.type === SWITCH_STRING) node.properties.cases = switchStringCases(node).filter((_, i) => i !== index);
+  else node.properties.pins = count - 1;
   return true;
 }
 

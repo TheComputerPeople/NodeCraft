@@ -3,7 +3,7 @@ import { copyNodes, pasteNodes } from '../core/clipboard';
 import * as editing from '../core/editing';
 import { addVariable, uniqueName } from '../core/blueprint-edits';
 import { functionStatus, isFunctionType, rebindFunctionNode } from '../core/imported-functions';
-import { SEQUENCE, VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
+import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { GraphNode, NodeDefinition, PinDefinition } from '../core/model';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } from './document';
 import { dom, eventElement, pinElement, setStatus } from './dom';
@@ -219,8 +219,8 @@ export function insertRerouteAt(connectionId: string, clientX: number, clientY: 
   render();
 }
 
-export function addSequenceOutput(node: GraphNode): void {
-  editing.addSequencePin(node);
+export function addOutputPin(node: GraphNode): void {
+  editing.addOutputPin(node);
   markDirty();
   render();
 }
@@ -239,15 +239,15 @@ export function pinMenuItems(nodeId: string, pinId: string): MenuItem[] {
   if (pin?.kind === 'data' && state.document?.kind === 'class') {
     items.push({ label: 'Promote to Variable', action: () => promoteToVariable(nodeId, pinId) });
   }
-  if (node.type === SEQUENCE && /^then\d+$/.test(pinId)) {
+  if (editing.canAddPin(node) && /^(then|out|case)\d+$/.test(pinId)) {
     items.push({
       label: 'Remove Execution Pin',
       danger: true,
       action: () => {
-        if (editing.removeSequencePin(graph, node, pinId)) {
+        if (editing.removeOutputPin(graph, node, pinId)) {
           markDirty();
           render();
-        } else setStatus('A Sequence needs at least one output.');
+        } else setStatus(`${lookupDefinition(node)?.displayName ?? 'This node'} needs at least one output.`);
       }
     });
   }

@@ -260,6 +260,7 @@ class CSharpEmitter {
   // ---- Class members ------------------------------------------------------------------------
 
   private method(access: string, name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | undefined, body: () => void): void {
+    this.out.endNode();
     const list = params.map((p) => `${this.typeName(p.type)} ${p.name}`).join(', ');
     this.out.line(`${access} ${returns ? this.typeName(returns) : 'void'} ${name}(${list})`);
     this.out.line('{');
@@ -293,7 +294,8 @@ class CSharpEmitter {
 
   private statement(s: IrStatement): void {
     const { out } = this;
-    if (s.kind !== 'callBlock') out.node(s.source, (text) => `// ${text}`);
+    if (s.kind === 'callBlock') out.endNode();
+    else out.node(s.source, (text) => `// ${text}`);
     switch (s.kind) {
       case 'print':
         out.line(`Console.WriteLine(${this.text(s.value)});`);
@@ -308,13 +310,33 @@ class CSharpEmitter {
         out.line(`${this.memberNames.get(s.member)} = ${this.coerce(s.value, member?.type)};`);
         break;
       }
-      case 'if':
+      case 'if': {
         out.line(`if (${this.expr(s.condition)})`);
         this.block(s.then);
-        if (s.else.length) {
-          out.line('else');
-          this.block(s.else);
+        // An if in the else branch from the same node (a Switch's cases) reads as `else if`.
+        let rest = s.else;
+        while (rest.length === 1 && rest[0].kind === 'if' && sameSource(rest[0], s)) {
+          const inner: Extract<IrStatement, { kind: 'if' }> = rest[0];
+          out.line(`else if (${this.expr(inner.condition)})`);
+          this.block(inner.then);
+          rest = inner.else;
         }
+        if (rest.length) {
+          out.line('else');
+          this.block(rest);
+        }
+        break;
+      }
+      case 'for': {
+        const counter = this.slotNames.get(s.counter)!;
+        const stop = s.stop ? ` && !${this.slotNames.get(s.stop)}` : '';
+        out.line(`for (${counter} = ${this.coerce(s.first, INT)}; ${counter} <= ${this.coerce(s.last, INT)}${stop}; ${counter}++)`);
+        this.block(s.body);
+        break;
+      }
+      case 'while':
+        out.line(`while (${this.expr(s.condition)})`);
+        this.block(s.body);
         break;
       case 'call': {
         const call = this.call(s.callee, s.args);
@@ -369,12 +391,21 @@ class CSharpEmitter {
       }
       case 'call':
         return this.call(e.callee, e.args);
+      case 'binary': {
+        // Both sides need one type in C#: the one either side has (an int counter, a string
+        // selection), with the other side converted to it.
+        const type = e.op === '&&' || e.op === '||' ? BOOL : this.typeOf(e.left) ?? this.typeOf(e.right);
+        const side = (x: IrExpr) => (type ? this.cast(this.operand(x), this.typeOf(x), type, x.kind === 'literal') : this.operand(x));
+        return `${side(e.left)} ${e.op} ${side(e.right)}`;
+      }
+      case 'not':
+        return `!${this.operand(e.value)}`;
     }
   }
 
   private operand(e: IrExpr): string {
     const text = this.expr(e);
-    return e.kind === 'add' ? `(${text})` : text;
+    return e.kind === 'add' || e.kind === 'binary' ? `(${text})` : text;
   }
 
   private call(callee: IrCallee, args: IrExpr[]): string {
@@ -458,6 +489,13 @@ function literal(value: unknown): string {
   }
   if (typeof value === 'string') return JSON.stringify(value);
   return 'null';
+}
+
+const INT: TypeRef = { id: 'int' };
+const BOOL: TypeRef = { id: 'bool' };
+
+function sameSource(a: IrStatement, b: IrStatement): boolean {
+  return a.kind !== 'callBlock' && b.kind !== 'callBlock' && a.source.graphId === b.source.graphId && a.source.nodeId === b.source.nodeId;
 }
 
 function isNumeric(type: TypeRef | undefined): boolean {

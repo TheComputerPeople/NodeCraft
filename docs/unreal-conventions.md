@@ -38,7 +38,7 @@ Sources:
 | Rename a node or edit a comment | F2, or click the title | Epic |
 | Go to the graph a node refers to | Double-click the node | Epic |
 | Comment around the selection | C | Epic |
-| Place a node | Hold a key and click: B Branch, S Sequence, C Comment, P BeginPlay (our Start); D Delay, G Gate, F For Each Loop, M MultiGate, N Do N, O Do Once arrive with Phase 4's flow-control nodes | Epic |
+| Place a node | Hold a key and click: B Branch, S Sequence, C Comment, P BeginPlay (our Start), G Gate, M MultiGate, N Do N, O Do Once; F For Each Loop and D Delay arrive with containers and latent actions | Epic |
 | Align (top, middle, bottom, left, center, right), straighten connections | Node context menu → Alignment | Epic (menu) |
 | Align top / left / bottom / right | Shift + W / A / S / D | Community |
 | Straighten connections | Q | Community |
