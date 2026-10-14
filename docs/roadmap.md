@@ -162,6 +162,21 @@ Goal: the full set of Blueprint authoring concepts, each enabled per language th
 
 Exit: a non-trivial program (classes, functions, events, async) is built entirely in graphs and runs correctly from generated TypeScript, Python and C#.
 
+Design: [program-structure.md](program-structure.md). Steps, one commit each (large steps may take several):
+
+1. Design and plan (this list).
+2. C# language pack: generator, runner, conformance on every fixture, placement, and C# functions as nodes.
+3. Flow control: loops, Do Once, Do N, Gate, MultiGate, Flip Flop, Switch on Int/String, and their hold keys.
+4. Containers: values and defaults, Make Array/Set/Map, wildcard pins, For Each Loop, the array, set and map functions.
+5. Functions: function graphs, call nodes, several outputs, local variables, pure functions, recursion, Collapse to Function, function libraries.
+6. Macros: tunnels, inline expansion, macro libraries, Collapse to Macro.
+7. Structs and enums: the asset kinds and their editors, Make/Break, Set Members, split pins, Switch on Enum.
+8. Custom events and event dispatchers.
+9. Classes: object references, Construct Object, Target pins, inheritance (graph and code classes), overrides and Parent calls, interfaces, Cast To.
+10. Latent actions: Delay and Retriggerable Delay, async generated code, Simulate's virtual clock.
+11. Entry points (Main, Test Case) and the framework pack format.
+12. The exit program, documentation and the parity checklist.
+
 ### Phase 5: Debugging
 
 Goal: Blueprint debugging, powered by each language's real debugger.
