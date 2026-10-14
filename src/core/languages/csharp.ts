@@ -22,8 +22,44 @@ const RESERVED = new Set([
 
 // Helper methods emitted into the generated class on demand. They implement docs/semantics.md
 // ("Values") exactly as Simulate does, so output matches the other targets.
-const HELPER_NAMES = ['FormatValue', 'FormatNumber', 'ToNumber', 'ToBoolean', 'As'];
-const HELPERS: Record<'format' | 'number' | 'boolean' | 'as', string[]> = {
+const HELPER_NAMES = ['FormatValue', 'FormatNumber', 'ToNumber', 'ToBoolean', 'As', 'ToJson', 'JsonString', 'EnumName', 'Delay', 'LatentQueue', 'LatentClock', 'RunLatentActions'];
+const HELPERS: Record<'format' | 'number' | 'boolean' | 'as' | 'latent', string[]> = {
+  latent: [
+    '// Latent actions of every class run from one queue (kept in the AppDomain), in the order they',
+    '// fall due, once Start() has returned: RunLatentActions() runs them.',
+    'private static List<(double Due, long Order, Action Run)> LatentQueue()',
+    '{',
+    '    if (AppDomain.CurrentDomain.GetData("blueprint.latent") is not List<(double Due, long Order, Action Run)> queue)',
+    '    {',
+    '        queue = new List<(double Due, long Order, Action Run)>();',
+    '        AppDomain.CurrentDomain.SetData("blueprint.latent", queue);',
+    '        AppDomain.CurrentDomain.SetData("blueprint.latent.clock", System.Diagnostics.Stopwatch.StartNew());',
+    '        AppDomain.CurrentDomain.SetData("blueprint.latent.run", (Action)RunLatentActions);',
+    '    }',
+    '    return queue;',
+    '}',
+    '',
+    'private static double LatentClock() => ((System.Diagnostics.Stopwatch)AppDomain.CurrentDomain.GetData("blueprint.latent.clock")!).Elapsed.TotalSeconds;',
+    '',
+    'private static void Delay(double seconds, Action then)',
+    '{',
+    '    var queue = LatentQueue();',
+    '    queue.Add((LatentClock() + Math.Max(0, seconds), queue.Count == 0 ? 0 : queue.Max(e => e.Order) + 1, then));',
+    '}',
+    '',
+    'public static void RunLatentActions()',
+    '{',
+    '    var queue = LatentQueue();',
+    '    while (queue.Count > 0)',
+    '    {',
+    '        var next = queue.OrderBy(e => e.Due).ThenBy(e => e.Order).First();',
+    '        queue.Remove(next);',
+    '        var wait = next.Due - LatentClock();',
+    '        if (wait > 0) System.Threading.Thread.Sleep(TimeSpan.FromSeconds(wait));',
+    '        next.Run();',
+    '    }',
+    '}'
+  ],
   format: [
     'private static string FormatValue(object? value) => value switch',
     '{',
@@ -198,6 +234,8 @@ export function csharpRunProject(targetFramework: string, sources: string[]): Re
       '        try',
       '        {',
       '            type.GetMethod("Start")!.Invoke(System.Activator.CreateInstance(type), null);',
+      '            // Latent actions (Delay) run once Start() has returned.',
+      '            (System.AppDomain.CurrentDomain.GetData("blueprint.latent.run") as System.Action)?.Invoke();',
       '            return 0;',
       '        }',
       '        catch (System.Reflection.TargetInvocationException error)',
@@ -410,7 +448,7 @@ class CSharpEmitter {
       for (const line of DISPATCHER_CLASS) body.line(line);
       body.line();
     }
-    for (const helper of ['format', 'number', 'boolean', 'as'] as const) {
+    for (const helper of ['format', 'number', 'boolean', 'as', 'latent'] as const) {
       if (!this.helpersUsed.has(helper)) continue;
       const kinds = [...this.types.values()].map((t) => t.kind);
       for (const line of helper === 'format' ? formatHelper(kinds.includes('enum'), kinds.includes('struct')) : HELPERS[helper]) body.line(line);
@@ -685,6 +723,38 @@ class CSharpEmitter {
         const other = s.target && s.type ? classInfo(this.program, s.type)?.dispatchers.find((d) => d.id === s.dispatcher)?.inputs.filter((p) => p.kind === 'data') : undefined;
         const params = other ?? this.program.dispatchers?.find((d) => d.id === s.dispatcher)?.params ?? [];
         out.line(`foreach (var handler in ${this.dispatcherRef(s)}.Handlers) handler(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
+        break;
+      }
+      case 'delay': {
+        this.helpersUsed.add('latent');
+        if (s.generation) {
+          // Retriggerable: only the latest start's countdown runs Completed.
+          const generation = this.slotNames.get(s.generation)!;
+          const started = `${generation}_started`;
+          out.line(`var ${started} = ++${generation};`);
+          out.line(`Delay(${this.expr(s.duration)}, () =>`);
+          out.line('{');
+          out.indent();
+          out.line(`if (${started} != ${generation}) return;`);
+          this.statements(s.then);
+          out.dedent();
+          out.line('});');
+          break;
+        }
+        const pending = this.slotNames.get(s.pending!)!;
+        out.line(`if (!${pending})`);
+        out.line('{');
+        out.indent();
+        out.line(`${pending} = true;`);
+        out.line(`Delay(${this.expr(s.duration)}, () =>`);
+        out.line('{');
+        out.indent();
+        out.line(`${pending} = false;`);
+        this.statements(s.then);
+        out.dedent();
+        out.line('});');
+        out.dedent();
+        out.line('}');
         break;
       }
       case 'cast': {

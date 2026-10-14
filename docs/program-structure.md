@@ -95,10 +95,11 @@ Unreal's standard macros, as built-in nodes with Unreal's pins:
 
 ## Latent actions
 
-- **Delay** (Duration in seconds) and **Retriggerable Delay**, with Unreal's rules: while a Delay is pending, running it again does nothing; a Retriggerable Delay restarts its countdown. More latent nodes follow the same model (Delay Until Next Tick, and Phase 3's async project functions as latent nodes, with **Completed** exec outputs).
-- As in Unreal, latent nodes are allowed in event graphs (and in macros used there), not in functions.
-- **Generated code:** every event that can reach a latent node becomes an `async` method (TypeScript `async`/`await` with a timer, Python `asyncio`, C# `async Task` with `Task.Delay`). `start()` runs the Start events and the program ends when every pending latent action has finished.
-- **Simulate** runs latent actions on a virtual clock: a Delay doesn't wait in real time, and pending actions resume in order of their due time (ties in the order they were scheduled). Generated code waits in real time, which gives the same order when the delays differ; graphs that rely on two delays of the same length finishing in a particular order are not portable, and the documentation says so.
+- **Delay** (Duration in seconds) and **Retriggerable Delay** (src/core/latent.ts), with Unreal's rules: a latent node suspends only the chain after it, so the node returns at once (a Sequence's next output runs) and Completed runs when the time is up; while a Delay is waiting, running it again does nothing; a Retriggerable Delay starts its countdown over. Hold D and click to place a Delay. More latent nodes (Delay Until Next Tick, async project functions with Completed outputs) follow the same model.
+- As in Unreal, latent nodes belong in event graphs (and macros used there), not in functions: a function runs to its end at once (a compile error says so). A Delay whose Completed leads back to it is a timer, not an exec loop.
+- The chain after Completed reads an event's inputs as they are when it runs (their latest values), as Unreal reads an event node's outputs.
+- **Generated code:** Completed is a callback, not an `await`, so every language keeps Unreal's order without async methods: TypeScript and JavaScript use `setTimeout` (Node.js runs timers in the order they fall due and waits for them before exiting); Python and C# put latent actions of every class on one queue per process (kept in `sys.modules` and the AppDomain), which runs them in due order once `start()`/`Start()` returns: Run does that, as does the Python module's `__main__` block; C# programs call any generated class's `RunLatentActions()`.
+- **Simulate** runs latent actions on a virtual clock: a Delay doesn't wait in real time, and pending actions run in order of their due time (ties in the order they were started). Generated code waits in real time, which gives the same order when the times differ; graphs that rely on two Delays of the same length finishing in a particular order are not portable. Simulate stops after 10,000 latent actions, as a timer that keeps starting itself runs forever.
 
 ## Entry points and framework packs
 

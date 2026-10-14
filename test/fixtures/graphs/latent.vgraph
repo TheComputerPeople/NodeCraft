@@ -1,0 +1,312 @@
+{
+  "schemaVersion": 3,
+  "name": "Latent",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "ping",
+          "type": "core:event.custom",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "name": "Ping"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:latent.delay",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "properties": {
+            "pin:duration": 0.1
+          }
+        },
+        {
+          "id": "n2",
+          "type": "core:console.print",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "ping"
+          }
+        },
+        {
+          "id": "poke",
+          "type": "core:event.custom",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "properties": {
+            "name": "Poke"
+          }
+        },
+        {
+          "id": "n3",
+          "type": "core:latent.retriggerable-delay",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "properties": {
+            "pin:duration": 0.3
+          }
+        },
+        {
+          "id": "n4",
+          "type": "core:console.print",
+          "position": {
+            "x": 1040,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "poke"
+          }
+        },
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 1040,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n5",
+          "type": "core:flow.sequence",
+          "position": {
+            "x": 1300,
+            "y": 0
+          },
+          "properties": {
+            "pins": 4
+          }
+        },
+        {
+          "id": "n6",
+          "type": "core:latent.delay",
+          "position": {
+            "x": 0,
+            "y": 200
+          },
+          "properties": {
+            "pin:duration": 0.7
+          }
+        },
+        {
+          "id": "n7",
+          "type": "core:console.print",
+          "position": {
+            "x": 260,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": "after 0.7"
+          }
+        },
+        {
+          "id": "n8",
+          "type": "core:console.print",
+          "position": {
+            "x": 520,
+            "y": 200
+          },
+          "properties": {
+            "pin:value": "sync"
+          }
+        },
+        {
+          "id": "n9",
+          "type": "core:call.event",
+          "position": {
+            "x": 780,
+            "y": 200
+          },
+          "properties": {
+            "event": "Ping"
+          }
+        },
+        {
+          "id": "n10",
+          "type": "core:call.event",
+          "position": {
+            "x": 1040,
+            "y": 200
+          },
+          "properties": {
+            "event": "Ping"
+          }
+        },
+        {
+          "id": "n11",
+          "type": "core:call.event",
+          "position": {
+            "x": 1300,
+            "y": 200
+          },
+          "properties": {
+            "event": "Poke"
+          }
+        },
+        {
+          "id": "n12",
+          "type": "core:latent.delay",
+          "position": {
+            "x": 0,
+            "y": 400
+          },
+          "properties": {
+            "pin:duration": 0.2
+          }
+        },
+        {
+          "id": "n13",
+          "type": "core:console.print",
+          "position": {
+            "x": 260,
+            "y": 400
+          },
+          "properties": {
+            "pin:value": "retrigger"
+          }
+        },
+        {
+          "id": "n14",
+          "type": "core:call.event",
+          "position": {
+            "x": 520,
+            "y": 400
+          },
+          "properties": {
+            "event": "Poke"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "ping",
+          "fromPin": "execOut",
+          "toNode": "n1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "completed",
+          "toNode": "n2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w3",
+          "fromNode": "poke",
+          "fromPin": "execOut",
+          "toNode": "n3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n3",
+          "fromPin": "completed",
+          "toNode": "n4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w5",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "n5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n5",
+          "fromPin": "then0",
+          "toNode": "n6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n6",
+          "fromPin": "completed",
+          "toNode": "n7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n5",
+          "fromPin": "then1",
+          "toNode": "n8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w9",
+          "fromNode": "n5",
+          "fromPin": "then2",
+          "toNode": "n9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n9",
+          "fromPin": "execOut",
+          "toNode": "n10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w11",
+          "fromNode": "n5",
+          "fromPin": "then3",
+          "toNode": "n11",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n11",
+          "fromPin": "execOut",
+          "toNode": "n12",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w13",
+          "fromNode": "n12",
+          "fromPin": "completed",
+          "toNode": "n13",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n13",
+          "fromPin": "execOut",
+          "toNode": "n14",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: Delay suspends only the chain after it, a waiting Delay ignores a second start, and a Retriggerable Delay starts over.",
+    "expectedOutput": [
+      "sync",
+      "ping",
+      "retrigger",
+      "poke",
+      "after 0.7"
+    ]
+  }
+}

@@ -83,6 +83,11 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 - Cast To a class succeeds for an object of that class or a subclass; Cast To an interface succeeds for an object whose class (or an ancestor) implements it. An empty reference fails. An interface function the class doesn't implement does nothing and returns its outputs' defaults.
 - A member node on another object reads, sets, calls or runs that object's member; reading or calling through an empty reference stops the run with an error ("Accessed None"). Objects are references: two variables holding the same object see the same variables.
 
+## Latent actions
+
+- A Delay starts its countdown and execution goes on after the node at once (nothing after Completed runs yet); when Duration seconds have passed, Completed runs. A Delay that is waiting ignores being run again; a Retriggerable Delay starts its countdown over (only the last countdown runs Completed).
+- Pending latent actions run after the code that started them, in order of their due time; ties run in the order they were started (Simulate guarantees this; generated code waits in real time).
+
 ## Variables
 
 - Member variables start at their declared default, else their type's default.

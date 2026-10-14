@@ -95,6 +95,10 @@ export type IrStatement =
   // A new object of class `type` into `slot`, its Start events run.
   | { kind: 'construct'; type: string; slot: string; source: SourceRef }
   | { kind: 'setObjectVariable'; target: IrExpr; type: string; variable: string; value: IrExpr; source: SourceRef }
+  // A Delay: unless it is already waiting (`pending`, a bool slot), `then` runs after `duration`
+  // seconds while the code after it goes on. A retriggerable one starts over instead: `generation`
+  // (an int slot) counts the starts, and only the latest one's countdown runs `then`.
+  | { kind: 'delay'; duration: IrExpr; pending?: string; generation?: string; then: IrStatement[]; source: SourceRef }
   // Cast To: `succeeded` runs with the value (as `type`, a class or interface) in `slot` when it is one,
   // else `failed`.
   | { kind: 'cast'; value: IrExpr; type: string; slot: string; succeeded: IrStatement[]; failed: IrStatement[]; source: SourceRef }

@@ -736,6 +736,34 @@ class TypeScriptEmitter {
         }
         break;
       }
+      case 'delay': {
+        // Node.js runs timers in the order they fall due, and waits for them before exiting.
+        const ms = `${this.operand(s.duration)} * 1000`;
+        if (s.generation) {
+          // Retriggerable: only the latest start's countdown runs Completed.
+          const generation = this.slotRef(s.generation);
+          out.line(this.flavor.typed ? 'setTimeout((started: number) => {' : 'setTimeout((/** @type {number} */ started) => {');
+          out.indent();
+          out.line(`if (started !== ${generation}) return;`);
+          this.statements(s.then);
+          out.dedent();
+          out.line(`}, ${ms}, ++${generation});`);
+          break;
+        }
+        const pending = this.slotRef(s.pending!);
+        out.line(`if (!${pending}) {`);
+        out.indent();
+        out.line(`${pending} = true;`);
+        out.line('setTimeout(() => {');
+        out.indent();
+        out.line(`${pending} = false;`);
+        this.statements(s.then);
+        out.dedent();
+        out.line(`}, ${ms});`);
+        out.dedent();
+        out.line('}');
+        break;
+      }
       case 'cast': {
         const local = this.userTypeName(s.type)!;
         const test = s.type.startsWith('interface:') ? `${this.interfaceGuard(local)}(${this.expr(s.value)})` : `${this.operand(s.value)} instanceof ${local}`;

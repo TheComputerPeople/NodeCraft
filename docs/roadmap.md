@@ -173,7 +173,7 @@ Design: [program-structure.md](program-structure.md). Steps, one commit each (la
 7. Structs and enums: the asset kinds and their editors, Make/Break, Set Members, split pins, Switch on Enum.
 8. Custom events and event dispatchers.
 9. Classes: object references, Construct Object, Target pins, inheritance (graph and code classes), overrides and Parent calls, interfaces, Cast To.
-10. Latent actions: Delay and Retriggerable Delay, async generated code, Simulate's virtual clock.
+10. Latent actions: Delay and Retriggerable Delay, generated as timers, Simulate's virtual clock.
 11. Entry points (Main, Test Case) and the framework pack format.
 12. The exit program, documentation and the parity checklist.
 
@@ -261,7 +261,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Nodes | Hold-key + click placement: B, S, C, P | ✅ | — |
 | Nodes | Hold-key + click placement: G, M, N, O | ✅ | — |
 | Nodes | Hold-key + click placement: F | ✅ | — |
-| Nodes | Hold-key + click placement: D (needs Delay) | ⬜ | 4 |
+| Nodes | Hold-key + click placement: D (Delay) | ✅ | — |
 | Nodes | Cut/copy/paste (also between graphs and files, as text), Ctrl+D duplicate | ✅ | — |
 | Nodes | Arrow keys move the selection; F2 renames comments, variables and graphs | ✅ | — |
 | Nodes | C wraps the selection in a comment; comments move their nodes, resize, rename | ✅ | — |
@@ -295,7 +295,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Blueprint Interfaces (implemented in Class Settings, interface calls), Cast To class or interface | ✅ (pure Cast later) | — |
 | Structure | Access (Public, Protected, Private) for variables and functions | ✅ | — |
 | Structure | Custom events (Call), event dispatchers (Call, Bind, Unbind, Unbind all, Assign), on this object or another | ✅ | — |
-| Structure | Latent actions (Delay) | ⬜ | 4 |
+| Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python; methods with Phase 4 classes) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
 | Library | Standard math, string, utility and file nodes | ✅ (collection nodes need Phase 4) | — |

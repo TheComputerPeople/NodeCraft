@@ -15,6 +15,7 @@ import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredC
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
+import { isLatentType } from '../latent';
 import { toIdentifier } from './names';
 
 export interface LowerOptions {
@@ -314,6 +315,8 @@ class Lowerer {
     }
     for (const node of graph.nodes) {
       if (node.type.startsWith('core:event.')) this.error('event-in-function', 'Events belong in event graphs, not in functions.', graph.id, node.id);
+      // As in Unreal: a function runs to its end at once, so it can't wait.
+      if (isLatentType(node.type)) this.error('latent-in-function', 'Delay belongs in event graphs: a function can\'t wait.', graph.id, node.id);
     }
     const signature = graph.signature ?? { inputs: [], outputs: [] };
     const fn: IrFunction = {
@@ -645,12 +648,15 @@ class Lowerer {
 
   // Exec wires must not loop (docs/semantics.md, "Execution flow"); loops come from loop nodes.
   // Wires into inputs that only change a node's state (Break, Reset, Gate's Open and Close) don't
-  // continue, so they can't close a loop. Reports each loop once.
+  // continue, so they can't close a loop; nor does a Delay's Completed, which runs later (a timer
+  // loop, as in Unreal). Reports each loop once.
   private checkExecCycles(info: GraphInfo): void {
     const state = new Map<string, 'visiting' | 'done'>();
     const visit = (nodeId: string): void => {
       state.set(nodeId, 'visiting');
-      for (const targets of info.execTargets.get(nodeId)?.values() ?? []) {
+      const latent = isLatentType(info.nodes.get(nodeId)?.type ?? '');
+      for (const [pin, targets] of info.execTargets.get(nodeId) ?? []) {
+        if (latent && pin === 'completed') continue;
         for (const target of targets) {
           const def = info.definitions.get(target.node);
           if (def && isStateInput(def, target.pin)) continue;
@@ -748,6 +754,23 @@ class Lowerer {
         return [];
       case 'custom-event':
         return next('execOut');
+      case 'delay':
+      case 'retriggerable-delay': {
+        const retriggerable = nativeOperation(def) === 'retriggerable-delay';
+        const pending = retriggerable ? undefined : this.stateSlot(info, node, def, 'pending', 'bool');
+        const generation = retriggerable ? this.stateSlot(info, node, def, 'generation', 'int') : undefined;
+        // The chain after Completed runs later, from no event's method: an event's inputs are read
+        // as they are then (their latest values), as Unreal reads an event node's outputs.
+        const event = this.currentEvent;
+        this.currentEvent = undefined;
+        let then: IrStatement[];
+        try {
+          then = next('completed');
+        } finally {
+          this.currentEvent = event;
+        }
+        return [{ kind: 'delay', duration: { kind: 'toNumber', value: input('duration') }, ...(pending ? { pending } : {}), ...(generation ? { generation } : {}), then, source }];
+      }
       case 'call-event': {
         const target = calledEvent(node, this.doc.graphs);
         if (!target) {

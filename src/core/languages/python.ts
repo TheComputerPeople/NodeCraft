@@ -31,7 +31,41 @@ function mapType(type: TypeRef): string {
 
 // Helper functions emitted into generated modules on demand. They implement docs/semantics.md
 // ("Values") exactly as Simulate does, so output matches the other targets.
-const HELPERS: Record<'format' | 'number' | 'boolean', string[]> = {
+const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent', string[]> = {
+  latent: [
+    'def _delay(seconds: float, action: Any, *args: Any) -> None:',
+    '    # Latent actions of every class run from one queue, in the order they fall due, once start()',
+    '    # has returned: _run_latent_actions() runs them.',
+    '    import heapq',
+    '    import sys',
+    '    import time',
+    '    import types',
+    '    queue: Any = sys.modules.get("_blueprint_latent")',
+    '    if queue is None:',
+    '        queue = types.ModuleType("_blueprint_latent")',
+    '        queue.pending = []',
+    '        queue.order = 0',
+    '',
+    '        def run() -> None:',
+    '            while queue.pending:',
+    '                due, _, then, then_args = heapq.heappop(queue.pending)',
+    '                wait = due - time.monotonic()',
+    '                if wait > 0:',
+    '                    time.sleep(wait)',
+    '                then(*then_args)',
+    '',
+    '        queue.run = run',
+    '        sys.modules["_blueprint_latent"] = queue',
+    '    queue.order += 1',
+    '    heapq.heappush(queue.pending, (time.monotonic() + max(0.0, seconds), queue.order, action, args))',
+    '',
+    '',
+    'def _run_latent_actions() -> None:',
+    '    import sys',
+    '    queue: Any = sys.modules.get("_blueprint_latent")',
+    '    if queue is not None:',
+    '        queue.run()'
+  ],
   format: [
     'def _format_value(value: Any) -> str:',
     '    if value is None:',
@@ -181,7 +215,7 @@ const DISPATCHER_CLASS = [
 const CLASS_STYLES: ClassMemberStyles = { functions: 'snake', variables: 'keep', dispatchers: 'keep', hiddenPrefix: '_' };
 
 // Names fixed in every generated module, which functions must not take.
-const MODULE_NAMES = ['_EventDispatcher', 'annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text'];
+const MODULE_NAMES = ['_EventDispatcher', 'annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text', '_delay', '_run_latent_actions'];
 
 // The names a function library's functions are defined as (snake_case, unique in the module). The
 // library's own generated module and every module that imports it use these.
@@ -203,7 +237,9 @@ const pythonGenerator: CodeGenerator = {
       '-c',
       [
         ...(context?.importRoots?.length ? [`import sys; sys.path[:0] = ${JSON.stringify(context.importRoots)}`] : []),
-        `import importlib.util as u; s = u.spec_from_file_location("vgraph_module", ${JSON.stringify(file.path)}); m = u.module_from_spec(s); s.loader.exec_module(m); m.${className}().start()`
+        `import importlib.util as u; s = u.spec_from_file_location("vgraph_module", ${JSON.stringify(file.path)}); m = u.module_from_spec(s); s.loader.exec_module(m); m.${className}().start()`,
+        // Latent actions (Delay) run once start() has returned.
+        'import sys; q = sys.modules.get("_blueprint_latent"); q and q.run()'
       ].join('; ')
     ],
     missingToolMessage: 'Python 3 was not found. Install Python 3.8 or later and make sure it is on the PATH.'
@@ -476,7 +512,7 @@ class PythonEmitter {
     header.line();
 
     const footer: string[] = [];
-    for (const helper of ['format', 'number', 'boolean'] as const) {
+    for (const helper of ['format', 'number', 'boolean', 'latent'] as const) {
       if (!this.helpersUsed.has(helper)) continue;
       const kinds = [...this.types.values()].map((t) => t.kind);
       footer.push('', '', ...(helper === 'format' ? formatHelper(kinds.includes('enum'), kinds.includes('struct')) : HELPERS[helper]));
@@ -486,7 +522,7 @@ class PythonEmitter {
       footer.push('', '', "# Unreal's event dispatcher: bound events run in the order they were bound, each event once.", ...DISPATCHER_CLASS);
     }
     if (late.length) footer.push('', '', '# Classes are imported last: they may use this one.', ...late);
-    if (runnable) footer.push('', '', 'if __name__ == "__main__":', `    ${this.className}().start()`);
+    if (runnable) footer.push('', '', 'if __name__ == "__main__":', `    ${this.className}().start()`, ...(this.helpersUsed.has('latent') ? ['    _run_latent_actions()'] : []));
 
     const roots = [...new Set(this.program.imports.map((i) => pythonImportRoot(i.path, i.module ?? pythonModuleName(i.path))))].sort();
     const headerText = header.toString();
@@ -669,6 +705,34 @@ class PythonEmitter {
       case 'broadcast':
         out.line(`${this.dispatcherRef(s)}.broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
         break;
+      case 'delay': {
+        this.helpersUsed.add('latent');
+        this.usesAny = true;
+        const callback = `_after_${this.slotNames.get((s.pending ?? s.generation)!)!.replace(/^_+/, '')}`;
+        const generation = s.generation && this.slotRef(s.generation);
+        if (!generation) {
+          out.line(`if not ${this.slotRef(s.pending!)}:`);
+          out.indent();
+          out.line(`${this.slotRef(s.pending!)} = True`);
+          out.line();
+        } else {
+          // Retriggerable: only the latest start's countdown runs Completed.
+          out.line(`${generation} += 1`);
+          out.line();
+        }
+        out.line(`def ${callback}(${generation ? 'started: int' : ''}) -> None:`);
+        out.indent();
+        if (generation) {
+          out.line(`if started != ${generation}:`);
+          out.line('    return');
+        } else out.line(`${this.slotRef(s.pending!)} = False`);
+        this.statements(s.then);
+        out.dedent();
+        out.line();
+        out.line(`_delay(${this.expr(s.duration)}, ${callback}${generation ? `, ${generation}` : ''})`);
+        if (!generation) out.dedent();
+        break;
+      }
       case 'cast':
         out.line(`if isinstance(${this.expr(s.value)}, ${this.userTypeName(s.type)}):`);
         out.indent();

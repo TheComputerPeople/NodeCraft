@@ -82,10 +82,19 @@ const OUT_OF_STACK = `Too many nested calls: the graph keeps calling itself.`;
 // Simulate stops a loop after this many passes, as Unreal's editor does; generated code has no limit.
 export const MAX_LOOP_PASSES = 1_000_000;
 
+// Simulate stops after running this many latent actions (a timer loop runs forever otherwise).
+export const MAX_LATENT_ACTIONS = 10_000;
+
 // Thrown after an error has been reported, to stop the whole run (docs/semantics.md, "Errors").
 class RunStopped extends Error {}
 
 export class GraphRuntime {
+  // Simulate's virtual clock (docs/program-structure.md, "Latent actions"): pending latent actions
+  // run in the order they fall due (ties in the order they were started), without waiting.
+  private latent: { due: number; order: number; run: () => void }[] = [];
+  private clock = 0;
+  private latentOrder = 0;
+
   constructor(
     private readonly registry: NodeRegistry,
     private readonly emit: (event: RuntimeLogEvent) => void,
@@ -108,7 +117,20 @@ export class GraphRuntime {
     }
 
     try {
+      this.latent = [];
+      this.clock = 0;
       this.start(run);
+      // Then the latent actions, as their time comes.
+      for (let ran = 0; this.latent.length; ran++) {
+        if (ran >= MAX_LATENT_ACTIONS) {
+          this.emit({ kind: 'error', message: `Simulate stopped after ${MAX_LATENT_ACTIONS} latent actions (a Delay that keeps starting itself runs forever).` });
+          throw new RunStopped('latent');
+        }
+        this.latent.sort((a, b) => a.due - b.due || a.order - b.order);
+        const next = this.latent.shift()!;
+        this.clock = next.due;
+        next.run();
+      }
       this.emit({ kind: 'graph.complete', message: 'Graph execution completed.' });
     } catch (error) {
       if (!(error instanceof RunStopped)) throw error;
@@ -207,6 +229,29 @@ export class GraphRuntime {
       }
       case 'self':
         return;
+      case 'delay':
+      case 'retriggerable-delay': {
+        if (context.frame.depth > 0) this.fail(context, node, "Delay belongs in event graphs: a function can't wait.");
+        const seconds = Math.max(0, toNumber(input('duration')));
+        const key = (name: string) => outputKey(graph, node, `state:${name}`);
+        const state = context.frame.state;
+        exit();
+        if (nativeOperation(definition) === 'retriggerable-delay') {
+          // Starts over: only the latest start's countdown runs Completed.
+          const started = Number(state.get(key('generation')) ?? 0) + 1;
+          state.set(key('generation'), started);
+          this.schedule(seconds, () => {
+            if (state.get(key('generation')) === started) continueFrom('completed');
+          });
+        } else if (!state.get(key('pending'))) {
+          state.set(key('pending'), true);
+          this.schedule(seconds, () => {
+            state.set(key('pending'), false);
+            continueFrom('completed');
+          });
+        }
+        return;
+      }
       case 'interface-call': {
         const outputs = this.callInterface(context, node, definition, input);
         for (const [pin, value] of outputs) setOutput(pin, value);
@@ -673,6 +718,10 @@ export class GraphRuntime {
     // The run of the class that declares the member (an ancestor's, for an inherited one).
     const layers = (value.state as RunState).layers;
     return { type, target: layers.find((l) => l.ownClass?.id === type.id) ?? layers[0] };
+  }
+
+  private schedule(seconds: number, run: () => void): void {
+    this.latent.push({ due: this.clock + seconds, order: this.latentOrder++, run });
   }
 
   // Whether an object is of a class (or a subclass of it), or implements an interface.
