@@ -52,6 +52,10 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
       <header><span id="results-title">Compiler Results</span><button id="results-close" title="Close">×</button></header>
       <ul id="results-list"></ul>
     </section>
+    <section id="find-results" hidden aria-label="Find Results">
+      <header><span id="find-title">Find Results</span><input id="find-input" class="find-input" placeholder="Search this graph file" aria-label="Find"><label class="find-scope"><input type="checkbox" id="find-all"> All files</label><button id="find-close" title="Close">×</button></header>
+      <ul id="find-list"></ul>
+    </section>
     <div id="help">Drag pins to connect · Alt+click a pin breaks its links · Ctrl+drag a pin moves them · Right-click for menus, right-drag to pan · Hold B, S or P and click to place · F7 compiles</div>
   </main>
   <aside id="inspector" class="panel">

@@ -6,6 +6,7 @@ import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, 
 import { applySettings, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
 import { dom, eventElement, nodeElement, setStatus } from './dom';
 import { postToHost } from './host';
+import { openFind, reveal, showResults } from './find';
 import { AlignEdge, alignSelection, straightenConnections } from './align';
 import { finishVariableDrag, removeVariable, startRename, updateVariableDrag } from './my-blueprint';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showNodeContextMenu } from './menus';
@@ -65,6 +66,15 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
     case 'runStatus':
       if (message.run) setStatus(message.run.message);
       break;
+    case 'findResults':
+      if (dom.findAll.checked) showResults(message.results ?? []);
+      break;
+    case 'reveal':
+      if (message.target) reveal(message.target);
+      break;
+    case 'openFind':
+      openFind(message.findAll ?? false);
+      break;
     case 'documentChanged': {
       if (!message.document) break;
       const hadGraph = !!state.graph;
@@ -114,6 +124,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
   } else if (e.key === 'F2' && state.selectedVariableId) {
     startRename('variable', state.selectedVariableId);
+    e.preventDefault();
+  } else if (mod && key === 'f') {
+    // Ctrl+F finds in this file, Ctrl+Shift+F in every file (Unreal's Find in All Blueprints).
+    openFind(e.shiftKey);
     e.preventDefault();
   } else if (mod && key === 'a') {
     selectAllNodes();

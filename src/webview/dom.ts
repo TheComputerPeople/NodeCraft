@@ -27,6 +27,11 @@ export const dom = {
   resultsTitle: element<HTMLSpanElement>('results-title'),
   resultsList: element<HTMLUListElement>('results-list'),
   resultsClose: element<HTMLButtonElement>('results-close'),
+  find: element<HTMLElement>('find-results'),
+  findInput: element<HTMLInputElement>('find-input'),
+  findAll: element<HTMLInputElement>('find-all'),
+  findList: element<HTMLUListElement>('find-list'),
+  findClose: element<HTMLButtonElement>('find-close'),
   fitButton: element<HTMLButtonElement>('fit')
 };
 

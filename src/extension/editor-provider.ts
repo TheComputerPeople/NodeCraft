@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { LanguagePackRegistry } from '../core/language-pack';
-import { CompileReport, GraphDocument, HostMessage, LanguageOption, UIMessage } from '../core/model';
+import { CompileReport, FileSearchHit, GraphDocument, HostMessage, LanguageOption, RevealTarget, UIMessage } from '../core/model';
+import { createResolver } from '../core/resolve';
+import { searchDocument } from '../core/search';
 import { NodeRegistry } from '../core/registry';
 import { GraphRuntime } from '../core/runtime';
 import { parseDocument, serializeDocument } from '../core/serializer';
@@ -13,6 +15,8 @@ type PanelSet = Set<vscode.WebviewPanel>;
 
 export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly panelsByDocument = new Map<string, PanelSet>();
+  // Find in All Blueprints hits to show once their file's editor has loaded.
+  private readonly pendingReveals = new Map<string, RevealTarget>();
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -83,8 +87,19 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
               compile: this.compiler.lastReport(document.uri)
             });
             if (parseError) this.post(webviewPanel, { type: 'error', message: parseError });
+            const reveal = this.pendingReveals.get(key);
+            if (reveal) {
+              this.pendingReveals.delete(key);
+              this.post(webviewPanel, { type: 'reveal', target: reveal });
+            }
             break;
           }
+          case 'findInAll':
+            this.post(webviewPanel, { type: 'findResults', results: await this.findInAll(message.query ?? '', key) });
+            break;
+          case 'reveal':
+            if (message.target?.uri) await this.reveal(message.target);
+            break;
           case 'applyDocument': {
             if (!message.document) return;
             const text = serializeDocument(message.document);
@@ -139,6 +154,59 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     disposables.push(vscode.workspace.onDidGrantWorkspaceTrust(() => {
       this.post(webviewPanel, { type: 'settings', trusted: true });
     }));
+  }
+
+  // Unreal's Find in All Blueprints: searches every graph in the workspace, using the editor's
+  // text for files that are open (so unsaved changes are found too).
+  private async findInAll(query: string, currentKey: string): Promise<FileSearchHit[]> {
+    if (!query.trim()) return [];
+    const files = await vscode.workspace.findFiles('**/*.vgraph', '**/node_modules/**', 2000);
+    const results: FileSearchHit[] = [];
+    for (const uri of files) {
+      const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+      let text: string;
+      try {
+        text = open?.getText() ?? new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+      } catch {
+        continue;
+      }
+      let graphDocument: GraphDocument;
+      try {
+        graphDocument = parseDocument(text, uri.path.split('/').pop()?.replace(/\.vgraph$/i, '') || 'Graph').document;
+      } catch {
+        // Unreadable graphs are skipped; opening them shows the problem.
+        continue;
+      }
+      const resolve = createResolver(this.registry, graphDocument.variables);
+      for (const hit of searchDocument(graphDocument, query, resolve)) {
+        results.push({ ...hit, uri: uri.toString(), file: vscode.workspace.asRelativePath(uri), current: uri.toString() === currentKey });
+        if (results.length >= MAX_FIND_RESULTS) return results;
+      }
+    }
+    return results;
+  }
+
+  // Opens another graph file at a Find in All Blueprints hit.
+  private async reveal(target: RevealTarget): Promise<void> {
+    const uri = vscode.Uri.parse(target.uri!);
+    const key = uri.toString();
+    const open = this.panelsByDocument.get(key);
+    if (open?.size) open.forEach((panel) => this.post(panel, { type: 'reveal', target }));
+    else this.pendingReveals.set(key, target);
+    await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+  }
+
+  // Sends a message to the graph editor that has focus, if any.
+  postToActive(message: HostMessage): boolean {
+    for (const panels of this.panelsByDocument.values()) {
+      for (const panel of panels) {
+        if (panel.active) {
+          this.post(panel, message);
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   // Shows a compile result in every editor open on the graph.
@@ -205,6 +273,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   }
 }
 
+const MAX_FIND_RESULTS = 500;
 const RESTRICTED_MODE_MESSAGE = 'Running graphs is disabled in Restricted Mode. Trust this workspace to run graphs.';
 const SAVE_DELAY_SETTING = 'blueprintVisualScripting.autoSaveDelay';
 const DEFAULT_SAVE_DELAY_MS = 150;

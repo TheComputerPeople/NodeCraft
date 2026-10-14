@@ -1,4 +1,5 @@
 import type { CompileDiagnostic } from './compiler/diagnostics';
+import type { SearchHit } from './search';
 import type { TypeRef } from './types';
 
 export type { TypeRef } from './types';
@@ -149,10 +150,30 @@ export interface LanguageOption {
   displayName: string;
 }
 
+// A Find in All Blueprints hit: a search hit plus the file it is in.
+export interface FileSearchHit extends SearchHit {
+  uri: string;
+  // Workspace-relative path, for display.
+  file: string;
+  // The hit is in the document of the editor that asked.
+  current: boolean;
+}
+
+// Where to jump to: a hit in the current document, or in another file (`uri`).
+export interface RevealTarget {
+  uri?: string;
+  kind: SearchHit['kind'];
+  id: string;
+  graphId?: string;
+}
+
 export interface UIMessage {
   // run: compile, then run the generated code; simulate: run in the editor's interpreter.
-  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate';
+  // findInAll: search every graph in the workspace; reveal: open another file at a hit.
+  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'findInAll' | 'reveal';
   document?: GraphDocument;
+  query?: string;
+  target?: RevealTarget;
 }
 
 export interface HostMessage {
@@ -164,6 +185,9 @@ export interface HostMessage {
     | 'runtimeEvent'
     | 'compileResult'
     | 'runStatus'
+    | 'findResults'
+    | 'reveal'
+    | 'openFind'
     | 'error';
   // Absent on 'init' when the file could not be parsed; the webview then stays read-only.
   document?: GraphDocument;
@@ -175,5 +199,9 @@ export interface HostMessage {
   languages?: LanguageOption[];
   compile?: CompileReport;
   run?: RunStatus;
+  results?: FileSearchHit[];
+  // openFind: search every file (Find in All Blueprints) rather than this one.
+  findAll?: boolean;
+  target?: RevealTarget;
   message?: string;
 }

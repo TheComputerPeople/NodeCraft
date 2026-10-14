@@ -53,6 +53,11 @@
         "title": "Run Graph",
         "category": "Blueprint Visual Scripting",
         "icon": "$(play)"
+      },
+      {
+        "command": "blueprintVisualScripting.findInAll",
+        "title": "Find in All Blueprints",
+        "category": "Blueprint Visual Scripting"
       }
     ],
     "customEditors": [
@@ -127,9 +132,21 @@
         {
           "command": "blueprintVisualScripting.run",
           "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor || resourceExtname == .vgraph"
+        },
+        {
+          "command": "blueprintVisualScripting.findInAll",
+          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "blueprintVisualScripting.findInAll",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc -p ./ && npm run compile:webview",

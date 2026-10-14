@@ -49,6 +49,11 @@ export function activate(context: vscode.ExtensionContext): void {
       const document = await graphDocumentFor(uri);
       if (document) await compileAndReport(document);
     }),
+    // Bound to Ctrl+Shift+F in graph editors, so it opens Find in All Blueprints rather than
+    // VS Code's workspace search (as in Unreal).
+    vscode.commands.registerCommand('blueprintVisualScripting.findInAll', () => {
+      if (!provider.postToActive({ type: 'openFind', findAll: true })) void vscode.commands.executeCommand('workbench.action.findInFiles');
+    }),
     vscode.commands.registerCommand('blueprintVisualScripting.run', async (uri?: vscode.Uri) => {
       const document = await graphDocumentFor(uri);
       if (!document) return;

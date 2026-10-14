@@ -235,7 +235,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Variables | Ctrl-drag → Get, Alt-drag → Set, drag onto a pin | ✅ | — |
 | Variables | Promote pin to variable | ✅ | — |
 | Variables | Container types (array/set/map) | 🟡 (type picker; container defaults and operations need Phase 4) | 4 |
-| Search | Find in Blueprint (Ctrl+F) / Find in All Blueprints (Ctrl+Shift+F) | ⬜ | 2 |
+| Search | Find in Blueprint (Ctrl+F) / Find in All Blueprints (Ctrl+Shift+F) | ✅ | — |
 | Palette | Favorites | ⬜ (per-user, needs settings storage) | later |
 | Compile | Compile button, Compiler Results, error badges on nodes | ✅ | — |
 | Compile | F7 compiles | ✅ | — |
