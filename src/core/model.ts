@@ -95,11 +95,16 @@ export interface GraphConnection {
   toPin: string;
 }
 
+// Who may use a class's variable or function, as Unreal's Private flag and Access Specifier:
+// anyone (the default), the class and its subclasses, or the class alone.
+export type Access = 'public' | 'protected' | 'private';
+
 export interface GraphVariable {
   id: string;
   name: string;
   type: TypeRef;
   defaultValue?: unknown;
+  access?: Access;
   // Grouping and help text shown in the My Blueprint panel, as in Unreal.
   category?: string;
   description?: string;
@@ -132,6 +137,8 @@ export interface GraphSignature {
   // Shown on call nodes and in the palette, as Unreal's function Description and Category.
   description?: string;
   category?: string;
+  // A class function's Access Specifier (public when absent).
+  access?: Access;
 }
 
 // Event graphs hold entry points; function and macro graphs have a signature.

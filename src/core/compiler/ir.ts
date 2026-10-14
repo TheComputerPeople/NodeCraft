@@ -113,6 +113,8 @@ export interface IrMember {
   type?: TypeRef;
   initial: IrExpr;
   function?: string;
+  // A member variable's access (public when absent).
+  access?: 'protected' | 'private';
 }
 
 // Storage for one output pin of an impure node (or a node's remembered state). Slots of nodes in a
@@ -138,6 +140,8 @@ export interface IrFunction {
   body: IrStatement[];
   // Replaces the parent class's function of the same name (C# needs `override`).
   overrides?: boolean;
+  // Its access (public when absent).
+  access?: 'protected' | 'private';
   // A custom event (docs/program-structure.md, "Custom events and event dispatchers"): its inputs
   // read outside its own flow are kept in these slots when it runs, as Unreal keeps an event's
   // outputs.
@@ -323,9 +327,9 @@ function literalType(value: unknown): TypeRef | undefined {
 // A program's public members, in the order claimClassMembers names them (src/core/compiler/names.ts).
 export function programClassSpec(program: IrProgram): ClassMemberSpec {
   return {
-    functions: program.functions.filter((f) => !f.event).map((f) => ({ id: f.id, name: f.name })),
+    functions: program.functions.filter((f) => !f.event).map((f) => ({ id: f.id, name: f.name, ...(f.access ? { access: f.access } : {}) })),
     events: program.functions.filter((f) => f.event).map((f) => ({ id: f.id, name: f.name })),
-    variables: program.members.filter((m) => !m.function).map((m) => ({ id: m.id, name: m.name })),
+    variables: program.members.filter((m) => !m.function).map((m) => ({ id: m.id, name: m.name, ...(m.access ? { access: m.access } : {}) })),
     dispatchers: (program.dispatchers ?? []).map((d) => ({ id: d.id, name: d.name }))
   };
 }

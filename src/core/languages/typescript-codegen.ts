@@ -163,7 +163,7 @@ class TypeScriptEmitter {
     const members = this.program.members.filter((m) => !m.function);
     const slots = this.program.slots.filter((x) => !x.function);
     const dispatchers = this.program.dispatchers ?? [];
-    for (const m of members) this.field(this.memberNames.get(m.id)!, m.type, this.coerce(m.initial, m.type), false);
+    for (const m of members) this.field(this.memberNames.get(m.id)!, m.type, this.coerce(m.initial, m.type), m.access ?? false);
     for (const d of dispatchers) {
       const name = this.dispatcherNames.get(d.id)!;
       if (flavor.typed) out.line(`readonly ${name} = new ${DISPATCHER_CLASS}<[${d.params.map((p) => this.typeName(p.type)).join(', ')}]>();`);
@@ -507,9 +507,10 @@ class TypeScriptEmitter {
 
   // ---- Class members ------------------------------------------------------------------------
 
-  private field(name: string, type: TypeRef | undefined, initial: string, internal: boolean): void {
+  // `internal`: private (true, or 'private'), protected, or public (false).
+  private field(name: string, type: TypeRef | undefined, initial: string, internal: boolean | 'protected' | 'private'): void {
     if (this.flavor.typed) {
-      this.out.line(`${internal ? 'private ' : ''}${name}: ${this.typeName(type)} = ${initial};`);
+      this.out.line(`${modifier(internal)}${name}: ${this.typeName(type)} = ${initial};`);
     } else {
       this.out.line(`/** @type {${this.typeName(type)}} */`);
       this.out.line(`${name} = ${initial};`);
@@ -517,7 +518,7 @@ class TypeScriptEmitter {
   }
 
   // `returns` is a type, or the text of one (a function's result object).
-  private method(name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | string | undefined, internal: boolean, body: () => void): void {
+  private method(name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | string | undefined, internal: boolean | 'protected' | 'private', body: () => void): void {
     const { out, flavor } = this;
     out.endNode();
     const returnText = typeof returns === 'string' ? returns : returns ? (flavor.typed ? this.typeName(returns) : this.mapType(returns)) : undefined;
@@ -525,7 +526,7 @@ class TypeScriptEmitter {
     const keyword = this.library ? `${!internal && this.esm ? 'export ' : ''}function ` : '';
     if (flavor.typed) {
       const list = params.map((p) => `${p.name}: ${this.typeName(p.type)}`).join(', ');
-      out.line(`${keyword}${internal && !this.library ? 'private ' : ''}${name}(${list}): ${returnText ?? 'void'} {`);
+      out.line(`${keyword}${this.library ? '' : modifier(internal)}${name}(${list}): ${returnText ?? 'void'} {`);
     } else {
       if (params.length || returnText) {
         out.line('/**');
@@ -555,7 +556,7 @@ class TypeScriptEmitter {
     const slots = this.program.slots.filter((x) => x.function === fn.id);
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name));
     if (fn.description) this.out.line(`// ${fn.description.replace(/\s+/g, ' ')}`);
-    this.method(this.functionNames.get(fn.id)!, params, this.resultType(fn), false, () => {
+    this.method(this.functionNames.get(fn.id)!, params, this.resultType(fn), fn.access ?? false, () => {
       // A custom event keeps the inputs other flows read, as Unreal keeps an event's outputs.
       for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotRef(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)};`);
       for (const m of locals) this.local(this.memberNames.get(m.id)!, m.type, this.coerce(m.initial, m.type));
@@ -1023,6 +1024,11 @@ class TypeScriptEmitter {
 }
 
 const INT: TypeRef = { id: 'int' };
+
+// TypeScript's access keyword for a member: private (true, or 'private'), protected, or none.
+function modifier(internal: boolean | 'protected' | 'private'): string {
+  return internal === true || internal === 'private' ? 'private ' : internal === 'protected' ? 'protected ' : '';
+}
 
 function sameSource(a: IrStatement, b: IrStatement): boolean {
   return a.kind !== 'callBlock' && b.kind !== 'callBlock' && a.source.graphId === b.source.graphId && a.source.nodeId === b.source.nodeId;

@@ -11,7 +11,7 @@ import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
-import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest } from '../objects';
+import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest } from '../objects';
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
@@ -111,7 +111,8 @@ class Lowerer {
         id: variable.id,
         name: variable.name,
         type: variable.type,
-        initial: this.initialExpr(variable.defaultValue, variable.type)
+        initial: this.initialExpr(variable.defaultValue, variable.type),
+        ...(variable.access && variable.access !== 'public' ? { access: variable.access } : {})
       });
     }
 
@@ -323,6 +324,7 @@ class Lowerer {
       pure: !!signature.pure,
       ...(signature.description ? { description: signature.description } : {}),
       ...(this.ownClass && parentFunction(this.ownClass, graph.name, (t) => this.options.registry.get(t)) ? { overrides: true } : {}),
+      ...(signature.access && signature.access !== 'public' ? { access: signature.access } : {}),
       body: []
     };
     // Registered before the body, so calls inside it (recursion) can find it.
@@ -393,6 +395,15 @@ class Lowerer {
     if (this.ownClass && implementedInterfaces(this.ownClass, (t) => this.options.registry.get(t)).includes(iface.id)) return { kind: 'self' };
     this.error('target-missing', `Connect an object that implements ${iface.name} to Target.`, info.graph.id, node.id);
     return { kind: 'default', type: { id: iface.id } };
+  }
+
+  // A protected member is for its class and subclasses, a private one for its class alone.
+  private checkAccess(info: GraphInfo, node: GraphNode, type: ClassInfo): void {
+    const member = node.properties.variable !== undefined ? type.variables.find((v) => v.id === node.properties.variable)
+      : node.properties.function !== undefined ? type.functions.find((f) => f.id === node.properties.function) : undefined;
+    if (member && !canAccess(member.access, type.id, this.ownClass, (t) => this.options.registry.get(t))) {
+      this.error('member-access', `"${member.name}" is ${member.access} to ${type.name}${member.access === 'protected' ? ' and its subclasses' : ''}.`, info.graph.id, node.id);
+    }
   }
 
   // The class a member node uses, or an error.
@@ -508,6 +519,7 @@ class Lowerer {
     if (!['object-set', 'object-call', 'object-event', 'object-dispatcher'].includes(operation)) return undefined;
     const type = this.memberClass(info, node);
     if (!type) return next('execOut');
+    this.checkAccess(info, node, type);
     const target = this.targetExpr(info, node, def, type);
     const args = dataInputs(def).filter((p) => p.id !== 'target' && p.id !== 'event').map((p) => input(p.id));
     switch (operation) {
@@ -855,6 +867,7 @@ class Lowerer {
     if (operation === 'object-get' || operation === 'object-set' || (operation === 'object-call' && isPure(sourceDef))) {
       const type = this.memberClass(info, sourceNode);
       if (!type) return { kind: 'default', type: pin?.type };
+      this.checkAccess(info, sourceNode, type);
       const target = this.targetExpr(info, sourceNode, sourceDef, type);
       if (operation !== 'object-call') return { kind: 'objectVariable', target, type: type.id, variable: String(sourceNode.properties.variable) };
       return this.follow(info, sourceNode, 'Pure nodes are wired in a loop.', pin, () => ({

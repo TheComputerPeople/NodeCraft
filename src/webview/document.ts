@@ -1,11 +1,11 @@
 // The document being edited, the node definitions it uses, and syncing changes back to the host.
 import { pinDefinition, releaseWildcards } from '../core/editing';
-import { GraphDocument, GraphNode, GraphPin, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
+import { Access, GraphDocument, GraphNode, GraphPin, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
 import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions } from '../core/imported-functions';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, UNBIND_ALL, UNBIND_EVENT, customEvents, documentDispatchers, eventName } from '../core/events';
-import { INTERFACE_CALL, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, PARENT_START, ancestors, classTypeId, declaredClass, implementedInterfaces, interfaceById, subclassTest } from '../core/objects';
+import { INTERFACE_CALL, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, PARENT_START, ancestors, canAccess, classTypeId, declaredClass, implementedInterfaces, interfaceById, subclassTest } from '../core/objects';
 import { setClassHierarchy } from '../core/types';
 import { listUserTypes } from '../core/user-types';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
@@ -76,6 +76,7 @@ export function paletteEntries(): PaletteEntry[] {
   }
   // Other classes' members, each with a Target pin, under the class's name (src/core/objects.ts).
   const own = state.document ? classTypeId(state.document.name) : '';
+  const ownClass = state.document ? declaredClass(state.document) : undefined;
   for (const type of listUserTypes(state.definitions, state.document?.language)) {
     // An interface's functions, called on any object that implements it.
     if (type.kind === 'interface') {
@@ -91,11 +92,13 @@ export function paletteEntries(): PaletteEntry[] {
       const definition = lookupDefinition({ id: '', type: nodeType, position: { x: 0, y: 0 }, properties: { class: type.id, ...properties } });
       if (definition) entries.push({ key: `${type.id}:${key}`, type: nodeType, properties: { class: type.id, ...properties }, definition });
     };
-    for (const v of type.variables) {
+    // Only the members this class may use: public ones, and its ancestors' protected ones.
+    const usable = (m: { access?: Access }) => canAccess(m.access, type.id, ownClass, (t) => state.defByType.get(t));
+    for (const v of type.variables.filter(usable)) {
       member(OBJECT_GET, { variable: v.id }, `get:${v.id}`);
       member(OBJECT_SET, { variable: v.id }, `set:${v.id}`);
     }
-    for (const f of type.functions) member(OBJECT_CALL, { function: f.id }, `call:${f.id}`);
+    for (const f of type.functions.filter(usable)) member(OBJECT_CALL, { function: f.id }, `call:${f.id}`);
     for (const e of type.events) member(OBJECT_EVENT, { event: e.id }, `event:${e.id}`);
     for (const d of type.dispatchers) for (const action of ['call', 'bind', 'unbind', 'unbind-all']) member(OBJECT_DISPATCHER, { dispatcher: d.id, action }, `${action}:${d.id}`);
   }

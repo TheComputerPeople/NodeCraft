@@ -65,9 +65,9 @@ export function dedent(code: string): string[] {
 // order (functions, events, variables, dispatchers), so they always agree.
 
 export interface ClassMemberSpec {
-  functions: { id: string; name: string }[];
+  functions: { id: string; name: string; access?: string }[];
   events: { id: string; name: string }[];
-  variables: { id: string; name: string }[];
+  variables: { id: string; name: string; access?: string }[];
   dispatchers: { id: string; name: string }[];
 }
 
@@ -82,6 +82,8 @@ export interface ClassMemberStyles {
   functions: NameStyle;
   variables: NameStyle;
   dispatchers: NameStyle;
+  // Put before a protected or private member's name (Python's leading underscore).
+  hiddenPrefix?: string;
 }
 
 // An ancestor class's member names, and its functions (by graph id and name), nearest first.
@@ -101,8 +103,9 @@ export function claimClassMembers(scope: NameScope, spec: ClassMemberSpec, style
     }
     return undefined;
   };
-  const claim = (items: { id: string; name: string }[], style: NameStyle) => new Map(items.map((item) => [item.id, scope.claim(item.name, style)]));
-  const functions = new Map(spec.functions.map((f) => [f.id, overridden(f.name) ?? scope.claim(f.name, styles.functions)]));
+  const prefix = (item: { access?: string }) => (item.access && item.access !== 'public' ? styles.hiddenPrefix ?? '' : '');
+  const claim = (items: { id: string; name: string; access?: string }[], style: NameStyle) => new Map(items.map((item) => [item.id, scope.claim(item.name, style, prefix(item))]));
+  const functions = new Map(spec.functions.map((f) => [f.id, overridden(f.name) ?? scope.claim(f.name, styles.functions, prefix(f))]));
   const events = claim(spec.events, styles.functions);
   const variables = claim(spec.variables, styles.variables);
   const dispatchers = claim(spec.dispatchers, styles.dispatchers);

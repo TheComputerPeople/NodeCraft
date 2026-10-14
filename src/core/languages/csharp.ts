@@ -381,7 +381,7 @@ class CSharpEmitter {
     const members = this.program.members.filter((m) => !m.function);
     const slots = this.program.slots.filter((x) => !x.function);
     const dispatchers = this.program.dispatchers ?? [];
-    for (const m of members) body.line(`public ${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
+    for (const m of members) body.line(`${m.access ?? 'public'} ${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
     for (const d of dispatchers) body.line(`public readonly EventDispatcher<${this.actionType(d.params)}> ${this.dispatcherNames.get(d.id)} = new();`);
     for (const x of slots) body.line(`private ${this.typeName(x.type)} ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
     if (members.length || slots.length || dispatchers.length) body.line();
@@ -548,7 +548,8 @@ class CSharpEmitter {
     const fields = this.outputFields.get(fn.id)!;
     const returns = fn.outputs.length > 1 ? `(${fn.outputs.map((o) => `${this.typeName(o.type)} ${fields.get(o.id)}`).join(', ')})` : fn.outputs[0]?.type ?? (fn.outputs.length ? { id: 'any' } : undefined);
     if (fn.description) this.out.line(`/// <summary>${fn.description.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\s+/g, ' ')}</summary>`);
-    const access = this.library ? 'public' : fn.overrides ? 'public override' : 'public virtual';
+    // Private methods can't be virtual; the others can be overridden.
+    const access = this.library ? 'public' : fn.access === 'private' ? 'private' : `${fn.access ?? 'public'} ${fn.overrides ? 'override' : 'virtual'}`;
     this.method(access, this.functionNames.get(fn.id)!, params, returns, () => {
       // A custom event keeps the inputs other flows read, as Unreal keeps an event's outputs.
       for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotNames.get(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)};`);

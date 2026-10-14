@@ -815,7 +815,8 @@ describe('inheritance', () => {
 
   function animal(language: string): GraphDocument {
     return {
-      schemaVersion: 3, name: 'Animal', kind: 'class', language, variables: [{ id: 'name', name: 'Name', type: { id: 'string' }, defaultValue: 'animal' }],
+      schemaVersion: 3, name: 'Animal', kind: 'class', language,
+      variables: [{ id: 'name', name: 'Name', type: { id: 'string' }, defaultValue: 'animal' }, { id: 'sound', name: 'Sound', type: { id: 'string' }, defaultValue: ' makes a sound', access: 'protected' }],
       graphs: [
         {
           id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
@@ -823,8 +824,8 @@ describe('inheritance', () => {
         },
         {
           ...speak('Speak'),
-          nodes: [n('entry', 'core:function.entry', { graph: 'Speak' }), n('name', 'core:variable.get', { variable: 'name' }), n('say', 'core:string.append', { 'pin:b': ' makes a sound' }), n('p', 'core:console.print')],
-          connections: [w('entry', 'execOut', 'p', 'execIn'), w('name', 'value', 'say', 'a'), w('say', 'returnValue', 'p', 'value')]
+          nodes: [n('entry', 'core:function.entry', { graph: 'Speak' }), n('name', 'core:variable.get', { variable: 'name' }), n('sound', 'core:variable.get', { variable: 'sound' }), n('say', 'core:string.append'), n('p', 'core:console.print')],
+          connections: [w('entry', 'execOut', 'p', 'execIn'), w('name', 'value', 'say', 'a'), w('sound', 'value', 'say', 'b'), w('say', 'returnValue', 'p', 'value')]
         },
         {
           id: 'Legs', name: 'Legs', kind: 'function', comments: [], signature: { pure: true, inputs: [], outputs: [{ id: 'legs', name: 'Legs', kind: 'data', type: { id: 'int' } }] },
@@ -840,8 +841,12 @@ describe('inheritance', () => {
       graphs: [
         {
           id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
-          nodes: [n('s', 'core:event.start'), n('p', 'core:console.print', { 'pin:value': 'dog start' }), n('parent', 'core:object.parent', { function: 'Start' })],
-          connections: [w('s', 'execOut', 'p', 'execIn'), w('p', 'execOut', 'parent', 'execIn')]
+          // The parent's protected Sound, read from the subclass.
+          nodes: [
+            n('s', 'core:event.start'), n('p', 'core:console.print', { 'pin:value': 'dog start' }), n('sound', 'core:object.get', { class: ANIMAL, variable: 'sound' }),
+            n('p2', 'core:console.print'), n('parent', 'core:object.parent', { function: 'Start' })
+          ],
+          connections: [w('s', 'execOut', 'p', 'execIn'), w('p', 'execOut', 'p2', 'execIn'), w('sound', 'value', 'p2', 'value'), w('p2', 'execOut', 'parent', 'execIn')]
         },
         {
           ...speak('DogSpeak'),
@@ -872,7 +877,7 @@ describe('inheritance', () => {
     };
   }
 
-  const EXPECTED = ['dog start', 'animal start', 'woof', 'animal makes a sound', '4', 'animal'];
+  const EXPECTED = ['dog start', ' makes a sound', 'animal start', 'woof', 'animal makes a sound', '4', 'animal'];
   const DOCS = [['Animal', animal], ['Dog', dog]] as const;
 
   function registryFor(language: string): NodeRegistry {

@@ -5,13 +5,15 @@
 // Construct node's definition, so the compiler, Simulate and the editor learn them from the node
 // registry, as structs travel with Make (src/core/user-types.ts).
 import { customEvents, delegateType, documentDispatchers, eventInputs, eventName } from './events';
-import { GraphDocument, GraphNode, GraphPin, NodeDefinition, PinDefinition } from './model';
+import { Access, GraphDocument, GraphNode, GraphPin, NodeDefinition, PinDefinition } from './model';
 import { TypeRef } from './types';
 import { TypeSource } from './user-types';
 
 export interface ClassMember {
   id: string;
   name: string;
+  // Public when absent.
+  access?: Access;
 }
 
 export interface ClassInfo {
@@ -44,10 +46,11 @@ export function declaredClass(doc: GraphDocument, source?: TypeSource): ClassInf
     ...(doc.parent ? { parent: doc.parent } : {}),
     ...(doc.interfaces?.length ? { interfaces: doc.interfaces } : {}),
     functions: doc.graphs.filter((g) => g.kind === 'function').map((g) => ({
-      id: g.id, name: g.name, inputs: g.signature?.inputs ?? [], outputs: g.signature?.outputs ?? [], pure: !!g.signature?.pure
+      id: g.id, name: g.name, inputs: g.signature?.inputs ?? [], outputs: g.signature?.outputs ?? [], pure: !!g.signature?.pure,
+      ...(g.signature?.access && g.signature.access !== 'public' ? { access: g.signature.access } : {})
     })),
     events: customEvents(doc.graphs).map(({ node }) => ({ id: eventName(node), name: eventName(node), inputs: eventInputs(node) })),
-    variables: doc.variables.map((v) => ({ id: v.id, name: v.name, type: v.type })),
+    variables: doc.variables.map((v) => ({ id: v.id, name: v.name, type: v.type, ...(v.access && v.access !== 'public' ? { access: v.access } : {}) })),
     dispatchers: documentDispatchers(doc).map((d) => ({ id: d.id, name: d.name, inputs: d.inputs }))
   };
 }
@@ -283,6 +286,14 @@ export function parentFunction(type: ClassInfo, name: string, definition: (type:
     if (fn) return { ...fn, owner: ancestor };
   }
   return undefined;
+}
+
+// Whether code in class `from` may use a member of class `owner` with this access: anyone a public
+// one, the class and its subclasses a protected one, the class alone a private one.
+export function canAccess(access: Access | undefined, owner: string, from: ClassInfo | undefined, definition: (type: string) => NodeDefinition | undefined): boolean {
+  if (!access || access === 'public') return true;
+  if (from?.id === owner) return true;
+  return access === 'protected' && !!from && ancestors(from, definition).some((a) => a.id === owner);
 }
 
 // The class hierarchy test for types.ts: whether an object of class `from` is a `to` (the class, an

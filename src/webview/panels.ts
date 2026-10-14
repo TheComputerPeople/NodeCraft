@@ -6,7 +6,7 @@ import { FUNCTION_ENTRY } from '../core/functions';
 import { MACRO_INPUTS, MACRO_OUTPUTS } from '../core/macros';
 import { definitionFor } from '../core/editing';
 import { SWITCH_INT, SWITCH_STRING, switchIntCases, switchStringCases } from '../core/flow-control';
-import { Graph, GraphNode, GraphVariable } from '../core/model';
+import { Access, Graph, GraphNode, GraphVariable } from '../core/model';
 import { ContainerKind, TypeRef } from '../core/types';
 import { defaultValue } from '../core/values';
 import { formatType } from '../core/types';
@@ -309,6 +309,15 @@ function renderFunctionDetails(graph: Graph): void {
   });
   // A macro is pure when it has no exec pins.
   if (!macro) fields.appendChild(field('Pure', pure));
+  // Unreal's Access Specifier, for a class's functions.
+  if (!macro && doc.kind === 'class') {
+    fields.appendChild(field('Access Specifier', accessPicker(signature.access, (access) => {
+      const sig = (graph.signature ??= { inputs: [], outputs: [] });
+      if (access === 'public') delete sig.access;
+      else sig.access = access;
+      refresh();
+    })));
+  }
 
   for (const side of ['inputs', 'outputs'] as const) {
     fields.insertAdjacentHTML('beforeend', `<div class="details-heading">${side === 'inputs' ? 'Inputs' : 'Outputs'}</div>`);
@@ -482,6 +491,14 @@ function renderVariableDetails(variableId: string): boolean {
   fields.appendChild(field('Variable Type', typeRow));
 
   fields.appendChild(field('Default Value', defaultValueEditor(variable)));
+  // A member variable's access (Unreal's Private flag, with Protected as for functions).
+  if (!found?.graph && doc.kind === 'class') {
+    fields.appendChild(field('Access', accessPicker(variable.access, (access) => {
+      if (access === 'public') delete variable.access;
+      else variable.access = access;
+      refresh();
+    })));
+  }
 
   const description = document.createElement('textarea');
   description.rows = 2;
@@ -613,6 +630,13 @@ export function defaultValueEditor(variable: GraphVariable): HTMLElement {
     markDirty();
   });
   return input;
+}
+
+// Public, Protected or Private.
+function accessPicker(value: Access | undefined, apply: (access: Access) => void): HTMLSelectElement {
+  const el = select([{ id: 'public', label: 'Public' }, { id: 'protected', label: 'Protected' }, { id: 'private', label: 'Private' }], value ?? 'public', 'Access');
+  el.addEventListener('change', () => apply(el.value as Access));
+  return el;
 }
 
 // A dropdown of an enum's values (Unreal's enum pin editor); the stored value is the value's id.

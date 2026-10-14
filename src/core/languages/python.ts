@@ -178,7 +178,7 @@ const DISPATCHER_CLASS = [
 ];
 
 // How a class's public members are named (src/core/compiler/names.ts).
-const CLASS_STYLES: ClassMemberStyles = { functions: 'snake', variables: 'keep', dispatchers: 'keep' };
+const CLASS_STYLES: ClassMemberStyles = { functions: 'snake', variables: 'keep', dispatchers: 'keep', hiddenPrefix: '_' };
 
 // Names fixed in every generated module, which functions must not take.
 const MODULE_NAMES = ['_EventDispatcher', 'annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text'];

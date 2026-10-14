@@ -171,3 +171,40 @@ describe('interfaces', () => {
     assert.ok(compileDocument(d, { registry: withUsable(), languages: builtinLanguagePacks(), generate: { sourceFileName: 'Game.vgraph' } }).diagnostics.some((x) => x.code === 'type-mismatch'));
   });
 });
+
+describe('access', () => {
+  const owner: GraphDocument = {
+    schemaVersion: 3, name: 'Owner', kind: 'class', language: 'javascript',
+    variables: [{ id: 'secret', name: 'Secret', type: { id: 'int' }, access: 'private' }, { id: 'shared', name: 'Shared', type: { id: 'int' }, access: 'protected' }],
+    graphs: [
+      { id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [], connections: [] },
+      { id: 'Hidden', name: 'Hidden', kind: 'function', comments: [], signature: { inputs: [], outputs: [], access: 'private' }, nodes: [node('entry', 'core:function.entry', { graph: 'Hidden' })], connections: [] }
+    ]
+  };
+  const reader = (name: string, variable: string, parent?: string): GraphDocument => ({
+    schemaVersion: 3, name, kind: 'class', language: 'javascript', variables: [], ...(parent ? { parent } : {}),
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('get', 'core:object.get', { class: 'object:Owner', variable }), node('p', 'core:console.print')],
+      connections: [wire('s', 'execOut', 'p', 'execIn'), wire('get', 'value', 'p', 'value')]
+    }]
+  });
+  const errorsOf = (d: GraphDocument) => {
+    const r = new NodeRegistry();
+    r.registerMany(classDefinitions(declaredClass(owner)!));
+    return compileDocument(d, { registry: r, languages: builtinLanguagePacks(), generate: { sourceFileName: 'T.vgraph' } }).diagnostics.filter((x) => x.severity === 'error').map((x) => x.code);
+  };
+
+  test('private members are the class\'s alone; protected ones its subclasses\' too', () => {
+    assert.deepEqual(errorsOf(reader('Stranger', 'shared')), ['member-access', 'target-missing']);
+    assert.deepEqual(errorsOf(reader('Heir', 'shared', 'object:Owner')), []);
+    assert.deepEqual(errorsOf(reader('Heir', 'secret', 'object:Owner')), ['member-access']);
+  });
+
+  test('generated code spells access in each language', () => {
+    const text = (language: string) => compileDocument({ ...owner, language }, { registry: new NodeRegistry(), languages: builtinLanguagePacks(), generate: { sourceFileName: 'Owner.vgraph' } }).output!.text;
+    assert.match(text('typescript'), /private Secret: number = 0;\s*protected Shared: number = 0;[\s\S]*private hidden\(\): void/);
+    assert.match(text('python'), /self\._Secret: int = 0\s*self\._Shared: int = 0[\s\S]*def _hidden\(self\)/);
+    assert.match(text('csharp'), /private int Secret = 0;\s*protected int Shared = 0;[\s\S]*private void Hidden\(\)/);
+  });
+});
