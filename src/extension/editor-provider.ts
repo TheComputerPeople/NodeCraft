@@ -23,11 +23,13 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     private readonly registry: NodeRegistry,
     private readonly languages: LanguagePackRegistry,
     private readonly compiler: CompileService,
-    private readonly output: () => vscode.OutputChannel
+    private readonly output: () => vscode.OutputChannel,
+    // Whether the project's functions have been scanned (src/extension/project-functions.ts).
+    private readonly functionsLoaded: () => boolean = () => true
   ) {
     context.subscriptions.push(
       registry.onDidChange(() => {
-        const message: HostMessage = { type: 'definitions', definitions: registry.all() };
+        const message: HostMessage = { type: 'definitions', definitions: registry.all(), functionsLoaded: this.functionsLoaded() };
         this.panelsByDocument.forEach((panels) => panels.forEach((panel) => this.post(panel, message)));
       })
     );
@@ -81,6 +83,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
               type: 'init',
               document: graphDocument,
               definitions: this.registry.all(),
+              functionsLoaded: this.functionsLoaded(),
               saveDelay: getSaveDelay(),
               trusted: vscode.workspace.isTrusted,
               languages: this.languageOptions(),
@@ -177,7 +180,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
         // Unreadable graphs are skipped; opening them shows the problem.
         continue;
       }
-      const resolve = createResolver(this.registry, graphDocument.variables);
+      const resolve = createResolver(this.registry, graphDocument.variables, graphDocument.importedFunctions);
       for (const hit of searchDocument(graphDocument, query, resolve)) {
         results.push({ ...hit, uri: uri.toString(), file: vscode.workspace.asRelativePath(uri), current: uri.toString() === currentKey });
         if (results.length >= MAX_FIND_RESULTS) return results;

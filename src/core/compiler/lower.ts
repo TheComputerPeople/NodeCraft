@@ -2,6 +2,7 @@
 // The rules implemented here are those of docs/semantics.md.
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from '../model';
 import { NodeRegistry } from '../registry';
+import { describeFunction, functionStatus, isFunctionType } from '../imported-functions';
 import { NodeResolver, createResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
@@ -60,7 +61,7 @@ class Lowerer {
   private readonly following = new Set<string>();
 
   constructor(private readonly doc: GraphDocument, private readonly options: LowerOptions) {
-    this.resolve = createResolver(options.registry, doc.variables);
+    this.resolve = createResolver(options.registry, doc.variables, doc.importedFunctions);
   }
 
   run(): LowerResult {
@@ -121,9 +122,10 @@ class Lowerer {
         continue;
       }
       info.nodes.set(node.id, node);
+      if (isFunctionType(node.type)) this.checkFunction(graph, node);
       const def = this.resolve(node);
       if (def) info.definitions.set(node.id, def);
-      else this.error('unknown-node-type', `Unknown node type "${node.type}". Its node library may be missing.`, graph.id, node.id);
+      else if (!isFunctionType(node.type)) this.error('unknown-node-type', `Unknown node type "${node.type}". Its node library may be missing.`, graph.id, node.id);
     }
 
     for (const c of graph.connections) {
@@ -164,6 +166,23 @@ class Lowerer {
       info.dataSources.set(key, { node: c.fromNode, pin: c.fromPin });
     }
     return info;
+  }
+
+  // A project function node whose code changed or disappeared can't compile until it is
+  // refreshed or replaced (docs/code-as-nodes.md, "When the code changes").
+  private checkFunction(graph: Graph, node: GraphNode): void {
+    const stored = this.doc.importedFunctions?.[node.type];
+    const status = functionStatus(stored, this.options.registry.get(node.type), () => this.options.registry.all());
+    const { name, path } = describeFunction(node.type, stored);
+    if (status.state === 'changed') {
+      this.error('function-changed', `${name} in ${path} changed: ${status.changes.join('; ')}. Right-click the node and choose Refresh Node.`, graph.id, node.id);
+    } else if (status.state === 'missing') {
+      const [candidate] = status.candidates;
+      const hint = status.candidates.length === 1 && candidate.implementation?.kind === 'function'
+        ? ` Was it renamed or moved to ${candidate.implementation.name} in ${candidate.implementation.path}? Right-click the node and choose Replace with ${candidate.displayName}.`
+        : '';
+      this.error('function-missing', `${name} in ${path} no longer exists, or is no longer marked @blueprint.${hint}`, graph.id, node.id);
+    }
   }
 
   // Exec wires must not loop (docs/semantics.md, "Execution flow"). Reports each loop once.

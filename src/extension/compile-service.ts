@@ -27,7 +27,9 @@ export class CompileService implements vscode.Disposable {
   constructor(
     private readonly registry: NodeRegistry,
     private readonly languages: LanguagePackRegistry,
-    private readonly output: () => vscode.OutputChannel
+    private readonly output: () => vscode.OutputChannel,
+    // Resolves when node definitions that load in the background (project functions) are ready.
+    private readonly ready: () => Promise<void> = () => Promise.resolve()
   ) {}
 
   lastReport(uri: vscode.Uri): CompileReport | undefined {
@@ -47,6 +49,7 @@ export class CompileService implements vscode.Disposable {
       return outcome;
     };
 
+    await this.ready();
     if (document.uri.scheme !== 'file') {
       return finish({ report: report([{ severity: 'error', code: 'unsaved', message: 'Save the graph to a file before compiling it.' }], '') });
     }

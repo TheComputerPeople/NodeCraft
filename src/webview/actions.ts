@@ -2,8 +2,9 @@
 import { copyNodes, pasteNodes } from '../core/clipboard';
 import * as editing from '../core/editing';
 import { addVariable, uniqueName } from '../core/blueprint-edits';
+import { functionStatus, isFunctionType, rebindFunctionNode } from '../core/imported-functions';
 import { SEQUENCE, VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
-import { GraphNode, PinDefinition } from '../core/model';
+import { GraphNode, NodeDefinition, PinDefinition } from '../core/model';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } from './document';
 import { dom, eventElement, pinElement, setStatus } from './dom';
 import { newConnectionId } from './host';
@@ -251,6 +252,50 @@ export function pinMenuItems(nodeId: string, pinId: string): MenuItem[] {
     });
   }
   return items;
+}
+
+// Unreal's Refresh Node: updates project function nodes whose code changed to the new signature,
+// keeping the wires that still fit. Without `nodeIds`, every such node in the file (Refresh All
+// Nodes).
+export function refreshFunctionNodes(nodeIds?: ReadonlySet<string>): void {
+  const doc = state.document;
+  if (!doc) return;
+  let nodes = 0;
+  let wires = 0;
+  for (const graph of doc.graphs) {
+    for (const node of graph.nodes) {
+      if (!isFunctionType(node.type) || (nodeIds && !nodeIds.has(node.id))) continue;
+      const status = functionStatus(doc.importedFunctions?.[node.type], state.defByType.get(node.type), () => state.definitions);
+      if (status.state !== 'changed') continue;
+      wires += rebind(graph, node, status.definition);
+      nodes++;
+    }
+  }
+  if (!nodes) {
+    setStatus('No nodes needed refreshing.');
+    return;
+  }
+  markDirty();
+  render();
+  setStatus(`Refreshed ${nodes} node${nodes === 1 ? '' : 's'}${wires ? `; removed ${wires} wire${wires === 1 ? '' : 's'} that no longer fit` : ''}.`);
+}
+
+// Points a node whose project function is gone at the function it was renamed or moved to.
+export function replaceFunctionNode(nodeId: string, replacement: NodeDefinition): void {
+  const graph = state.graph;
+  const node = graph?.nodes.find((n) => n.id === nodeId);
+  if (!graph || !node) return;
+  const wires = rebind(graph, node, replacement);
+  markDirty();
+  render();
+  setStatus(`Replaced with ${replacement.displayName}${wires ? `; removed ${wires} wire${wires === 1 ? '' : 's'} that no longer fit` : ''}.`);
+}
+
+// Stores the new signature first, so the node (and the wire checks) use it.
+function rebind(graph: NonNullable<typeof state.graph>, node: GraphNode, definition: NodeDefinition): number {
+  const doc = state.document!;
+  doc.importedFunctions = { ...(doc.importedFunctions ?? {}), [definition.type]: definition };
+  return rebindFunctionNode(graph, node, definition, lookupDefinition).length;
 }
 
 // Arrow keys move the selection, as in Unreal.

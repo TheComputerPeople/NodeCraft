@@ -129,6 +129,9 @@ export interface GraphDocument {
   // Member variables; libraries have none.
   variables: GraphVariable[];
   graphs: Graph[];
+  // The signature of each project function the graphs call, by node type, as it was when its
+  // nodes were made or last refreshed (docs/code-as-nodes.md, "When the code changes").
+  importedFunctions?: Record<string, NodeDefinition>;
   metadata?: Record<string, unknown>;
   // Fields this version doesn't know about are preserved on save.
   [extra: string]: unknown;
@@ -204,10 +207,14 @@ export interface HostMessage {
     | 'findResults'
     | 'reveal'
     | 'openFind'
+    // Refresh every project function node whose code changed (Unreal's Refresh All Nodes).
+    | 'refreshAll'
     | 'error';
   // Absent on 'init' when the file could not be parsed; the webview then stays read-only.
   document?: GraphDocument;
   definitions?: NodeDefinition[];
+  // Whether the project's functions have been scanned, so a missing one is really gone.
+  functionsLoaded?: boolean;
   saveDelay?: number;
   // Whether the workspace is trusted; running graphs is disabled when it isn't.
   trusted?: boolean;

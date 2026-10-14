@@ -1,6 +1,7 @@
 // The document being edited, the node definitions it uses, and syncing changes back to the host.
 import { pinDefinition } from '../core/editing';
 import { GraphDocument, GraphNode, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
+import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions } from '../core/imported-functions';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
 import { primaryGraph } from '../core/serializer';
 import { markCompileDirty, renderLanguagePicker } from './compile-results';
@@ -14,7 +15,7 @@ import { applyTransform } from './view';
 
 // A node's definition in the open document (variable nodes take their variable's name and type).
 export function lookupDefinition(node: GraphNode): NodeDefinition | undefined {
-  return createResolver({ get: (type) => state.defByType.get(type) }, state.document?.variables ?? [])(node);
+  return createResolver({ get: (type) => state.defByType.get(type) }, state.document?.variables ?? [], state.document?.importedFunctions)(node);
 }
 
 // Something the palette and action menu can place: a node type, plus preset properties.
@@ -52,6 +53,23 @@ function callable(definition: NodeDefinition): boolean {
 // Text an entry matches in searches: its name, category, description and keywords.
 export function searchText(definition: NodeDefinition): string {
   return [definition.displayName, definition.category, definition.description ?? '', ...(definition.keywords ?? [])].join(' ').toLowerCase();
+}
+
+// A project function node whose code changed (a warning until it is refreshed) or is gone (an
+// error), for its badge and menu (docs/code-as-nodes.md, "When the code changes").
+export function functionProblem(node: GraphNode): { severity: 'error' | 'warning'; message: string; status: ReturnType<typeof functionStatus> } | undefined {
+  if (!isFunctionType(node.type) || !state.document) return undefined;
+  const stored = state.document.importedFunctions?.[node.type];
+  const status = functionStatus(stored, state.defByType.get(node.type), () => state.definitions);
+  const { name, path } = describeFunction(node.type, stored);
+  if (status.state === 'changed') {
+    return { severity: 'warning', status, message: `${name} in ${path} changed: ${status.changes.join('; ')}. Right-click the node and choose Refresh Node.` };
+  }
+  if (status.state === 'missing' && state.functionsLoaded) {
+    const offer = status.candidates.length ? ` Right-click the node to replace it with ${status.candidates.map((c) => c.displayName).join(' or ')}.` : '';
+    return { severity: 'error', status, message: `${name} in ${path} no longer exists, or is no longer marked @blueprint.${offer}` };
+  }
+  return undefined;
 }
 
 export function pinDef(nodeId: string, pinId: string): PinDefinition | undefined {
@@ -121,6 +139,8 @@ export function flushSave(): void {
   if (!state.document || !state.dirty) return;
   clearTimeout(state.saveTimer);
   state.dirty = false;
+  // Store the signature of each project function the graph calls, with the graph.
+  syncImportedFunctions(state.document, (type) => state.defByType.get(type));
   postToHost({ type: 'applyDocument', document: state.document });
   // Don't hide a message an action just showed (e.g. "Deleted Health and 2 nodes").
   if (dom.status.textContent === 'Unsaved changes') setStatus('Saved');

@@ -43,6 +43,18 @@
         "$ref": "#/$defs/graph"
       }
     },
+    "importedFunctions": {
+      "type": "object",
+      "description": "The signature of each project function the graphs call, keyed by node type (fn:<language>:<path>#<name>), as it was when its nodes were made or last refreshed. Nodes keep these pins until refreshed when the code changes.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "type",
+          "inputs",
+          "outputs"
+        ]
+      }
+    },
     "metadata": {
       "type": "object"
     }

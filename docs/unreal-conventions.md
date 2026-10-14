@@ -43,6 +43,9 @@ Sources:
 | Align top / left / bottom / right | Shift + W / A / S / D | Community |
 | Straighten connections | Q | Community |
 | Add a reroute node | Double-click a wire | Community |
+| Refresh Node: update a node whose function's signature changed | Node context menu | Engine behavior |
+| Refresh All Nodes | Command Palette → Refresh All Nodes (Unreal: File menu) | Epic (menu) |
+| Replace a node whose function was renamed or moved | Node context menu → Replace with … | Ours: Unreal has no equivalent for code nodes |
 
 ## Wires and pins
 

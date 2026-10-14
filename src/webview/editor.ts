@@ -1,6 +1,6 @@
 // Webview entry point: wires DOM and host events to the editor modules.
 import { HostMessage, RuntimeLogEvent } from '../core/model';
-import { addNode, compatibleEntriesForDraft, completeConnection, copySelection, deleteSelected, duplicateSelected, finishRewire, moveSelection, pasteText, pinMenuItems } from './actions';
+import { addNode, compatibleEntriesForDraft, completeConnection, copySelection, deleteSelected, duplicateSelected, finishRewire, moveSelection, pasteText, pinMenuItems, refreshFunctionNodes } from './actions';
 import { deleteSelectedComments, finishCommentDrag, isDraggingComment, placeComment, selectedCommentIds, startCommentRename, updateCommentDrag, wrapSelectionInComment } from './comments';
 import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, setLanguage, showCompileResult } from './compile-results';
 import { applySettings, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
@@ -52,6 +52,7 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
   const message = event.data;
   switch (message.type) {
     case 'init':
+      state.functionsLoaded = message.functionsLoaded ?? true;
       applySettings(message);
       state.languages = message.languages ?? [];
       setDefinitions(message.definitions ?? []);
@@ -91,8 +92,12 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       break;
     }
     case 'definitions':
+      state.functionsLoaded = message.functionsLoaded ?? true;
       setDefinitions(message.definitions ?? []);
       render();
+      break;
+    case 'refreshAll':
+      refreshFunctionNodes();
       break;
     case 'settings':
       applySettings(message);

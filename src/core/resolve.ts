@@ -2,6 +2,7 @@
 // some take their pins from context, as in Unreal: a variable Get/Set node shows the variable's
 // name and type. Everything that needs a node's pins (editor, compiler, Simulate) goes through
 // this, so they always agree.
+import { isFunctionType, signatureChanges } from './imported-functions';
 import { GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
 
 export type NodeResolver = (node: GraphNode) => NodeDefinition | undefined;
@@ -29,9 +30,15 @@ export function boundVariable(node: GraphNode, variables: readonly GraphVariable
   return typeof id === 'string' ? variables.find((v) => v.id === id) : undefined;
 }
 
-export function createResolver(registry: ResolveContext, variables: readonly GraphVariable[]): NodeResolver {
+// `imported` is the document's stored function signatures: a project function whose code no
+// longer matches (or is gone) keeps the pins its nodes were made with until they are refreshed.
+export function createResolver(registry: ResolveContext, variables: readonly GraphVariable[], imported?: Readonly<Record<string, NodeDefinition>>): NodeResolver {
   return (node) => {
     const base = registry.get(node.type);
+    if (isFunctionType(node.type)) {
+      const stored = imported?.[node.type];
+      return stored && (!base || signatureChanges(stored, base).length) ? stored : base;
+    }
     if (!base) return undefined;
     if (node.type === VARIABLE_GET || node.type === VARIABLE_SET) return variableDefinition(base, node, variables);
     if (node.type === SEQUENCE) return { ...base, outputs: Array.from({ length: sequencePinCount(node) }, (_, i) => execPin(`then${i}`, `Then ${i}`, 'output')) };

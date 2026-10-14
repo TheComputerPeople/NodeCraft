@@ -34,6 +34,8 @@ export class ProjectFunctions implements vscode.Disposable {
   private generation = 0;
   private lastReport = '';
   private readyResolve!: () => void;
+  // Whether the first full scan has finished, so a function that isn't found is really gone.
+  loaded = false;
   // Resolves after the first full scan.
   readonly ready = new Promise<void>((resolve) => (this.readyResolve = resolve));
 
@@ -72,6 +74,7 @@ export class ProjectFunctions implements vscode.Disposable {
     if (generation !== this.generation) return;
     this.files.clear();
     for (const [key, value] of results) this.files.set(key, value);
+    this.loaded = true;
     this.publish();
   }
 

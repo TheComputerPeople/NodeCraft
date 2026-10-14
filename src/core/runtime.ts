@@ -36,7 +36,7 @@ export class GraphRuntime {
   // Runs every Start node in the document's event graphs. Function and macro graphs only run when
   // called, which arrives with Phase 4.
   run(doc: GraphDocument): void {
-    const run: RunState = { variables: new Map(), outputs: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc.variables) };
+    const run: RunState = { variables: new Map(), outputs: new Map(), language: doc.language || DEFAULT_LANGUAGE, resolve: createResolver(this.registry, doc.variables, doc.importedFunctions) };
     for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue ?? defaultValue(variable.type));
 
     const entries = doc.graphs

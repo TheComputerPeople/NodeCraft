@@ -58,6 +58,11 @@
         "command": "blueprintVisualScripting.findInAll",
         "title": "Find in All Blueprints",
         "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.refreshAllNodes",
+        "title": "Refresh All Nodes",
+        "category": "Blueprint Visual Scripting"
       }
     ],
     "customEditors": [
@@ -140,6 +145,10 @@
         },
         {
           "command": "blueprintVisualScripting.findInAll",
+          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
+        },
+        {
+          "command": "blueprintVisualScripting.refreshAllNodes",
           "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
         }
       ]

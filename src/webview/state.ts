@@ -95,6 +95,8 @@ export interface EditorState {
   runtimePaintPending: boolean;
   // Target languages offered in the toolbar.
   languages: LanguageOption[];
+  // Whether the host has scanned the project's functions, so one that isn't found is really gone.
+  functionsLoaded: boolean;
   // The latest compile result, and whether the graph changed since (Unreal shows that as "?").
   compile: CompileReport | null;
   compileState: 'unknown' | 'dirty' | 'compiling' | CompileReport['status'];
@@ -135,6 +137,7 @@ export const state: EditorState = {
   runtimeClearTimer: undefined,
   runtimePaintPending: false,
   languages: [],
+  functionsLoaded: true,
   compile: null,
   compileState: 'unknown',
   hoverPin: null,

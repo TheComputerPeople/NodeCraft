@@ -26,10 +26,12 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   // The project's own functions, exposed as nodes (docs/code-as-nodes.md).
-  context.subscriptions.push(new ProjectFunctions(registry, languages, output));
+  const projectFunctions = new ProjectFunctions(registry, languages, output);
+  context.subscriptions.push(projectFunctions);
 
-  const compiler = new CompileService(registry, languages, output);
-  const provider = new GraphEditorProvider(context, registry, languages, compiler, output);
+  // Compiling waits for the first scan, so functions that are merely still loading aren't reported missing.
+  const compiler = new CompileService(registry, languages, output, () => projectFunctions.ready);
+  const provider = new GraphEditorProvider(context, registry, languages, compiler, output, () => projectFunctions.loaded);
   context.subscriptions.push(
     compiler,
     vscode.window.registerCustomEditorProvider(GRAPH_VIEW_TYPE, provider, { supportsMultipleEditorsPerDocument: true })
@@ -55,6 +57,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     // Bound to Ctrl+Shift+F in graph editors, so it opens Find in All Blueprints rather than
     // VS Code's workspace search (as in Unreal).
+    // Unreal's File > Refresh All Nodes: updates every node whose project function changed.
+    vscode.commands.registerCommand('blueprintVisualScripting.refreshAllNodes', () => {
+      if (!provider.postToActive({ type: 'refreshAll' })) void vscode.window.showInformationMessage('Open a graph to refresh its nodes.');
+    }),
     vscode.commands.registerCommand('blueprintVisualScripting.findInAll', () => {
       if (!provider.postToActive({ type: 'openFind', findAll: true })) void vscode.commands.executeCommand('workbench.action.findInFiles');
     }),

@@ -181,7 +181,7 @@ async function compileOnceFound(graph: vscode.Uri): Promise<void> {
   for (;;) {
     await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
     const problems = vscode.languages.getDiagnostics(graph);
-    if (!problems.some((p) => p.code === 'unknown-node-type')) {
+    if (!problems.some((p) => p.code === 'unknown-node-type' || p.code === 'function-missing')) {
       assert.deepEqual(problems.map((p) => p.message), []);
       return;
     }
@@ -205,6 +205,20 @@ test('functions marked @blueprint become nodes that generated code imports', asy
   await write('uses-py.vgraph', projectGraph('UsesPy', 'python', 'fn:python:game/score.py#double'));
   await compileOnceFound(pyGraph);
   assert.match(await readText(workspaceFile('uses_py_vgraph.py')), /^from game\.score import double$/m);
+
+  // Renaming the function in code is detected: the node's function is gone.
+  await write('lib/score.ts', '/** @blueprint pure */\nexport function twice(value: number): number {\n  return value * 2;\n}\n');
+  const deadline = Date.now() + 15000;
+  for (;;) {
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', tsGraph);
+    const problems = vscode.languages.getDiagnostics(tsGraph);
+    if (problems.some((p) => p.code === 'function-missing')) {
+      assert.match(problems[0].message, /double in lib\/score\.ts no longer exists/);
+      break;
+    }
+    if (Date.now() > deadline) throw new Error('The rename was never detected');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
 });
 
 export async function run(): Promise<void> {

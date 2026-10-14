@@ -5,7 +5,7 @@ import { SEQUENCE } from '../core/resolve';
 import { addSequenceOutput, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
-import { lookupDefinition, markDirty, pinDef } from './document';
+import { functionProblem, lookupDefinition, markDirty, pinDef } from './document';
 import { dom } from './dom';
 import { renderInspector } from './panels';
 import { Point, state } from './state';
@@ -41,15 +41,17 @@ function renderNode(node: GraphNode): HTMLElement {
   // Unreal shows a node's description as a tooltip rather than on the node.
   if (def.description) el.title = def.description;
 
-  // Unreal-style badge for compiler errors and warnings on this node.
-  const diagnostics = nodeDiagnostics(node.id);
+  // Unreal-style badge for compiler errors and warnings on this node, and for a project function
+  // whose code changed or is gone (shown at once, without compiling).
+  const problem = functionProblem(node);
+  const diagnostics = [...nodeDiagnostics(node.id), ...(problem ? [problem] : [])];
   const severity = diagnostics.some((d) => d.severity === 'error') ? 'error' : diagnostics.length ? 'warning' : undefined;
   if (severity) {
     el.classList.add(`has-${severity}`);
     const badge = document.createElement('span');
     badge.className = `node-badge ${severity}`;
     badge.textContent = severity === 'error' ? 'ERROR!' : 'WARNING!';
-    badge.title = diagnostics.map((d) => d.message).join('\n');
+    badge.title = [...new Set(diagnostics.map((d) => d.message))].join('\n');
     el.appendChild(badge);
   }
 

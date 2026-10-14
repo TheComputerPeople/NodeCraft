@@ -2,9 +2,9 @@
 // (its pin actions above the node's) and a comment.
 import { PinAddress, definitionFor } from '../core/editing';
 import { PinKind } from '../core/model';
-import { addNode, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected } from './actions';
+import { addNode, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected, refreshFunctionNodes, replaceFunctionNode } from './actions';
 import { alignSelection, distributeSelection, straightenConnections } from './align';
-import { PaletteEntry, lookupDefinition, paletteEntries, searchText } from './document';
+import { PaletteEntry, functionProblem, lookupDefinition, paletteEntries, searchText } from './document';
 import { dom, escapeHtml } from './dom';
 import { headerColor } from './style';
 import { deleteSelectedComments, selectedCommentIds, startCommentRename } from './comments';
@@ -89,9 +89,18 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
       <div class="context-separator"></div>
       <div class="context-heading">Node Actions</div>`
     : '';
+  // A project function whose code changed or is gone: Refresh Node, or Replace with a function it
+  // was probably renamed or moved to.
+  const status = functionProblem(node)?.status;
+  const functionItems: MenuItem[] = status?.state === 'changed'
+    ? [{ label: 'Refresh Node', action: () => refreshFunctionNodes(new Set([nodeId])) }]
+    : status?.state === 'missing'
+      ? status.candidates.slice(0, 5).map((c) => ({ label: `Replace with ${c.displayName}${c.implementation?.kind === 'function' ? ` (${c.implementation.path})` : ''}`, action: () => replaceFunctionNode(nodeId, c) }))
+      : [];
   dom.contextMenu.innerHTML = `
       <div class="context-title">${escapeHtml(def.displayName)}</div>
       ${pinSection}
+      ${functionItems.map((item, i) => `<button data-function-action="${i}">${escapeHtml(item.label)}</button>`).join('')}
       <button data-action="duplicate">Duplicate</button>
       <button data-action="disconnect">Disconnect All Connections</button>
       <button data-action="select-connected">Select Connected Nodes</button>
@@ -132,6 +141,12 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
     button.addEventListener('click', () => {
       actions[button.dataset.action ?? '']?.();
       hideContextMenu();
+    });
+  });
+  dom.contextMenu.querySelectorAll<HTMLButtonElement>('button[data-function-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      hideContextMenu();
+      functionItems[Number(button.dataset.functionAction)]?.action();
     });
   });
   dom.contextMenu.querySelectorAll<HTMLButtonElement>('button[data-pin-action]').forEach((button) => {
