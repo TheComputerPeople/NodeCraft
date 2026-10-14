@@ -153,8 +153,31 @@ export function pythonEnumMembers(type: EnumInfo): Map<string, string> {
   return new Map(type.enumerators.map((e) => [e.id, scope.claim(e.name, 'snake').toUpperCase()]));
 }
 
+// Unreal's event dispatcher, emitted when the class declares one: bound events (bound methods,
+// which compare equal for the same object and method) run in the order they were bound, each once.
+const DISPATCHER_CLASS = [
+  'class _EventDispatcher:',
+  '    def __init__(self) -> None:',
+  '        self._handlers: list[Any] = []',
+  '',
+  '    def bind(self, handler: Any) -> None:',
+  '        if handler not in self._handlers:',
+  '            self._handlers.append(handler)',
+  '',
+  '    def unbind(self, handler: Any) -> None:',
+  '        if handler in self._handlers:',
+  '            self._handlers.remove(handler)',
+  '',
+  '    def clear(self) -> None:',
+  '        self._handlers.clear()',
+  '',
+  '    def broadcast(self, *args: Any) -> None:',
+  '        for handler in list(self._handlers):',
+  '            handler(*args)'
+];
+
 // Names fixed in every generated module, which functions must not take.
-const MODULE_NAMES = ['annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text'];
+const MODULE_NAMES = ['_EventDispatcher', 'annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text'];
 
 // The names a function library's functions are defined as (snake_case, unique in the module). The
 // library's own generated module and every module that imports it use these.
@@ -206,6 +229,7 @@ class PythonEmitter {
   // Local names of imported functions, aliased where they would clash.
   private readonly importNames = new Map<string, string>();
   private readonly functionNames = new Map<string, string>();
+  private readonly dispatcherNames = new Map<string, string>();
   // Parameter names of each function, keyed by function and input id.
   private readonly paramNames = new Map<string, string>();
   private readonly className: string;
@@ -227,6 +251,7 @@ class PythonEmitter {
     const moduleScope = this.library ? this.names : new NameScope(RESERVED, [this.className, ...MODULE_NAMES]);
     for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
     for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
+    for (const d of program.dispatchers ?? []) this.dispatcherNames.set(d.id, this.names.claim(d.name));
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'snake', '_'));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', '_'));
@@ -247,11 +272,12 @@ class PythonEmitter {
     body.indent();
     const fields = [
       ...this.program.members.filter((m) => !m.function).map((m) => ({ name: this.memberNames.get(m.id)!, type: m.type, initial: this.value(m.initial, m.type) })),
+      ...(this.program.dispatchers ?? []).map((d) => ({ name: this.dispatcherNames.get(d.id)!, type: 'dispatcher' as const, initial: '_EventDispatcher()' })),
       ...this.program.slots.filter((x) => !x.function).map((x) => ({ name: this.slotNames.get(x.id)!, type: x.type, initial: this.defaultFor(x.type) }))
     ];
     if (fields.length) {
       this.method('__init__', [], undefined, () => {
-        for (const f of fields) body.line(`self.${f.name}: ${this.typeName(f.type)} = ${f.initial}`);
+        for (const f of fields) body.line(`self.${f.name}: ${f.type === 'dispatcher' ? '_EventDispatcher' : this.typeName(f.type)} = ${f.initial}`);
       });
     }
     this.method('start', [], undefined, () => this.statements(this.program.start));
@@ -344,6 +370,10 @@ class PythonEmitter {
       const kinds = [...this.types.values()].map((t) => t.kind);
       footer.push('', '', ...(helper === 'format' ? formatHelper(kinds.includes('enum'), kinds.includes('struct')) : HELPERS[helper]));
     }
+    if (this.program.dispatchers?.length) {
+      this.usesAny = true;
+      footer.push('', '', "# Unreal's event dispatcher: bound events run in the order they were bound, each event once.", ...DISPATCHER_CLASS);
+    }
     if (runnable) footer.push('', '', 'if __name__ == "__main__":', `    ${this.className}().start()`);
 
     const roots = [...new Set(this.program.imports.map((i) => pythonImportRoot(i.path, i.module ?? pythonModuleName(i.path))))].sort();
@@ -394,6 +424,8 @@ class PythonEmitter {
     const returns = fn.outputs.length > 1 ? `tuple[${fn.outputs.map((o) => this.typeName(o.type)).join(', ')}]` : fn.outputs[0]?.type ?? (fn.outputs.length ? { id: 'any' } : undefined);
     this.method(this.functionNames.get(fn.id)!, params, returns, () => {
       if (fn.description) this.out.line(`# ${fn.description.replace(/\s+/g, ' ')}`);
+      // A custom event keeps the inputs other flows read, as Unreal keeps an event's outputs.
+      for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotRef(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)}`);
       for (const m of locals) this.out.line(`${this.memberNames.get(m.id)}: ${this.typeName(m.type)} = ${this.value(m.initial, m.type)}`);
       for (const x of slots) this.out.line(`${this.slotNames.get(x.id)}: ${this.typeName(x.type)} = ${this.defaultFor(x.type)}`);
       this.statements(fn.body);
@@ -516,6 +548,15 @@ class PythonEmitter {
         out.line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
         break;
       }
+      case 'bindEvent':
+        out.line(`self.${this.dispatcherNames.get(s.dispatcher)}.${s.bind ? 'bind' : 'unbind'}(self.${this.functionNames.get(s.event)})`);
+        break;
+      case 'unbindAll':
+        out.line(`self.${this.dispatcherNames.get(s.dispatcher)}.clear()`);
+        break;
+      case 'broadcast':
+        out.line(`self.${this.dispatcherNames.get(s.dispatcher)}.broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
+        break;
       case 'return': {
         const fn = this.program.functions.find((f) => f.id === s.source.graphId);
         out.line(fn?.outputs.length ? `return ${fn.outputs.map((o, i) => (s.values[i] ? this.value(s.values[i], o.type) : this.defaultFor(o.type))).join(', ')}` : 'return');

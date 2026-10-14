@@ -6,6 +6,7 @@ import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, Runtime
 import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
+import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs } from './events';
 import { expandDocument, isExpandedNode, macroProblemKey, visibleNodeId } from './macros';
 import { StructValue, TypeLookup, expandSplitPins, typeLookup } from './user-types';
 import { NodeResolver, createResolver, createUnsplitResolver, isPure } from './resolve';
@@ -23,6 +24,12 @@ interface RunState {
   macroProblems: Map<string, string>;
   // The workspace's structs and enums (src/core/user-types.ts).
   types: TypeLookup;
+  // The object's frame, where custom events run wherever they are called from.
+  objectFrame: Frame;
+  // The events bound to each event dispatcher, in the order they were bound.
+  bindings: Map<string, { graph: Graph; node: GraphNode }[]>;
+  // How many custom events are running inside one another.
+  eventDepth: number;
 }
 
 // What one run of a graph keeps: the event graphs share one frame (the object's), and each call
@@ -52,8 +59,11 @@ class ReturnSignal {
   constructor(readonly values: Map<string, unknown>) {}
 }
 
-// Simulate stops runaway recursion with an error instead of overflowing the stack.
-export const MAX_CALL_DEPTH = 1000;
+// Simulate stops runaway recursion with an error instead of overflowing the stack. Each graph call
+// takes many JavaScript frames, so the limit stays well inside the extension host's stack; calls
+// that still run out of stack (functions and events nested in each other) stop the same way.
+export const MAX_CALL_DEPTH = 250;
+const OUT_OF_STACK = `Too many nested calls: the graph keeps calling itself.`;
 
 // Simulate stops a loop after this many passes, as Unreal's editor does; generated code has no limit.
 export const MAX_LOOP_PASSES = 1_000_000;
@@ -73,7 +83,7 @@ export class GraphRuntime {
   // Runs every Start node in the document's event graphs. Function graphs only run when called.
   run(doc: GraphDocument): void {
     const run = this.runState(doc);
-    const objectFrame: Frame = { outputs: new Map(), state: new Map(), params: new Map(), locals: new Map(), depth: 0 };
+    const objectFrame = run.objectFrame;
     for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue !== undefined ? fromStored(variable.defaultValue, variable.type, run.types) : defaultValue(variable.type, run.types));
 
     const entries = run.doc.graphs
@@ -158,6 +168,41 @@ export class GraphRuntime {
         continueFrom('execOut');
         exit();
         return;
+      case 'custom-event':
+        exit(Object.fromEntries(eventInputs(node).map((p) => [p.name, context.frame.outputs.get(outputKey(graph, node, p.id))])));
+        continueFrom('execOut');
+        return;
+      case 'call-event': {
+        const target = calledEvent(node, context.run.doc.graphs) ?? this.fail(context, node, `There is no custom event named "${String(node.properties.event ?? '')}".`);
+        const args = definition.inputs.filter((p) => p.kind === 'data').map((p) => input(p.id));
+        exit();
+        this.runEvent(context, node, target, args);
+        continueFrom('execOut');
+        return;
+      }
+      case 'call-dispatcher':
+      case 'bind-event':
+      case 'unbind-event':
+      case 'unbind-all': {
+        const dispatcher = boundDispatcher(node, documentDispatchers(context.run.doc)) ?? this.fail(context, node, 'This node uses an event dispatcher that no longer exists.');
+        const bound = context.run.bindings.get(dispatcher.id) ?? [];
+        const operation = nativeOperation(definition);
+        exit();
+        if (operation === 'call-dispatcher') {
+          const args = definition.inputs.filter((p) => p.kind === 'data').map((p) => input(p.id));
+          // Events bound or unbound while running don't change this broadcast.
+          for (const event of [...bound]) this.runEvent(context, node, event, args);
+        } else if (operation === 'unbind-all') {
+          context.run.bindings.set(dispatcher.id, []);
+        } else {
+          const event = this.wiredEvent(context, node) ?? this.fail(context, node, "Wire a Custom Event's red pin into Event.");
+          const others = bound.filter((b) => b.node !== event.node || b.graph !== event.graph);
+          // Binding an event twice binds it once, where it was first bound.
+          context.run.bindings.set(dispatcher.id, operation === 'bind-event' ? (others.length === bound.length ? [...bound, event] : bound) : others);
+        }
+        continueFrom('execOut');
+        return;
+      }
       case 'function-return':
         if (context.frame.depth === 0) this.fail(context, node, 'A Return Node belongs in a function graph.');
         exit();
@@ -404,7 +449,11 @@ export class GraphRuntime {
     const unsplit = createUnsplitResolver(this.registry, expanded.doc);
     const doc = { ...expanded.doc, graphs: expanded.doc.graphs.map((g) => expandSplitPins(g, unsplit, (type) => this.registry.get(type))) };
     const language = doc.language || DEFAULT_LANGUAGE;
-    return { doc, variables: new Map(), language, resolve: createResolver(this.registry, doc), macroProblems: problems, types: typeLookup(this.registry.all(), language), ...(document ? { document } : {}) };
+    const objectFrame: Frame = { outputs: new Map(), state: new Map(), params: new Map(), locals: new Map(), depth: 0 };
+    return {
+      doc, variables: new Map(), language, resolve: createResolver(this.registry, doc), macroProblems: problems, types: typeLookup(this.registry.all(), language),
+      objectFrame, bindings: new Map(), eventDepth: 0, ...(document ? { document } : {})
+    };
   }
 
   private runFunction(context: GraphContext, node: GraphNode, run: RunState, graph: Graph, input: (pinId: string) => unknown): Map<string, unknown> {
@@ -420,6 +469,7 @@ export class GraphRuntime {
     try {
       this.executeNode({ run, graph, frame, executing: new Set() }, entry);
     } catch (error) {
+      if (error instanceof RangeError) this.fail(context, node, OUT_OF_STACK);
       if (!(error instanceof ReturnSignal)) throw error;
       return new Map(outputs.map((p) => [p.id, error.values.has(p.id) ? error.values.get(p.id) : defaultValue(p.type, run.types)]));
     }
@@ -441,6 +491,37 @@ export class GraphRuntime {
       this.variables(context, id).set(id, result);
     }
     return result;
+  }
+
+  // Runs a custom event with these inputs, in the object's frame (its outputs keep the inputs).
+  private runEvent(context: GraphContext, caller: GraphNode, event: { graph: Graph; node: GraphNode }, args: unknown[]): void {
+    const run = context.run;
+    if (run.eventDepth >= MAX_CALL_DEPTH) this.fail(context, caller, `Too many nested calls (${MAX_CALL_DEPTH}): the event keeps calling itself.`);
+    eventInputs(event.node).filter((p) => p.kind === 'data').forEach((p, i) => run.objectFrame.outputs.set(outputKey(event.graph, event.node, p.id), args[i]));
+    run.eventDepth++;
+    try {
+      this.executeNode({ run, graph: event.graph, frame: run.objectFrame, executing: new Set() }, event.node);
+    } catch (error) {
+      if (error instanceof RangeError) this.fail(context, caller, OUT_OF_STACK);
+      throw error;
+    } finally {
+      run.eventDepth--;
+    }
+  }
+
+  // The custom event wired into a Bind or Unbind node's Event pin (through reroutes).
+  private wiredEvent(context: GraphContext, node: GraphNode): { graph: Graph; node: GraphNode } | undefined {
+    const { graph } = context;
+    let wire = graph.connections.find((c) => c.toNode === node.id && c.toPin === 'event');
+    const seen = new Set<string>();
+    while (wire && !seen.has(wire.fromNode)) {
+      seen.add(wire.fromNode);
+      const from = graph.nodes.find((n) => n.id === wire!.fromNode);
+      if (from?.type === CUSTOM_EVENT && wire.fromPin === DELEGATE_PIN) return { graph, node: from };
+      if (from?.type !== 'core:reroute') return undefined;
+      wire = graph.connections.find((c) => c.toNode === from.id && c.toPin === 'in');
+    }
+    return undefined;
   }
 
   // Where a variable lives: the call's locals, or the object's members.

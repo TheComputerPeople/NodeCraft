@@ -4,6 +4,7 @@ import * as edits from '../core/blueprint-edits';
 import * as editing from '../core/editing';
 import { FUNCTION_CALL } from '../core/functions';
 import { MACRO_INSTANCE } from '../core/macros';
+import { BIND_EVENT, CALL_DISPATCHER, UNBIND_ALL, UNBIND_EVENT, documentDispatchers } from '../core/events';
 import { GraphKind, GraphVariable } from '../core/model';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { formatType } from '../core/types';
@@ -95,9 +96,34 @@ export function renderMyBlueprint(): void {
     for (const variable of doc.variables) vars.appendChild(variableItem(variable));
     root.appendChild(vars);
 
-    // Event dispatchers need custom events (Phase 4).
-    const dispatchers = sectionElement('Event Dispatchers', 'Event dispatchers arrive in a later version', undefined);
-    dispatchers.appendChild(emptyItem('Arrive in a later version'));
+    const dispatchers = sectionElement('Event Dispatchers', 'Add Event Dispatcher', () => {
+      const dispatcher = edits.addDispatcher(doc);
+      markDirty();
+      selectDispatcher(dispatcher.id);
+      renderPalette();
+      startRename('dispatcher', dispatcher.id);
+    });
+    const declared = documentDispatchers(doc);
+    if (!declared.length) dispatchers.appendChild(emptyItem('No event dispatchers'));
+    for (const dispatcher of declared) {
+      const item = itemElement(dispatcher.name, 'dispatcher', dispatcher.id);
+      item.classList.toggle('selected', dispatcher.id === state.selectedDispatcherId);
+      item.title = 'Drag onto a graph to Call, Bind, Unbind or Assign it.';
+      item.addEventListener('click', () => selectDispatcher(dispatcher.id));
+      item.addEventListener('mousedown', (e) => {
+        if (e.button !== 0 || eventElement(e)?.closest('input')) return;
+        state.variableDrag = { variableId: '', dispatcherId: dispatcher.id, startX: e.clientX, startY: e.clientY, moved: false };
+      });
+      item.addEventListener('dblclick', () => startRename('dispatcher', dispatcher.id));
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showFloatingMenu([
+          { label: 'Rename', action: () => startRename('dispatcher', dispatcher.id) },
+          { label: 'Delete', danger: true, action: () => removeDispatcher(dispatcher.id) }
+        ], e.clientX, e.clientY);
+      });
+      dispatchers.appendChild(item);
+    }
     root.appendChild(dispatchers);
   }
 }
@@ -150,7 +176,7 @@ function sectionElement(title: string, addLabel: string, onAdd: (() => void) | u
   return section;
 }
 
-function itemElement(name: string, kind: 'graph' | 'variable', id: string): HTMLElement {
+function itemElement(name: string, kind: 'graph' | 'variable' | 'dispatcher', id: string): HTMLElement {
   const item = document.createElement('div');
   item.className = 'mb-item';
   item.dataset.kind = kind;
@@ -190,8 +216,15 @@ export function openGraph(graphId: string): void {
   renderInspector();
 }
 
-export function selectVariable(id: string | null): void {
+export function selectDispatcher(id: string | null): void {
+  state.selectedDispatcherId = id;
+  if (id) state.selectedVariableId = null;
+  selectVariable(null, false);
+}
+
+export function selectVariable(id: string | null, clearDispatcher = true): void {
   state.selectedVariableId = id;
+  if (clearDispatcher && id) state.selectedDispatcherId = null;
   if (id) {
     state.selectedNodeIds.clear();
     state.selectedNodeId = null;
@@ -202,7 +235,7 @@ export function selectVariable(id: string | null): void {
 }
 
 // Replaces an item's label with a text field; Enter or leaving the field applies, Escape cancels.
-export function startRename(kind: 'graph' | 'variable', id: string): void {
+export function startRename(kind: 'graph' | 'variable' | 'dispatcher', id: string): void {
   const item = dom.myBlueprint.querySelector<HTMLElement>(`.mb-item[data-kind="${kind}"][data-id="${CSS.escape(id)}"]`);
   const label = item?.querySelector<HTMLElement>('.mb-name');
   if (!item || !label) return;
@@ -218,7 +251,7 @@ export function startRename(kind: 'graph' | 'variable', id: string): void {
     done = true;
     const doc = state.document;
     if (apply && doc) {
-      const error = kind === 'graph' ? edits.renameGraph(doc, id, input.value) : edits.renameVariable(doc, id, input.value);
+      const error = kind === 'graph' ? edits.renameGraph(doc, id, input.value) : kind === 'dispatcher' ? edits.renameDispatcher(doc, id, input.value) : edits.renameVariable(doc, id, input.value);
       if (error) setStatus(error);
       else {
         markDirty();
@@ -238,6 +271,19 @@ export function startRename(kind: 'graph' | 'variable', id: string): void {
   });
   input.addEventListener('blur', () => finish(true));
   input.addEventListener('mousedown', (e) => e.stopPropagation());
+}
+
+function removeDispatcher(id: string): void {
+  const doc = state.document;
+  const dispatcher = documentDispatchers(doc ?? undefined).find((d) => d.id === id);
+  if (!doc || !dispatcher) return;
+  const removed = edits.deleteDispatcher(doc, id);
+  if (state.selectedDispatcherId === id) state.selectedDispatcherId = null;
+  markDirty();
+  render();
+  renderMyBlueprint();
+  renderPalette();
+  setStatus(removed ? `Deleted ${dispatcher.name} and the ${removed} node${removed === 1 ? '' : 's'} that used it.` : `Deleted ${dispatcher.name}.`);
 }
 
 function removeGraph(graphId: string): void {
@@ -277,7 +323,8 @@ export function updateVariableDrag(e: MouseEvent): void {
   const variable = doc && edits.findVariable(doc, drag.variableId)?.variable;
   const ghost = dom.dragGhost;
   ghost.hidden = false;
-  ghost.textContent = drag.functionId ? doc?.graphs.find((g) => g.id === drag.functionId)?.name ?? '' : variable?.name ?? '';
+  ghost.textContent = drag.functionId ? doc?.graphs.find((g) => g.id === drag.functionId)?.name ?? ''
+    : drag.dispatcherId ? documentDispatchers(doc ?? undefined).find((d) => d.id === drag.dispatcherId)?.name ?? '' : variable?.name ?? '';
   ghost.style.setProperty('--pin-color', typeColor(variable?.type));
   ghost.style.left = `${e.clientX}px`;
   ghost.style.top = `${e.clientY}px`;
@@ -293,6 +340,22 @@ export function finishVariableDrag(e: MouseEvent): void {
   const target = eventElement(e);
   if (!target?.closest('#canvas-wrap')) return;
   const position = screenToWorld(e.clientX, e.clientY);
+  // An event dispatcher: Unreal's menu of what to do with it.
+  if (drag.dispatcherId) {
+    const dispatcher = documentDispatchers(state.document ?? undefined).find((d) => d.id === drag.dispatcherId);
+    if (!dispatcher) return;
+    const properties = { dispatcher: dispatcher.id };
+    const items: MenuItem[] = [
+      { label: 'Call', action: () => addNode(CALL_DISPATCHER, position, properties) },
+      { label: 'Bind', action: () => addNode(BIND_EVENT, position, properties) },
+      { label: 'Unbind', action: () => addNode(UNBIND_EVENT, position, properties) },
+      { label: 'Unbind all', action: () => addNode(UNBIND_ALL, position, properties) }
+    ];
+    // Assign makes a custom event, which only event graphs hold.
+    if (state.graph.kind === 'event') items.push({ label: 'Assign', action: () => assign(dispatcher.id, position) });
+    showFloatingMenu(items, e.clientX, e.clientY);
+    return;
+  }
   // A function: place a call to it. A macro: place an instance of it, except in itself.
   if (drag.functionId) {
     const graph = state.document?.graphs.find((g) => g.id === drag.functionId);
@@ -345,4 +408,17 @@ function wireToPin(nodeId: string, getter: boolean, pin: editing.PinAddress): vo
   editing.connect(state.graph, lookupDefinition, ends, newConnectionId());
   markDirty();
   render();
+}
+
+// Unreal's Assign: a Bind node and a new custom event of the dispatcher's kind, wired together.
+function assign(dispatcherId: string, position: { x: number; y: number }): void {
+  const doc = state.document;
+  if (!doc || !state.graph) return;
+  const result = edits.assignDispatcher(doc, state.graph, dispatcherId, position, newConnectionId);
+  if (!result) return;
+  state.selectedNodeIds = new Set([result.bind.id, result.event.id]);
+  state.selectedNodeId = result.event.id;
+  markDirty();
+  render();
+  renderPalette();
 }

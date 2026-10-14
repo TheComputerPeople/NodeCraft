@@ -11,6 +11,8 @@ const TYPE_COLORS: Record<string, string> = {
   object: '#1f9fef',
   struct: '#1e5fc4',
   enum: '#106f61',
+  // Unreal draws event (delegate) pins red.
+  delegate: '#e03c3c',
   native: '#a374e5'
 };
 const NEUTRAL = '#8c8484';

@@ -60,7 +60,7 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 - A function graph runs from its **Function Entry** node, whose outputs are the function's inputs, until a **Return Node**, which ends the call with the values wired into it. Reaching the end without a Return Node returns each output's type default. A function may have several Return Nodes.
 - A call node runs the function with its inputs (an unconnected input uses the value typed on the node, else the input's default in the signature). An impure call's outputs keep the values of its latest call, like any impure node; a **pure** function's call runs each time one of its outputs is read.
 - Each call has its own **local variables**, starting at their defaults, and its own copy of the outputs and remembered state of the nodes inside the function, so recursion works. Member variables are shared, as everywhere in the object.
-- Simulate stops a chain of more than 1,000 nested calls with an error; generated code runs until the language's own stack runs out.
+- Simulate stops a chain of more than 250 nested calls (of functions and custom events) with an error; generated code runs until the language's own stack runs out.
 - In generated code a function is a method of the class: one output is its return value; several are an object with a field per output (TypeScript and JavaScript), a tuple (Python) or a named tuple (C#).
 - A **function library**'s functions behave the same when called from another graph file. They have no member variables, and each call has its own locals and node state. In generated code they are module functions (a static class in C#) that callers import.
 
@@ -69,6 +69,12 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 - A macro instance behaves exactly as if the macro's nodes were placed in its stead: execution entering one of its exec inputs continues from the Inputs tunnel's pin of that name, and reaching one of the Outputs tunnel's exec pins continues from the instance's pin of that name. Data inputs are read where the macro's nodes read them (an unwired input uses the value typed on the instance, else the pin's default).
 - Each instance has its own copy of the macro's nodes: their outputs and remembered state (Do Once, Gate…) belong to that instance. Member variables are shared, as everywhere in the object.
 - In generated code a macro's nodes are written out where it is used.
+
+## Custom events and event dispatchers
+
+- Calling a custom event (its Call node, or an event dispatcher it is bound to) runs it right away, in the object, wherever the call is (an event graph or a function); execution continues after the Call node when the event's flow ends.
+- An event's inputs are its outputs: they keep the values of its latest run, readable from other flows like any impure node's outputs.
+- A dispatcher's Call runs each bound event in the order they were bound, with the Call's inputs; an event bound twice runs once. Bindings changed while a Call runs apply to the next Call.
 
 ## Variables
 

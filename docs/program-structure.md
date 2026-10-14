@@ -74,10 +74,12 @@ Unreal's standard macros, as built-in nodes with Unreal's pins:
 
 ## Custom events and event dispatchers
 
-- **Custom Event** nodes in event graphs, with parameters edited in Details, called by **Call Custom Event** nodes. Each becomes a method in generated code.
-- **Event Dispatchers** are declared in My Blueprint with a signature. Nodes, as in Unreal: **Call** (broadcast to every bound event), **Bind Event to**, **Unbind Event from**, **Unbind All Events from**, and **Assign** (binds a new Custom Event in one step). The red event pin on a Custom Event connects to Bind.
-- Bound events run in the order they were bound. Binding the same event twice binds it once.
-- Generated as a list of callbacks with `bind`, `unbind`, `clear` and `broadcast`, in a small helper each target already has the pieces for (TypeScript arrays of functions, Python lists, C# `event Action<…>`).
+- **Custom Event** nodes (event graphs only) take a free name when placed (CustomEvent, CustomEvent_1…); their name and inputs are edited in Details, stored on the node (`properties.name`, `properties.inputs`). Each custom event can be called from the action menu (a Call node, titled with the event's name, in any graph of the class); renaming the event renames its Call nodes. Functions, custom events and dispatchers share one set of names, as in Unreal.
+- Calling a custom event runs it right away, as Unreal does for events called directly. In generated code each custom event is a method (lowered as an event function, src/core/compiler/lower.ts); inside its own flow its inputs are the method's parameters, and inputs read from other flows are kept in fields when it runs, as Unreal keeps an event node's outputs.
+- **Event Dispatchers** are declared in My Blueprint's Event Dispatchers section with inputs (edited in Details). Dragging one onto a graph offers Unreal's choices: **Call** (runs every bound event), **Bind** (Bind Event to), **Unbind** (Unbind Event from), **Unbind all** (Unbind all Events from), and, in event graphs, **Assign** (a Bind node and a new custom event with the dispatcher's inputs, wired together). The action menu offers the same nodes. Deleting a dispatcher deletes the nodes that use it.
+- The red pin on a Custom Event stands for the event (type `delegate:(<input types>)`); it connects to Bind's and Unbind's Event pin when the event's inputs match the dispatcher's. Changing an event's or dispatcher's inputs drops the wires that no longer fit.
+- Bound events run in the order they were bound. Binding the same event twice binds it once; events bound or unbound while a Call runs take effect from the next Call.
+- Generated as a small `EventDispatcher` helper in each file that declares one: TypeScript and JavaScript keep (object, method) pairs, Python keeps bound methods, C# keeps `Action<…>` delegates in a list (each compares equal for the same object and method, so Unbind and binding twice work, and step 9's binding of other objects' events needs nothing new).
 
 ## Classes
 

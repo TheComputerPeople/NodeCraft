@@ -2,6 +2,7 @@ import type { CompileDiagnostic } from './compiler/diagnostics';
 import type { SearchHit } from './search';
 import type { TypeRef } from './types';
 import type { EnumInfo, Enumerator, StructInfo } from './user-types';
+import type { Dispatcher } from './events';
 
 export type { TypeRef } from './types';
 
@@ -158,6 +159,8 @@ export interface GraphDocument {
   graphs: Graph[];
   // An enumeration's values, in order.
   enumerators?: Enumerator[];
+  // A class's event dispatchers (src/core/events.ts).
+  dispatchers?: Dispatcher[];
   // The signature of each project function the graphs call, by node type, as it was when its
   // nodes were made or last refreshed (docs/code-as-nodes.md, "When the code changes").
   importedFunctions?: Record<string, NodeDefinition>;

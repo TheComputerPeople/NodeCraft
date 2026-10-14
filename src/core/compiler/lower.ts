@@ -8,8 +8,9 @@ import { hasWildcard } from '../containers';
 import { NodeResolver, REROUTE, createResolver, createUnsplitResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
-import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
+import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup } from '../user-types';
 import { TypeRef } from '../types';
@@ -65,6 +66,8 @@ class Lowerer {
   private readonly functions: IrFunction[] = [];
   // The function graph being lowered, if any: its slots and locals belong to each call.
   private currentFunction: string | undefined;
+  // The custom event whose method is being lowered: its inputs are that method's parameters.
+  private currentEvent: string | undefined;
 
   private readonly resolve: NodeResolver;
   private readonly macros: MacroLookup;
@@ -136,7 +139,10 @@ class Lowerer {
     for (const info of [...eventGraphs, ...functionGraphs]) this.checkExecCycles(info);
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
 
+    // Custom events are methods too; registered first, so Call nodes anywhere find them.
+    const events = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === CUSTOM_EVENT).map((node) => ({ info, node, fn: this.registerEvent(info, node) })));
     for (const info of functionGraphs) this.lowerFunction(info);
+    for (const { info, node, fn } of events) this.lowerEvent(info, node, fn);
     const start = entries.flatMap(({ info, start: node }) => this.lowerNode(info, node.id));
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
 
@@ -149,7 +155,8 @@ class Lowerer {
       imports: [...this.imports.values()],
       blocks: [...this.blocks.values()],
       functions: this.functions,
-      start
+      start,
+      dispatchers: documentDispatchers(this.doc).map((d): IrDispatcher => ({ id: d.id, name: d.name, params: d.inputs.filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type })) }))
     };
     this.importTypes(program);
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
@@ -298,6 +305,49 @@ class Lowerer {
     }
   }
 
+  // ---- Custom events (src/core/events.ts) ----------------------------------------------------
+
+  private registerEvent(info: GraphInfo, node: GraphNode): IrFunction {
+    const name = eventName(node);
+    const clash = this.functions.find((f) => f.name === name) ?? this.doc.graphs.find((g) => g.kind === 'function' && g.name === name);
+    if (clash) this.error('duplicate-event', `There is already a function or event named "${name}".`, info.graph.id, node.id);
+    const fn: IrFunction = {
+      id: eventFunctionId(info.graph.id, node.id),
+      name,
+      params: eventInputs(node).filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type })),
+      outputs: [],
+      pure: false,
+      body: [],
+      event: { stores: [] }
+    };
+    this.functions.push(fn);
+    return fn;
+  }
+
+  private lowerEvent(info: GraphInfo, node: GraphNode, fn: IrFunction): void {
+    this.currentEvent = fn.id;
+    try {
+      fn.body = this.lowerNode(info, node.id);
+    } finally {
+      this.currentEvent = undefined;
+    }
+  }
+
+  // The custom event wired into a Bind or Unbind node's Event pin (through reroutes).
+  private wiredEvent(info: GraphInfo, node: GraphNode): string | undefined {
+    let source = info.dataSources.get(inputKey(node.id, 'event'));
+    const seen = new Set<string>();
+    while (source && !seen.has(source.node)) {
+      seen.add(source.node);
+      const from = info.nodes.get(source.node);
+      if (from?.type === CUSTOM_EVENT && source.pin === DELEGATE_PIN) return eventFunctionId(info.graph.id, from.id);
+      if (from?.type !== REROUTE) break;
+      source = info.dataSources.get(inputKey(from.id, 'in'));
+    }
+    this.error('event-unwired', "Wire a Custom Event's red pin into Event.", info.graph.id, node.id);
+    return undefined;
+  }
+
   // ---- Validation ----------------------------------------------------------------------------
 
   // A graph with the macros it uses expanded in place (src/core/macros.ts), and its split struct pins
@@ -437,7 +487,13 @@ class Lowerer {
         const main = pin === mainExecInput(def);
         const block: IrBlock = { id: key, name: main ? `run_${nodeId}` : `run_${nodeId}_${pin}`, body: [] };
         this.blocks.set(key, block);
-        block.body = this.lowerNode(info, nodeId, pin, key);
+        const event = this.currentEvent;
+        this.currentEvent = undefined;
+        try {
+          block.body = this.lowerNode(info, nodeId, pin, key);
+        } finally {
+          this.currentEvent = event;
+        }
       }
       return [{ kind: 'callBlock', block: key, source }];
     }
@@ -491,6 +547,31 @@ class Lowerer {
       }
       case 'end':
         return [];
+      case 'custom-event':
+        return next('execOut');
+      case 'call-event': {
+        const target = calledEvent(node, this.doc.graphs);
+        if (!target) {
+          this.error('event-missing', `There is no custom event named "${String(node.properties.event ?? '')}".`, info.graph.id, nodeId);
+          return next('execOut');
+        }
+        return [{ kind: 'callFunction', function: eventFunctionId(target.graph.id, target.node.id), args: dataInputs(def).map((p) => input(p.id)), results: [], source }, ...next('execOut')];
+      }
+      case 'call-dispatcher':
+      case 'bind-event':
+      case 'unbind-event':
+      case 'unbind-all': {
+        const dispatcher = boundDispatcher(node, documentDispatchers(this.doc));
+        if (!dispatcher) {
+          this.error('dispatcher-missing', 'This node uses an event dispatcher that no longer exists.', info.graph.id, nodeId);
+          return next('execOut');
+        }
+        const operation = nativeOperation(def);
+        if (operation === 'call-dispatcher') return [{ kind: 'broadcast', dispatcher: dispatcher.id, args: dataInputs(def).map((p) => input(p.id)), source }, ...next('execOut')];
+        if (operation === 'unbind-all') return [{ kind: 'unbindAll', dispatcher: dispatcher.id, source }, ...next('execOut')];
+        const event = this.wiredEvent(info, node);
+        return [...(event ? [{ kind: 'bindEvent' as const, dispatcher: dispatcher.id, event, bind: operation === 'bind-event', source }] : []), ...next('execOut')];
+      }
       // Expanded away, or reported: a macro that can't be expanded, a tunnel outside a macro.
       case 'macro-instance':
       case 'macro-inputs':
@@ -600,6 +681,17 @@ class Lowerer {
     if (operation === 'get-variable' || operation === 'set-variable') {
       const member = this.variableMember(info, sourceNode, sourceDef);
       return member ? { kind: 'member', member: member.id } : { kind: 'default', type: pin?.type };
+    }
+    // A custom event's inputs: its method's parameters inside its own flow; elsewhere, the values
+    // it last ran with, which its method keeps in slots.
+    if (operation === 'custom-event') {
+      const event = eventFunctionId(info.graph.id, sourceNode.id);
+      if (source.pin === DELEGATE_PIN) return { kind: 'default', type: pin?.type };
+      if (this.currentEvent === event) return { kind: 'param', function: event, id: source.pin };
+      const slot = this.slot(info, sourceNode, sourceDef, source.pin);
+      const stores = this.functions.find((f) => f.id === event)?.event?.stores;
+      if (stores && !stores.some((s) => s.param === source.pin)) stores.push({ param: source.pin, slot });
+      return { kind: 'output', slot };
     }
     // A function's inputs, read from its entry node.
     if (operation === 'function-entry') {
@@ -875,6 +967,11 @@ class Lowerer {
     const diagnostic: CompileDiagnostic = { severity, code, message, ...(graphId ? { graphId } : {}), ...(visible ? { nodeId: visible } : {}) };
     if (!this.diagnostics.some((d) => d.severity === severity && d.code === code && d.message === message && d.graphId === diagnostic.graphId && d.nodeId === diagnostic.nodeId)) this.diagnostics.push(diagnostic);
   }
+}
+
+// The IrFunction id of a custom event's method.
+function eventFunctionId(graphId: string, nodeId: string): string {
+  return JSON.stringify(['event', graphId, nodeId]);
 }
 
 function inputKey(nodeId: string, pinId: string): string {

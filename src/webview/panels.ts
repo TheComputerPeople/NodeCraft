@@ -19,6 +19,8 @@ import { headerColor } from './style';
 import { state } from './state';
 import { screenToWorld } from './view';
 import { UserType, listUserTypes } from '../core/user-types';
+import { CUSTOM_EVENT } from '../core/events';
+import { renderDispatcherDetails, renderEventDetails } from './event-details';
 
 export function renderPalette(): void {
   dom.categories.innerHTML = '';
@@ -58,6 +60,11 @@ export function renderInspector(): void {
   const graph = state.graph;
   const node = graph?.nodes.find((n) => n.id === state.selectedNodeId);
   if (!node && state.selectedVariableId && renderVariableDetails(state.selectedVariableId)) return;
+  if (!node && state.selectedDispatcherId && renderDispatcherDetails(state.selectedDispatcherId)) return;
+  if (node?.type === CUSTOM_EVENT) {
+    renderEventDetails(node);
+    return;
+  }
   // A function's or macro's settings: when its graph is open with nothing selected, or its entry
   // (or a tunnel) is selected.
   const own = graph?.kind === 'function' ? [FUNCTION_ENTRY] : [MACRO_INPUTS, MACRO_OUTPUTS];

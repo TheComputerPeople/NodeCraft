@@ -284,3 +284,17 @@ describe('GraphRuntime: flow control', () => {
     assert.equal(events.some((e) => e.kind === 'error'), false);
   });
 });
+
+describe('runaway recursion', () => {
+  test('a function calling itself too deeply stops with an error instead of overflowing the stack', () => {
+    const d = doc([node('s', 'core:event.start'), node('c', 'core:function.call', { graph: 'F', 'pin:n': 5000 })], [wire('s', 'execOut', 'c', 'execIn')]);
+    d.graphs.push({
+      id: 'F', name: 'F', kind: 'function', comments: [], signature: { inputs: [{ id: 'n', name: 'N', kind: 'data', type: { id: 'int' } }], outputs: [] },
+      nodes: [node('entry', 'core:function.entry', { graph: 'F' }), node('gt', 'core:math.greater', { 'pin:b': 0 }), node('br', 'core:flow.branch'), node('sub', 'core:math.subtract', { 'pin:b': 1 }), node('rec', 'core:function.call', { graph: 'F' })],
+      connections: [wire('entry', 'execOut', 'br', 'execIn'), wire('entry', 'n', 'gt', 'a'), wire('gt', 'returnValue', 'br', 'condition'), wire('br', 'true', 'rec', 'execIn'), wire('entry', 'n', 'sub', 'a'), wire('sub', 'returnValue', 'rec', 'n')]
+    });
+    const errors = run(d).filter((e) => e.kind === 'error');
+    assert.equal(errors.length, 1);
+    assert.match(errors[0].message ?? '', /Too many nested calls \(250\)/);
+  });
+});

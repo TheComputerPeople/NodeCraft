@@ -1,0 +1,545 @@
+{
+  "schemaVersion": 3,
+  "name": "Events",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [
+    {
+      "id": "total",
+      "name": "Total",
+      "type": {
+        "id": "int"
+      },
+      "defaultValue": 0
+    }
+  ],
+  "dispatchers": [
+    {
+      "id": "onScored",
+      "name": "On Scored",
+      "inputs": [
+        {
+          "id": "points",
+          "name": "Points",
+          "kind": "data",
+          "type": {
+            "id": "int"
+          }
+        }
+      ]
+    }
+  ],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "addPoints",
+          "type": "core:event.custom",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "name": "Add Points",
+            "inputs": [
+              {
+                "id": "points",
+                "name": "Points",
+                "kind": "data",
+                "type": {
+                  "id": "int"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:math.add",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "core:variable.get",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "properties": {
+            "variable": "total"
+          }
+        },
+        {
+          "id": "n3",
+          "type": "core:variable.set",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "properties": {
+            "variable": "total"
+          }
+        },
+        {
+          "id": "n4",
+          "type": "core:console.print",
+          "position": {
+            "x": 1040,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "announce",
+          "type": "core:event.custom",
+          "position": {
+            "x": 1040,
+            "y": 0
+          },
+          "properties": {
+            "name": "Announce",
+            "inputs": [
+              {
+                "id": "points",
+                "name": "Points",
+                "kind": "data",
+                "type": {
+                  "id": "int"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "n5",
+          "type": "core:console.print",
+          "position": {
+            "x": 1300,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "scored"
+          }
+        },
+        {
+          "id": "n6",
+          "type": "core:console.print",
+          "position": {
+            "x": 1560,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "log",
+          "type": "core:event.custom",
+          "position": {
+            "x": 1560,
+            "y": 0
+          },
+          "properties": {
+            "name": "Log"
+          }
+        },
+        {
+          "id": "n7",
+          "type": "core:console.print",
+          "position": {
+            "x": 1820,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "log"
+          }
+        },
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 1820,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "n8",
+          "type": "core:call.event",
+          "position": {
+            "x": 0,
+            "y": 220
+          },
+          "properties": {
+            "event": "Add Points",
+            "pin:points": 5
+          }
+        },
+        {
+          "id": "n9",
+          "type": "core:dispatcher.bind",
+          "position": {
+            "x": 260,
+            "y": 220
+          },
+          "properties": {
+            "dispatcher": "onScored"
+          }
+        },
+        {
+          "id": "n10",
+          "type": "core:dispatcher.bind",
+          "position": {
+            "x": 520,
+            "y": 220
+          },
+          "properties": {
+            "dispatcher": "onScored"
+          }
+        },
+        {
+          "id": "n11",
+          "type": "core:dispatcher.bind",
+          "position": {
+            "x": 780,
+            "y": 220
+          },
+          "properties": {
+            "dispatcher": "onScored"
+          }
+        },
+        {
+          "id": "n12",
+          "type": "core:dispatcher.call",
+          "position": {
+            "x": 1040,
+            "y": 220
+          },
+          "properties": {
+            "dispatcher": "onScored",
+            "pin:points": 3
+          }
+        },
+        {
+          "id": "n13",
+          "type": "core:dispatcher.unbind",
+          "position": {
+            "x": 1300,
+            "y": 220
+          },
+          "properties": {
+            "dispatcher": "onScored"
+          }
+        },
+        {
+          "id": "n14",
+          "type": "core:dispatcher.call",
+          "position": {
+            "x": 1560,
+            "y": 220
+          },
+          "properties": {
+            "dispatcher": "onScored",
+            "pin:points": 4
+          }
+        },
+        {
+          "id": "n15",
+          "type": "core:console.print",
+          "position": {
+            "x": 1820,
+            "y": 220
+          },
+          "properties": {}
+        },
+        {
+          "id": "n16",
+          "type": "core:dispatcher.unbind-all",
+          "position": {
+            "x": 0,
+            "y": 440
+          },
+          "properties": {
+            "dispatcher": "onScored"
+          }
+        },
+        {
+          "id": "n17",
+          "type": "core:dispatcher.call",
+          "position": {
+            "x": 260,
+            "y": 440
+          },
+          "properties": {
+            "dispatcher": "onScored",
+            "pin:points": 9
+          }
+        },
+        {
+          "id": "n18",
+          "type": "core:function.call",
+          "position": {
+            "x": 520,
+            "y": 440
+          },
+          "properties": {
+            "graph": "Helper"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "addPoints",
+          "fromPin": "execOut",
+          "toNode": "n1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n2",
+          "fromPin": "value",
+          "toNode": "n1",
+          "toPin": "a"
+        },
+        {
+          "id": "w3",
+          "fromNode": "addPoints",
+          "fromPin": "points",
+          "toNode": "n1",
+          "toPin": "b"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n1",
+          "fromPin": "execOut",
+          "toNode": "n3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w5",
+          "fromNode": "n1",
+          "fromPin": "result",
+          "toNode": "n3",
+          "toPin": "value"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n3",
+          "fromPin": "execOut",
+          "toNode": "n4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n3",
+          "fromPin": "result",
+          "toNode": "n4",
+          "toPin": "value"
+        },
+        {
+          "id": "w8",
+          "fromNode": "announce",
+          "fromPin": "execOut",
+          "toNode": "n5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w9",
+          "fromNode": "n5",
+          "fromPin": "execOut",
+          "toNode": "n6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "announce",
+          "fromPin": "points",
+          "toNode": "n6",
+          "toPin": "value"
+        },
+        {
+          "id": "w11",
+          "fromNode": "log",
+          "fromPin": "execOut",
+          "toNode": "n7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "n8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w13",
+          "fromNode": "addPoints",
+          "fromPin": "delegate",
+          "toNode": "n9",
+          "toPin": "event"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n8",
+          "fromPin": "execOut",
+          "toNode": "n9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w15",
+          "fromNode": "announce",
+          "fromPin": "delegate",
+          "toNode": "n10",
+          "toPin": "event"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n9",
+          "fromPin": "execOut",
+          "toNode": "n10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w17",
+          "fromNode": "addPoints",
+          "fromPin": "delegate",
+          "toNode": "n11",
+          "toPin": "event"
+        },
+        {
+          "id": "w18",
+          "fromNode": "n10",
+          "fromPin": "execOut",
+          "toNode": "n11",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w19",
+          "fromNode": "n11",
+          "fromPin": "execOut",
+          "toNode": "n12",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w20",
+          "fromNode": "addPoints",
+          "fromPin": "delegate",
+          "toNode": "n13",
+          "toPin": "event"
+        },
+        {
+          "id": "w21",
+          "fromNode": "n12",
+          "fromPin": "execOut",
+          "toNode": "n13",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w22",
+          "fromNode": "n13",
+          "fromPin": "execOut",
+          "toNode": "n14",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w23",
+          "fromNode": "announce",
+          "fromPin": "points",
+          "toNode": "n15",
+          "toPin": "value"
+        },
+        {
+          "id": "w24",
+          "fromNode": "n14",
+          "fromPin": "execOut",
+          "toNode": "n15",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w25",
+          "fromNode": "n15",
+          "fromPin": "execOut",
+          "toNode": "n16",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w26",
+          "fromNode": "n16",
+          "fromPin": "execOut",
+          "toNode": "n17",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w27",
+          "fromNode": "n17",
+          "fromPin": "execOut",
+          "toNode": "n18",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "Helper",
+      "name": "Helper",
+      "kind": "function",
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Helper"
+          }
+        },
+        {
+          "id": "n1",
+          "type": "core:call.event",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "properties": {
+            "event": "Log"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "n1",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": [],
+      "signature": {
+        "inputs": [],
+        "outputs": []
+      }
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: custom events called directly and through an event dispatcher (bind, bind twice, unbind, unbind all), an event input read from another flow, and an event called from a function.",
+    "expectedOutput": [
+      "5",
+      "8",
+      "scored",
+      "3",
+      "scored",
+      "4",
+      "4",
+      "log"
+    ]
+  }
+}

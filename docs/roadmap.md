@@ -275,7 +275,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Visuals | Exec pins white arrows, data pins and wires colored by type | ✅ | — |
 | Visuals | Title styles for event/function/pure/macro; compact variable getters | ✅ | — |
 | Panels | Details panel (node details, variable settings) | ✅ | — |
-| Panels | My Blueprint panel: graphs, functions, macros, variables | ✅ (event dispatchers and local variables need Phase 4) | — |
+| Panels | My Blueprint panel: graphs, functions, macros, variables, local variables, event dispatchers | ✅ | — |
 | Variables | Get/Set nodes bound to a variable | ✅ | — |
 | Variables | Ctrl-drag → Get, Alt-drag → Set, drag onto a pin | ✅ | — |
 | Variables | Promote pin to variable | ✅ | — |
@@ -291,7 +291,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | For Each Loop (with Break) | ✅ | — |
 | Structure | Structs, enums, Make/Break, Set Members, Switch on Enum, the structure and enumeration editors | ✅ (sets and map keys of structs or enums later) | — |
 | Structure | Classes, inheritance, interfaces, Cast To | ⬜ | 4 |
-| Structure | Event dispatchers, custom events | ⬜ | 4 |
+| Structure | Custom events (Call), event dispatchers (Call, Bind, Unbind, Unbind all, Assign) | ✅ (binding other objects' events with classes, step 9) | — |
 | Structure | Latent actions (Delay) | ⬜ | 4 |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python; methods with Phase 4 classes) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |

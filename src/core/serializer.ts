@@ -95,6 +95,7 @@ function normalizeDocument(raw: Record<string, unknown>, fallbackName: string): 
   };
 
   if (doc.kind !== 'class' && doc.kind !== 'structure' && doc.variables.length) throw new Error(`Invalid .vgraph document: a ${doc.kind} cannot have variables.`);
+  if (doc.dispatchers !== undefined && (doc.kind !== 'class' || !Array.isArray(doc.dispatchers))) throw new Error('Invalid .vgraph document: only a class has event dispatchers, as an array.');
   const ids = new Set<string>();
   for (const graph of doc.graphs) {
     if (ids.has(graph.id)) throw new Error(`Invalid .vgraph document: duplicate graph id "${graph.id}".`);
@@ -117,7 +118,7 @@ function normalizeGraph(raw: unknown, index: number): Graph {
   return graph;
 }
 
-const DOCUMENT_KEY_ORDER = ['schemaVersion', 'name', 'kind', 'language', 'variables', 'enumerators', 'graphs', 'metadata'];
+const DOCUMENT_KEY_ORDER = ['schemaVersion', 'name', 'kind', 'language', 'variables', 'enumerators', 'dispatchers', 'graphs', 'metadata'];
 const GRAPH_KEY_ORDER = ['id', 'name', 'kind', 'signature', 'localVariables', 'nodes', 'connections', 'comments'];
 
 // Known fields come first in a fixed order, so files diff cleanly whichever code produced them.

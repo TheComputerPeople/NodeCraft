@@ -2,6 +2,7 @@
 // Pure data operations shared by the editor and tests; each mutates the document passed in.
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables } from './functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from './macros';
+import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, CUSTOM_EVENT, DELEGATE_PIN, Dispatcher, UNBIND_EVENT, customEvents, documentDispatchers, eventName, isDispatcherNode } from './events';
 import { DocumentKind, Graph, GraphConnection, GraphDocument, GraphKind, GraphNode, GraphPin, GraphVariable, NodeDefinition } from './model';
 import { VARIABLE_GET, VARIABLE_SET } from './resolve';
 import { createEmptyDocument, createGraph } from './serializer';
@@ -517,4 +518,158 @@ export function newDocument(name: string, language: string | undefined, kind: Do
   if (kind === 'structure') addVariable(doc);
   if (kind === 'enumeration') addEnumerator(doc);
   return doc;
+}
+
+// ---- Custom events and event dispatchers (src/core/events.ts) -----------------------------------
+
+// The names functions, custom events and dispatchers of the document have: they share one
+// namespace in generated code, as in Unreal.
+function memberNames(doc: GraphDocument): string[] {
+  return [...doc.graphs.filter((g) => g.kind === 'function').map((g) => g.name), ...customEvents(doc.graphs).map((e) => eventName(e.node)), ...documentDispatchers(doc).map((d) => d.name)];
+}
+
+export function uniqueEventName(doc: GraphDocument, base = 'CustomEvent'): string {
+  return uniqueName(base, memberNames(doc));
+}
+
+// Renames a custom event and the Call nodes that run it.
+export function renameCustomEvent(doc: GraphDocument, node: GraphNode, name: string): string | undefined {
+  const trimmed = name.trim();
+  const old = eventName(node);
+  if (!trimmed) return 'An event needs a name.';
+  if (trimmed !== old && memberNames(doc).includes(trimmed)) return `There is already a function, event or dispatcher named "${trimmed}".`;
+  for (const graph of doc.graphs) for (const n of graph.nodes) if (n.type === CALL_EVENT && n.properties.event === old) n.properties.event = trimmed;
+  node.properties.name = trimmed;
+  return undefined;
+}
+
+// The parameters of a custom event (on its node) or an event dispatcher (on the document).
+export type EventOwner = { event: GraphNode } | { dispatcher: string };
+
+function ownerInputs(doc: GraphDocument, owner: EventOwner): GraphPin[] | undefined {
+  if ('event' in owner) return (owner.event.properties.inputs ??= []) as GraphPin[];
+  return documentDispatchers(doc).find((d) => d.id === owner.dispatcher)?.inputs;
+}
+
+// The nodes showing an owner's parameters (the event node and its Call nodes, or the dispatcher's
+// Call nodes), and the Bind and Unbind nodes whose Event pin takes events of that kind.
+function ownerNodes(doc: GraphDocument, owner: EventOwner): { params: Set<GraphNode>; binds: Set<GraphNode> } {
+  const params = new Set<GraphNode>();
+  const binds = new Set<GraphNode>();
+  for (const graph of doc.graphs) {
+    for (const n of graph.nodes) {
+      if ('event' in owner) {
+        if (n === owner.event || (n.type === CALL_EVENT && n.properties.event === eventName(owner.event))) params.add(n);
+      } else if (n.properties.dispatcher === owner.dispatcher) {
+        if (n.type === CALL_DISPATCHER) params.add(n);
+        if (n.type === BIND_EVENT || n.type === UNBIND_EVENT) binds.add(n);
+      }
+    }
+  }
+  return { params, binds };
+}
+
+// A parameter's wires and values go when it changes, and so do the event wires of Bind and Unbind
+// nodes (and of the event's own red pin), whose events may no longer fit.
+function forgetEventParam(doc: GraphDocument, owner: EventOwner, pinId: string | undefined): void {
+  const { params, binds } = ownerNodes(doc, owner);
+  const ids = new Set([...params].map((n) => n.id));
+  const bindIds = new Set([...binds].map((n) => n.id));
+  for (const graph of doc.graphs) {
+    if (!graph.nodes.some((n) => params.has(n) || binds.has(n))) continue;
+    const ownEvent = 'event' in owner && graph.nodes.includes(owner.event) ? owner.event.id : undefined;
+    graph.connections = graph.connections.filter((c) => {
+      const onParam = pinId !== undefined && ((ids.has(c.toNode) && c.toPin === pinId) || (ids.has(c.fromNode) && c.fromPin === pinId));
+      const onEvent = (bindIds.has(c.toNode) && c.toPin === 'event') || (c.fromNode === ownEvent && c.fromPin === DELEGATE_PIN);
+      return !onParam && !onEvent;
+    });
+    if (pinId !== undefined) for (const n of graph.nodes) if (params.has(n)) delete n.properties[`pin:${pinId}`];
+  }
+}
+
+export function addEventParam(doc: GraphDocument, owner: EventOwner, type: TypeRef = { id: 'bool' }): GraphPin | undefined {
+  const inputs = ownerInputs(doc, owner);
+  if (!inputs) return undefined;
+  const name = uniqueName('NewParam', inputs.map((p) => p.name));
+  const pin: GraphPin = { id: uniqueId('', name, [...inputs.map((p) => p.id), DELEGATE_PIN, 'execIn', 'execOut']), name, kind: 'data', type };
+  inputs.push(pin);
+  forgetEventParam(doc, owner, undefined);
+  return pin;
+}
+
+export function renameEventParam(doc: GraphDocument, owner: EventOwner, pinId: string, name: string): string | undefined {
+  const trimmed = name.trim();
+  const inputs = ownerInputs(doc, owner);
+  if (!trimmed) return 'A parameter needs a name.';
+  if (inputs?.some((p) => p.id !== pinId && p.name === trimmed)) return `There is already a parameter named "${trimmed}".`;
+  const pin = inputs?.find((p) => p.id === pinId);
+  if (pin) pin.name = trimmed;
+  return undefined;
+}
+
+export function setEventParamType(doc: GraphDocument, owner: EventOwner, pinId: string, type: TypeRef): void {
+  const pin = ownerInputs(doc, owner)?.find((p) => p.id === pinId);
+  if (!pin) return;
+  pin.type = type;
+  forgetEventParam(doc, owner, pinId);
+}
+
+export function removeEventParam(doc: GraphDocument, owner: EventOwner, pinId: string): void {
+  const inputs = ownerInputs(doc, owner);
+  const at = inputs?.findIndex((p) => p.id === pinId) ?? -1;
+  if (!inputs || at < 0) return;
+  inputs.splice(at, 1);
+  forgetEventParam(doc, owner, pinId);
+}
+
+// How many Call nodes run a custom event.
+export function eventUses(doc: GraphDocument, node: GraphNode): number {
+  return ownerNodes(doc, { event: node }).params.size - 1;
+}
+
+export function addDispatcher(doc: GraphDocument): Dispatcher {
+  if (doc.kind !== 'class') throw new Error('Only classes have event dispatchers.');
+  const name = uniqueName('NewEventDispatcher', memberNames(doc));
+  const dispatcher: Dispatcher = { id: uniqueId('', name, documentDispatchers(doc).map((d) => d.id)), name, inputs: [] };
+  (doc.dispatchers ??= []).push(dispatcher);
+  return dispatcher;
+}
+
+export function renameDispatcher(doc: GraphDocument, id: string, name: string): string | undefined {
+  const trimmed = name.trim();
+  const dispatcher = documentDispatchers(doc).find((d) => d.id === id);
+  if (!trimmed) return 'A dispatcher needs a name.';
+  if (dispatcher && trimmed !== dispatcher.name && memberNames(doc).includes(trimmed)) return `There is already a function, event or dispatcher named "${trimmed}".`;
+  if (dispatcher) dispatcher.name = trimmed;
+  return undefined;
+}
+
+// Deletes the dispatcher and, as Unreal does, the nodes that use it. Returns how many went.
+export function deleteDispatcher(doc: GraphDocument, id: string): number {
+  doc.dispatchers = documentDispatchers(doc).filter((d) => d.id !== id);
+  if (!doc.dispatchers.length) delete doc.dispatchers;
+  let removed = 0;
+  for (const graph of doc.graphs) {
+    const doomed = new Set(graph.nodes.filter((n) => isDispatcherNode(n.type) && n.properties.dispatcher === id).map((n) => n.id));
+    removed += doomed.size;
+    graph.nodes = graph.nodes.filter((n) => !doomed.has(n.id));
+    graph.connections = graph.connections.filter((c) => !doomed.has(c.fromNode) && !doomed.has(c.toNode));
+  }
+  return removed;
+}
+
+// Unreal's Assign: a Bind node and a new custom event with the dispatcher's parameters, wired
+// together, at `position`.
+export function assignDispatcher(doc: GraphDocument, graph: Graph, dispatcherId: string, position: { x: number; y: number }, connectionId: () => string): { bind: GraphNode; event: GraphNode } | undefined {
+  const dispatcher = documentDispatchers(doc).find((d) => d.id === dispatcherId);
+  if (!dispatcher) return undefined;
+  const ids = graph.nodes.map((n) => n.id);
+  const bind: GraphNode = { id: uniqueName(`bind_${dispatcher.id}`, ids), type: BIND_EVENT, position, properties: { dispatcher: dispatcher.id } };
+  const event: GraphNode = {
+    id: uniqueName(`event_${dispatcher.id}`, [...ids, bind.id]), type: CUSTOM_EVENT, position: { x: position.x, y: position.y + 140 },
+    properties: { name: uniqueEventName(doc, `${dispatcher.name.replace(/\s+/g, '')}_Event`), inputs: dispatcher.inputs.map((p) => ({ ...p })) }
+  };
+  graph.nodes.push(bind, event);
+  graph.connections.push({ id: connectionId(), fromNode: event.id, fromPin: DELEGATE_PIN, toNode: bind.id, toPin: 'event' });
+  return { bind, event };
 }

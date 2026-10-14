@@ -19,6 +19,8 @@ const RESERVED = new Set([
 // Formats a value the way docs/semantics.md says Print shows it. Only emitted when a value's type
 // isn't known at compile time.
 const FORMAT_HELPER = 'formatValue';
+// Unreal's event dispatcher, emitted when the class declares one.
+const DISPATCHER_CLASS = 'EventDispatcher';
 
 export interface TypeScriptFlavor {
   typed: boolean;
@@ -97,6 +99,7 @@ class TypeScriptEmitter {
   // Local names of imported functions, aliased where they would clash.
   private readonly importNames = new Map<string, string>();
   private readonly functionNames = new Map<string, string>();
+  private readonly dispatcherNames = new Map<string, string>();
   // Parameter names of each function, keyed by function and input id.
   private readonly paramNames = new Map<string, string>();
   // Field names of a function's result object, when it has several outputs.
@@ -118,11 +121,12 @@ class TypeScriptEmitter {
       this.functionNames.set(f.id, this.names.claim(f.name, 'camel'));
       this.outputFields.set(f.id, resultFields(f.outputs));
     }
-    const moduleScope = this.library ? this.names : new NameScope(RESERVED, [this.className, FORMAT_HELPER]);
+    const moduleScope = this.library ? this.names : new NameScope(RESERVED, [this.className, FORMAT_HELPER, DISPATCHER_CLASS]);
     for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
     // Member variables keep their names; internal fields are private (TypeScript) or underscored (JavaScript).
     const internal = flavor.typed || this.library ? '' : '_';
     for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
+    for (const d of program.dispatchers ?? []) this.dispatcherNames.set(d.id, this.names.claim(d.name));
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'keep', internal));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', internal));
@@ -142,9 +146,18 @@ class TypeScriptEmitter {
 
     const members = this.program.members.filter((m) => !m.function);
     const slots = this.program.slots.filter((x) => !x.function);
+    const dispatchers = this.program.dispatchers ?? [];
     for (const m of members) this.field(this.memberNames.get(m.id)!, m.type, this.coerce(m.initial, m.type), false);
+    for (const d of dispatchers) {
+      const name = this.dispatcherNames.get(d.id)!;
+      if (flavor.typed) out.line(`readonly ${name} = new ${DISPATCHER_CLASS}<[${d.params.map((p) => this.typeName(p.type)).join(', ')}]>();`);
+      else {
+        out.line(`/** @type {${DISPATCHER_CLASS}<[${d.params.map((p) => this.mapType(p.type)).join(', ')}]>} */`);
+        out.line(`${name} = new ${DISPATCHER_CLASS}();`);
+      }
+    }
     for (const x of slots) this.field(this.slotNames.get(x.id)!, x.type, this.defaultFor(x.type), true);
-    if (members.length || slots.length) out.line();
+    if (members.length || slots.length || dispatchers.length) out.line();
 
     this.method('start', [], undefined, false, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
@@ -158,8 +171,64 @@ class TypeScriptEmitter {
       out.line();
       out.line(`module.exports = { ${this.className} };`);
     }
+    if (dispatchers.length) this.dispatcherClass();
     if (this.needsFormat) this.formatHelper();
     return { text: out.toString(), className: this.className, nodeLines: out.nodeLines };
+  }
+
+  // Unreal's event dispatcher: bound events run in the order they were bound, each event once. An
+  // event is its object and method, so binding another object's event works too.
+  private dispatcherClass(): void {
+    const { out, flavor } = this;
+    const lines = flavor.typed ? [
+      `class ${DISPATCHER_CLASS}<Args extends unknown[]> {`,
+      '  private bindings: [object, (...args: Args) => void][] = [];',
+      '',
+      '  bind(target: object, handler: (...args: Args) => void): void {',
+      '    if (!this.bindings.some(([t, h]) => t === target && h === handler)) this.bindings.push([target, handler]);',
+      '  }',
+      '',
+      '  unbind(target: object, handler: (...args: Args) => void): void {',
+      '    this.bindings = this.bindings.filter(([t, h]) => t !== target || h !== handler);',
+      '  }',
+      '',
+      '  clear(): void {',
+      '    this.bindings = [];',
+      '  }',
+      '',
+      '  broadcast(...args: Args): void {',
+      '    for (const [target, handler] of [...this.bindings]) handler.apply(target, args);',
+      '  }',
+      '}'
+    ] : [
+      '/** @template {unknown[]} Args */',
+      `class ${DISPATCHER_CLASS} {`,
+      '  /** @type {[object, (...args: Args) => void][]} */',
+      '  bindings = [];',
+      '',
+      '  /** @param {object} target @param {(...args: Args) => void} handler */',
+      '  bind(target, handler) {',
+      '    if (!this.bindings.some(([t, h]) => t === target && h === handler)) this.bindings.push([target, handler]);',
+      '  }',
+      '',
+      '  /** @param {object} target @param {(...args: Args) => void} handler */',
+      '  unbind(target, handler) {',
+      '    this.bindings = this.bindings.filter(([t, h]) => t !== target || h !== handler);',
+      '  }',
+      '',
+      '  clear() {',
+      '    this.bindings = [];',
+      '  }',
+      '',
+      '  /** @param {Args} args */',
+      '  broadcast(...args) {',
+      '    for (const [target, handler] of [...this.bindings]) handler.apply(target, args);',
+      '  }',
+      '}'
+    ];
+    out.line();
+    out.line('// Unreal\'s event dispatcher: bound events run in the order they were bound, each event once.');
+    for (const line of lines) out.line(line);
   }
 
   // A function library: its functions as exported module functions, its helpers as module functions.
@@ -333,6 +402,8 @@ class TypeScriptEmitter {
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name));
     if (fn.description) this.out.line(`// ${fn.description.replace(/\s+/g, ' ')}`);
     this.method(this.functionNames.get(fn.id)!, params, this.resultType(fn), false, () => {
+      // A custom event keeps the inputs other flows read, as Unreal keeps an event's outputs.
+      for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotRef(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)};`);
       for (const m of locals) this.local(this.memberNames.get(m.id)!, m.type, this.coerce(m.initial, m.type));
       for (const x of slots) this.local(this.slotNames.get(x.id)!, x.type, this.defaultFor(x.type));
       this.statements(fn.body);
@@ -491,6 +562,18 @@ class TypeScriptEmitter {
           const fields = this.outputFields.get(fn.id)!;
           out.line(`({ ${s.results.map((r) => `${fields.get(r.output)}: ${this.slotRef(r.slot)}`).join(', ')} } = ${call});`);
         }
+        break;
+      }
+      case 'bindEvent':
+      case 'unbindAll': {
+        const dispatcher = `this.${this.dispatcherNames.get(s.dispatcher)}`;
+        if (s.kind === 'unbindAll') out.line(`${dispatcher}.clear();`);
+        else out.line(`${dispatcher}.${s.bind ? 'bind' : 'unbind'}(this, this.${this.functionNames.get(s.event)});`);
+        break;
+      }
+      case 'broadcast': {
+        const params = this.program.dispatchers?.find((d) => d.id === s.dispatcher)?.params ?? [];
+        out.line(`this.${this.dispatcherNames.get(s.dispatcher)}.broadcast(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
         break;
       }
       case 'return': {

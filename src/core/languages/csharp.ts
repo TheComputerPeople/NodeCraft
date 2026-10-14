@@ -254,6 +254,27 @@ function formatHelper(enums: boolean, structs: boolean): string[] {
   return lines;
 }
 
+// Unreal's event dispatcher, emitted when the class declares one: bound events (delegates, equal
+// for the same object and method) run in the order they were bound, each once.
+const DISPATCHER_CLASS = [
+  'public sealed class EventDispatcher<T> where T : Delegate',
+  '{',
+  '    private readonly List<T> handlers = new();',
+  '',
+  '    public void Bind(T handler)',
+  '    {',
+  '        if (!handlers.Contains(handler)) handlers.Add(handler);',
+  '    }',
+  '',
+  '    public void Unbind(T handler) => handlers.Remove(handler);',
+  '',
+  '    public void Clear() => handlers.Clear();',
+  '',
+  '    // A copy, so events that bind or unbind while running don\'t disturb the loop.',
+  '    public T[] Handlers => handlers.ToArray();',
+  '}'
+];
+
 // Property names of a struct's fields and member names of an enum's values (PascalCase), the same
 // in the type's own file and in every file that uses it.
 export function csharpFieldNames(type: StructInfo): Map<string, string> {
@@ -308,6 +329,7 @@ class CSharpEmitter {
   private readonly helperNames = new Map<string, string>();
   private readonly blockNames = new Map<string, string>();
   private readonly functionNames = new Map<string, string>();
+  private readonly dispatcherNames = new Map<string, string>();
   // Parameter names of each function, keyed by function and input id.
   private readonly paramNames = new Map<string, string>();
   // Element names of a function's result tuple, when it has several outputs.
@@ -326,12 +348,13 @@ class CSharpEmitter {
     if (program.declaration) this.types.set(program.declaration.type.id, program.declaration.type);
     // A member can't share its class's name in C#. A library's functions are claimed first,
     // exactly as csharpLibraryExports claims them.
-    this.names = new NameScope(RESERVED, [...(this.library ? [] : ['Start']), this.className, ...HELPER_NAMES]);
+    this.names = new NameScope(RESERVED, [...(this.library ? [] : ['Start']), this.className, ...HELPER_NAMES, 'EventDispatcher']);
     for (const f of program.functions) {
       this.functionNames.set(f.id, this.names.claim(f.name, 'pascal'));
       this.outputFields.set(f.id, resultFields(f.outputs));
     }
     for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
+    for (const d of program.dispatchers ?? []) this.dispatcherNames.set(d.id, this.names.claim(d.name, 'pascal'));
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'pascal'));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'pascal'));
@@ -343,13 +366,20 @@ class CSharpEmitter {
     body.indent();
     const members = this.program.members.filter((m) => !m.function);
     const slots = this.program.slots.filter((x) => !x.function);
+    const dispatchers = this.program.dispatchers ?? [];
     for (const m of members) body.line(`public ${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
+    for (const d of dispatchers) body.line(`public readonly EventDispatcher<${this.actionType(d.params)}> ${this.dispatcherNames.get(d.id)} = new();`);
     for (const x of slots) body.line(`private ${this.typeName(x.type)} ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
-    if (members.length || slots.length) body.line();
+    if (members.length || slots.length || dispatchers.length) body.line();
     if (!this.library) this.method('public', 'Start', [], undefined, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const block of this.program.blocks) this.method('private', this.blockNames.get(block.id)!, [], undefined, () => this.statements(block.body));
     for (const helper of this.program.helpers) this.helperMethod(helper);
+    if (dispatchers.length) {
+      body.line("// Unreal's event dispatcher: bound events run in the order they were bound, each event once.");
+      for (const line of DISPATCHER_CLASS) body.line(line);
+      body.line();
+    }
     for (const helper of ['format', 'number', 'boolean', 'as'] as const) {
       if (!this.helpersUsed.has(helper)) continue;
       const kinds = [...this.types.values()].map((t) => t.kind);
@@ -474,6 +504,8 @@ class CSharpEmitter {
     const returns = fn.outputs.length > 1 ? `(${fn.outputs.map((o) => `${this.typeName(o.type)} ${fields.get(o.id)}`).join(', ')})` : fn.outputs[0]?.type ?? (fn.outputs.length ? { id: 'any' } : undefined);
     if (fn.description) this.out.line(`/// <summary>${fn.description.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\s+/g, ' ')}</summary>`);
     this.method('public', this.functionNames.get(fn.id)!, params, returns, () => {
+      // A custom event keeps the inputs other flows read, as Unreal keeps an event's outputs.
+      for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotNames.get(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)};`);
       for (const m of locals) this.out.line(`${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
       for (const x of slots) this.out.line(`${this.typeName(x.type)} ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
       this.statements(fn.body);
@@ -594,6 +626,17 @@ class CSharpEmitter {
         if (!s.results.length) out.line(`${call};`);
         else if (fn.outputs.length === 1) out.line(`${this.slotNames.get(s.results[0].slot)} = ${call};`);
         else out.line(`(${fn.outputs.map((o) => this.slotNames.get(s.results.find((r) => r.output === o.id)?.slot ?? '') ?? '_').join(', ')}) = ${call};`);
+        break;
+      }
+      case 'bindEvent':
+        out.line(`${this.dispatcherNames.get(s.dispatcher)}.${s.bind ? 'Bind' : 'Unbind'}(${this.functionNames.get(s.event)});`);
+        break;
+      case 'unbindAll':
+        out.line(`${this.dispatcherNames.get(s.dispatcher)}.Clear();`);
+        break;
+      case 'broadcast': {
+        const params = this.program.dispatchers?.find((d) => d.id === s.dispatcher)?.params ?? [];
+        out.line(`foreach (var handler in ${this.dispatcherNames.get(s.dispatcher)}.Handlers) handler(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
         break;
       }
       case 'return': {
@@ -766,6 +809,11 @@ class CSharpEmitter {
       default:
         return 'null';
     }
+  }
+
+  // The delegate type of an event taking these parameters.
+  private actionType(params: { type?: TypeRef }[]): string {
+    return params.length ? `Action<${params.map((p) => this.typeName(p.type)).join(', ')}>` : 'Action';
   }
 
   // The name a struct or enum goes by: its own in its file, else fully qualified.

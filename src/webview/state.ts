@@ -108,9 +108,11 @@ export interface EditorState {
   contextSensitive: boolean;
   // The variable selected in My Blueprint (its settings show in Details), if any.
   selectedVariableId: string | null;
+  // An event dispatcher selected in My Blueprint, shown in Details.
+  selectedDispatcherId: string | null;
   // A variable being dragged from My Blueprint onto the canvas.
   // A variable (or, with functionId, a function or macro) being dragged from My Blueprint onto the graph.
-  variableDrag: { variableId: string; functionId?: string; startX: number; startY: number; moved: boolean } | null;
+  variableDrag: { variableId: string; functionId?: string; dispatcherId?: string; startX: number; startY: number; moved: boolean } | null;
   // The view (pan and zoom) last used for each graph, restored when switching back.
   viewByGraph: Map<string, { pan: Point; zoom: number }>;
 }
@@ -145,6 +147,7 @@ export const state: EditorState = {
   heldKey: null,
   contextSensitive: true,
   selectedVariableId: null,
+  selectedDispatcherId: null,
   variableDrag: null,
   viewByGraph: new Map()
 };

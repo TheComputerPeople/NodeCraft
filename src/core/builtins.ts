@@ -3,6 +3,7 @@ import { containerDefinitions } from './containers';
 import { flowControlDefinitions } from './flow-control';
 import { functionDefinitions } from './functions';
 import { macroDefinitions } from './macros';
+import { eventDefinitions } from './events';
 import { standardLibraryDefinitions } from './stdlib';
 
 const t = (id: string): TypeRef => ({ id });
@@ -87,6 +88,7 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
     ...containerDefinitions(),
     ...functionDefinitions(),
     ...macroDefinitions(),
+    ...eventDefinitions(),
     ...standardLibraryDefinitions()
   ];
 }

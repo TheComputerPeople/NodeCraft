@@ -67,6 +67,35 @@
         }
       }
     },
+    "dispatchers": {
+      "type": "array",
+      "description": "A class's event dispatchers: bound custom events take these inputs.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "inputs"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "importedFunctions": {
       "type": "object",
       "description": "The signature of each project function the graphs call, keyed by node type (fn:<language>:<path>#<name>), as it was when its nodes were made or last refreshed. Nodes keep these pins until refreshed when the code changes.",
@@ -192,6 +221,24 @@
           "enumerators": {
             "minItems": 1
           }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "not": {
+              "const": "class"
+            }
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "dispatchers"
+          ]
         }
       }
     }

@@ -71,7 +71,12 @@ export type IrStatement =
   // Ends the function, returning the values of its outputs (in signature order).
   | { kind: 'return'; values: IrExpr[]; source: SourceRef }
   // Runs a shared block: a node reached by more than one exec wire, plus everything after it.
-  | { kind: 'callBlock'; block: string; source: SourceRef };
+  | { kind: 'callBlock'; block: string; source: SourceRef }
+  // Binds (or unbinds) a custom event (an IrFunction's id) to an event dispatcher of this object.
+  | { kind: 'bindEvent'; dispatcher: string; event: string; bind: boolean; source: SourceRef }
+  | { kind: 'unbindAll'; dispatcher: string; source: SourceRef }
+  // Runs every event bound to the dispatcher, in the order they were bound.
+  | { kind: 'broadcast'; dispatcher: string; args: IrExpr[]; source: SourceRef };
 
 // A member variable of the generated class, or (with `function`) a local variable of a function,
 // which starts at its initial value on every call.
@@ -104,6 +109,17 @@ export interface IrFunction {
   pure: boolean;
   description?: string;
   body: IrStatement[];
+  // A custom event (docs/program-structure.md, "Custom events and event dispatchers"): its inputs
+  // read outside its own flow are kept in these slots when it runs, as Unreal keeps an event's
+  // outputs.
+  event?: { stores: { param: string; slot: string }[] };
+}
+
+// An event dispatcher of the class: bound events take these parameters.
+export interface IrDispatcher {
+  id: string;
+  name: string;
+  params: { id: string; name: string; type?: TypeRef }[];
 }
 
 // A code node's snippet, wrapped as a function of its data inputs.
@@ -162,6 +178,7 @@ export interface IrProgram {
   start: IrStatement[];
   // A structure or enumeration document: the generated file declares this type instead of a class.
   declaration?: IrDeclaration;
+  dispatchers?: IrDispatcher[];
 }
 
 // The structs and enums a program uses, by type id.
