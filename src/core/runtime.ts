@@ -7,8 +7,8 @@ import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
 import { expandDocument, isExpandedNode, macroProblemKey, visibleNodeId } from './macros';
-import { StructValue, TypeLookup, typeLookup } from './user-types';
-import { NodeResolver, createResolver, isPure } from './resolve';
+import { StructValue, TypeLookup, expandSplitPins, typeLookup } from './user-types';
+import { NodeResolver, createResolver, createUnsplitResolver, isPure } from './resolve';
 import { defaultValue, formatValue, fromStored, toBoolean, toNumber } from './values';
 
 interface RunState {
@@ -398,7 +398,11 @@ export class GraphRuntime {
 
   // A run of `doc`, with the macros it uses expanded (each use is a copy of the macro's nodes).
   private runState(original: GraphDocument, document?: string): RunState {
-    const { doc, problems } = expandDocument(original, (type) => this.registry.get(type));
+    const expanded = expandDocument(original, (type) => this.registry.get(type));
+    const problems = expanded.problems;
+    // Split struct pins become Make and Break nodes (src/core/user-types.ts).
+    const unsplit = createUnsplitResolver(this.registry, expanded.doc);
+    const doc = { ...expanded.doc, graphs: expanded.doc.graphs.map((g) => expandSplitPins(g, unsplit, (type) => this.registry.get(type))) };
     const language = doc.language || DEFAULT_LANGUAGE;
     return { doc, variables: new Map(), language, resolve: createResolver(this.registry, doc), macroProblems: problems, types: typeLookup(this.registry.all(), language), ...(document ? { document } : {}) };
   }

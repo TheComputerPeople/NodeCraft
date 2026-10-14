@@ -6,6 +6,7 @@ import { DEFAULT_MULTIGATE_PINS, DEFAULT_SWITCH_INT_PINS, MULTIGATE, SWITCH_INT,
 import { GraphConnection, GraphNode, NodeDefinition, PinDefinition } from './model';
 import { REROUTE, SEQUENCE, sequencePinCount } from './resolve';
 import { canConnect } from './types';
+import { SPLIT_PROPERTY, splitPinIds } from './user-types';
 
 export interface GraphContent {
   nodes: GraphNode[];
@@ -381,4 +382,24 @@ export function connectThroughToString(
   connect(graph, lookup, { fromNode: endpoints.fromNode, fromPin: endpoints.fromPin, toNode: node.id, toPin: 'value' }, ids.connections[0]);
   connect(graph, lookup, { fromNode: node.id, fromPin: 'result', toNode: endpoints.toNode, toPin: endpoints.toPin }, ids.connections[1]);
   return node;
+}
+
+// Unreal's Split Struct Pin: the pin's wires and value go, and a pin per field takes its place.
+export function splitStructPin(graph: GraphContent, node: GraphNode, pinId: string): void {
+  const split = splitPinIds(node.properties);
+  if (split.includes(pinId)) return;
+  graph.connections = graph.connections.filter((c) => !((c.toNode === node.id && c.toPin === pinId) || (c.fromNode === node.id && c.fromPin === pinId)));
+  delete node.properties[`pin:${pinId}`];
+  node.properties[SPLIT_PROPERTY] = [...split, pinId];
+}
+
+// Unreal's Recombine Struct Pin, from the struct pin or any of its field pins (and theirs): the
+// field pins' wires and values go, and the struct pin returns.
+export function recombineStructPin(graph: GraphContent, node: GraphNode, pinId: string): void {
+  const prefix = `${pinId}.`;
+  const remaining = splitPinIds(node.properties).filter((id) => id !== pinId && !id.startsWith(prefix));
+  if (remaining.length) node.properties[SPLIT_PROPERTY] = remaining;
+  else delete node.properties[SPLIT_PROPERTY];
+  graph.connections = graph.connections.filter((c) => !((c.toNode === node.id && c.toPin.startsWith(prefix)) || (c.fromNode === node.id && c.fromPin.startsWith(prefix))));
+  for (const key of Object.keys(node.properties)) if (key.startsWith(`pin:${prefix}`)) delete node.properties[key];
 }

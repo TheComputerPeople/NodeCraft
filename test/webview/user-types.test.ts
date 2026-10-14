@@ -114,6 +114,34 @@ describe('structs and enums', () => {
     assert.deepEqual(await e.page.$$eval('.pin[data-node="members"]', (els) => els.map((el) => (el as HTMLElement).dataset.pin)), ['execIn', 'struct', 'health', 'execOut', 'result']);
   });
 
+  test('a struct pin splits into its fields from its menu, and recombines', async (t) => {
+    const doc = sampleDocument();
+    doc.graphs[0].nodes.push({ id: 'break', type: 'struct:Stats.break', position: { x: 600, y: 560 }, properties: {} });
+    const e = await open(t, doc);
+    if (!e) return;
+    const pins = () => e.page.$$eval('.pin[data-node="break"]', (els) => els.map((el) => (el as HTMLElement).dataset.pin));
+    const struct = await e.pinCenter('break', 'struct');
+    await e.page.mouse.click(struct.x, struct.y, { button: 'right' });
+    await e.page.locator('#context-menu button', { hasText: 'Split Struct Pin' }).click();
+    assert.deepEqual(await pins(), ['struct.health', 'struct.team', 'health', 'team']);
+    const saved = await (async () => {
+      const deadline = Date.now() + 3000;
+      for (;;) {
+        const last = (await e.posted()).filter((m) => m.type === 'applyDocument').pop()?.document;
+        const node = last?.graphs[0].nodes.find((n) => n.id === 'break');
+        if (node?.properties.split) return node;
+        if (Date.now() > deadline) throw new Error('No save with the split');
+        await e.page.waitForTimeout(25);
+      }
+    })();
+    assert.deepEqual(saved.properties.split, ['struct']);
+
+    const field = await e.pinCenter('break', 'struct.team');
+    await e.page.mouse.click(field.x, field.y, { button: 'right' });
+    await e.page.locator('#context-menu button', { hasText: 'Recombine Struct Pin' }).click();
+    assert.deepEqual(await pins(), ['struct', 'health', 'team']);
+  });
+
   test('variable types include structs and enums', async (t) => {
     const e = await open(t, sampleDocument());
     if (!e) return;

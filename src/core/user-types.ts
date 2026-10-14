@@ -3,7 +3,7 @@
 // types, used as `struct:<Name>` and `enum:<Name>` pin types. Their nodes (Make, Break, Set Members;
 // Switch on, ==, !=) carry the type's description, so the compiler, Simulate and the editor learn
 // the type from the node registry like everything else.
-import { GraphDocument, NodeDefinition, PinDefinition } from './model';
+import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from './model';
 import { TypeRef, parseTypeId } from './types';
 
 export interface StructField {
@@ -214,4 +214,93 @@ export function listUserTypes(definitions: Iterable<NodeDefinition>, language?: 
     if (!types.has(type.id)) types.set(type.id, type);
   }
   return [...types.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+// ---- Split struct pins (Unreal's Split Struct Pin and Recombine Struct Pin) ---------------------
+//
+// A struct pin listed in a node's `properties.split` shows a pin per field instead, with the id
+// "<pin>.<field>" (a field that is a struct can be split again). Before compiling and Simulate,
+// expandSplitPins turns each split into a hidden Make or Break node, so nothing else needs to know.
+
+export const SPLIT_PROPERTY = 'split';
+
+export function splitPinIds(properties: Record<string, unknown>): string[] {
+  const value = properties[SPLIT_PROPERTY];
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+// The struct a pin type names, from its Make node's definition.
+export function structInfo(type: TypeRef | undefined, definition: (type: string) => NodeDefinition | undefined): StructInfo | undefined {
+  if (!type || type.container || !type.id.startsWith('struct:')) return undefined;
+  const implementation = definition(`${type.id}.make`)?.implementation;
+  return implementation?.kind === 'struct' ? implementation.type : undefined;
+}
+
+// The definition with the node's split pins replaced by a pin per field.
+export function applySplits(def: NodeDefinition, split: readonly string[], definition: (type: string) => NodeDefinition | undefined): NodeDefinition {
+  if (!split.length) return def;
+  const expand = (pins: PinDefinition[]): PinDefinition[] => pins.flatMap((pin) => {
+    const struct = pin.kind === 'data' && split.includes(pin.id) ? structInfo(pin.type, definition) : undefined;
+    if (!struct) return [pin];
+    return expand(struct.fields.map((f) => ({
+      id: `${pin.id}.${f.id}`, name: `${pin.name || pin.id} ${f.name}`, kind: 'data' as const, direction: pin.direction, type: f.type,
+      ...(pin.direction === 'input' && f.defaultValue !== undefined ? { defaultValue: f.defaultValue } : {}),
+      split: { pin: pin.id, field: f.id }
+    })));
+  });
+  return { ...def, inputs: expand(def.inputs), outputs: expand(def.outputs) };
+}
+
+// The graph with every split pin replaced by a hidden Make node (inputs) or Break node (outputs),
+// with ids "<node>/split:<pin>", so diagnostics and Simulate's events point at the node itself.
+// `unsplit` resolves a node as if nothing were split.
+export function expandSplitPins(graph: Graph, unsplit: (node: GraphNode) => NodeDefinition | undefined, definition: (type: string) => NodeDefinition | undefined): Graph {
+  if (!graph.nodes.some((n) => splitPinIds(n.properties).length)) return graph;
+  const nodes: GraphNode[] = [];
+  const connections = [...graph.connections];
+  // Moves the wires of (node, from) to (target, to).
+  const rewire = (node: string, from: string, target: string, to: string): void => {
+    for (const c of connections) {
+      if (c.toNode === node && c.toPin === from) Object.assign(c, { toNode: target, toPin: to });
+      if (c.fromNode === node && c.fromPin === from) Object.assign(c, { fromNode: target, fromPin: to });
+    }
+  };
+  for (const original of graph.nodes) {
+    const split = splitPinIds(original.properties);
+    if (!split.length) {
+      nodes.push(original);
+      continue;
+    }
+    const properties = { ...original.properties };
+    delete properties[SPLIT_PROPERTY];
+    const node: GraphNode = { ...original, properties };
+    nodes.push(node);
+    const def = unsplit(node);
+    // `owner` holds the struct pin `pin`; the sub-pins on the original node are "<base>.<field>".
+    const expand = (owner: GraphNode, pin: PinDefinition, base: string): void => {
+      const struct = structInfo(pin.type, definition);
+      if (!struct) return;
+      const input = pin.direction === 'input';
+      const helper: GraphNode = {
+        id: `${original.id}${'/'}split:${base}`, type: structNodeType(struct, input ? 'make' : 'break'), position: owner.position, properties: {}
+      };
+      nodes.push(helper);
+      connections.push(input
+        ? { id: `${helper.id}>`, fromNode: helper.id, fromPin: 'struct', toNode: owner.id, toPin: pin.id }
+        : { id: `${helper.id}<`, fromNode: owner.id, fromPin: pin.id, toNode: helper.id, toPin: 'struct' });
+      for (const f of struct.fields) {
+        const sub = `${base}.${f.id}`;
+        const fieldPin: PinDefinition = { id: f.id, name: f.name, kind: 'data', direction: pin.direction, type: f.type };
+        if (split.includes(sub) && structInfo(f.type, definition)) {
+          expand(helper, fieldPin, sub);
+          continue;
+        }
+        rewire(original.id, sub, helper.id, f.id);
+        const stored = original.properties[`pin:${sub}`];
+        if (input && stored !== undefined) helper.properties[`pin:${f.id}`] = stored;
+      }
+    };
+    for (const pin of [...(def?.inputs ?? []), ...(def?.outputs ?? [])]) if (pin.kind === 'data' && split.includes(pin.id)) expand(node, pin, pin.id);
+  }
+  return { ...graph, nodes, connections };
 }

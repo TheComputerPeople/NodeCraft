@@ -15,6 +15,8 @@ export interface PinDefinition {
   direction: PinDirection;
   type?: TypeRef;
   defaultValue?: unknown;
+  // A pin of a split struct pin: the struct pin and the field it stands for (src/core/user-types.ts).
+  split?: { pin: string; field: string };
 }
 
 export interface NodeDefinition {

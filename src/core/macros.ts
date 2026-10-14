@@ -84,6 +84,13 @@ export function isExpandedNode(id: string): boolean {
   return id.includes(MACRO_SEPARATOR);
 }
 
+// A node copied from inside a macro (not one standing in for a split struct pin of the node itself,
+// "node/split:pin"; src/core/user-types.ts).
+export function isMacroInnerNode(id: string): boolean {
+  const at = id.indexOf(MACRO_SEPARATOR);
+  return at >= 0 && !id.startsWith('split:', at + 1);
+}
+
 // The macro an instance node uses: its graph and a key that identifies it (to catch a macro using
 // itself), or why it can't be used. Undefined for nodes that aren't macro instances.
 export type MacroLookup = (node: GraphNode) => { graph: Graph; key: string } | string | undefined;

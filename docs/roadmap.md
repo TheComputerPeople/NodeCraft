@@ -270,7 +270,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Nodes | Inline default values on pins | ✅ | — |
 | Nodes | Add-pin (+) on Sequence, MultiGate and Switch; remove a pin from its menu | ✅ (Sequence starts with 3 outputs, Unreal's with 2) | — |
 | Nodes | Make Array/Set/Map, wildcard pins | ✅ | — |
-| Nodes | Split struct pins | ⬜ | 4 (with structs) |
+| Nodes | Split struct pins (Split Struct Pin, Recombine Struct Pin) | ✅ | — |
 | Nodes | Automatic conversion nodes | ✅ (bool/int/float → string via To String) | — |
 | Visuals | Exec pins white arrows, data pins and wires colored by type | ✅ | — |
 | Visuals | Title styles for event/function/pure/macro; compact variable getters | ✅ | — |

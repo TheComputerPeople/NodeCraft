@@ -2,6 +2,7 @@
 // values and compile errors. The conformance suite runs them on every target.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { recombineStructPin, splitStructPin } from '../../src/core/editing';
 import { DOCUMENT_KIND_NAMES, addEnumerator, moveMember, newDocument, removeEnumerator, renameEnumerator } from '../../src/core/blueprint-edits';
 import { compileDocument } from '../../src/core/compiler';
 import { builtinLanguagePacks } from '../../src/core/languages';
@@ -130,5 +131,55 @@ describe('compiling structs and enums', () => {
     assert.match(output!.text, /^import \{ Point \} from "\.\/types\/Point\.vgraph\.js";$/m);
     assert.match(output!.text, /^import \{ Team \} from "\.\/types\/Team\.vgraph\.js";$/m, 'the struct\'s enum field may be needed too');
     assert.match(output!.text, /P = new Point\(\);/);
+  });
+});
+
+describe('split struct pins', () => {
+  // Line { Start: Point, Width } holds a struct, to split twice.
+  const line: GraphDocument = { schemaVersion: 3, name: 'Line', kind: 'structure', language: 'javascript', graphs: [], variables: [{ id: 'start', name: 'Start', type: { id: 'struct:Point' } }, { id: 'width', name: 'Width', type: { id: 'int' }, defaultValue: 2 }] };
+  const withLine = (): NodeRegistry => {
+    const r = registry();
+    r.registerMany(userTypeDefinitions(declaredType(line)!));
+    return r;
+  };
+  const doc = (nodes: GraphDocument['graphs'][number]['nodes'], connections: GraphDocument['graphs'][number]['connections']): GraphDocument => ({
+    schemaVersion: 3, name: 'T', kind: 'class', language: 'javascript', variables: [{ id: 'l', name: 'L', type: { id: 'struct:Line' } }],
+    graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes, connections }]
+  });
+
+  test('a split pin shows a pin per field; split again for a struct field', () => {
+    const d = doc([node('get', 'core:variable.get', { variable: 'l', split: ['value', 'value.start'] })], []);
+    const def = createResolver(withLine(), d)(d.graphs[0].nodes[0])!;
+    assert.deepEqual(def.outputs.map((p) => [p.id, p.name]), [['value.start.x', 'L Start X'], ['value.start.side', 'L Start Side'], ['value.width', 'L Width']]);
+    assert.deepEqual(def.outputs[0].split, { pin: 'value.start', field: 'x' });
+  });
+
+  test('splitting drops the pin\'s wires; recombining drops the field pins\' wires and values', () => {
+    const d = doc([node('get', 'core:variable.get', { variable: 'l' }), node('set', 'core:variable.set', { variable: 'l' })], [wire('get', 'value', 'set', 'value')]);
+    const [get, set] = d.graphs[0].nodes;
+    splitStructPin(d.graphs[0], set, 'value');
+    assert.equal(d.graphs[0].connections.length, 0);
+    splitStructPin(d.graphs[0], set, 'value.start');
+    set.properties['pin:value.width'] = 5;
+    d.graphs[0].connections.push(wire('get', 'value', 'set', 'value.start.x'));
+    recombineStructPin(d.graphs[0], set, 'value');
+    assert.deepEqual([set.properties, d.graphs[0].connections], [{ variable: 'l' }, []]);
+    assert.ok(get);
+  });
+
+  test('split pins run and compile as Make and Break nodes', () => {
+    // Set L from split fields (Start's X wired from a split Get of L, Width typed), then print L.
+    const d = doc([
+      node('s', 'core:event.start'), node('get', 'core:variable.get', { variable: 'l', split: ['value', 'value.start'] }),
+      node('set', 'core:variable.set', { variable: 'l', split: ['value', 'value.start'], 'pin:value.width': 7, 'pin:value.start.side': 'blue' }),
+      node('print', 'core:console.print'), node('l2', 'core:variable.get', { variable: 'l' })
+    ], [
+      wire('s', 'execOut', 'set', 'execIn'), wire('get', 'value.start.x', 'set', 'value.start.x'),
+      wire('set', 'execOut', 'print', 'execIn'), wire('l2', 'value', 'print', 'value')
+    ]);
+    assert.deepEqual(logs(run(d, withLine())), ['{"Start":{"X":1,"Side":"Light Blue"},"Width":7}']);
+    const result = compileDocument(d, { registry: withLine(), languages: builtinLanguagePacks(), generate: { sourceFileName: 'T.vgraph' } });
+    assert.deepEqual(result.diagnostics, []);
+    assert.match(result.output!.text, /this\.L = new Line\(new Point\(this\.L\.start\.x, Team\.LightBlue\), 7\);/);
   });
 });

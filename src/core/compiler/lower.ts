@@ -5,13 +5,13 @@ import { NodeRegistry } from '../registry';
 import { describeFunction, functionStatus, isFunctionType } from '../imported-functions';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from '../flow-control';
 import { hasWildcard } from '../containers';
-import { NodeResolver, REROUTE, createResolver, isPure } from '../resolve';
+import { NodeResolver, REROUTE, createResolver, createUnsplitResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
-import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isExpandedNode, macroLookup, visibleNodeId } from '../macros';
-import { TypeLookup, UserType, declaredType, isUserTypeId, typeLookup } from '../user-types';
+import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
+import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup } from '../user-types';
 import { TypeRef } from '../types';
 import { toIdentifier } from './names';
 
@@ -300,17 +300,18 @@ class Lowerer {
 
   // ---- Validation ----------------------------------------------------------------------------
 
-  // A graph with the macros it uses expanded in place (src/core/macros.ts).
+  // A graph with the macros it uses expanded in place (src/core/macros.ts), and its split struct pins
+  // turned into Make and Break nodes (src/core/user-types.ts).
   private analyzeExpanded(graph: Graph): GraphInfo {
     const expansion = expandMacros(graph, this.macros);
     for (const problem of expansion.problems) this.error('macro-invalid', problem.message, graph.id, problem.nodeId);
     for (const [id, name] of expansion.macros) this.macroNames.set(JSON.stringify([graph.id, id]), name);
+    const expanded = expandSplitPins(expansion.graph, createUnsplitResolver(this.options.registry, this.doc), (type) => this.options.registry.get(type));
     // The wires of an instance that couldn't be expanded aren't checked: the instance is reported.
-    const unexpanded = new Set(expansion.problems.map((p) => p.nodeId).filter((id) => expansion.graph.nodes.some((n) => n.id === id)));
-    if (expansion.graph === graph) return this.analyze(graph, unexpanded);
+    const unexpanded = new Set(expansion.problems.map((p) => p.nodeId).filter((id) => expanded.nodes.some((n) => n.id === id)));
     this.quietInner = true;
     try {
-      return this.analyze(expansion.graph, unexpanded);
+      return this.analyze(expanded, unexpanded);
     } finally {
       this.quietInner = false;
     }
@@ -869,7 +870,7 @@ class Lowerer {
   }
 
   private report(severity: CompileDiagnostic['severity'], code: string, message: string, graphId?: string, nodeId?: string): void {
-    if (nodeId && isExpandedNode(nodeId) && this.quietInner) return;
+    if (nodeId && isMacroInnerNode(nodeId) && this.quietInner) return;
     const visible = nodeId && visibleNodeId(nodeId);
     const diagnostic: CompileDiagnostic = { severity, code, message, ...(graphId ? { graphId } : {}), ...(visible ? { nodeId: visible } : {}) };
     if (!this.diagnostics.some((d) => d.severity === severity && d.code === code && d.message === message && d.graphId === diagnostic.graphId && d.nodeId === diagnostic.nodeId)) this.diagnostics.push(diagnostic);

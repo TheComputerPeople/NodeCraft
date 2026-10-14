@@ -548,7 +548,11 @@ describe('structs and enums', () => {
           n('break', `${STATS}.break`), n('breakCopy', `${STATS}.break`), n('p2', 'core:console.print'), n('p3', 'core:console.print'),
           n('make', `${STATS}.make`, { 'pin:name': 'Mage', 'pin:health': 7, 'pin:team': 'red' }), n('p4', 'core:console.print'),
           n('switch', `${TEAM}.switch`), n('isRed', 'core:console.print', { 'pin:value': 'is red' }), n('isBlue', 'core:console.print', { 'pin:value': 'is blue' }),
-          n('eq', `${TEAM}.equal`, { 'pin:b': 'green' }), n('p5', 'core:console.print')
+          n('eq', `${TEAM}.equal`, { 'pin:b': 'green' }), n('p5', 'core:console.print'),
+          // Split struct pins: Stats' Name from a split Get; Copy set from split fields.
+          n('getSplit', 'core:variable.get', { variable: 'stats', split: ['value'] }), n('p6', 'core:console.print'),
+          n('setSplit', 'core:variable.set', { variable: 'copy', split: ['value'], 'pin:value.name': 'Split', 'pin:value.team': 'green' }),
+          n('getCopy2', 'core:variable.get', { variable: 'copy' }), n('p7', 'core:console.print')
         ],
         connections: [
           w('s', 'execOut', 'p1', 'execIn'), w('get', 'value', 'p1', 'value'),
@@ -559,7 +563,10 @@ describe('structs and enums', () => {
           w('p3', 'execOut', 'p4', 'execIn'), w('make', 'struct', 'p4', 'value'),
           w('p4', 'execOut', 'switch', 'execIn'), w('break', 'team', 'switch', 'selection'),
           w('switch', 'red', 'isRed', 'execIn'), w('switch', 'blue', 'isBlue', 'execIn'),
-          w('isBlue', 'execOut', 'p5', 'execIn'), w('break', 'team', 'eq', 'a'), w('eq', 'returnValue', 'p5', 'value')
+          w('isBlue', 'execOut', 'p5', 'execIn'), w('break', 'team', 'eq', 'a'), w('eq', 'returnValue', 'p5', 'value'),
+          w('p5', 'execOut', 'p6', 'execIn'), w('getSplit', 'value.name', 'p6', 'value'),
+          w('p6', 'execOut', 'setSplit', 'execIn'), w('getSplit', 'value.health', 'setSplit', 'value.health'),
+          w('setSplit', 'execOut', 'p7', 'execIn'), w('getCopy2', 'value', 'p7', 'value')
         ]
       }]
     };
@@ -572,7 +579,9 @@ describe('structs and enums', () => {
     '100',
     '{"Name":"Mage","Health":7,"Team":"Red","Scores":[1,2]}',
     'is blue',
-    'false'
+    'false',
+    'Hero',
+    '{"Name":"Split","Health":42,"Team":"Green","Scores":[1,2]}'
   ];
 
   test('Simulate', () => {

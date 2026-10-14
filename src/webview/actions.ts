@@ -8,6 +8,7 @@ import { MACRO_INPUTS, MACRO_OUTPUTS } from '../core/macros';
 import { functionStatus, isFunctionType, rebindFunctionNode } from '../core/imported-functions';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { GraphNode, NodeDefinition, PinDefinition } from '../core/model';
+import { structInfo } from '../core/user-types';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } from './document';
 import { dom, eventElement, pinElement, setStatus } from './dom';
 import { newConnectionId } from './host';
@@ -288,6 +289,19 @@ export function pinMenuItems(nodeId: string, pinId: string): MenuItem[] {
   const pin = pinDef(nodeId, pinId);
   if (pin?.kind === 'data' && state.document?.kind === 'class') {
     items.push({ label: 'Promote to Variable', action: () => promoteToVariable(nodeId, pinId) });
+  }
+  // Unreal's Split Struct Pin and Recombine Struct Pin.
+  const edit = (change: () => void) => () => {
+    change();
+    markDirty();
+    render();
+  };
+  if (pin?.kind === 'data' && structInfo(pin.type, (type) => state.defByType.get(type))) {
+    items.push({ label: 'Split Struct Pin', action: edit(() => editing.splitStructPin(graph, node, pinId)) });
+  }
+  if (pin?.split) {
+    const whole = pin.split.pin;
+    items.push({ label: 'Recombine Struct Pin', action: edit(() => editing.recombineStructPin(graph, node, whole)) });
   }
   const element = /^(item|key|value)\d+$/.test(pinId);
   if (editing.canAddPin(node) && (element || /^(then|out|case)\d+$/.test(pinId))) {

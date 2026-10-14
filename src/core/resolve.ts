@@ -8,7 +8,7 @@ import { isFunctionType, signatureChanges } from './imported-functions';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables, functionNodeDefinition } from './functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS, macroNodeDefinition } from './macros';
 import { Graph, GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
-import { setMembersDefinition } from './user-types';
+import { applySplits, setMembersDefinition, splitPinIds } from './user-types';
 
 export type NodeResolver = (node: GraphNode) => NodeDefinition | undefined;
 
@@ -46,6 +46,17 @@ export interface ResolverDocument {
 // `doc.importedFunctions` is the document's stored function signatures: a project function whose
 // code no longer matches (or is gone) keeps the pins its nodes were made with until refreshed.
 export function createResolver(registry: ResolveContext, doc: ResolverDocument): NodeResolver {
+  const resolve = createUnsplitResolver(registry, doc);
+  // Split struct pins show a pin per field (src/core/user-types.ts).
+  return (node) => {
+    const def = resolve(node);
+    const split = splitPinIds(node.properties);
+    return def && split.length ? applySplits(def, split, (type) => registry.get(type)) : def;
+  };
+}
+
+// The resolver without split struct pins: what a node's pins are before splitting.
+export function createUnsplitResolver(registry: ResolveContext, doc: ResolverDocument): NodeResolver {
   const variables = [...doc.variables, ...allLocalVariables(doc)];
   return (node) => {
     const base = registry.get(node.type);
