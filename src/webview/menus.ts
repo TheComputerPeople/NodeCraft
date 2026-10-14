@@ -39,7 +39,10 @@ export function showAddNodeMenu(
   const input = dom.contextMenu.querySelector<HTMLInputElement>('#context-search')!;
   input.addEventListener('input', () => renderContextNodeResults(input.value));
   renderContextNodeResults('');
-  requestAnimationFrame(() => input.focus());
+  // Deferred so the opening click does not steal focus back; skipped if the menu closed meanwhile.
+  requestAnimationFrame(() => {
+    if (!dom.contextMenu.hidden) input.focus();
+  });
 }
 
 function renderContextNodeResults(query: string): void {
@@ -137,6 +140,9 @@ export function clampContextMenuToCanvas(): void {
 }
 
 export function hideContextMenu(): void {
+  // A hidden field keeps focus until the next layout; release it now so the very next key press
+  // reaches the graph's shortcuts.
+  if (dom.contextMenu.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   dom.contextMenu.hidden = true;
   state.context = null;
 }

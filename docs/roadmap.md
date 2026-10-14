@@ -96,6 +96,12 @@ Exit: the sample graphs produce identical output in Simulate, in generated TypeS
 
 ### Phase 2: Blueprint look and feel
 
+Status: complete (October 2026), with the deferrals below. A browser test builds the sample graph from an empty file using only Unreal's gestures (hold-key placement, the action menu, dragging from pins, inline values, F7) and checks that it compiles and prints the same result.
+
+- **Deferred to Phase 4**, because they need nodes or types that arrive there: collapse to function/macro, Make Array and Append, wildcard pins, split struct pins, hold-key placement for D/G/F/M/N/O, event dispatchers, local variables, and container defaults.
+- **Deferred to later**: action-menu favorites (per-user state that needs settings storage).
+- **Deviations from Unreal**: a new Sequence node has three outputs (Unreal's has two). int and float connect directly, without a visible conversion node. Large graphs stay responsive by drawing wires from cached pin positions and redrawing only what moves, not by virtualizing nodes; a 500-node graph drags and pans in well under a frame.
+
 Goal: a Blueprint user recognizes the editor at a glance and their hands already know the shortcuts. Everything here is language-independent.
 
 - **Visual language**: white exec pins with triangle arrows; circular data pins colored by type using Unreal's palette (bool red, int teal, float green, string magenta, object blue, struct dark blue, wildcard grey); wires take the type color; distinct title styles for event, function, pure function and macro nodes; pure nodes have no exec pins.

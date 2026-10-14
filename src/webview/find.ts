@@ -25,6 +25,7 @@ export function openFind(allFiles: boolean): void {
 }
 
 export function closeFind(): void {
+  if (dom.find.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   dom.find.hidden = true;
 }
 

@@ -4,20 +4,15 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 
 ## What is included
 
-- `.vgraph` text-backed custom editor.
-- Blueprint-style **execution pins** and **data pins**.
-- Drag nodes around the canvas.
-- Drag from a pin to another pin to connect it.
-- Drag from a pin to empty space to open a compatible-node creation menu.
-- Typed data connections with basic compatibility checks.
-- Node palette with search and categories.
-- Inspector for editing unconnected input defaults.
-- JSON persistence with VS Code text-document undo/save behavior.
-- Built-in Flow, Math, Debug, and Variable nodes: Start, Add, Branch, Print, Set/Get Variable, Sequence, End.
-- Workspace-loaded `*.node.json` user node libraries, with code snippets per language. Example: `Double`.
+- A `.vgraph` custom editor that looks and behaves like Unreal Engine's Blueprint editor: the same gestures, shortcuts, pin colors and node styles, so Blueprint users can start without relearning (see the reference below).
+- **Blueprints**: a `.vgraph` file is a class, function library or macro library holding graphs, functions, macros and variables, managed in the **My Blueprint** panel.
+- **Execution and data pins**, with Unreal's wiring rules, inline values for unconnected inputs, automatic **To String** conversion, reroute nodes, comment boxes, copy and paste, alignment tools and Find.
+- Built-in Flow, Math, Debug and Variable nodes: Start, Add, Branch, Sequence, Print, Get and Set, To String, End.
+- Workspace `*.node.json` user node libraries, with a code snippet per language. Example: `Double`.
 - **Code generation**: each graph compiles to readable source code in its target language, written next to the graph and meant to be committed. TypeScript, JavaScript and Python are supported.
-- Unreal-style **Compile** button and **Compiler Results**, with error and warning badges on nodes and entries in the Problems panel.
-- **Run** (generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter).
+- Unreal-style **Compile** (F7) and **Compiler Results**, with error and warning badges on nodes and entries in the Problems panel.
+- **Run** (the generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter).
+- Saving goes through VS Code's text document, so undo, redo, dirty state and source control work as usual.
 
 ## Open and run
 
@@ -104,7 +99,7 @@ VS Code Custom Text Editor
                     +--> Node Registry
                     +--> Type System
                     +--> Runtime / Debug Events
-                    +--> Future Visual IR / Code Generators
+                    +--> Visual IR --> Code Generators (language packs)
 ```
 
 The extension uses VS Code's `CustomTextEditorProvider`, which is the intended API for editable text-based custom formats. See:
@@ -119,21 +114,67 @@ The MVP deliberately focuses on the graph/editor contract. See [docs/roadmap.md]
 
 ## Editor interaction reference
 
-- **Left-drag a node header:** move the node; when multiple nodes are selected, the whole selection moves.
-- **Shift/Ctrl/Cmd-click a node:** add/remove it from the selection.
-- **Left-drag the canvas background:** box-select nodes.
-- **Ctrl/Cmd-click a wire:** pick the nearest end of the wire and drag that end to a different pin. Releasing off a pin removes the connection.
-- **Ctrl/Cmd-click a connected pin:** rewire the nearest connection from that pin.
-- **Alt-click a pin:** break all connections on that pin.
-- **Alt-click a wire:** remove that connection.
-- **Right-click the background:** open a floating node search menu at that location.
-- **Right-click a node:** open node actions such as Duplicate, Disconnect All Connections, Select Connected Nodes, Center View, and Delete.
-- **Middle-drag:** pan the canvas.
-- **Mouse wheel:** zoom around the cursor.
-- **Delete/Backspace:** delete the current selection.
-- **Ctrl/Cmd+A:** select all nodes.
-- **Escape:** close menus and cancel active connection/selection gestures.
-### Core canvas gestures
+The editor follows Unreal Engine 5's Blueprint editor. [docs/unreal-conventions.md](docs/unreal-conventions.md) lists every convention with its source, the pin colors and the node title styles. On macOS, Ctrl is Cmd and Alt is Option.
 
-The editor uses the desktop mouse event path for its two primary interactions: left-drag any node body to move it, and left-drag any input/output pin to create or reconnect a wire. Background left-drag creates the selection marquee.
+### Navigation and selection
 
+| Action | Gesture |
+|---|---|
+| Pan | Right-drag (middle-drag also works) |
+| Zoom | Mouse wheel |
+| Zoom to the selection, or the whole graph | Home |
+| Select / add / toggle | Click / Shift + click / Ctrl + click a node |
+| Marquee select (replace / add / remove) | Drag / Shift + drag / Ctrl + drag the background |
+| Select all | Ctrl + A |
+
+### Nodes
+
+| Action | Gesture |
+|---|---|
+| Add a node (graph action menu) | Right-click the background; the palette on the left also works |
+| Node actions (alignment, break links, delete…) | Right-click a node |
+| Place Branch, Sequence or Start | Hold B, S or P and click |
+| Comment around the selection | C (hold C and click to place an empty comment) |
+| Move | Drag a node; arrow keys move the selection |
+| Delete | Delete |
+| Cut / copy / paste / duplicate | Ctrl + X / C / V / D |
+| Align top / left / bottom / right | Shift + W / A / S / D |
+| Straighten connections | Q |
+| Rename a comment, graph or variable | F2 or double-click |
+| Context Sensitive | Checkbox in the action menu: only nodes that fit the dragged pin |
+
+### Wires and pins
+
+| Action | Gesture |
+|---|---|
+| Connect | Drag from a pin to a pin. An exec output takes one wire, a data input one; connecting replaces the old wire. |
+| Create a connected node | Drag from a pin to empty space |
+| Break all links | Alt + click a pin, or right-click it → Break Link(s) |
+| Move all links to another pin | Ctrl + drag from a pin |
+| Highlight a pin's wires | Hover the pin |
+| Add a reroute node | Double-click a wire |
+| Edit an unconnected input | Type in the field on the node |
+| Convert a number or bool to text | Connect it to a string pin; a To String node is inserted |
+| Promote to Variable | Right-click a data pin |
+| Add / remove a Sequence output | "Add pin +" on the node / right-click the pin → Remove Execution Pin |
+
+### Variables (My Blueprint)
+
+| Action | Gesture |
+|---|---|
+| Add | **+** next to Variables |
+| Get node / Set node | Ctrl + drag / Alt + drag the variable into the graph |
+| Choose Get or Set | Drag the variable into the graph |
+| Get or Set as appropriate | Drag the variable onto a compatible pin |
+| Type, default value, rename | Select the variable; edit it in Details |
+
+### Editor commands
+
+| Action | Gesture |
+|---|---|
+| Compile | F7, or **Compile** in the toolbar |
+| Save | Ctrl + S |
+| Undo / redo | Ctrl + Z / Ctrl + Y |
+| Find in this file | Ctrl + F |
+| Find in all graph files | Ctrl + Shift + F |
+| Cancel the current gesture or close a menu | Escape |

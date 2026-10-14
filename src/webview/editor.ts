@@ -233,6 +233,10 @@ dom.canvasWrap.addEventListener('mousedown', (e) => {
   const target = eventElement(e);
   if (target?.closest('#context-menu')) return;
   hideContextMenu();
+  // Canvas gestures prevent the default mousedown (no text selection), which would also leave
+  // focus in an inline value editor and swallow shortcuts; clicking elsewhere ends the edit.
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active !== target && active.matches('input, textarea, select')) active.blur();
   if (e.button === 1 || e.button === 2) {
     const nodeId = target?.closest<HTMLElement>('.node')?.dataset.node ?? null;
     const pinEl = target?.closest<HTMLElement>('.pin');
