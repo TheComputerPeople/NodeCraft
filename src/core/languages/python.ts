@@ -1,9 +1,9 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, programClassSpec, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
 import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
-import type { ClassInfo } from '../objects';
+import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
 import { TypeRef, parseTypeId } from '../types';
@@ -280,7 +280,8 @@ class PythonEmitter {
       return this.finish(false);
     }
     const parent = this.program.classInfo?.parent;
-    body.line(`class ${this.className}${parent ? `(${this.userTypeName(parent)})` : ''}:`);
+    const bases = [...(parent ? [this.userTypeName(parent)] : []), ...(this.program.interfaces ?? []).map((i) => this.userTypeName(i.type.id))];
+    body.line(`class ${this.className}${bases.length ? `(${bases.join(', ')})` : ''}:`);
     body.indent();
     const fields = [
       ...this.program.members.filter((m) => !m.function).map((m) => ({ name: this.memberNames.get(m.id)!, type: m.type, initial: this.value(m.initial, m.type) })),
@@ -296,6 +297,18 @@ class PythonEmitter {
     // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay.
     if (!parent || this.program.hasStart) this.method('start', [], undefined, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
+    // The interface functions the class gives no body: they do nothing and return defaults.
+    for (const { type, stubs } of this.program.interfaces ?? []) {
+      for (const fn of stubs) {
+        const scope = new NameScope(RESERVED);
+        const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => ({ name: scope.claim(p.name, 'snake'), type: p.type }));
+        const outputs = fn.outputs.filter((p) => p.kind === 'data');
+        const returns = !outputs.length ? undefined : outputs.length === 1 ? outputs[0].type : `tuple[${outputs.map((o) => this.typeName(o.type)).join(', ')}]`;
+        this.method(this.interfaceNames(type).functions.get(fn.id)!, params, returns, () => {
+          body.line(outputs.length ? `return ${outputs.map((o) => this.defaultFor(o.type)).join(', ')}` : 'pass');
+        });
+      }
+    }
     for (const block of this.program.blocks) this.blockMethod(block);
     for (const helper of this.program.helpers) this.helperMethod(helper);
     body.trimTrailingBlank();
@@ -308,6 +321,21 @@ class PythonEmitter {
   private emitDeclaration(): GeneratedCode {
     const body = this.out;
     const declaration = this.program.declaration!;
+    if (declaration.kind === 'interface') {
+      // A class that implements the interface inherits from it, so Cast To is isinstance.
+      const names = this.interfaceNames(declaration.type);
+      body.line(`class ${this.className}:`);
+      body.line(`    """An interface: classes that implement ${declaration.type.name} inherit from it."""`);
+      for (const fn of declaration.type.functions) {
+        const params = ['self', ...fn.inputs.filter((p) => p.kind === 'data').map((p) => `${toIdentifier(p.name, 'snake')}: ${this.typeName(p.type)}`)].join(', ');
+        const outputs = fn.outputs.filter((p) => p.kind === 'data');
+        const returns = !outputs.length ? 'None' : outputs.length === 1 ? this.typeName(outputs[0].type) : `tuple[${outputs.map((o) => this.typeName(o.type)).join(', ')}]`;
+        body.line();
+        body.line(`    def ${names.functions.get(fn.id)}(${params}) -> ${returns}:`);
+        body.line('        ...');
+      }
+      return this.finish(false);
+    }
     if (declaration.kind === 'enum') {
       this.extraImports.add('from enum import Enum');
       const members = pythonEnumMembers(declaration.type);
@@ -354,7 +382,22 @@ class PythonEmitter {
       chain.push({ names, functions: ancestor.functions });
       parent = ancestor.parent;
     }
+    // Interfaces the class and its ancestors implement: their functions keep the interface's names.
+    const classes = [info, ...[...seen].map((id) => classInfo(this.program, id))];
+    for (const id of new Set(classes.flatMap((c) => c?.interfaces ?? []))) {
+      const iface = interfaceInfo(this.program, id);
+      if (iface) chain.push({ names: this.interfaceNames(iface), functions: iface.functions });
+    }
     return chain;
+  }
+
+  // An interface's function names, as its own module and every implementing class name them.
+  private interfaceNames(iface: InterfaceInfo): ClassMemberNames {
+    const cached = this.classNames.get(iface.id);
+    if (cached) return cached;
+    const names = claimClassMembers(new NameScope(RESERVED, ['start']), { functions: iface.functions, events: [], variables: [], dispatchers: [] }, CLASS_STYLES);
+    this.classNames.set(iface.id, names);
+    return names;
   }
 
   // The generated name of the nearest ancestor's function called `name` (what Parent calls).
@@ -626,6 +669,25 @@ class PythonEmitter {
       case 'broadcast':
         out.line(`${this.dispatcherRef(s)}.broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
         break;
+      case 'cast':
+        out.line(`if isinstance(${this.expr(s.value)}, ${this.userTypeName(s.type)}):`);
+        out.indent();
+        out.line(`${this.slotRef(s.slot)} = ${this.expr(s.value)}`);
+        this.statements(s.succeeded);
+        out.dedent();
+        if (s.failed.length) {
+          out.line('else:');
+          out.indent();
+          this.statements(s.failed);
+          out.dedent();
+        }
+        break;
+      case 'interfaceCall': {
+        const iface = interfaceInfo(this.program, s.type);
+        const call = `${this.targetRef(s.target)}.${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        out.line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
+        break;
+      }
       case 'parentCall': {
         if (s.start) {
           out.line('super().start()');
@@ -717,6 +779,12 @@ class PythonEmitter {
       }
       case 'self':
         return 'self';
+      case 'interfaceCall': {
+        const iface = interfaceInfo(this.program, e.type);
+        const outputs = iface?.functions.find((f) => f.id === e.function)?.outputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `${this.targetRef(e.target)}.${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
+      }
       case 'parentCall': {
         const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];

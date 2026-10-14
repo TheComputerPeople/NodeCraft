@@ -1,8 +1,8 @@
 // Generates TypeScript, or JavaScript with JSDoc types, from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, classInfo, exprType, programClassSpec, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
 import { relativeSpecifier, typescriptSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
-import type { ClassInfo } from '../objects';
+import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode } from '../language-pack';
 import { TypeRef } from '../types';
@@ -153,8 +153,12 @@ class TypeScriptEmitter {
     if (this.program.declaration) return this.emitDeclaration();
     if (this.library) return this.emitLibrary();
     const parent = this.program.classInfo?.parent;
-    out.line(`${esm ? 'export ' : ''}class ${this.className}${parent ? ` extends ${this.userTypeName(parent)}` : ''} {`);
+    const interfaces = (this.program.interfaces ?? []).map((i) => this.userTypeName(i.type.id)!);
+    const implementsClause = flavor.typed && interfaces.length ? ` implements ${interfaces.join(', ')}` : '';
+    out.line(`${esm ? 'export ' : ''}class ${this.className}${parent ? ` extends ${this.userTypeName(parent)}` : ''}${implementsClause} {`);
     out.indent();
+    // Each interface's tag, which its type guard looks for.
+    for (const local of interfaces) out.line(flavor.typed ? `readonly [${this.interfaceTag(local)}] = true as const;` : `[${this.interfaceTag(local)}] = true;`);
 
     const members = this.program.members.filter((m) => !m.function);
     const slots = this.program.slots.filter((x) => !x.function);
@@ -174,6 +178,7 @@ class TypeScriptEmitter {
     // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay.
     if (!parent || this.program.hasStart) this.method('start', [], undefined, false, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
+    this.interfaceStubs();
     for (const block of this.program.blocks) this.blockMethod(block);
     for (const helper of this.program.helpers) this.helperMethod(helper);
     out.trimTrailingBlank();
@@ -270,7 +275,31 @@ class TypeScriptEmitter {
       chain.push({ names, functions: ancestor.functions });
       parent = ancestor.parent;
     }
+    // Interfaces the class and its ancestors implement: their functions keep the interface's names.
+    const classes = [info, ...[...seen].map((id) => classInfo(this.program, id))];
+    for (const id of new Set(classes.flatMap((c) => c?.interfaces ?? []))) {
+      const iface = interfaceInfo(this.program, id);
+      if (iface) chain.push({ names: this.interfaceNames(iface), functions: iface.functions });
+    }
     return chain;
+  }
+
+  // An interface's function names, as its own file and every implementing class name them.
+  private interfaceNames(iface: InterfaceInfo): ClassMemberNames {
+    const cached = this.classNames.get(iface.id);
+    if (cached) return cached;
+    const names = claimClassMembers(new NameScope(RESERVED, ['start']), { functions: iface.functions, events: [], variables: [], dispatchers: [] }, CLASS_STYLES);
+    this.classNames.set(iface.id, names);
+    return names;
+  }
+
+  // An interface's run-time tag and type guard (TypeScript's interfaces are gone at run time).
+  private interfaceTag(local: string): string {
+    return `${local}Tag`;
+  }
+
+  private interfaceGuard(local: string): string {
+    return `is${local}`;
   }
 
   // The generated name of the nearest ancestor's function called `name` (what Parent calls).
@@ -320,6 +349,10 @@ class TypeScriptEmitter {
     const { out, flavor } = this;
     const declaration = this.program.declaration!;
     const exported = this.esm ? 'export ' : '';
+    if (declaration.kind === 'interface') {
+      this.interfaceDeclaration(declaration.type);
+      return { text: out.toString(), className: this.className, nodeLines: out.nodeLines };
+    }
     if (declaration.kind === 'enum') {
       const members = typescriptEnumMembers(declaration.type);
       const values = declaration.type.enumerators.map((e) => [members.get(e.id)!, JSON.stringify(e.name)] as const);
@@ -373,6 +406,51 @@ class TypeScriptEmitter {
     return { text: out.toString(), className: this.className, nodeLines: out.nodeLines };
   }
 
+  // An interface: its functions' signatures, and a tag classes that implement it carry, which its
+  // type guard (what Cast To checks) looks for.
+  private interfaceDeclaration(type: InterfaceInfo): void {
+    const { out, flavor } = this;
+    const exported = this.esm ? 'export ' : '';
+    const tag = this.interfaceTag(this.className);
+    const guard = this.interfaceGuard(this.className);
+    const names = this.interfaceNames(type);
+    out.line(flavor.typed ? `${exported}const ${tag}: unique symbol = Symbol.for(${JSON.stringify(`blueprint:${type.name}`)});` : `${exported}const ${tag} = Symbol.for(${JSON.stringify(`blueprint:${type.name}`)});`);
+    out.line();
+    if (flavor.typed) {
+      out.line(`${exported}interface ${this.className} {`);
+      out.line(`  readonly [${tag}]: true;`);
+      for (const fn of type.functions) {
+        const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => `${toIdentifier(p.name, 'camel')}: ${this.typeName(p.type)}`).join(', ');
+        out.line(`  ${names.functions.get(fn.id)}(${params}): ${this.interfaceResult(fn)};`);
+      }
+      out.line('}');
+      out.line();
+    }
+    out.line(`// Whether an object's class implements ${type.name} (Cast To ${type.name}).`);
+    if (flavor.typed) {
+      out.line(`${exported}function ${guard}(value: unknown): value is ${this.className} {`);
+      out.line(`  return typeof value === "object" && value !== null && (value as { [${tag}]?: true })[${tag}] === true;`);
+    } else {
+      out.line('/** @param {unknown} value @returns {boolean} */');
+      out.line(`${exported}function ${guard}(value) {`);
+      out.line(`  return typeof value === "object" && value !== null && /** @type {Record<symbol, unknown>} */ (value)[${tag}] === true;`);
+    }
+    out.line('}');
+    if (!this.esm) {
+      out.line();
+      out.line(`module.exports = { ${tag}, ${guard} };`);
+    }
+  }
+
+  // An interface function's return type: none, its one output's, or an object of its outputs.
+  private interfaceResult(fn: ClassInfo['functions'][number]): string {
+    const outputs = fn.outputs.filter((p) => p.kind === 'data');
+    if (!outputs.length) return 'void';
+    if (outputs.length === 1) return this.typeName(outputs[0].type);
+    const fields = resultFields(outputs);
+    return `{ ${outputs.map((o) => `${fields.get(o.id)}: ${this.typeName(o.type)}`).join('; ')} }`;
+  }
+
   // The name a struct or enum goes by in this file: its own, or its import's.
   private userTypeName(id: string): string | undefined {
     if (this.program.declaration?.type.id === id || id === `object:${this.program.className}`) return this.className;
@@ -385,6 +463,7 @@ class TypeScriptEmitter {
     const element = (id: string): string | undefined => {
       if (!isUserTypeId(id)) return undefined;
       if (!this.flavor.typed && this.types.get(id)?.kind === 'enum') return 'string';
+      if (!this.flavor.typed && id.startsWith('interface:')) return 'any';
       return this.userTypeName(id) ?? 'unknown';
     };
     const own = element(type.id);
@@ -411,10 +490,16 @@ class TypeScriptEmitter {
       byModule.set(specifier, [...(byModule.get(specifier) ?? []), i]);
     }
     for (const [specifier, imports] of [...byModule].sort(([a], [b]) => compare(a, b))) {
-      const names = imports.map((i) => {
+      const alias = (name: string, as: string) => (name === as ? name : `${name}${esm ? ' as ' : ': '}${as}`);
+      const names = imports.flatMap((i) => {
         const local = this.importNames.get(i.id)!;
-        return local === i.name ? local : `${i.name}${esm ? ' as ' : ': '}${local}`;
+        if (i.userType?.kind !== 'interface') return [alias(i.name, local)];
+        // An interface: its tag and guard at run time.
+        return [alias(this.interfaceTag(i.name), this.interfaceTag(local)), alias(this.interfaceGuard(i.name), this.interfaceGuard(local))];
       }).join(', ');
+      // An interface's type is imported as a type: Node.js strips it with the other types.
+      const types = this.flavor.typed ? imports.filter((i) => i.userType?.kind === 'interface').map((i) => alias(i.name, this.importNames.get(i.id)!)) : [];
+      if (types.length) this.out.line(`import type { ${types.join(', ')} } from ${JSON.stringify(specifier)};`);
       this.out.line(esm ? `import { ${names} } from ${JSON.stringify(specifier)};` : `const { ${names} } = require(${JSON.stringify(specifier)});`);
     }
     if (byModule.size) this.out.line();
@@ -483,6 +568,23 @@ class TypeScriptEmitter {
 
   private local(name: string, type: TypeRef | undefined, initial: string): void {
     this.out.line(this.flavor.typed ? `let ${name}: ${this.typeName(type)} = ${initial};` : `let ${name} = ${initial};`);
+  }
+
+  // The interface functions the class gives no body: they do nothing and return defaults, as Unreal's
+  // unimplemented interface functions do.
+  private interfaceStubs(): void {
+    for (const { type, stubs } of this.program.interfaces ?? []) {
+      const names = this.interfaceNames(type);
+      for (const fn of stubs) {
+        const scope = new NameScope(RESERVED, ['this']);
+        const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => ({ name: scope.claim(p.name, 'camel'), type: p.type }));
+        const outputs = fn.outputs.filter((p) => p.kind === 'data');
+        this.method(names.functions.get(fn.id)!, params, outputs.length ? this.interfaceResult(fn) : undefined, false, () => {
+          if (outputs.length === 1) this.out.line(`return ${this.defaultFor(outputs[0].type)};`);
+          else if (outputs.length) this.out.line(`return { ${[...resultFields(outputs)].map(([id, field]) => `${field}: ${this.defaultFor(outputs.find((o) => o.id === id)?.type)}`).join(', ')} };`);
+        });
+      }
+    }
   }
 
   // A function's return type: none, its one output's, or an object with a field per output.
@@ -633,6 +735,37 @@ class TypeScriptEmitter {
         }
         break;
       }
+      case 'cast': {
+        const local = this.userTypeName(s.type)!;
+        const test = s.type.startsWith('interface:') ? `${this.interfaceGuard(local)}(${this.expr(s.value)})` : `${this.operand(s.value)} instanceof ${local}`;
+        out.line(`if (${test}) {`);
+        out.indent();
+        out.line(`${this.slotRef(s.slot)} = ${this.flavor.typed ? `${this.operand(s.value)} as ${local}` : this.expr(s.value)};`);
+        this.statements(s.succeeded);
+        out.dedent();
+        if (s.failed.length) {
+          out.line('} else {');
+          out.indent();
+          this.statements(s.failed);
+          out.dedent();
+        }
+        out.line('}');
+        break;
+      }
+      case 'interfaceCall': {
+        const fn = interfaceInfo(this.program, s.type)?.functions.find((f) => f.id === s.function);
+        const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
+        const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
+        const iface = interfaceInfo(this.program, s.type);
+        const call = `${this.targetRef(s.target)}.${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        if (!s.results.length) out.line(`${call};`);
+        else if (outputs.length === 1) out.line(`${this.slotRef(s.results[0].slot)} = ${call};`);
+        else {
+          const fields = resultFields(outputs);
+          out.line(`({ ${s.results.map((r) => `${fields.get(r.output)}: ${this.slotRef(r.slot)}`).join(', ')} } = ${call});`);
+        }
+        break;
+      }
       case 'parentCall': {
         if (s.start) {
           out.line('super.start();');
@@ -750,6 +883,13 @@ class TypeScriptEmitter {
       }
       case 'self':
         return 'this';
+      case 'interfaceCall': {
+        const iface = interfaceInfo(this.program, e.type);
+        const fn = iface?.functions.find((f) => f.id === e.function);
+        const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `${this.targetRef(e.target)}.${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        return e.output ? `${call}.${resultFields(fn?.outputs.filter((p) => p.kind === 'data') ?? []).get(e.output)}` : call;
+      }
       case 'parentCall': {
         const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];

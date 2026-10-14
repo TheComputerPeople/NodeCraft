@@ -11,7 +11,7 @@ import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { declaredType, userTypeDefinitions } from '../core/user-types';
-import { classDefinitions, declaredClass } from '../core/objects';
+import { classDefinitions, declaredClass, declaredInterface, interfaceDefinitions } from '../core/objects';
 import { csharpNamespace, pythonModule } from './placement';
 
 const GLOB = '**/*.vgraph';
@@ -98,7 +98,7 @@ export class GraphLibraries implements vscode.Disposable {
       return undefined;
     }
     // Most graphs are classes; skip parsing them.
-    if (!/"kind":\s*"(class|functionLibrary|macroLibrary|structure|enumeration)"/.test(text)) return undefined;
+    if (!/"kind":\s*"(class|functionLibrary|macroLibrary|structure|enumeration|interface)"/.test(text)) return undefined;
     let doc: GraphDocument;
     try {
       doc = parseDocument(text, path.basename(uri.fsPath, '.vgraph')).document;
@@ -118,6 +118,9 @@ export class GraphLibraries implements vscode.Disposable {
     // Classes: Construct, which carries the class's public members (src/core/objects.ts).
     const cls = declaredClass(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) });
     if (cls) return { path: relative(root, uri.fsPath), definitions: classDefinitions(cls) };
+    // Interfaces: Cast To, which carries the interface's functions.
+    const iface = declaredInterface(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) });
+    if (iface) return { path: relative(root, uri.fsPath), definitions: interfaceDefinitions(iface) };
     if (doc.kind !== 'functionLibrary') return undefined;
     const functions = doc.graphs.filter((g) => g.kind === 'function').map((g) => ({ id: g.id, name: g.name }));
     const definitions = libraryDefinitions(doc, {

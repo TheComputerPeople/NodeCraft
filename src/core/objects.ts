@@ -23,6 +23,8 @@ export interface ClassInfo {
   source?: TypeSource;
   // The parent class ("object:<Name>"): its members are this class's too.
   parent?: string;
+  // The interfaces ("interface:<Name>") it implements.
+  interfaces?: string[];
   // In the order generated code names them (see each language's class member names).
   functions: (ClassMember & { inputs: GraphPin[]; outputs: GraphPin[]; pure: boolean })[];
   events: (ClassMember & { inputs: GraphPin[] })[];
@@ -40,12 +42,37 @@ export function declaredClass(doc: GraphDocument, source?: TypeSource): ClassInf
   return {
     kind: 'class', id: classTypeId(doc.name), name: doc.name, ...(doc.language ? { language: doc.language } : {}), ...(source ? { source } : {}),
     ...(doc.parent ? { parent: doc.parent } : {}),
+    ...(doc.interfaces?.length ? { interfaces: doc.interfaces } : {}),
     functions: doc.graphs.filter((g) => g.kind === 'function').map((g) => ({
       id: g.id, name: g.name, inputs: g.signature?.inputs ?? [], outputs: g.signature?.outputs ?? [], pure: !!g.signature?.pure
     })),
     events: customEvents(doc.graphs).map(({ node }) => ({ id: eventName(node), name: eventName(node), inputs: eventInputs(node) })),
     variables: doc.variables.map((v) => ({ id: v.id, name: v.name, type: v.type })),
     dispatchers: documentDispatchers(doc).map((d) => ({ id: d.id, name: d.name, inputs: d.inputs }))
+  };
+}
+
+// An interface: function signatures that classes implementing it give bodies (Unreal's Blueprint
+// Interface).
+export interface InterfaceInfo {
+  kind: 'interface';
+  // The pin type id, "interface:<Name>".
+  id: string;
+  name: string;
+  language?: string;
+  source?: TypeSource;
+  functions: ClassInfo['functions'];
+}
+
+export function interfaceTypeId(name: string): string {
+  return `interface:${name}`;
+}
+
+export function declaredInterface(doc: GraphDocument, source?: TypeSource): InterfaceInfo | undefined {
+  if (doc.kind !== 'interface') return undefined;
+  return {
+    kind: 'interface', id: interfaceTypeId(doc.name), name: doc.name, ...(doc.language ? { language: doc.language } : {}), ...(source ? { source } : {}),
+    functions: doc.graphs.filter((g) => g.kind === 'function').map((g) => ({ id: g.id, name: g.name, inputs: g.signature?.inputs ?? [], outputs: g.signature?.outputs ?? [], pure: !!g.signature?.pure }))
   };
 }
 
@@ -61,6 +88,8 @@ export const OBJECT_DISPATCHER = 'core:object.dispatcher';
 // Unreal's "Parent: <Function>" (and "Parent: BeginPlay"): runs the parent class's version.
 export const PARENT_CALL = 'core:object.parent';
 export const PARENT_START = 'Start';
+// A function of an interface, called on an object that implements it (Unreal's interface call).
+export const INTERFACE_CALL = 'core:interface.call';
 
 // What an object dispatcher node does with the dispatcher.
 export type DispatcherAction = 'call' | 'bind' | 'unbind' | 'unbind-all';
@@ -93,13 +122,34 @@ export function objectDefinitions(): NodeDefinition[] {
     member(OBJECT_CALL, 'Call Function', 'object-call', 'Calls a function of the Target object.'),
     member(OBJECT_EVENT, 'Call Event', 'object-event', 'Runs a custom event of the Target object.'),
     member(OBJECT_DISPATCHER, 'Event Dispatcher', 'object-dispatcher', "Calls, binds or unbinds the Target object's event dispatcher."),
-    member(PARENT_CALL, 'Parent', 'parent-call', "Runs the parent class's version of this function (or of Start).")
+    member(PARENT_CALL, 'Parent', 'parent-call', "Runs the parent class's version of this function (or of Start)."),
+    member(INTERFACE_CALL, 'Interface Call', 'interface-call', 'Calls an interface function of the Target object.')
   ];
 }
 
-// Construct <Class>: a new object of the class, its Start events run.
+// Cast To <Class or Interface>: Cast Succeeded with the object as that type, else Cast Failed.
+function castDefinition(type: ClassInfo | InterfaceInfo): NodeDefinition {
+  return {
+    type: `${type.id}.cast`, version: 1, displayName: `Cast To ${type.name}`, category: 'Utilities|Casting', color: OBJECT_COLOR,
+    keywords: ['cast', 'cast to', 'is a', type.name],
+    description: `Cast Succeeded runs when the object is a ${type.name}${type.kind === 'interface' ? ' (its class implements it)' : ''}, with it as one; else Cast Failed.`,
+    inputs: [execIn, { id: 'object', name: 'Object', kind: 'data', direction: 'input', type: { id: 'any' } }],
+    outputs: [
+      { id: 'succeeded', name: 'Cast Succeeded', kind: 'exec', direction: 'output' }, { id: 'failed', name: 'Cast Failed', kind: 'exec', direction: 'output' },
+      { id: 'as', name: `As ${type.name}`, kind: 'data', direction: 'output', type: { id: type.id } }
+    ],
+    implementation: type.kind === 'class' ? { kind: 'class', operation: 'cast', type } : { kind: 'interface', operation: 'cast', type }
+  };
+}
+
+// An interface's Cast To node, which carries its functions.
+export function interfaceDefinitions(type: InterfaceInfo): NodeDefinition[] {
+  return [castDefinition(type)];
+}
+
+// Construct <Class>: a new object of the class, its Start events run; and Cast To <Class>.
 export function classDefinitions(type: ClassInfo): NodeDefinition[] {
-  return [{
+  return [castDefinition(type), {
     type: constructNodeType(type), version: 1, displayName: `Construct ${type.name}`, category: 'Objects', color: OBJECT_COLOR,
     keywords: ['construct', 'create', 'new', 'spawn', 'construct object from class'],
     description: `A new ${type.name}. Its Start events run first, as spawning runs BeginPlay.`,
@@ -124,6 +174,15 @@ const data = (pin: GraphPin, direction: PinDefinition['direction']): PinDefiniti
 // Self, and the member nodes, with the pins of the member they use on the Target object.
 export function objectNodeDefinition(base: NodeDefinition, node: GraphNode, own: ClassInfo | undefined, definition: (type: string) => NodeDefinition | undefined): NodeDefinition {
   if (node.type === SELF) return own ? { ...base, outputs: [{ ...base.outputs[0], type: { id: own.id } }] } : base;
+  if (node.type === INTERFACE_CALL) {
+    const iface = typeof node.properties.interface === 'string' ? interfaceById(node.properties.interface, definition) : undefined;
+    const fn = iface?.functions.find((f) => f.id === node.properties.function);
+    const target: PinDefinition = { id: 'target', name: 'Target', kind: 'data', direction: 'input', type: { id: String(node.properties.interface ?? 'interface:') } };
+    if (!iface || !fn) return { ...base, displayName: `Missing interface function`, inputs: [execIn, target], outputs: [execOut] };
+    const ins = fn.inputs.filter((p) => p.kind === 'data').map((p) => data(p, 'input'));
+    const outs = fn.outputs.filter((p) => p.kind === 'data').map((p) => data(p, 'output'));
+    return { ...base, displayName: fn.name, category: iface.name, description: `${iface.name}'s ${fn.name}, on an object that implements it.`, inputs: [...(fn.pure ? [] : [execIn]), target, ...ins], outputs: [...(fn.pure ? [] : [execOut]), ...outs] };
+  }
   if (node.type === PARENT_CALL) {
     const name = String(node.properties.function ?? PARENT_START);
     if (name === PARENT_START) return { ...base, displayName: 'Parent: Start', inputs: [execIn], outputs: [execOut] };
@@ -182,7 +241,17 @@ export function dispatcherAction(node: GraphNode): DispatcherAction {
 }
 
 export function isObjectNode(type: string): boolean {
-  return [SELF, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL].includes(type);
+  return [SELF, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL, INTERFACE_CALL].includes(type);
+}
+
+export function interfaceById(id: string, definition: (type: string) => NodeDefinition | undefined): InterfaceInfo | undefined {
+  const implementation = definition(`${id}.cast`)?.implementation;
+  return implementation?.kind === 'interface' ? implementation.type : undefined;
+}
+
+// The interfaces a class implements, with its ancestors' (each once).
+export function implementedInterfaces(type: ClassInfo, definition: (type: string) => NodeDefinition | undefined): string[] {
+  return [...new Set([type, ...ancestors(type, definition)].flatMap((c) => c.interfaces ?? []))];
 }
 
 // ---- Inheritance ----------------------------------------------------------------------------------
@@ -216,11 +285,14 @@ export function parentFunction(type: ClassInfo, name: string, definition: (type:
   return undefined;
 }
 
-// The class hierarchy test for types.ts: whether `from` is `to` or one of its subclasses.
+// The class hierarchy test for types.ts: whether an object of class `from` is a `to` (the class, an
+// ancestor, or an interface it or an ancestor implements).
 export function subclassTest(definition: (type: string) => NodeDefinition | undefined, own?: ClassInfo): (from: string, to: string) => boolean {
   return (from, to) => {
     const type = own?.id === from ? own : classById(from, definition);
-    return !!type && (type.id === to || ancestors(type, definition).some((a) => a.id === to));
+    if (!type) return false;
+    const chain = [type, ...ancestors(type, definition)];
+    return chain.some((c) => c.id === to || c.interfaces?.includes(to));
   };
 }
 

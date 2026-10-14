@@ -11,7 +11,7 @@ import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
-import { ClassInfo, PARENT_START, ancestors, declaredClass, dispatcherAction, isObjectNode, nodeClass, parentFunction, subclassTest } from '../objects';
+import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest } from '../objects';
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
@@ -99,7 +99,7 @@ class Lowerer {
   }
 
   run(): LowerResult {
-    if (this.doc.kind === 'structure' || this.doc.kind === 'enumeration') return this.declaration();
+    if (this.doc.kind === 'structure' || this.doc.kind === 'enumeration' || this.doc.kind === 'interface') return this.declaration();
     const names = new Set<string>();
     for (const variable of this.doc.variables) {
       if (this.members.has(variable.id) || names.has(variable.name)) {
@@ -144,7 +144,6 @@ class Lowerer {
     if (this.doc.kind === 'macroLibrary') return { diagnostics: this.diagnostics };
 
     const entries = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === START).map((start) => ({ info, start })));
-    if (!entries.length && this.doc.kind === 'class') this.warning('no-start', 'The graph has no Start event, so the generated start method does nothing.');
 
     for (const info of [...eventGraphs, ...functionGraphs]) this.checkExecCycles(info);
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
@@ -169,6 +168,7 @@ class Lowerer {
       start,
       ...(this.ownClass ? { classInfo: this.ownClass } : {}),
       ...(this.ancestors.length ? { ancestors: this.ancestors } : {}),
+      ...this.interfacePlan(),
       hasStart: entries.length > 0,
       dispatchers: documentDispatchers(this.doc).map((d): IrDispatcher => ({ id: d.id, name: d.name, params: d.inputs.filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type })) }))
     };
@@ -181,6 +181,18 @@ class Lowerer {
 
   // A structure or enumeration document: the type it declares, with the fields' initial values.
   private declaration(): LowerResult {
+    const iface = declaredInterface(this.doc);
+    if (iface) {
+      const names = new Set<string>();
+      for (const fn of iface.functions) {
+        if (names.has(fn.name)) this.error('duplicate-member', `${iface.name} has two functions named "${fn.name}".`, fn.id);
+        names.add(fn.name);
+      }
+      const program: IrProgram = { className: this.doc.name, members: [], slots: [], helpers: [], imports: [], blocks: [], functions: [], start: [], declaration: { kind: 'interface', type: iface } };
+      this.importTypes(program);
+      if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
+      return { diagnostics: this.diagnostics, program };
+    }
     const type = declaredType(this.doc);
     if (!type) return { diagnostics: this.diagnostics };
     const names = new Set<string>();
@@ -215,8 +227,9 @@ class Lowerer {
           used.set(value, type);
           // A struct's fields may hold other structs and enums the generated code then refers to.
           if (type.kind === 'struct') for (const f of type.fields) visit(f.type);
-          // A class's ancestors: generated code names its members after theirs.
+          // A class's ancestors and interfaces: generated code names its members after theirs.
           if (type.kind === 'class' && type.parent) visit(type.parent);
+          if (type.kind === 'class') for (const i of type.interfaces ?? []) visit(i);
         }
         return;
       }
@@ -367,6 +380,21 @@ class Lowerer {
 
   // ---- Objects (src/core/objects.ts) ---------------------------------------------------------
 
+  // The interface an interface call uses, or an error.
+  private callInterface(info: GraphInfo, node: GraphNode): InterfaceInfo | undefined {
+    const iface = typeof node.properties.interface === 'string' ? interfaceById(node.properties.interface, (t) => this.options.registry.get(t)) : undefined;
+    if (!iface) this.error('interface-missing', `There is no interface ${String(node.properties.interface ?? '').replace(/^interface:/, '')} in the workspace.`, info.graph.id, node.id);
+    return iface;
+  }
+
+  // An interface call's Target: wired, else Self when this class implements the interface.
+  private interfaceTarget(info: GraphInfo, node: GraphNode, def: NodeDefinition, iface: InterfaceInfo): IrExpr {
+    if (info.dataSources.has(inputKey(node.id, 'target'))) return this.inputExpr(info, node, def, 'target');
+    if (this.ownClass && implementedInterfaces(this.ownClass, (t) => this.options.registry.get(t)).includes(iface.id)) return { kind: 'self' };
+    this.error('target-missing', `Connect an object that implements ${iface.name} to Target.`, info.graph.id, node.id);
+    return { kind: 'default', type: { id: iface.id } };
+  }
+
   // The class a member node uses, or an error.
   private memberClass(info: GraphInfo, node: GraphNode): ClassInfo | undefined {
     const type = nodeClass(node, this.ownClass, (t) => this.options.registry.get(t));
@@ -379,10 +407,43 @@ class Lowerer {
     return type.id === this.ownClass?.id || this.ancestors.some((a) => a.id === type.id);
   }
 
+  // The interfaces the class declares itself (those its ancestors implement are theirs already), each
+  // with the functions neither it nor an ancestor gives a body; and every interface it implements.
+  private interfacePlan(): Pick<IrProgram, 'interfaces' | 'allInterfaces'> {
+    const own = this.ownClass;
+    if (!own) return {};
+    const definition = (t: string) => this.options.registry.get(t);
+    const inherited = new Set(this.ancestors.flatMap((a) => implementedInterfaces(a, definition)));
+    const bodies = new Set([own, ...this.ancestors].flatMap((c) => c.functions.map((f) => f.name)));
+    const all = implementedInterfaces(own, definition).map((id) => interfaceById(id, definition)).filter((i): i is InterfaceInfo => !!i);
+    const mine = all.filter((i) => (own.interfaces ?? []).includes(i.id) && !inherited.has(i.id));
+    return {
+      ...(mine.length ? { interfaces: mine.map((type) => ({ type, stubs: type.functions.filter((f) => !bodies.has(f.name)) })) } : {}),
+      ...(all.length ? { allInterfaces: all } : {})
+    };
+  }
+
   // The parent class must exist and not loop; a subclass's members must not take its ancestors'
   // names, except functions that override with the same signature.
   private checkInheritance(): void {
     const own = this.ownClass;
+    // Interfaces: each must exist, and a function named like one of theirs implements it, so it
+    // keeps its signature.
+    const definition = (t: string) => this.options.registry.get(t);
+    const signatureOf = (pins: { kind: string; type?: TypeRef }[]) => JSON.stringify(pins.filter((p) => p.kind === 'data').map((p) => p.type?.id ?? 'any'));
+    for (const id of own?.interfaces ?? []) {
+      const iface = interfaceById(id, definition);
+      if (!iface) {
+        this.error('interface-missing', `There is no interface ${id.replace(/^interface:/, '')} in the workspace.`);
+        continue;
+      }
+      for (const fn of own!.functions) {
+        const declared = iface.functions.find((f) => f.name === fn.name);
+        if (declared && (signatureOf(declared.inputs) !== signatureOf(fn.inputs) || signatureOf(declared.outputs) !== signatureOf(fn.outputs) || declared.pure !== fn.pure)) {
+          this.error('interface-mismatch', `"${fn.name}" implements ${iface.name}'s function, so it needs the same inputs, outputs and Pure setting.`, fn.id);
+        }
+      }
+    }
     if (!own?.parent) return;
     const parentName = own.parent.replace(/^object:/, '');
     if (!this.ancestors.length) {
@@ -416,9 +477,19 @@ class Lowerer {
   private lowerObjectNode(info: GraphInfo, node: GraphNode, def: NodeDefinition, next: (out: string) => IrStatement[], input: (pinId: string) => IrExpr, source: SourceRef): IrStatement[] | undefined {
     const operation = nativeOperation(def);
     const implementation = def.implementation;
-    if (implementation?.kind === 'class') {
+    if (implementation?.kind === 'class' && implementation.operation === 'construct') {
       const slot = this.slot(info, node, def, 'object');
       return [{ kind: 'construct', type: implementation.type.id, slot, source }, ...next('execOut')];
+    }
+    if (implementation?.kind === 'interface' || (implementation?.kind === 'class' && implementation.operation === 'cast')) {
+      const slot = this.slot(info, node, def, 'as');
+      return [{ kind: 'cast', value: input('object'), type: implementation.type.id, slot, succeeded: next('succeeded'), failed: next('failed'), source }];
+    }
+    if (operation === 'interface-call') {
+      const iface = this.callInterface(info, node);
+      if (!iface) return next('execOut');
+      const results = def.outputs.filter((p) => p.kind === 'data').map((p) => ({ output: p.id, slot: this.slot(info, node, def, p.id) }));
+      return [{ kind: 'interfaceCall', target: this.interfaceTarget(info, node, def, iface), type: iface.id, function: String(node.properties.function), args: dataInputs(def).filter((p) => p.id !== 'target').map((p) => input(p.id)), results, source }, ...next('execOut')];
     }
     if (operation === 'parent-call') {
       const name = String(node.properties.function ?? PARENT_START);
@@ -488,6 +559,7 @@ class Lowerer {
       info.nodes.set(node.id, node);
       if (isFunctionType(node.type)) this.checkFunction(graph, node);
       if (typeof node.properties.class === 'string' && isObjectNode(node.type)) this.memberClass({ graph } as GraphInfo, node);
+      if (typeof node.properties.interface === 'string' && isObjectNode(node.type)) this.callInterface({ graph } as GraphInfo, node);
       if ((node.type === MACRO_INPUTS || node.type === MACRO_OUTPUTS) && graph.kind !== 'macro') {
         this.error('tunnel-outside-macro', 'Inputs and Outputs nodes belong in macro graphs.', graph.id, node.id);
       }
@@ -763,6 +835,15 @@ class Lowerer {
       return { kind: 'toText', value };
     }
     if (operation === 'self') return { kind: 'self' };
+    if (operation === 'interface-call' && isPure(sourceDef)) {
+      const iface = this.callInterface(info, sourceNode);
+      if (!iface) return { kind: 'default', type: pin?.type };
+      return {
+        kind: 'interfaceCall', target: this.interfaceTarget(info, sourceNode, sourceDef, iface), type: iface.id, function: String(sourceNode.properties.function),
+        args: dataInputs(sourceDef).filter((p) => p.id !== 'target').map((p) => this.inputExpr(info, sourceNode, sourceDef, p.id)),
+        ...(sourceDef.outputs.filter((p) => p.kind === 'data').length > 1 ? { output: source.pin } : {})
+      };
+    }
     // A pure parent function: called where its value is used.
     if (operation === 'parent-call' && isPure(sourceDef)) {
       return {
@@ -1085,7 +1166,7 @@ class Lowerer {
   private programView(): ProgramTypes {
     return {
       members: [...this.members.values()], slots: [...this.slots.values()], helpers: [...this.helpers.values()], imports: [...this.imports.values()], functions: this.functions,
-      className: this.doc.name, ...(this.ownClass ? { classInfo: this.ownClass } : {})
+      className: this.doc.name, ...(this.ownClass ? { classInfo: this.ownClass } : {}), ...this.interfacePlan()
     };
   }
 

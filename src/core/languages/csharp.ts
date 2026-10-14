@@ -1,8 +1,8 @@
 // C# pack: generates a C# class per graph from Visual IR, and runs it through a small console
 // project (docs/program-structure.md, "C# language pack").
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, exprType, userTypes, classInfo, programClassSpec } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, exprType, userTypes, classInfo, programClassSpec, interfaceInfo } from '../compiler/ir';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent } from '../compiler/names';
-import type { ClassInfo } from '../objects';
+import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { scanCSharp } from '../importing/csharp-scanner';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
@@ -390,6 +390,19 @@ class CSharpEmitter {
     const parent = this.program.classInfo?.parent;
     if (!this.library && (!parent || this.program.hasStart)) this.method(parent ? 'public override' : 'public virtual', 'Start', [], undefined, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
+    // The interface functions the class gives no body: they do nothing and return defaults.
+    for (const { type, stubs } of this.program.interfaces ?? []) {
+      for (const fn of stubs) {
+        const scope = new NameScope(RESERVED);
+        const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => ({ name: scope.claim(p.name, 'camel'), type: p.type }));
+        const outputs = fn.outputs.filter((p) => p.kind === 'data');
+        const fields = resultFields(outputs);
+        this.method('public virtual', this.interfaceNames(type).functions.get(fn.id)!, params, outputs.length > 1 ? this.interfaceResult(fn) : outputs[0]?.type, () => {
+          if (outputs.length === 1) this.out.line(`return ${this.defaultFor(outputs[0].type)};`);
+          else if (outputs.length) this.out.line(`return (${outputs.map((o) => `${fields.get(o.id)}: ${this.defaultFor(o.type)}`).join(', ')});`);
+        });
+      }
+    }
     for (const block of this.program.blocks) this.method('private', this.blockNames.get(block.id)!, [], undefined, () => this.statements(block.body));
     for (const helper of this.program.helpers) this.helperMethod(helper);
     if (dispatchers.length) {
@@ -425,7 +438,8 @@ class CSharpEmitter {
       header.line();
     }
     const parentClass = this.program.classInfo?.parent;
-    header.line(`public ${this.library ? 'static ' : ''}class ${this.className}${parentClass ? ` : ${this.userTypeName(parentClass)}` : ''}`);
+    const bases = [...(parentClass ? [this.userTypeName(parentClass)] : []), ...(this.program.interfaces ?? []).map((i) => this.userTypeName(i.type.id))];
+    header.line(`public ${this.library ? 'static ' : ''}class ${this.className}${bases.length ? ` : ${bases.join(', ')}` : ''}`);
     header.line('{');
     return this.finish(header, body);
   }
@@ -453,6 +467,19 @@ class CSharpEmitter {
     const header = this.header();
     const body = this.out;
     const declaration = this.program.declaration!;
+    if (declaration.kind === 'interface') {
+      const names = this.interfaceNames(declaration.type);
+      header.line(`public interface ${this.className}`);
+      header.line('{');
+      body.indent();
+      for (const fn of declaration.type.functions) {
+        const scope = new NameScope(RESERVED);
+        const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => `${this.typeName(p.type)} ${scope.claim(p.name, 'camel')}`).join(', ');
+        body.line(`${this.interfaceResult(fn)} ${names.functions.get(fn.id)}(${params});`);
+      }
+      body.dedent();
+      return this.finish(header, body);
+    }
     if (declaration.kind === 'enum') {
       const members = csharpEnumMembers(declaration.type);
       header.line(`public enum ${this.className}`);
@@ -659,6 +686,32 @@ class CSharpEmitter {
         out.line(`foreach (var handler in ${this.dispatcherRef(s)}.Handlers) handler(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
         break;
       }
+      case 'cast': {
+        const type = this.userTypeName(s.type);
+        out.line(`if (${this.operand(s.value)} is ${type})`);
+        out.line('{');
+        out.indent();
+        out.line(`${this.slotNames.get(s.slot)} = (${type})${this.operand(s.value)};`);
+        this.statements(s.succeeded);
+        out.dedent();
+        out.line('}');
+        if (s.failed.length) {
+          out.line('else');
+          this.block(s.failed);
+        }
+        break;
+      }
+      case 'interfaceCall': {
+        const iface = interfaceInfo(this.program, s.type);
+        const fn = iface?.functions.find((f) => f.id === s.function);
+        const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
+        const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `${this.targetRef(s.target)}.${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        if (!s.results.length) out.line(`${call};`);
+        else if (outputs.length === 1) out.line(`${this.slotNames.get(s.results[0].slot)} = ${call};`);
+        else out.line(`(${s.results.map((r) => this.slotNames.get(r.slot)).join(', ')}) = ${call};`);
+        break;
+      }
       case 'parentCall': {
         if (s.start) {
           out.line('base.Start();');
@@ -773,6 +826,13 @@ class CSharpEmitter {
       }
       case 'self':
         return 'this';
+      case 'interfaceCall': {
+        const iface = interfaceInfo(this.program, e.type);
+        const fn = iface?.functions.find((f) => f.id === e.function);
+        const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `${this.targetRef(e.target)}.${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        return e.output ? `${call}.${resultFields(fn?.outputs.filter((p) => p.kind === 'data') ?? []).get(e.output)}` : call;
+      }
       case 'parentCall': {
         const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
@@ -901,7 +961,31 @@ class CSharpEmitter {
       chain.push({ names, functions: ancestor.functions });
       parent = ancestor.parent;
     }
+    // Interfaces the class and its ancestors implement: their functions keep the interface's names.
+    const classes = [info, ...[...seen].map((id) => classInfo(this.program, id))];
+    for (const id of new Set(classes.flatMap((c) => c?.interfaces ?? []))) {
+      const iface = interfaceInfo(this.program, id);
+      if (iface) chain.push({ names: this.interfaceNames(iface), functions: iface.functions });
+    }
     return chain;
+  }
+
+  // An interface's function names, as its own file and every implementing class name them.
+  private interfaceNames(iface: InterfaceInfo): ClassMemberNames {
+    const cached = this.classNames.get(iface.id);
+    if (cached) return cached;
+    const names = claimClassMembers(classScope(new NameScope(RESERVED).claim(iface.name, 'pascal')), { functions: iface.functions, events: [], variables: [], dispatchers: [] }, CLASS_STYLES);
+    this.classNames.set(iface.id, names);
+    return names;
+  }
+
+  // An interface function's return type: none, its one output's, or a named tuple of its outputs.
+  private interfaceResult(fn: ClassInfo['functions'][number]): string {
+    const outputs = fn.outputs.filter((p) => p.kind === 'data');
+    if (!outputs.length) return 'void';
+    if (outputs.length === 1) return this.typeName(outputs[0].type);
+    const fields = resultFields(outputs);
+    return `(${outputs.map((o) => `${this.typeName(o.type)} ${fields.get(o.id)}`).join(', ')})`;
   }
 
   // The generated name of the nearest ancestor's function called `name` (what Parent calls).

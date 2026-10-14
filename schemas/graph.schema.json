@@ -24,7 +24,8 @@
         "functionLibrary",
         "macroLibrary",
         "structure",
-        "enumeration"
+        "enumeration",
+        "interface"
       ]
     },
     "language": {
@@ -35,6 +36,14 @@
       "type": "string",
       "pattern": "^object:",
       "description": "A class's parent class, as object:<Name>."
+    },
+    "interfaces": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^interface:"
+      },
+      "description": "The interfaces a class implements, as interface:<Name>."
     },
     "variables": {
       "type": "array",
@@ -262,6 +271,50 @@
           "required": [
             "parent"
           ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "not": {
+              "const": "class"
+            }
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "interfaces"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "interface"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "variables": {
+            "maxItems": 0
+          },
+          "graphs": {
+            "minItems": 1,
+            "items": {
+              "properties": {
+                "kind": {
+                  "const": "function"
+                }
+              }
+            }
+          }
         }
       }
     }

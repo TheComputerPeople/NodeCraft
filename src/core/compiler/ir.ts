@@ -4,7 +4,7 @@
 import { TypeRef } from '../types';
 import type { ClassMemberSpec } from './names';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
-import type { ClassInfo } from '../objects';
+import type { ClassInfo, InterfaceInfo } from '../objects';
 
 // The node a piece of IR came from, for diagnostics and node markers in generated code.
 export interface SourceRef {
@@ -55,7 +55,9 @@ export type IrExpr =
   // A pure function of the Target object, reading one of its outputs when it has several.
   | { kind: 'objectCall'; target: IrExpr; type: string; function: string; args: IrExpr[]; output?: string }
   // The parent class's version of a pure function (by name), reading one of its outputs.
-  | { kind: 'parentCall'; function: string; args: IrExpr[]; output?: string };
+  | { kind: 'parentCall'; function: string; args: IrExpr[]; output?: string }
+  // A pure interface function (by graph id) of the Target object, reading one of its outputs.
+  | { kind: 'interfaceCall'; target: IrExpr; type: string; function: string; args: IrExpr[]; output?: string };
 
 // `+` and `-` are integer arithmetic on counters; the rest give booleans.
 export type BinaryOp = '<' | '<=' | '>=' | '==' | '!=' | '&&' | '||' | '+' | '-';
@@ -93,6 +95,11 @@ export type IrStatement =
   // A new object of class `type` into `slot`, its Start events run.
   | { kind: 'construct'; type: string; slot: string; source: SourceRef }
   | { kind: 'setObjectVariable'; target: IrExpr; type: string; variable: string; value: IrExpr; source: SourceRef }
+  // Cast To: `succeeded` runs with the value (as `type`, a class or interface) in `slot` when it is one,
+  // else `failed`.
+  | { kind: 'cast'; value: IrExpr; type: string; slot: string; succeeded: IrStatement[]; failed: IrStatement[]; source: SourceRef }
+  // Calls an interface function (by graph id) of the Target object, each output into a slot.
+  | { kind: 'interfaceCall'; target: IrExpr; type: string; function: string; args: IrExpr[]; results: { output: string; slot: string }[]; source: SourceRef }
   // Runs the parent class's version of a function (by name; each output into a slot), or its start.
   | { kind: 'parentCall'; function?: string; start?: boolean; args: IrExpr[]; results: { output: string; slot: string }[]; source: SourceRef }
   // Calls a function (each output into a slot) or runs a custom event (by name) of the Target object.
@@ -177,7 +184,8 @@ export interface IrImport {
 // The type a structure or enumeration document declares, with each field's initial value.
 export type IrDeclaration =
   | { kind: 'struct'; type: StructInfo; initial: IrExpr[] }
-  | { kind: 'enum'; type: EnumInfo };
+  | { kind: 'enum'; type: EnumInfo }
+  | { kind: 'interface'; type: InterfaceInfo };
 
 export interface IrBlock {
   id: string;
@@ -207,6 +215,20 @@ export interface IrProgram {
   ancestors?: ClassInfo[];
   // Whether the graph has Start nodes: a subclass without any keeps its parent's start.
   hasStart?: boolean;
+  // The interfaces the class itself declares (not those its ancestors already implement), with the
+  // functions it gives no body, which get empty ones.
+  interfaces?: { type: InterfaceInfo; stubs: ClassInfo['functions'] }[];
+  // Every interface the class and its ancestors implement: generated code names their functions.
+  allInterfaces?: InterfaceInfo[];
+}
+
+// An interface a program knows: one it implements, or one it imports.
+export function interfaceInfo(program: Pick<IrProgram, 'imports' | 'allInterfaces' | 'declaration'>, id: string): InterfaceInfo | undefined {
+  if (program.declaration?.kind === 'interface' && program.declaration.type.id === id) return program.declaration.type;
+  const known = program.allInterfaces?.find((i) => i.id === id);
+  if (known) return known;
+  const type = program.imports.find((i) => i.id === id)?.userType;
+  return type?.kind === 'interface' ? type : undefined;
 }
 
 // The class an "object:<Name>" type names: the program's own, or one it imports.
@@ -224,7 +246,7 @@ export function userTypes(program: Pick<IrProgram, 'imports'>): Map<string, User
 }
 
 // Static type of an expression, as far as it is known.
-export type ProgramTypes = Pick<IrProgram, 'members' | 'slots' | 'helpers' | 'imports' | 'functions' | 'className' | 'classInfo' | 'ancestors'>;
+export type ProgramTypes = Pick<IrProgram, 'members' | 'slots' | 'helpers' | 'imports' | 'functions' | 'className' | 'classInfo' | 'ancestors' | 'allInterfaces' | 'declaration'>;
 
 export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefined {
   switch (expr.kind) {
@@ -273,6 +295,10 @@ export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefin
       return classInfo(program, expr.type)?.variables.find((v) => v.id === expr.variable)?.type;
     case 'objectCall': {
       const outputs = classInfo(program, expr.type)?.functions.find((f) => f.id === expr.function)?.outputs.filter((p) => p.kind === 'data') ?? [];
+      return (expr.output ? outputs.find((p) => p.id === expr.output) : outputs[0])?.type;
+    }
+    case 'interfaceCall': {
+      const outputs = interfaceInfo(program, expr.type)?.functions.find((f) => f.id === expr.function)?.outputs.filter((p) => p.kind === 'data') ?? [];
       return (expr.output ? outputs.find((p) => p.id === expr.output) : outputs[0])?.type;
     }
     case 'parentCall': {

@@ -1,11 +1,11 @@
 // The document being edited, the node definitions it uses, and syncing changes back to the host.
 import { pinDefinition, releaseWildcards } from '../core/editing';
-import { GraphDocument, GraphNode, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
+import { GraphDocument, GraphNode, GraphPin, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
 import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions } from '../core/imported-functions';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, UNBIND_ALL, UNBIND_EVENT, customEvents, documentDispatchers, eventName } from '../core/events';
-import { OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, PARENT_START, ancestors, classTypeId, declaredClass, subclassTest } from '../core/objects';
+import { INTERFACE_CALL, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, PARENT_START, ancestors, classTypeId, declaredClass, implementedInterfaces, interfaceById, subclassTest } from '../core/objects';
 import { setClassHierarchy } from '../core/types';
 import { listUserTypes } from '../core/user-types';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
@@ -43,7 +43,7 @@ export function paletteEntries(): PaletteEntry[] {
     // A function has one entry node and a macro one pair of tunnels; calls and macros are offered
     // one by one; Return Nodes only fit in functions, and events only in event graphs (as in
     // Unreal's action menu).
-    .filter((d) => ![FUNCTION_ENTRY, FUNCTION_CALL, MACRO_INPUTS, MACRO_OUTPUTS, MACRO_INSTANCE, CALL_EVENT, CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL].includes(d.type))
+    .filter((d) => ![FUNCTION_ENTRY, FUNCTION_CALL, MACRO_INPUTS, MACRO_OUTPUTS, MACRO_INSTANCE, CALL_EVENT, CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL, INTERFACE_CALL].includes(d.type))
     .filter((d) => (kind === 'event' || !kind ? d.type !== FUNCTION_RETURN : !d.type.startsWith('core:event.') && (kind === 'function' || d.type !== FUNCTION_RETURN)))
     // A macro library's macro can't use itself.
     .filter((d) => !(d.implementation?.kind === 'macro' && kind === 'macro' && d.implementation.source.graph === state.graph?.id && state.document?.kind === 'macroLibrary'))
@@ -77,6 +77,15 @@ export function paletteEntries(): PaletteEntry[] {
   // Other classes' members, each with a Target pin, under the class's name (src/core/objects.ts).
   const own = state.document ? classTypeId(state.document.name) : '';
   for (const type of listUserTypes(state.definitions, state.document?.language)) {
+    // An interface's functions, called on any object that implements it.
+    if (type.kind === 'interface') {
+      for (const f of type.functions) {
+        const properties = { interface: type.id, function: f.id };
+        const definition = lookupDefinition({ id: '', type: INTERFACE_CALL, position: { x: 0, y: 0 }, properties });
+        if (definition) entries.push({ key: `${type.id}:${f.id}`, type: INTERFACE_CALL, properties, definition });
+      }
+      continue;
+    }
     if (type.kind !== 'class' || type.id === own) continue;
     const member = (nodeType: string, properties: Record<string, unknown>, key: string): void => {
       const definition = lookupDefinition({ id: '', type: nodeType, position: { x: 0, y: 0 }, properties: { class: type.id, ...properties } });
@@ -147,6 +156,14 @@ export function setDefinitions(definitions: NodeDefinition[]): void {
 export function updateClassHierarchy(): void {
   const own = state.document ? declaredClass(state.document) : undefined;
   setClassHierarchy(subclassTest((type) => state.defByType.get(type), own));
+}
+
+// The functions of the interfaces the document's class implements (with its ancestors').
+export function documentInterfaceFunctions(): { name: string; inputs: GraphPin[]; outputs: GraphPin[]; pure: boolean }[] {
+  const own = state.document ? declaredClass(state.document) : undefined;
+  if (!own) return [];
+  const definition = (type: string) => state.defByType.get(type);
+  return implementedInterfaces(own, definition).flatMap((id) => interfaceById(id, definition)?.functions ?? []);
 }
 
 // The document's class's ancestors, nearest first.

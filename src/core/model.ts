@@ -3,7 +3,7 @@ import type { SearchHit } from './search';
 import type { TypeRef } from './types';
 import type { EnumInfo, Enumerator, StructInfo } from './user-types';
 import type { Dispatcher } from './events';
-import type { ClassInfo } from './objects';
+import type { ClassInfo, InterfaceInfo } from './objects';
 
 export type { TypeRef } from './types';
 
@@ -46,8 +46,10 @@ export type NodeImplementation =
   // A struct's Make, Break and Set Members, and an enum's Switch on, == and != (src/core/user-types.ts).
   | { kind: 'struct'; operation: 'make' | 'break' | 'set-members'; type: StructInfo }
   | { kind: 'enum'; operation: 'switch' | 'equal' | 'not-equal'; type: EnumInfo }
-  // A class's Construct node, which carries the class's public members (src/core/objects.ts).
-  | { kind: 'class'; operation: 'construct'; type: ClassInfo };
+  // A class's Construct node, which carries the class's public members, and its Cast To node; an
+  // interface's Cast To node, which carries its functions (src/core/objects.ts).
+  | { kind: 'class'; operation: 'construct' | 'cast'; type: ClassInfo }
+  | { kind: 'interface'; operation: 'cast'; type: InterfaceInfo };
 
 // A macro of a macro library (src/core/libraries.ts): its graph, with the library's other macros
 // already expanded in it, so it can be expanded anywhere (src/core/macros.ts).
@@ -149,7 +151,7 @@ export interface Graph {
 // What a .vgraph file is, mirroring Unreal's asset types: a class (variables, event graphs,
 // functions, macros), a library of functions, or a library of macros.
 // Structures and enumerations declare a type and have no graphs (src/core/user-types.ts).
-export type DocumentKind = 'class' | 'functionLibrary' | 'macroLibrary' | 'structure' | 'enumeration';
+export type DocumentKind = 'class' | 'functionLibrary' | 'macroLibrary' | 'structure' | 'enumeration' | 'interface';
 
 // The contents of a .vgraph file (schema version 3).
 export interface GraphDocument {
@@ -166,6 +168,8 @@ export interface GraphDocument {
   dispatchers?: Dispatcher[];
   // A class's parent class ("object:<Name>"), as Unreal's Parent Class in Class Settings.
   parent?: string;
+  // The interfaces ("interface:<Name>") a class implements, as in Class Settings.
+  interfaces?: string[];
   // The signature of each project function the graphs call, by node type, as it was when its
   // nodes were made or last refreshed (docs/code-as-nodes.md, "When the code changes").
   importedFunctions?: Record<string, NodeDefinition>;

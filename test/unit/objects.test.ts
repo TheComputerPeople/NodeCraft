@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { compileDocument } from '../../src/core/compiler';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { GraphDocument, GraphNode } from '../../src/core/model';
-import { classDefinitions, declaredClass } from '../../src/core/objects';
+import { classDefinitions, declaredClass, declaredInterface, interfaceDefinitions } from '../../src/core/objects';
 import { NodeRegistry } from '../../src/core/registry';
 import { createResolver } from '../../src/core/resolve';
 import { GraphRuntime } from '../../src/core/runtime';
@@ -129,5 +129,45 @@ describe('inheritance', () => {
     new GraphRuntime(r, (e) => events.push(e), undefined, (file) => (file === 'Base.vgraph' ? base : undefined)).run(d);
     assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), ['child', 'base']);
     assert.match(compileDocument(d, { registry: r, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Child.vgraph' } }).output!.text, /class Child extends Base \{[\s\S]*greet\(\) \{[\s\S]*super\.greet\(\);/);
+  });
+});
+
+describe('interfaces', () => {
+  const usable: GraphDocument = {
+    schemaVersion: 3, name: 'Usable', kind: 'interface', language: 'javascript', variables: [],
+    graphs: [{ id: 'Use', name: 'Use', kind: 'function', comments: [], signature: { inputs: [], outputs: [{ id: 'ok', name: 'OK', kind: 'data', type: { id: 'bool' } }] }, nodes: [], connections: [] }]
+  };
+  const withUsable = (): NodeRegistry => {
+    const r = new NodeRegistry();
+    r.registerMany(interfaceDefinitions(declaredInterface(usable)!));
+    return r;
+  };
+  const errorsOf = (d: GraphDocument) => compileDocument(d, { registry: withUsable(), languages: builtinLanguagePacks(), generate: { sourceFileName: 'T.vgraph' } }).diagnostics
+    .filter((x) => x.severity === 'error').map((x) => x.code);
+
+  test('an implemented interface must exist, and its functions keep their signatures', () => {
+    const d = doc([], []);
+    d.interfaces = ['interface:Gone'];
+    assert.deepEqual(errorsOf(d), ['interface-missing']);
+    d.interfaces = ['interface:Usable'];
+    d.graphs.push({ id: 'Use', name: 'Use', kind: 'function', comments: [], signature: { inputs: [], outputs: [] }, nodes: [node('entry', 'core:function.entry', { graph: 'Use' })], connections: [] });
+    assert.deepEqual(errorsOf(d), ['interface-mismatch']);
+  });
+
+  test('an unimplemented interface function gets an empty body that returns defaults', () => {
+    const d = doc([], []);
+    d.interfaces = ['interface:Usable'];
+    const { output } = compileDocument(d, { registry: withUsable(), languages: builtinLanguagePacks(), generate: { sourceFileName: 'Game.vgraph' } });
+    assert.match(output!.text, /\[UsableTag\] = true;[\s\S]*use\(\) \{\s*return false;\s*\}/);
+  });
+
+  test('an object of a class that implements it wires into an interface pin', () => {
+    const r = withUsable();
+    const d = doc([node('self', 'core:object.self'), node('call', 'core:interface.call', { interface: 'interface:Usable', function: 'Use' })], [wire('self', 'self', 'call', 'target')]);
+    d.interfaces = ['interface:Usable'];
+    r.registerMany(classDefinitions(declaredClass(d)!));
+    assert.deepEqual(compileDocument(d, { registry: r, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Game.vgraph' } }).diagnostics.filter((x) => x.code === 'type-mismatch'), []);
+    delete d.interfaces;
+    assert.ok(compileDocument(d, { registry: withUsable(), languages: builtinLanguagePacks(), generate: { sourceFileName: 'Game.vgraph' } }).diagnostics.some((x) => x.code === 'type-mismatch'));
   });
 });

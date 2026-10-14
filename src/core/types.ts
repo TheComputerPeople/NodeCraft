@@ -8,6 +8,7 @@
 //                                  element or key type, and a map's value type)
 //   struct:<Name>, enum:<Name>     user-defined types
 //   object:<Class>                 a reference to an instance of a class
+//   interface:<Interface>          a reference to an object whose class implements the interface
 //   delegate:(<parameter types>)   an event that takes these parameters (a Custom Event's red pin)
 //   native:<qualified name>        a type imported from user code with no canonical equivalent;
 //                                  checked by name and passed through untouched
@@ -27,9 +28,9 @@ export interface TypeRef {
 export const PRIMITIVE_TYPES = ['bool', 'int', 'float', 'string'] as const;
 export type PrimitiveTypeId = (typeof PRIMITIVE_TYPES)[number];
 
-export type TypeCategory = 'primitive' | 'any' | 'wildcard' | 'struct' | 'enum' | 'object' | 'native' | 'delegate' | 'unknown';
+export type TypeCategory = 'primitive' | 'any' | 'wildcard' | 'struct' | 'enum' | 'object' | 'interface' | 'native' | 'delegate' | 'unknown';
 
-const NAMED_CATEGORIES = ['struct', 'enum', 'object', 'native', 'delegate'] as const;
+const NAMED_CATEGORIES = ['struct', 'enum', 'object', 'interface', 'native', 'delegate'] as const;
 
 // Type ids written by earlier versions of the extension.
 const LEGACY_TYPE_IDS: Record<string, string> = { number: 'float' };
@@ -72,7 +73,7 @@ export function setClassHierarchy(test: ((from: string, to: string) => boolean) 
 
 function elementsConnect(from: string, to: string): boolean {
   if (from === to || from.startsWith('wildcard') || to.startsWith('wildcard')) return true;
-  if (from.startsWith('object:') && to.startsWith('object:')) return !!isSubclass?.(from, to);
+  if (from.startsWith('object:') && (to.startsWith('object:') || to.startsWith('interface:'))) return !!isSubclass?.(from, to);
   // Numeric pins connect both ways until Phase 2 adds Unreal-style conversion nodes.
   return (from === 'int' && to === 'float') || (from === 'float' && to === 'int');
 }

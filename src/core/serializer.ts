@@ -55,7 +55,7 @@ export function parseDocument(text: string, fallbackName = 'NewGraph'): ParsedDo
   return { document };
 }
 
-const DOCUMENT_KINDS: DocumentKind[] = ['class', 'functionLibrary', 'macroLibrary', 'structure', 'enumeration'];
+const DOCUMENT_KINDS: DocumentKind[] = ['class', 'functionLibrary', 'macroLibrary', 'structure', 'enumeration', 'interface'];
 const GRAPH_KINDS: GraphKind[] = ['event', 'function', 'macro'];
 
 // Which graph kinds each document kind may contain, as in Unreal.
@@ -64,7 +64,9 @@ const ALLOWED_GRAPHS: Record<DocumentKind, GraphKind[]> = {
   functionLibrary: ['function'],
   macroLibrary: ['macro'],
   structure: [],
-  enumeration: []
+  enumeration: [],
+  // An interface's functions are signatures; implementing classes give them bodies.
+  interface: ['function']
 };
 
 // Whether a document holds graphs: structures and enumerations only declare a type.
@@ -96,6 +98,9 @@ function normalizeDocument(raw: Record<string, unknown>, fallbackName: string): 
 
   if (doc.kind !== 'class' && doc.kind !== 'structure' && doc.variables.length) throw new Error(`Invalid .vgraph document: a ${doc.kind} cannot have variables.`);
   if (doc.dispatchers !== undefined && (doc.kind !== 'class' || !Array.isArray(doc.dispatchers))) throw new Error('Invalid .vgraph document: only a class has event dispatchers, as an array.');
+  if (doc.interfaces !== undefined && (doc.kind !== 'class' || !Array.isArray(doc.interfaces) || doc.interfaces.some((i) => typeof i !== 'string' || !i.startsWith('interface:')))) {
+    throw new Error('Invalid .vgraph document: only a class implements interfaces, as a list of "interface:<Name>".');
+  }
   if (doc.parent !== undefined && (doc.kind !== 'class' || typeof doc.parent !== 'string' || !doc.parent.startsWith('object:'))) throw new Error('Invalid .vgraph document: only a class has a parent class, as "object:<Name>".');
   const ids = new Set<string>();
   for (const graph of doc.graphs) {
@@ -119,7 +124,7 @@ function normalizeGraph(raw: unknown, index: number): Graph {
   return graph;
 }
 
-const DOCUMENT_KEY_ORDER = ['schemaVersion', 'name', 'kind', 'language', 'parent', 'variables', 'enumerators', 'dispatchers', 'graphs', 'metadata'];
+const DOCUMENT_KEY_ORDER = ['schemaVersion', 'name', 'kind', 'language', 'parent', 'interfaces', 'variables', 'enumerators', 'dispatchers', 'graphs', 'metadata'];
 const GRAPH_KEY_ORDER = ['id', 'name', 'kind', 'signature', 'localVariables', 'nodes', 'connections', 'comments'];
 
 // Known fields come first in a fixed order, so files diff cleanly whichever code produced them.

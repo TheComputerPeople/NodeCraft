@@ -7,7 +7,7 @@ import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs } from './events';
-import { ClassInfo, ObjectValue, PARENT_START, classById, declaredClass, dispatcherAction, nodeClass } from './objects';
+import { ClassInfo, InterfaceInfo, ObjectValue, PARENT_START, classById, declaredClass, dispatcherAction, implementedInterfaces, interfaceById, nodeClass } from './objects';
 import { expandDocument, isExpandedNode, macroProblemKey, visibleNodeId } from './macros';
 import { StructValue, TypeLookup, expandSplitPins, typeLookup } from './user-types';
 import { NodeResolver, createResolver, createUnsplitResolver, isPure } from './resolve';
@@ -207,6 +207,13 @@ export class GraphRuntime {
       }
       case 'self':
         return;
+      case 'interface-call': {
+        const outputs = this.callInterface(context, node, definition, input);
+        for (const [pin, value] of outputs) setOutput(pin, value);
+        exit(Object.fromEntries(outputs));
+        continueFrom('execOut');
+        return;
+      }
       case 'parent-call': {
         const name = String(node.properties.function ?? PARENT_START);
         exit();
@@ -316,7 +323,16 @@ export class GraphRuntime {
         break;
       default: {
         const implementation = definition.implementation;
-        if (implementation?.kind === 'class') {
+        // Cast To: the object as the class or interface, when it is one.
+        if (implementation?.kind === 'interface' || (implementation?.kind === 'class' && implementation.operation === 'cast')) {
+          const value = input('object');
+          const is = value instanceof ObjectValue && this.isA(value, implementation.type.id);
+          setOutput('as', is ? value : null);
+          exit({ succeeded: is });
+          continueFrom(is ? 'succeeded' : 'failed');
+          break;
+        }
+        if (implementation?.kind === 'class' && implementation.operation === 'construct') {
           const object = this.construct(context, node, implementation.type);
           setOutput('object', object);
           exit();
@@ -659,6 +675,28 @@ export class GraphRuntime {
     return { type, target: layers.find((l) => l.ownClass?.id === type.id) ?? layers[0] };
   }
 
+  // Whether an object is of a class (or a subclass of it), or implements an interface.
+  private isA(object: ObjectValue, id: string): boolean {
+    const layers = (object.state as RunState).layers;
+    return layers.some((l) => l.ownClass?.id === id || l.ownClass?.interfaces?.includes(id));
+  }
+
+  // An interface function of the Target (Self when this class implements the interface): the
+  // object's function of that name, or outputs at their defaults when its class gives it no body.
+  private callInterface(context: GraphContext, node: GraphNode, definition: NodeDefinition, input: (pinId: string) => unknown): Map<string, unknown> {
+    const definitionOf = (t: string) => this.registry.get(t);
+    const iface = (typeof node.properties.interface === 'string' ? interfaceById(node.properties.interface, definitionOf) : undefined) as InterfaceInfo | undefined;
+    const fn = iface?.functions.find((f) => f.id === node.properties.function) ?? this.fail(context, node, 'This interface function no longer exists.');
+    const wired = context.graph.connections.some((c) => c.toNode === node.id && c.toPin === 'target');
+    const own = context.run.ownClass && implementedInterfaces(context.run.ownClass, definitionOf).includes(iface!.id);
+    const value = wired ? input('target') : own ? context.run.self : undefined;
+    if (!(value instanceof ObjectValue)) this.fail(context, node, `Accessed None: Target has no ${iface!.name}.`);
+    const found = this.virtualFunction(value.state as RunState, fn.name);
+    if (found) return this.runFunction(context, node, found.run, found.graph, input);
+    void definition;
+    return new Map(fn.outputs.filter((p) => p.kind === 'data').map((p) => [p.id, defaultValue(p.type, context.run.types)]));
+  }
+
   // A function of a Target object, by the name its class gives it: the object's most derived version.
   private objectFunction(context: GraphContext, node: GraphNode, type: ClassInfo, target: RunState): { run: RunState; graph: Graph } {
     const name = type.functions.find((f) => f.id === node.properties.function)?.name;
@@ -741,6 +779,9 @@ export class GraphRuntime {
       const { type, target } = this.target(context, node, definition, (id) => this.inputValue(context, node, definition, id, following));
       const fn = this.objectFunction(context, node, type, target);
       return this.runFunction(context, node, fn.run, fn.graph, (id) => this.inputValue(context, node, definition, id, following)).get(pinId);
+    }
+    if (operation === 'interface-call' && isPure(definition)) {
+      return this.callInterface(context, node, definition, (id) => this.inputValue(context, node, definition, id, following)).get(pinId);
     }
     // A pure parent function: called on every read.
     if (operation === 'parent-call' && isPure(definition)) {

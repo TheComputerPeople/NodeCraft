@@ -42,7 +42,7 @@ describe('struct and enum documents', () => {
   });
 
   test('new files of each kind start as Unreal\'s assets do', () => {
-    assert.deepEqual(Object.values(DOCUMENT_KIND_NAMES), ['Blueprint Class', 'Blueprint Function Library', 'Blueprint Macro Library', 'Structure', 'Enumeration']);
+    assert.deepEqual(Object.values(DOCUMENT_KIND_NAMES), ['Blueprint Class', 'Blueprint Function Library', 'Blueprint Macro Library', 'Structure', 'Enumeration', 'Blueprint Interface']);
     assert.deepEqual(newDocument('S', 'python', 'structure').variables.map((v) => v.name), ['MemberVar']);
     assert.deepEqual(newDocument('E', 'python', 'enumeration').enumerators?.map((e) => e.name), ['NewEnumerator']);
     assert.deepEqual(newDocument('F', 'python', 'functionLibrary').graphs.map((g) => g.kind), ['function']);

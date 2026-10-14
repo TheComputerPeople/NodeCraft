@@ -88,9 +88,9 @@ describe('lowerDocument: execution flow', () => {
     assert.equal(result.program, undefined);
   });
 
-  test('a graph without Start compiles with a warning', () => {
+  test('a class without Start compiles quietly: other classes construct it', () => {
     const result = lower(doc([node('p', 'core:console.print')], []));
-    assert.deepEqual(codes(result.diagnostics, 'warning'), ['no-start']);
+    assert.deepEqual(result.diagnostics, []);
     assert.deepEqual(result.program?.start, []);
   });
 });

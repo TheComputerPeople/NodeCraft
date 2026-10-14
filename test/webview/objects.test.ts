@@ -4,7 +4,7 @@ import { after, afterEach, before, describe, test, TestContext } from 'node:test
 import assert from 'node:assert/strict';
 import { Browser } from 'playwright-core';
 import { GraphDocument } from '../../src/core/model';
-import { classDefinitions, declaredClass } from '../../src/core/objects';
+import { classDefinitions, declaredClass, declaredInterface, interfaceDefinitions } from '../../src/core/objects';
 import { EditorPage, launchBrowser, sampleDefinitions, sampleDocument } from './harness';
 
 const enemy: GraphDocument = {
@@ -14,6 +14,11 @@ const enemy: GraphDocument = {
     { id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [], connections: [] },
     { id: 'Hit', name: 'Hit', kind: 'function', comments: [], signature: { inputs: [{ id: 'amount', name: 'Amount', kind: 'data', type: { id: 'int' } }], outputs: [] }, nodes: [], connections: [] }
   ]
+};
+
+const usable: GraphDocument = {
+  schemaVersion: 3, name: 'Usable', kind: 'interface', language: 'javascript', variables: [],
+  graphs: [{ id: 'Use', name: 'Use', kind: 'function', comments: [], signature: { inputs: [], outputs: [{ id: 'ok', name: 'OK', kind: 'data', type: { id: 'bool' } }] }, nodes: [], connections: [] }]
 };
 
 describe('objects', () => {
@@ -43,7 +48,7 @@ describe('objects', () => {
       return undefined;
     }
     editor = await EditorPage.open(browser);
-    await editor.send({ type: 'init', document: sampleDocument(), definitions: [...sampleDefinitions(), ...classDefinitions(declaredClass(enemy)!)], saveDelay: 0 });
+    await editor.send({ type: 'init', document: sampleDocument(), definitions: [...sampleDefinitions(), ...classDefinitions(declaredClass(enemy)!), ...interfaceDefinitions(declaredInterface(usable)!)], saveDelay: 0 });
     return editor;
   }
 
@@ -93,5 +98,18 @@ describe('objects', () => {
     assert.deepEqual(hit.nodes.map((n) => n.type), ['core:function.entry', 'core:object.parent']);
     assert.ok(hit.connections.some((c) => c.fromPin === 'amount' && c.toPin === 'amount'));
     assert.equal(await e.count('.mb-override'), 0, 'nothing left to override');
+  });
+
+  test('Class Settings adds an interface; its functions are implemented from the Override menu', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const names = await e.page.$$eval('.palette-node strong', (els) => els.map((el) => el.textContent));
+    for (const name of ['Cast To Usable', 'Cast To Enemy', 'Use']) assert.ok(names.includes(name), name);
+    await e.page.selectOption('#inspector-content select[aria-label="Add Interface"]', 'interface:Usable');
+    await e.page.click('.mb-override');
+    await e.page.locator('#floating-menu button', { hasText: 'Use (interface)' }).click();
+    const doc = await saved(e, (d) => d.graphs.some((g) => g.name === 'Use'));
+    assert.deepEqual(doc.interfaces, ['interface:Usable']);
+    assert.deepEqual(doc.graphs.find((g) => g.name === 'Use')!.nodes.map((n) => n.type), ['core:function.entry', 'core:function.return']);
   });
 });

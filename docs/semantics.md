@@ -80,6 +80,7 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 
 - Construct makes a new object of a class with its variables at their defaults and runs its Start events before the next node runs. An object variable starts empty.
 - An object of a subclass has its ancestors' variables too, each as its own class declares it. Calling a function runs the object's most derived version (the override); Parent: <Function> runs the next one up. Start runs the most derived class's Start nodes; Parent: Start runs the next class up that has any.
+- Cast To a class succeeds for an object of that class or a subclass; Cast To an interface succeeds for an object whose class (or an ancestor) implements it. An empty reference fails. An interface function the class doesn't implement does nothing and returns its outputs' defaults.
 - A member node on another object reads, sets, calls or runs that object's member; reading or calling through an empty reference stops the run with an error ("Accessed None"). Objects are references: two variables holding the same object see the same variables.
 
 ## Variables

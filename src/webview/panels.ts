@@ -119,16 +119,50 @@ function renderClassSettings(): void {
   const fields = document.createElement('div');
   fields.className = 'details-fields';
   const parent = select([{ id: '', label: 'None' }, ...candidates.map((t) => ({ id: t.id, label: t.name }))], doc.parent ?? '', 'Parent Class');
-  parent.addEventListener('change', () => {
-    if (parent.value) doc.parent = parent.value;
-    else delete doc.parent;
+  const changed = (): void => {
     updateClassHierarchy();
     markDirty();
     render();
     renderMyBlueprint();
     renderPalette();
+    renderInspector();
+  };
+  parent.addEventListener('change', () => {
+    if (parent.value) doc.parent = parent.value;
+    else delete doc.parent;
+    changed();
   });
   fields.appendChild(field('Parent Class', parent));
+
+  // Implemented Interfaces, as in Unreal's Class Settings.
+  fields.insertAdjacentHTML('beforeend', '<div class="details-heading">Implemented Interfaces</div>');
+  const implemented = doc.interfaces ?? [];
+  for (const id of implemented) {
+    const row = document.createElement('div');
+    row.className = 'signature-row';
+    const label = document.createElement('span');
+    label.textContent = id.replace(/^interface:/, '');
+    const remove = document.createElement('button');
+    remove.textContent = '×';
+    remove.title = `Remove ${label.textContent}`;
+    remove.addEventListener('click', () => {
+      doc.interfaces = implemented.filter((i) => i !== id);
+      if (!doc.interfaces.length) delete doc.interfaces;
+      changed();
+    });
+    row.append(label, remove);
+    fields.appendChild(row);
+  }
+  const available = workspaceTypes().filter((t) => t.kind === 'interface' && !implemented.includes(t.id));
+  if (available.length) {
+    const add = select([{ id: '', label: 'Add interface…' }, ...available.map((t) => ({ id: t.id, label: t.name }))], '', 'Add Interface');
+    add.addEventListener('change', () => {
+      if (!add.value) return;
+      doc.interfaces = [...implemented, add.value];
+      changed();
+    });
+    fields.appendChild(add);
+  }
   fields.insertAdjacentHTML('beforeend', '<div class="muted">Select a node to see its details.</div>');
   wrapper.appendChild(fields);
   dom.inspector.innerHTML = '';

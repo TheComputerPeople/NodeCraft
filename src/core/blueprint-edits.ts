@@ -25,7 +25,7 @@ function uniqueId(prefix: string, name: string, taken: Iterable<string>): string
 // Graph kinds a document kind can hold (as in Unreal's asset types).
 export function allowedGraphKinds(doc: GraphDocument): GraphKind[] {
   if (doc.kind === 'structure' || doc.kind === 'enumeration') return [];
-  return doc.kind === 'functionLibrary' ? ['function'] : doc.kind === 'macroLibrary' ? ['macro'] : ['event', 'function', 'macro'];
+  return doc.kind === 'functionLibrary' || doc.kind === 'interface' ? ['function'] : doc.kind === 'macroLibrary' ? ['macro'] : ['event', 'function', 'macro'];
 }
 
 const DEFAULT_GRAPH_NAMES: Record<GraphKind, string> = { event: 'NewEventGraph', function: 'NewFunction', macro: 'NewMacro' };
@@ -504,7 +504,8 @@ export const DOCUMENT_KIND_NAMES: Record<DocumentKind, string> = {
   functionLibrary: 'Blueprint Function Library',
   macroLibrary: 'Blueprint Macro Library',
   structure: 'Structure',
-  enumeration: 'Enumeration'
+  enumeration: 'Enumeration',
+  interface: 'Blueprint Interface'
 };
 
 // A new file of `kind`, as Unreal makes new assets: a class with its event graph, a library with one
@@ -514,7 +515,7 @@ export function newDocument(name: string, language: string | undefined, kind: Do
   if (kind === 'class') return doc;
   doc.kind = kind;
   doc.graphs = [];
-  if (kind === 'functionLibrary') addGraph(doc, 'function');
+  if (kind === 'functionLibrary' || kind === 'interface') addGraph(doc, 'function');
   if (kind === 'macroLibrary') addGraph(doc, 'macro');
   if (kind === 'structure') addVariable(doc);
   if (kind === 'enumeration') addEnumerator(doc);
@@ -698,6 +699,20 @@ export function overrideFunction(doc: GraphDocument, inherited: { name: string; 
     wire(inherited.pure ? entry.id : parent.id, 'execOut', ret.id, 'execIn');
     for (const p of outputs) wire(parent.id, p.id, ret.id, p.id);
     if (inherited.pure) graph.connections = graph.connections.filter((c) => !(c.toNode === parent.id && c.toPin === 'execIn'));
+  }
+  return graph;
+}
+
+// Implementing an interface function: a function with its name and signature (a Return Node when it
+// has outputs), as Unreal makes one when you open the interface function in My Blueprint.
+export function implementFunction(doc: GraphDocument, declared: { name: string; inputs: GraphPin[]; outputs: GraphPin[]; pure: boolean }, connectionId: () => string): Graph {
+  const graph = addGraph(doc, 'function');
+  graph.name = declared.name;
+  graph.signature = { inputs: declared.inputs.map((p) => ({ ...p })), outputs: declared.outputs.map((p) => ({ ...p })), ...(declared.pure ? { pure: true } : {}) };
+  for (const node of graph.nodes) node.properties.graph = graph.id;
+  if (declared.outputs.some((p) => p.kind === 'data')) {
+    graph.nodes.push({ id: 'return', type: FUNCTION_RETURN, position: { x: 400, y: 0 }, properties: { graph: graph.id } });
+    graph.connections.push({ id: connectionId(), fromNode: graph.nodes[0].id, fromPin: 'execOut', toNode: 'return', toPin: 'execIn' });
   }
   return graph;
 }

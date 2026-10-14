@@ -12,7 +12,7 @@ import { compileDocument } from '../../src/core/compiler';
 import { exposeFunctions } from '../../src/core/importing/symbols';
 import { libraryDefinitions } from '../../src/core/libraries';
 import { declaredType, userTypeDefinitions } from '../../src/core/user-types';
-import { classDefinitions, declaredClass } from '../../src/core/objects';
+import { classDefinitions, declaredClass, declaredInterface, interfaceDefinitions } from '../../src/core/objects';
 import { GenerateOptions } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { GraphDocument, NodeDefinition, RuntimeLogEvent } from '../../src/core/model';
@@ -942,6 +942,152 @@ describe('inheritance', () => {
       fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
         compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
         files: [...classFiles, file].map((f) => path.relative(dir, f))
+      }));
+      const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+      const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    });
+  }
+});
+
+// Interfaces and Cast To (docs/program-structure.md, "Classes"): Crate implements Damageable (one
+// function with a body, one left to its empty stub); Rock doesn't. A Game casts both, calls the
+// interface through the cast and through an interface-typed variable, and casts to a class.
+describe('interfaces', () => {
+  const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin });
+  const DAMAGEABLE = 'interface:Damageable';
+  const amount = { id: 'amount', name: 'Amount', kind: 'data' as const, type: { id: 'int' } };
+  const remaining = { id: 'remaining', name: 'Remaining', kind: 'data' as const, type: { id: 'int' } };
+  const emptyEvents = (): GraphDocument['graphs'][number] => ({ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [], connections: [] });
+
+  function damageable(language: string): GraphDocument {
+    return {
+      schemaVersion: 3, name: 'Damageable', kind: 'interface', language, variables: [],
+      graphs: [
+        { id: 'TakeDamage', name: 'Take Damage', kind: 'function', comments: [], signature: { inputs: [amount], outputs: [remaining] }, nodes: [n('entry', 'core:function.entry', { graph: 'TakeDamage' })], connections: [] },
+        { id: 'Describe', name: 'Describe', kind: 'function', comments: [], signature: { inputs: [], outputs: [] }, nodes: [n('entry', 'core:function.entry', { graph: 'Describe' })], connections: [] }
+      ]
+    };
+  }
+
+  function crate(language: string): GraphDocument {
+    return {
+      schemaVersion: 3, name: 'Crate', kind: 'class', language, interfaces: [DAMAGEABLE], variables: [{ id: 'hp', name: 'HP', type: { id: 'int' }, defaultValue: 5 }],
+      graphs: [emptyEvents(), {
+        id: 'TakeDamage', name: 'Take Damage', kind: 'function', comments: [], signature: { inputs: [amount], outputs: [remaining] },
+        nodes: [
+          n('entry', 'core:function.entry', { graph: 'TakeDamage' }), n('hp', 'core:variable.get', { variable: 'hp' }), n('sub', 'core:math.subtract'),
+          n('set', 'core:variable.set', { variable: 'hp' }), n('ret', 'core:function.return', { graph: 'TakeDamage' })
+        ],
+        connections: [
+          w('entry', 'execOut', 'set', 'execIn'), w('hp', 'value', 'sub', 'a'), w('entry', 'amount', 'sub', 'b'), w('sub', 'returnValue', 'set', 'value'),
+          w('set', 'execOut', 'ret', 'execIn'), w('set', 'result', 'ret', 'remaining')
+        ]
+      }]
+    };
+  }
+
+  const rock = (language: string): GraphDocument => ({ schemaVersion: 3, name: 'Rock', kind: 'class', language, variables: [], graphs: [emptyEvents()] });
+
+  function game(language: string): GraphDocument {
+    const call = (id: string, fn: string, properties: Record<string, unknown> = {}) => n(id, 'core:interface.call', { interface: DAMAGEABLE, function: fn, ...properties });
+    return {
+      schemaVersion: 3, name: 'Game', kind: 'class', language, variables: [{ id: 'target', name: 'Target', type: { id: DAMAGEABLE } }],
+      graphs: [{
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [
+          n('s', 'core:event.start'), n('crate', 'object:Crate.construct'), n('cast', `${DAMAGEABLE}.cast`), call('hit', 'TakeDamage', { 'pin:amount': 2 }), n('p1', 'core:console.print'),
+          call('describe', 'Describe'), n('p2', 'core:console.print', { 'pin:value': 'described' }),
+          n('rock', 'object:Rock.construct'), n('castRock', `${DAMAGEABLE}.cast`), n('p3', 'core:console.print', { 'pin:value': 'rock is not damageable' }),
+          n('castCrate', 'object:Crate.cast'), n('p4', 'core:console.print', { 'pin:value': 'crate' }),
+          n('set', 'core:variable.set', { variable: 'target' }), n('get', 'core:variable.get', { variable: 'target' }), call('hit2', 'TakeDamage', { 'pin:amount': 1 }), n('p5', 'core:console.print')
+        ],
+        connections: [
+          w('s', 'execOut', 'crate', 'execIn'), w('crate', 'execOut', 'cast', 'execIn'), w('crate', 'object', 'cast', 'object'),
+          w('cast', 'succeeded', 'hit', 'execIn'), w('cast', 'as', 'hit', 'target'), w('hit', 'execOut', 'p1', 'execIn'), w('hit', 'remaining', 'p1', 'value'),
+          w('p1', 'execOut', 'describe', 'execIn'), w('cast', 'as', 'describe', 'target'), w('describe', 'execOut', 'p2', 'execIn'),
+          w('p2', 'execOut', 'rock', 'execIn'), w('rock', 'execOut', 'castRock', 'execIn'), w('rock', 'object', 'castRock', 'object'), w('castRock', 'failed', 'p3', 'execIn'),
+          w('p3', 'execOut', 'castCrate', 'execIn'), w('crate', 'object', 'castCrate', 'object'), w('castCrate', 'succeeded', 'p4', 'execIn'),
+          w('p4', 'execOut', 'set', 'execIn'), w('crate', 'object', 'set', 'value'), w('set', 'execOut', 'hit2', 'execIn'), w('get', 'value', 'hit2', 'target'),
+          w('hit2', 'execOut', 'p5', 'execIn'), w('hit2', 'remaining', 'p5', 'value')
+        ]
+      }]
+    };
+  }
+
+  const EXPECTED = ['3', 'described', 'rock is not damageable', 'crate', '2'];
+  const DOCS = [['Damageable', damageable], ['Crate', crate], ['Rock', rock]] as const;
+
+  function registryFor(language: string): NodeRegistry {
+    const r = registry();
+    const generator = languages.get(language)!.generator!;
+    for (const [name, make] of DOCS) {
+      const module = language === 'python' ? generator.outputFileName(`${name}.vgraph`).replace(/\.py$/, '') : language === 'csharp' ? 'Things' : undefined;
+      const source = { document: `things/${name}.vgraph`, generatedPath: `things/${generator.outputFileName(`${name}.vgraph`)}`, ...(module ? { module } : {}) };
+      const doc = make(language);
+      r.registerMany(doc.kind === 'interface' ? interfaceDefinitions(declaredInterface(doc, source)!) : classDefinitions(declaredClass(doc, source)!));
+    }
+    return r;
+  }
+
+  test('Simulate', () => {
+    const events: RuntimeLogEvent[] = [];
+    const load = (file: string) => DOCS.find(([name]) => file === `things/${name}.vgraph`)?.[1]('typescript');
+    new GraphRuntime(registryFor('typescript'), (e) => events.push(e), languages, load).run(game('typescript'));
+    assert.deepEqual(events.filter((e) => e.kind === 'error'), []);
+    assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), EXPECTED);
+  });
+
+  function build(key: string, language: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; files: string[]; importRoots?: string[] } {
+    const dir = path.join(workDir, `interfaces-${key}`);
+    fs.mkdirSync(path.join(dir, 'things'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'game'), { recursive: true });
+    const r = registryFor(language);
+    const files = DOCS.map(([name, make]) => {
+      const result = compileDocument(make(language), { registry: r, languages, generate: { sourceFileName: `${name}.vgraph`, outputDir: 'things', namespace: 'Things', ...generate } });
+      assert.deepEqual(result.diagnostics, [], name);
+      const file = path.join(dir, 'things', result.output!.fileName);
+      fs.writeFileSync(file, result.output!.text);
+      return file;
+    });
+    const result = compileDocument(game(language), { registry: r, languages, generate: { sourceFileName: 'Game.vgraph', outputDir: 'game', namespace: 'App', ...generate } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    return { file, className: result.output!.className, dir, files, importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)) };
+  }
+
+  for (const target of [
+    { label: 'TypeScript', key: 'typescript', language: 'typescript' },
+    { label: 'JavaScript (ES modules)', key: 'javascript-esm', language: 'javascript', moduleFormat: 'esm' as const },
+    { label: 'JavaScript (CommonJS)', key: 'javascript-commonjs', language: 'javascript', moduleFormat: 'commonjs' as const },
+    { label: 'Python', key: 'python', language: 'python' },
+    { label: 'C#', key: 'csharp', language: 'csharp' }
+  ]) {
+    test(target.label, async (t) => {
+      const { file, className, dir, files, importRoots } = build(target.key, target.language, { moduleFormat: target.moduleFormat });
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? files : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'game'), importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), EXPECTED, `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  for (const { language, flags } of [
+    { language: 'typescript', flags: { allowImportingTsExtensions: true } },
+    { language: 'javascript', flags: { allowJs: true, checkJs: true } }
+  ]) {
+    test(`${language} interfaces type-check under --strict`, () => {
+      const { file, dir, files } = build(`typecheck-${language}`, language);
+      fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
+        files: [...files, file].map((f) => path.relative(dir, f))
       }));
       const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
       const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });

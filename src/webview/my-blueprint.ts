@@ -9,7 +9,7 @@ import { GraphKind, GraphVariable } from '../core/model';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { formatType } from '../core/types';
 import { addNode } from './actions';
-import { documentAncestors, lookupDefinition, markDirty } from './document';
+import { documentAncestors, documentInterfaceFunctions, lookupDefinition, markDirty } from './document';
 import { dom, eventElement, setStatus } from './dom';
 import { MenuItem, showFloatingMenu } from './floating-menu';
 import { newConnectionId } from './host';
@@ -44,22 +44,25 @@ export function renderMyBlueprint(): void {
       startRename('graph', graph.id);
     });
     const graphs = doc.graphs.filter((g) => g.kind === section.kind);
-    // Unreal's Override: the parent classes' functions this class doesn't override yet.
-    const overridable = section.kind === 'function' ? documentAncestors().flatMap((a) => a.functions).filter((f, i, all) => all.findIndex((x) => x.name === f.name) === i && !graphs.some((g) => g.name === f.name)) : [];
-    if (overridable.length) {
+    // Unreal's Override: the parent classes' functions this class doesn't override yet, and the
+    // functions of its interfaces it doesn't implement yet.
+    const fresh = <T extends { name: string }>(list: T[]) => list.filter((f, i, all) => all.findIndex((x) => x.name === f.name) === i && !graphs.some((g) => g.name === f.name));
+    const overridable = section.kind === 'function' ? fresh(documentAncestors().flatMap((a) => a.functions)) : [];
+    const implementable = section.kind === 'function' ? fresh(documentInterfaceFunctions()).filter((f) => !overridable.some((o) => o.name === f.name)) : [];
+    if (overridable.length || implementable.length) {
       const override = document.createElement('button');
       override.className = 'mb-override';
       override.textContent = 'Override ▾';
-      override.title = 'Override a function of the parent class';
+      override.title = 'Override a function of the parent class, or implement one of an interface';
       override.addEventListener('click', (e) => {
-        showFloatingMenu(overridable.map((f) => ({
-          label: f.name,
-          action: () => {
-            const graph = edits.overrideFunction(doc, f, newConnectionId);
-            markDirty();
-            openGraph(graph.id);
-          }
-        })), e.clientX, e.clientY);
+        const open = (graph: { id: string }) => {
+          markDirty();
+          openGraph(graph.id);
+        };
+        showFloatingMenu([
+          ...overridable.map((f) => ({ label: f.name, action: () => open(edits.overrideFunction(doc, f, newConnectionId)) })),
+          ...implementable.map((f) => ({ label: `${f.name} (interface)`, action: () => open(edits.implementFunction(doc, f, newConnectionId)) }))
+        ], e.clientX, e.clientY);
       });
       el.querySelector('.mb-header')?.insertBefore(override, el.querySelector('.mb-header button'));
     }
