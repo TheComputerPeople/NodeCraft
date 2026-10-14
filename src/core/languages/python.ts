@@ -1,8 +1,8 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, exprType, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, programClassSpec, userTypes } from '../compiler/ir';
 import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
-import { NameScope, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
 import { TypeRef, parseTypeId } from '../types';
@@ -176,6 +176,9 @@ const DISPATCHER_CLASS = [
   '            handler(*args)'
 ];
 
+// How a class's public members are named (src/core/compiler/names.ts).
+const CLASS_STYLES: ClassMemberStyles = { functions: 'snake', variables: 'keep', dispatchers: 'keep' };
+
 // Names fixed in every generated module, which functions must not take.
 const MODULE_NAMES = ['_EventDispatcher', 'annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text'];
 
@@ -239,6 +242,8 @@ class PythonEmitter {
   private readonly types: Map<string, UserType>;
   // Standard-library imports the body needs beyond the usual ones, e.g. "from enum import Enum".
   private readonly extraImports = new Set<string>();
+  // The public member names of each class the program uses, by type id; its own first.
+  private readonly classNames = new Map<string, ClassMemberNames>();
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions) {
     this.library = !!program.library;
@@ -247,11 +252,14 @@ class PythonEmitter {
     if (program.declaration) this.types.set(program.declaration.type.id, program.declaration.type);
     // A library's functions are claimed first, exactly as pythonExportNames claims them.
     this.names = this.library ? new NameScope(RESERVED, MODULE_NAMES) : new NameScope(RESERVED, ['start']);
-    for (const f of program.functions) this.functionNames.set(f.id, this.names.claim(f.name, 'snake'));
+    // Public members first, as every module that uses the class names them.
+    const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES);
+    this.classNames.set(`object:${program.className}`, own);
+    for (const f of program.functions) this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
+    for (const [id, name] of own.variables) this.memberNames.set(id, name);
+    for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     const moduleScope = this.library ? this.names : new NameScope(RESERVED, [this.className, ...MODULE_NAMES]);
     for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
-    for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
-    for (const d of program.dispatchers ?? []) this.dispatcherNames.set(d.id, this.names.claim(d.name));
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'snake', '_'));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', '_'));
@@ -321,9 +329,30 @@ class PythonEmitter {
     return this.finish(false);
   }
 
-  // The name a struct or enum goes by in this module: its own, or its import's.
+  // A dispatcher of this object, or of the Target object.
+  private dispatcherRef(s: { dispatcher: string; target?: IrExpr; type?: string }): string {
+    if (s.target && s.type) return `${this.targetRef(s.target)}.${this.membersOf(s.type)?.dispatchers.get(s.dispatcher)}`;
+    return `self.${this.dispatcherNames.get(s.dispatcher)}`;
+  }
+
+  // The member names another class's generated module gives its public members.
+  private membersOf(id: string): ClassMemberNames | undefined {
+    const existing = this.classNames.get(id);
+    if (existing) return existing;
+    const info = classInfo(this.program, id);
+    if (!info) return undefined;
+    const names = claimClassMembers(new NameScope(RESERVED, ['start']), info, CLASS_STYLES);
+    this.classNames.set(id, names);
+    return names;
+  }
+
+  private targetRef(e: IrExpr): string {
+    return e.kind === 'self' ? 'self' : this.operand(e);
+  }
+
+  // The name a struct, enum or class goes by in this module: its own, or its import's.
   private userTypeName(id: string): string {
-    if (this.program.declaration?.type.id === id) return this.className;
+    if (this.program.declaration?.type.id === id || id === `object:${this.program.className}`) return this.className;
     return this.importNames.get(id) ?? 'Any';
   }
 
@@ -352,14 +381,21 @@ class PythonEmitter {
     }
     // Project code, one import per module (docs/code-as-nodes.md, "Generated imports").
     const byModule = new Map<string, string[]>();
-    for (const i of [...this.program.imports].sort((a, b) => compare(a.name, b.name))) {
-      if (!i.path && !i.module) continue;
-      const module = i.module ?? pythonModuleName(i.path);
-      const local = this.importNames.get(i.id)!;
-      byModule.set(module, [...(byModule.get(module) ?? []), local === i.name ? local : `${i.name} as ${local}`]);
-    }
-    if (byModule.size) {
-      for (const [module, names] of [...byModule].sort(([a], [b]) => compare(a, b))) header.line(`from ${module} import ${names.join(', ')}`);
+    const fromImports = (imports: IrImport[]): string[] => {
+      const byModule = new Map<string, string[]>();
+      for (const i of [...imports].sort((a, b) => compare(a.name, b.name))) {
+        if (!i.path && !i.module) continue;
+        const module = i.module ?? pythonModuleName(i.path);
+        const local = this.importNames.get(i.id)!;
+        byModule.set(module, [...(byModule.get(module) ?? []), local === i.name ? local : `${i.name} as ${local}`]);
+      }
+      return [...byModule].sort(([a], [b]) => compare(a, b)).map(([module, names]) => `from ${module} import ${names.join(', ')}`);
+    };
+    const early = fromImports(this.program.imports.filter((i) => i.userType?.kind !== 'class'));
+    // Classes are imported at the end: two classes that use each other then both load.
+    const late = fromImports(this.program.imports.filter((i) => i.userType?.kind === 'class'));
+    if (early.length) {
+      for (const line of early) header.line(line);
       header.line();
     }
     header.line();
@@ -374,6 +410,7 @@ class PythonEmitter {
       this.usesAny = true;
       footer.push('', '', "# Unreal's event dispatcher: bound events run in the order they were bound, each event once.", ...DISPATCHER_CLASS);
     }
+    if (late.length) footer.push('', '', '# Classes are imported last: they may use this one.', ...late);
     if (runnable) footer.push('', '', 'if __name__ == "__main__":', `    ${this.className}().start()`);
 
     const roots = [...new Set(this.program.imports.map((i) => pythonImportRoot(i.path, i.module ?? pythonModuleName(i.path))))].sort();
@@ -549,14 +586,28 @@ class PythonEmitter {
         break;
       }
       case 'bindEvent':
-        out.line(`self.${this.dispatcherNames.get(s.dispatcher)}.${s.bind ? 'bind' : 'unbind'}(self.${this.functionNames.get(s.event)})`);
+        out.line(`${this.dispatcherRef(s)}.${s.bind ? 'bind' : 'unbind'}(self.${this.functionNames.get(s.event)})`);
         break;
       case 'unbindAll':
-        out.line(`self.${this.dispatcherNames.get(s.dispatcher)}.clear()`);
+        out.line(`${this.dispatcherRef(s)}.clear()`);
         break;
       case 'broadcast':
-        out.line(`self.${this.dispatcherNames.get(s.dispatcher)}.broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
+        out.line(`${this.dispatcherRef(s)}.broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
         break;
+      case 'construct':
+        out.line(`${this.slotRef(s.slot)} = ${this.userTypeName(s.type)}()`);
+        out.line(`${this.slotRef(s.slot)}.start()`);
+        break;
+      case 'setObjectVariable':
+        out.line(`${this.targetRef(s.target)}.${this.membersOf(s.type)?.variables.get(s.variable)} = ${this.value(s.value, classInfo(this.program, s.type)?.variables.find((v) => v.id === s.variable)?.type)}`);
+        break;
+      case 'objectCall': {
+        const names = this.membersOf(s.type);
+        const name = s.function !== undefined ? names?.functions.get(s.function) : names?.events.get(s.event!);
+        const call = `${this.targetRef(s.target)}.${name}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        out.line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
+        break;
+      }
       case 'return': {
         const fn = this.program.functions.find((f) => f.id === s.source.graphId);
         out.line(fn?.outputs.length ? `return ${fn.outputs.map((o, i) => (s.values[i] ? this.value(s.values[i], o.type) : this.defaultFor(o.type))).join(', ')}` : 'return');
@@ -622,6 +673,18 @@ class PythonEmitter {
       case 'enumValue': {
         const type = this.types.get(e.type);
         return `${this.userTypeName(e.type)}.${type?.kind === 'enum' ? pythonEnumMembers(type).get(e.value) : e.value}`;
+      }
+      case 'self':
+        return 'self';
+      case 'isValid':
+        return `${this.operand(e.value)} is not None`;
+      case 'objectVariable':
+        return `${this.targetRef(e.target)}.${this.membersOf(e.type)?.variables.get(e.variable)}`;
+      case 'objectCall': {
+        const fn = classInfo(this.program, e.type)?.functions.find((f) => f.id === e.function);
+        const call = `${this.targetRef(e.target)}.${this.membersOf(e.type)?.functions.get(e.function)}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
+        return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'makeContainer': {
         if (e.type.container === 'map') {

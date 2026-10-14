@@ -7,6 +7,7 @@ import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs } from './events';
+import { ClassInfo, ObjectValue, declaredClass, dispatcherAction, nodeClass } from './objects';
 import { expandDocument, isExpandedNode, macroProblemKey, visibleNodeId } from './macros';
 import { StructValue, TypeLookup, expandSplitPins, typeLookup } from './user-types';
 import { NodeResolver, createResolver, createUnsplitResolver, isPure } from './resolve';
@@ -26,8 +27,12 @@ interface RunState {
   types: TypeLookup;
   // The object's frame, where custom events run wherever they are called from.
   objectFrame: Frame;
-  // The events bound to each event dispatcher, in the order they were bound.
-  bindings: Map<string, { graph: Graph; node: GraphNode }[]>;
+  // The events bound to each event dispatcher, in the order they were bound (each with the object
+  // it belongs to).
+  bindings: Map<string, BoundEvent[]>;
+  // The object this run is (src/core/objects.ts), and its class.
+  self: ObjectValue;
+  ownClass?: ClassInfo;
   // How many custom events are running inside one another.
   eventDepth: number;
 }
@@ -52,6 +57,12 @@ interface GraphContext {
   frame: Frame;
   // Nodes currently on the execution call stack; reaching one again is an exec cycle.
   executing: Set<string>;
+}
+
+interface BoundEvent {
+  run: RunState;
+  graph: Graph;
+  node: GraphNode;
 }
 
 // Thrown by a Return Node to end its function's call with these output values.
@@ -83,19 +94,13 @@ export class GraphRuntime {
   // Runs every Start node in the document's event graphs. Function graphs only run when called.
   run(doc: GraphDocument): void {
     const run = this.runState(doc);
-    const objectFrame = run.objectFrame;
-    for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue !== undefined ? fromStored(variable.defaultValue, variable.type, run.types) : defaultValue(variable.type, run.types));
-
-    const entries = run.doc.graphs
-      .filter((g) => g.kind === 'event')
-      .flatMap((graph) => graph.nodes.filter((n) => n.type === 'core:event.start').map((start) => ({ graph, start })));
-    if (entries.length === 0) {
+    if (!this.startEntries(run).length) {
       this.emit({ kind: 'error', message: 'Graph has no Start node.' });
       return;
     }
 
     try {
-      for (const { graph, start } of entries) this.executeNode({ run, graph, frame: objectFrame, executing: new Set() }, start);
+      this.start(run);
       this.emit({ kind: 'graph.complete', message: 'Graph execution completed.' });
     } catch (error) {
       if (!(error instanceof RunStopped)) throw error;
@@ -176,7 +181,7 @@ export class GraphRuntime {
         const target = calledEvent(node, context.run.doc.graphs) ?? this.fail(context, node, `There is no custom event named "${String(node.properties.event ?? '')}".`);
         const args = definition.inputs.filter((p) => p.kind === 'data').map((p) => input(p.id));
         exit();
-        this.runEvent(context, node, target, args);
+        this.runEvent(context, node, { run: context.run, ...target }, args);
         continueFrom('execOut');
         return;
       }
@@ -185,20 +190,37 @@ export class GraphRuntime {
       case 'unbind-event':
       case 'unbind-all': {
         const dispatcher = boundDispatcher(node, documentDispatchers(context.run.doc)) ?? this.fail(context, node, 'This node uses an event dispatcher that no longer exists.');
-        const bound = context.run.bindings.get(dispatcher.id) ?? [];
         const operation = nativeOperation(definition);
+        const action = operation === 'call-dispatcher' ? 'call' : operation === 'bind-event' ? 'bind' : operation === 'unbind-event' ? 'unbind' : 'unbind-all';
         exit();
-        if (operation === 'call-dispatcher') {
-          const args = definition.inputs.filter((p) => p.kind === 'data').map((p) => input(p.id));
-          // Events bound or unbound while running don't change this broadcast.
-          for (const event of [...bound]) this.runEvent(context, node, event, args);
-        } else if (operation === 'unbind-all') {
-          context.run.bindings.set(dispatcher.id, []);
+        this.dispatch(context, node, definition, context.run, dispatcher.id, action, input);
+        continueFrom('execOut');
+        return;
+      }
+      case 'self':
+        return;
+      case 'object-set':
+      case 'object-call':
+      case 'object-event':
+      case 'object-dispatcher': {
+        const { type, target } = this.target(context, node, definition, input);
+        const operation = nativeOperation(definition);
+        if (operation === 'object-set') {
+          const value = input('value');
+          target.variables.set(String(node.properties.variable), value);
+          exit({ value });
+        } else if (operation === 'object-call') {
+          const graph = target.doc.graphs.find((g) => g.id === node.properties.function && g.kind === 'function') ?? this.fail(context, node, `${type.name} no longer has this function.`);
+          const outputs = this.runFunction(context, node, target, graph, input);
+          for (const [pin, value] of outputs) setOutput(pin, value);
+          exit(Object.fromEntries(outputs));
+        } else if (operation === 'object-event') {
+          const event = calledEvent({ ...node, properties: { event: node.properties.event } }, target.doc.graphs) ?? this.fail(context, node, `${type.name} no longer has this event.`);
+          exit();
+          this.runEvent(context, node, { run: target, ...event }, definition.inputs.filter((p) => p.kind === 'data' && p.id !== 'target').map((p) => input(p.id)));
         } else {
-          const event = this.wiredEvent(context, node) ?? this.fail(context, node, "Wire a Custom Event's red pin into Event.");
-          const others = bound.filter((b) => b.node !== event.node || b.graph !== event.graph);
-          // Binding an event twice binds it once, where it was first bound.
-          context.run.bindings.set(dispatcher.id, operation === 'bind-event' ? (others.length === bound.length ? [...bound, event] : bound) : others);
+          exit();
+          this.dispatch(context, node, definition, target, String(node.properties.dispatcher), dispatcherAction(node), input);
         }
         continueFrom('execOut');
         return;
@@ -274,6 +296,13 @@ export class GraphRuntime {
         break;
       default: {
         const implementation = definition.implementation;
+        if (implementation?.kind === 'class') {
+          const object = this.construct(context, node, implementation.type);
+          setOutput('object', object);
+          exit();
+          continueFrom('execOut');
+          break;
+        }
         if (implementation?.kind === 'function' && implementation.source) {
           const outputs = this.callLibrary(context, node, implementation.source, input);
           for (const [pin, value] of outputs) setOutput(pin, value);
@@ -441,7 +470,17 @@ export class GraphRuntime {
     return this.runFunction(context, node, run, expanded, input);
   }
 
-  // A run of `doc`, with the macros it uses expanded (each use is a copy of the macro's nodes).
+  private startEntries(run: RunState): { graph: Graph; start: GraphNode }[] {
+    return run.doc.graphs.filter((g) => g.kind === 'event').flatMap((graph) => graph.nodes.filter((n) => n.type === 'core:event.start').map((start) => ({ graph, start })));
+  }
+
+  // Runs an object's Start events (a constructed object's too, as spawning runs BeginPlay).
+  private start(run: RunState): void {
+    for (const { graph, start } of this.startEntries(run)) this.executeNode({ run, graph, frame: run.objectFrame, executing: new Set() }, start);
+  }
+
+  // A run of `doc`, with the macros it uses expanded (each use is a copy of the macro's nodes), and
+  // its member variables at their defaults.
   private runState(original: GraphDocument, document?: string): RunState {
     const expanded = expandDocument(original, (type) => this.registry.get(type));
     const problems = expanded.problems;
@@ -450,10 +489,14 @@ export class GraphRuntime {
     const doc = { ...expanded.doc, graphs: expanded.doc.graphs.map((g) => expandSplitPins(g, unsplit, (type) => this.registry.get(type))) };
     const language = doc.language || DEFAULT_LANGUAGE;
     const objectFrame: Frame = { outputs: new Map(), state: new Map(), params: new Map(), locals: new Map(), depth: 0 };
-    return {
+    const ownClass = declaredClass(original);
+    const run: RunState = {
       doc, variables: new Map(), language, resolve: createResolver(this.registry, doc), macroProblems: problems, types: typeLookup(this.registry.all(), language),
-      objectFrame, bindings: new Map(), eventDepth: 0, ...(document ? { document } : {})
+      objectFrame, bindings: new Map(), eventDepth: 0, self: undefined as unknown as ObjectValue, ...(ownClass ? { ownClass } : {}), ...(document ? { document } : {})
     };
+    (run as { self: ObjectValue }).self = new ObjectValue(doc.name, run);
+    for (const variable of doc.variables) run.variables.set(variable.id, variable.defaultValue !== undefined ? fromStored(variable.defaultValue, variable.type, run.types) : defaultValue(variable.type, run.types));
+    return run;
   }
 
   private runFunction(context: GraphContext, node: GraphNode, run: RunState, graph: Graph, input: (pinId: string) => unknown): Map<string, unknown> {
@@ -494,8 +537,8 @@ export class GraphRuntime {
   }
 
   // Runs a custom event with these inputs, in the object's frame (its outputs keep the inputs).
-  private runEvent(context: GraphContext, caller: GraphNode, event: { graph: Graph; node: GraphNode }, args: unknown[]): void {
-    const run = context.run;
+  private runEvent(context: GraphContext, caller: GraphNode, event: BoundEvent, args: unknown[]): void {
+    const run = event.run;
     if (run.eventDepth >= MAX_CALL_DEPTH) this.fail(context, caller, `Too many nested calls (${MAX_CALL_DEPTH}): the event keeps calling itself.`);
     eventInputs(event.node).filter((p) => p.kind === 'data').forEach((p, i) => run.objectFrame.outputs.set(outputKey(event.graph, event.node, p.id), args[i]));
     run.eventDepth++;
@@ -507,6 +550,52 @@ export class GraphRuntime {
     } finally {
       run.eventDepth--;
     }
+  }
+
+  // Calls, binds or unbinds a dispatcher of `owner` (this object, or a Target object). Bound events
+  // are this object's.
+  private dispatch(context: GraphContext, node: GraphNode, definition: NodeDefinition, owner: RunState, dispatcher: string, action: string, input: (pinId: string) => unknown): void {
+    const bound = owner.bindings.get(dispatcher) ?? [];
+    if (action === 'call') {
+      const args = definition.inputs.filter((p) => p.kind === 'data' && p.id !== 'target').map((p) => input(p.id));
+      // Events bound or unbound while running don't change this broadcast.
+      for (const event of [...bound]) this.runEvent(context, node, event, args);
+    } else if (action === 'unbind-all') {
+      owner.bindings.set(dispatcher, []);
+    } else {
+      const wired = this.wiredEvent(context, node) ?? this.fail(context, node, "Wire a Custom Event's red pin into Event.");
+      const event: BoundEvent = { run: context.run, ...wired };
+      const others = bound.filter((b) => b.node !== event.node || b.graph !== event.graph || b.run !== event.run);
+      // Binding an event twice binds it once, where it was first bound.
+      owner.bindings.set(dispatcher, action === 'bind' ? (others.length === bound.length ? [...bound, event] : bound) : others);
+    }
+  }
+
+  // A new object of `type`, its Start events run: of this document's class, or of another class
+  // read from its file.
+  private construct(context: GraphContext, node: GraphNode, type: ClassInfo): ObjectValue {
+    const own = context.run.ownClass?.id === type.id;
+    const doc = own ? context.run.doc : type.source && this.loadDocument?.(type.source.document);
+    if (!doc) this.fail(context, node, `Simulate can't read ${type.name}'s file${type.source ? ` (${type.source.document})` : ''}.`);
+    const run = this.runState(doc, own ? context.run.document : type.source?.document);
+    try {
+      this.start(run);
+    } catch (error) {
+      if (error instanceof RangeError) this.fail(context, node, OUT_OF_STACK);
+      throw error;
+    }
+    return run.self;
+  }
+
+  // The class a member node uses and the object it acts on: its Target, else this object (for its
+  // own class). Unreal stops with "Accessed None" when the Target is empty.
+  private target(context: GraphContext, node: GraphNode, definition: NodeDefinition, input: (pinId: string) => unknown): { type: ClassInfo; target: RunState } {
+    const type = nodeClass(node, context.run.ownClass, (t) => this.registry.get(t)) ?? this.fail(context, node, `There is no class ${String(node.properties.class ?? '').replace(/^object:/, '')}.`);
+    const wired = context.graph.connections.some((c) => c.toNode === node.id && c.toPin === 'target');
+    const value = wired ? input('target') : type.id === context.run.ownClass?.id ? context.run.self : undefined;
+    if (!(value instanceof ObjectValue)) this.fail(context, node, `Accessed None: Target has no ${type.name}.`);
+    void definition;
+    return { type, target: value.state as RunState };
   }
 
   // The custom event wired into a Bind or Unbind node's Event pin (through reroutes).
@@ -569,6 +658,17 @@ export class GraphRuntime {
       return this.variables(context, id).get(id) ?? null;
     }
     if (operation === 'macro-instance') this.fail(context, node, this.macroProblem(context, node));
+    if (operation === 'self') return context.run.self;
+    if (operation === 'is-valid') return this.inputValue(context, node, definition, 'object', following) instanceof ObjectValue;
+    if (operation === 'object-get' || operation === 'object-set') {
+      const { target } = this.target(context, node, definition, (id) => this.inputValue(context, node, definition, id, following));
+      return target.variables.get(String(node.properties.variable)) ?? null;
+    }
+    if (operation === 'object-call' && isPure(definition)) {
+      const { type, target } = this.target(context, node, definition, (id) => this.inputValue(context, node, definition, id, following));
+      const graph = target.doc.graphs.find((g) => g.id === node.properties.function && g.kind === 'function') ?? this.fail(context, node, `${type.name} no longer has this function.`);
+      return this.runFunction(context, node, target, graph, (id) => this.inputValue(context, node, definition, id, following)).get(pinId);
+    }
     // A function's inputs, read from its entry node.
     if (operation === 'function-entry') return context.frame.params.get(pinId) ?? defaultValue(definition.outputs.find((p) => p.id === pinId)?.type, context.run.types);
     // Make and Break are pure; so are an enum's == and !=.

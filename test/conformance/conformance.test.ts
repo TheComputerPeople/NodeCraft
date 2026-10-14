@@ -12,6 +12,7 @@ import { compileDocument } from '../../src/core/compiler';
 import { exposeFunctions } from '../../src/core/importing/symbols';
 import { libraryDefinitions } from '../../src/core/libraries';
 import { declaredType, userTypeDefinitions } from '../../src/core/user-types';
+import { classDefinitions, declaredClass } from '../../src/core/objects';
 import { GenerateOptions } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { GraphDocument, NodeDefinition, RuntimeLogEvent } from '../../src/core/model';
@@ -644,6 +645,157 @@ describe('structs and enums', () => {
       fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
         compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
         files: [...typeFiles, file].map((f) => path.relative(dir, f))
+      }));
+      const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+      const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    });
+  }
+});
+
+// Objects (docs/program-structure.md, "Classes"): a Game class constructs an Enemy (a class in
+// another folder), reads and sets its variables, calls its functions (impure, with an output, and
+// pure), runs its custom event, and binds an event of its own to the Enemy's event dispatcher.
+describe('objects', () => {
+  const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin });
+  const ENEMY = 'object:Enemy';
+  const nameInput = { id: 'name', name: 'Name', kind: 'data' as const, type: { id: 'string' } };
+
+  function enemy(language: string): GraphDocument {
+    const get = (id: string, variable: string) => n(id, 'core:variable.get', { variable });
+    return {
+      schemaVersion: 3, name: 'Enemy', kind: 'class', language,
+      variables: [{ id: 'health', name: 'Health', type: { id: 'int' }, defaultValue: 3 }, { id: 'name', name: 'Name', type: { id: 'string' }, defaultValue: 'Goblin' }],
+      dispatchers: [{ id: 'died', name: 'Died', inputs: [nameInput] }],
+      graphs: [
+        {
+          id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+          nodes: [
+            n('s', 'core:event.start'), n('ready', 'core:console.print', { 'pin:value': 'enemy ready' }),
+            n('taunt', 'core:event.custom', { name: 'Taunt' }), n('grr', 'core:string.append', { 'pin:a': 'Grr from ' }), get('name', 'name'), n('p', 'core:console.print')
+          ],
+          connections: [w('s', 'execOut', 'ready', 'execIn'), w('taunt', 'execOut', 'p', 'execIn'), w('name', 'value', 'grr', 'b'), w('grr', 'returnValue', 'p', 'value')]
+        },
+        {
+          // Take Damage(Amount) -> Remaining: Health -= Amount; Died(Name) when it reaches 0.
+          id: 'TakeDamage', name: 'Take Damage', kind: 'function', comments: [],
+          signature: { inputs: [{ id: 'amount', name: 'Amount', kind: 'data', type: { id: 'int' } }], outputs: [{ id: 'remaining', name: 'Remaining', kind: 'data', type: { id: 'int' } }] },
+          nodes: [
+            n('entry', 'core:function.entry', { graph: 'TakeDamage' }), get('health', 'health'), n('sub', 'core:math.subtract'), n('set', 'core:variable.set', { variable: 'health' }),
+            get('health2', 'health'), n('dead', 'core:math.less-equal', { 'pin:b': 0 }), n('branch', 'core:flow.branch'), get('name', 'name'),
+            n('died', 'core:dispatcher.call', { dispatcher: 'died' }), n('r1', 'core:function.return', { graph: 'TakeDamage' }), n('r2', 'core:function.return', { graph: 'TakeDamage' })
+          ],
+          connections: [
+            w('entry', 'execOut', 'set', 'execIn'), w('health', 'value', 'sub', 'a'), w('entry', 'amount', 'sub', 'b'), w('sub', 'returnValue', 'set', 'value'),
+            w('set', 'execOut', 'branch', 'execIn'), w('health2', 'value', 'dead', 'a'), w('dead', 'returnValue', 'branch', 'condition'),
+            w('branch', 'true', 'died', 'execIn'), w('name', 'value', 'died', 'name'), w('died', 'execOut', 'r1', 'execIn'), w('branch', 'false', 'r2', 'execIn'),
+            w('health2', 'value', 'r1', 'remaining'), w('health2', 'value', 'r2', 'remaining')
+          ]
+        },
+        {
+          id: 'IsAlive', name: 'Is Alive', kind: 'function', comments: [],
+          signature: { pure: true, inputs: [], outputs: [{ id: 'alive', name: 'Alive', kind: 'data', type: { id: 'bool' } }] },
+          nodes: [n('entry', 'core:function.entry', { graph: 'IsAlive' }), get('health', 'health'), n('gt', 'core:math.greater', { 'pin:b': 0 }), n('ret', 'core:function.return', { graph: 'IsAlive' })],
+          connections: [w('entry', 'execOut', 'ret', 'execIn'), w('health', 'value', 'gt', 'a'), w('gt', 'returnValue', 'ret', 'alive')]
+        }
+      ]
+    };
+  }
+
+  function game(language: string): GraphDocument {
+    const enemyRef = (id: string) => n(id, 'core:variable.get', { variable: 'enemy' });
+    const on = (id: string, type: string, properties: Record<string, unknown>) => n(id, type, { class: ENEMY, ...properties });
+    const nodes = [
+      n('s', 'core:event.start'), n('construct', `${ENEMY}.construct`), n('setEnemy', 'core:variable.set', { variable: 'enemy' }),
+      n('valid', 'core:object.is-valid'), n('p1', 'core:console.print'),
+      on('bind', 'core:object.dispatcher', { dispatcher: 'died', action: 'bind' }), n('onDied', 'core:event.custom', { name: 'On Enemy Died', inputs: [nameInput] }),
+      n('died', 'core:string.append', { 'pin:b': ' died' }), n('pDied', 'core:console.print'),
+      on('taunt', 'core:object.event', { event: 'Taunt' }), on('td1', 'core:object.call', { function: 'TakeDamage', 'pin:amount': 2 }), n('p2', 'core:console.print'),
+      on('alive1', 'core:object.call', { function: 'IsAlive' }), n('p3', 'core:console.print'),
+      on('setHealth', 'core:object.set', { variable: 'health', 'pin:value': 1 }), on('td2', 'core:object.call', { function: 'TakeDamage', 'pin:amount': 5 }),
+      on('health', 'core:object.get', { variable: 'health' }), n('p4', 'core:console.print'), on('alive2', 'core:object.call', { function: 'IsAlive' }), n('p5', 'core:console.print'),
+      ...['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8', 'e9'].map(enemyRef)
+    ];
+    const chain = ['s', 'construct', 'setEnemy', 'p1', 'bind', 'taunt', 'td1', 'p2', 'p3', 'setHealth', 'td2', 'p4', 'p5'];
+    const connections = [
+      ...chain.slice(1).map((id, i) => w(chain[i], 'execOut', id, 'execIn')),
+      w('construct', 'object', 'setEnemy', 'value'), w('e1', 'value', 'valid', 'object'), w('valid', 'returnValue', 'p1', 'value'),
+      w('e2', 'value', 'bind', 'target'), w('onDied', 'delegate', 'bind', 'event'), w('onDied', 'execOut', 'pDied', 'execIn'), w('onDied', 'name', 'died', 'a'), w('died', 'returnValue', 'pDied', 'value'),
+      w('e3', 'value', 'taunt', 'target'), w('e4', 'value', 'td1', 'target'), w('td1', 'remaining', 'p2', 'value'),
+      w('e5', 'value', 'alive1', 'target'), w('alive1', 'alive', 'p3', 'value'),
+      w('e6', 'value', 'setHealth', 'target'), w('e7', 'value', 'td2', 'target'),
+      w('e8', 'value', 'health', 'target'), w('health', 'value', 'p4', 'value'), w('e9', 'value', 'alive2', 'target'), w('alive2', 'alive', 'p5', 'value')
+    ];
+    return {
+      schemaVersion: 3, name: 'Game', kind: 'class', language, variables: [{ id: 'enemy', name: 'Enemy', type: { id: ENEMY } }],
+      graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes, connections }]
+    };
+  }
+
+  const EXPECTED = ['enemy ready', 'true', 'Grr from Goblin', '1', 'true', 'Goblin died', '-4', 'false'];
+  const generated = (language: string) => `actors/${languages.get(language)!.generator!.outputFileName('Enemy.vgraph')}`;
+
+  function registryFor(language: string): NodeRegistry {
+    const r = registry();
+    const module = language === 'python' ? languages.get('python')!.generator!.outputFileName('Enemy.vgraph').replace(/\.py$/, '') : language === 'csharp' ? 'Actors' : undefined;
+    r.registerMany(classDefinitions(declaredClass(enemy(language), { document: 'actors/Enemy.vgraph', generatedPath: generated(language), ...(module ? { module } : {}) })!));
+    return r;
+  }
+
+  test('Simulate', () => {
+    const events: RuntimeLogEvent[] = [];
+    new GraphRuntime(registryFor('typescript'), (e) => events.push(e), languages, (file) => (file === 'actors/Enemy.vgraph' ? enemy('typescript') : undefined)).run(game('typescript'));
+    assert.deepEqual(events.filter((e) => e.kind === 'error'), []);
+    assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), EXPECTED);
+  });
+
+  function build(key: string, language: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; enemyFile: string; importRoots?: string[] } {
+    const dir = path.join(workDir, `objects-${key}`);
+    fs.mkdirSync(path.join(dir, 'actors'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'game'), { recursive: true });
+    const r = registryFor(language);
+    const enemyResult = compileDocument(enemy(language), { registry: r, languages, generate: { sourceFileName: 'Enemy.vgraph', outputDir: 'actors', namespace: 'Actors', ...generate } });
+    assert.deepEqual(enemyResult.diagnostics, []);
+    const enemyFile = path.join(dir, 'actors', enemyResult.output!.fileName);
+    fs.writeFileSync(enemyFile, enemyResult.output!.text);
+    const result = compileDocument(game(language), { registry: r, languages, generate: { sourceFileName: 'Game.vgraph', outputDir: 'game', namespace: 'App', ...generate } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    return { file, className: result.output!.className, dir, enemyFile, importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)) };
+  }
+
+  for (const target of [
+    { label: 'TypeScript', key: 'typescript', language: 'typescript' },
+    { label: 'JavaScript (ES modules)', key: 'javascript-esm', language: 'javascript', moduleFormat: 'esm' as const },
+    { label: 'JavaScript (CommonJS)', key: 'javascript-commonjs', language: 'javascript', moduleFormat: 'commonjs' as const },
+    { label: 'Python', key: 'python', language: 'python' },
+    { label: 'C#', key: 'csharp', language: 'csharp' }
+  ]) {
+    test(target.label, async (t) => {
+      const { file, className, dir, enemyFile, importRoots } = build(target.key, target.language, { moduleFormat: target.moduleFormat });
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? [enemyFile] : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'game'), importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), EXPECTED, `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  for (const { language, flags } of [
+    { language: 'typescript', flags: { allowImportingTsExtensions: true } },
+    { language: 'javascript', flags: { allowJs: true, checkJs: true } }
+  ]) {
+    test(`${language} classes type-check under --strict`, () => {
+      const { file, dir, enemyFile } = build(`typecheck-${language}`, language);
+      fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
+        files: [enemyFile, file].map((f) => path.relative(dir, f))
       }));
       const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
       const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });

@@ -11,6 +11,7 @@ import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { declaredType, userTypeDefinitions } from '../core/user-types';
+import { classDefinitions, declaredClass } from '../core/objects';
 import { csharpNamespace, pythonModule } from './placement';
 
 const GLOB = '**/*.vgraph';
@@ -97,7 +98,7 @@ export class GraphLibraries implements vscode.Disposable {
       return undefined;
     }
     // Most graphs are classes; skip parsing them.
-    if (!/"kind":\s*"(functionLibrary|macroLibrary|structure|enumeration)"/.test(text)) return undefined;
+    if (!/"kind":\s*"(class|functionLibrary|macroLibrary|structure|enumeration)"/.test(text)) return undefined;
     let doc: GraphDocument;
     try {
       doc = parseDocument(text, path.basename(uri.fsPath, '.vgraph')).document;
@@ -114,6 +115,9 @@ export class GraphLibraries implements vscode.Disposable {
     // Structs and enums: their Make, Break, Switch… nodes carry the type (src/core/user-types.ts).
     const type = declaredType(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) });
     if (type) return { path: relative(root, uri.fsPath), definitions: userTypeDefinitions(type) };
+    // Classes: Construct, which carries the class's public members (src/core/objects.ts).
+    const cls = declaredClass(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) });
+    if (cls) return { path: relative(root, uri.fsPath), definitions: classDefinitions(cls) };
     if (doc.kind !== 'functionLibrary') return undefined;
     const functions = doc.graphs.filter((g) => g.kind === 'function').map((g) => ({ id: g.id, name: g.name }));
     const definitions = libraryDefinitions(doc, {

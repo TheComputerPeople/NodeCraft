@@ -11,6 +11,7 @@ import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
+import { ClassInfo, declaredClass, dispatcherAction, isObjectNode, nodeClass } from '../objects';
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup } from '../user-types';
 import { TypeRef } from '../types';
@@ -73,6 +74,8 @@ class Lowerer {
   private readonly macros: MacroLookup;
   // The workspace's structs and enums (src/core/user-types.ts).
   private readonly types: TypeLookup;
+  // The class this document declares, as other objects see it (src/core/objects.ts).
+  private readonly ownClass: ClassInfo | undefined;
   // Reroute and pure nodes being followed for the current input, to catch data loops.
   private readonly following = new Set<string>();
   // While checking a graph with macros expanded in it: problems with the macros' own nodes were
@@ -86,6 +89,7 @@ class Lowerer {
     this.resolve = createResolver(options.registry, doc);
     this.macros = macroLookup(doc.graphs, (type) => options.registry.get(type));
     this.types = typeLookup(options.registry.all(), doc.language);
+    this.ownClass = declaredClass(doc);
   }
 
   run(): LowerResult {
@@ -156,6 +160,7 @@ class Lowerer {
       blocks: [...this.blocks.values()],
       functions: this.functions,
       start,
+      ...(this.ownClass ? { classInfo: this.ownClass } : {}),
       dispatchers: documentDispatchers(this.doc).map((d): IrDispatcher => ({ id: d.id, name: d.name, params: d.inputs.filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type })) }))
     };
     this.importTypes(program);
@@ -222,7 +227,7 @@ class Lowerer {
       declaration.initial.forEach(visit);
     }
     for (const [id, type] of [...used].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-      if (declaration && declaration.type.id === id) continue;
+      if ((declaration && declaration.type.id === id) || this.ownClass?.id === id) continue;
       if (type.language && type.language !== (this.doc.language || type.language)) continue;
       const name = toIdentifier(type.name, 'pascal');
       const source = type.source;
@@ -348,6 +353,55 @@ class Lowerer {
     return undefined;
   }
 
+  // ---- Objects (src/core/objects.ts) ---------------------------------------------------------
+
+  // The class a member node uses, or an error.
+  private memberClass(info: GraphInfo, node: GraphNode): ClassInfo | undefined {
+    const type = nodeClass(node, this.ownClass, (t) => this.options.registry.get(t));
+    if (!type) this.error('class-missing', `There is no class ${String(node.properties.class ?? '').replace(/^object:/, '')} in the workspace.`, info.graph.id, node.id);
+    return type;
+  }
+
+  // The object a member node acts on: its Target pin, else (for its own class) Self.
+  private targetExpr(info: GraphInfo, node: GraphNode, def: NodeDefinition, type: ClassInfo): IrExpr {
+    if (info.dataSources.has(inputKey(node.id, 'target'))) return this.inputExpr(info, node, def, 'target');
+    if (type.id === this.ownClass?.id) return { kind: 'self' };
+    this.error('target-missing', `Connect a ${type.name} to Target.`, info.graph.id, node.id);
+    return { kind: 'default', type: { id: type.id } };
+  }
+
+  private lowerObjectNode(info: GraphInfo, node: GraphNode, def: NodeDefinition, next: (out: string) => IrStatement[], input: (pinId: string) => IrExpr, source: SourceRef): IrStatement[] | undefined {
+    const operation = nativeOperation(def);
+    const implementation = def.implementation;
+    if (implementation?.kind === 'class') {
+      const slot = this.slot(info, node, def, 'object');
+      return [{ kind: 'construct', type: implementation.type.id, slot, source }, ...next('execOut')];
+    }
+    if (!['object-set', 'object-call', 'object-event', 'object-dispatcher'].includes(operation)) return undefined;
+    const type = this.memberClass(info, node);
+    if (!type) return next('execOut');
+    const target = this.targetExpr(info, node, def, type);
+    const args = dataInputs(def).filter((p) => p.id !== 'target' && p.id !== 'event').map((p) => input(p.id));
+    switch (operation) {
+      case 'object-set':
+        return [{ kind: 'setObjectVariable', target, type: type.id, variable: String(node.properties.variable), value: input('value'), source }, ...next('execOut')];
+      case 'object-call': {
+        const results = def.outputs.filter((p) => p.kind === 'data').map((p) => ({ output: p.id, slot: this.slot(info, node, def, p.id) }));
+        return [{ kind: 'objectCall', target, type: type.id, function: String(node.properties.function), args, results, source }, ...next('execOut')];
+      }
+      case 'object-event':
+        return [{ kind: 'objectCall', target, type: type.id, event: String(node.properties.event), args, results: [], source }, ...next('execOut')];
+      default: {
+        const dispatcher = String(node.properties.dispatcher);
+        const action = dispatcherAction(node);
+        if (action === 'call') return [{ kind: 'broadcast', dispatcher, args, target, type: type.id, source }, ...next('execOut')];
+        if (action === 'unbind-all') return [{ kind: 'unbindAll', dispatcher, target, type: type.id, source }, ...next('execOut')];
+        const event = this.wiredEvent(info, node);
+        return [...(event ? [{ kind: 'bindEvent' as const, dispatcher, event, bind: action === 'bind', target, type: type.id, source }] : []), ...next('execOut')];
+      }
+    }
+  }
+
   // ---- Validation ----------------------------------------------------------------------------
 
   // A graph with the macros it uses expanded in place (src/core/macros.ts), and its split struct pins
@@ -376,6 +430,7 @@ class Lowerer {
       }
       info.nodes.set(node.id, node);
       if (isFunctionType(node.type)) this.checkFunction(graph, node);
+      if (typeof node.properties.class === 'string' && isObjectNode(node.type)) this.memberClass({ graph } as GraphInfo, node);
       if ((node.type === MACRO_INPUTS || node.type === MACRO_OUTPUTS) && graph.kind !== 'macro') {
         this.error('tunnel-outside-macro', 'Inputs and Outputs nodes belong in macro graphs.', graph.id, node.id);
       }
@@ -511,8 +566,11 @@ class Lowerer {
           { kind: 'store', slot: this.slot(info, node, def, 'result'), value: { kind: 'add', left: { kind: 'toNumber', value: input('a') }, right: { kind: 'toNumber', value: input('b') } }, source },
           ...next('execOut')
         ];
-      case 'print':
-        return [{ kind: 'print', value: input('value'), source }, ...next('execOut')];
+      case 'print': {
+        const value = input('value');
+        this.checkPrintable(info, nodeId, value);
+        return [{ kind: 'print', value, source }, ...next('execOut')];
+      }
       case 'branch':
         return [{ kind: 'if', condition: { kind: 'toBoolean', value: input('condition') }, then: next('true'), else: next('false'), source }];
       case 'sequence':
@@ -579,6 +637,8 @@ class Lowerer {
         return [];
     }
 
+    const objectStatements = this.lowerObjectNode(info, node, def, next, input, source);
+    if (objectStatements) return objectStatements;
     const user = def.implementation;
     if (user?.kind === 'struct' && user.operation === 'set-members') {
       // The struct with the chosen fields changed; one read from a variable is written back to it.
@@ -640,7 +700,24 @@ class Lowerer {
     // Get is pure, and Set's output is the variable's new value: both read the member where used.
     const operation = nativeOperation(sourceDef);
     // Pure conversions are inlined where their value is used.
-    if (operation === 'to-string') return { kind: 'toText', value: this.inputExpr(info, sourceNode, sourceDef, 'value') };
+    if (operation === 'to-string') {
+      const value = this.inputExpr(info, sourceNode, sourceDef, 'value');
+      this.checkPrintable(info, sourceNode.id, value);
+      return { kind: 'toText', value };
+    }
+    if (operation === 'self') return { kind: 'self' };
+    if (operation === 'is-valid') return { kind: 'isValid', value: this.inputExpr(info, sourceNode, sourceDef, 'object') };
+    if (operation === 'object-get' || operation === 'object-set' || (operation === 'object-call' && isPure(sourceDef))) {
+      const type = this.memberClass(info, sourceNode);
+      if (!type) return { kind: 'default', type: pin?.type };
+      const target = this.targetExpr(info, sourceNode, sourceDef, type);
+      if (operation !== 'object-call') return { kind: 'objectVariable', target, type: type.id, variable: String(sourceNode.properties.variable) };
+      return this.follow(info, sourceNode, 'Pure nodes are wired in a loop.', pin, () => ({
+        kind: 'objectCall', target, type: type.id, function: String(sourceNode.properties.function),
+        args: dataInputs(sourceDef).filter((p) => p.id !== 'target').map((p) => this.inputExpr(info, sourceNode, sourceDef, p.id)),
+        ...(sourceDef.outputs.filter((p) => p.kind === 'data').length > 1 ? { output: source.pin } : {})
+      }));
+    }
     // Make Array/Set/Map is pure: a new container wherever its value is used, as in Unreal.
     if (operation === 'make-array' || operation === 'make-set' || operation === 'make-map') {
       const type = sourceDef.outputs[0]?.type ?? { id: 'any', container: 'array' };
@@ -942,7 +1019,17 @@ class Lowerer {
   }
 
   private programView(): ProgramTypes {
-    return { members: [...this.members.values()], slots: [...this.slots.values()], helpers: [...this.helpers.values()], imports: [...this.imports.values()], functions: this.functions };
+    return {
+      members: [...this.members.values()], slots: [...this.slots.values()], helpers: [...this.helpers.values()], imports: [...this.imports.values()], functions: this.functions,
+      className: this.doc.name, ...(this.ownClass ? { classInfo: this.ownClass } : {})
+    };
+  }
+
+  // An object prints as nothing useful, and differently in each language: Unreal prints one's name
+  // with Get Display Name, which arrives later.
+  private checkPrintable(info: GraphInfo, nodeId: string, value: IrExpr): void {
+    const type = exprType(value, this.programView());
+    if (type && !type.container && type.id.startsWith('object:')) this.error('print-object', "An object can't be printed; print one of its variables.", info.graph.id, nodeId);
   }
 
   // Where IR came from: a node inside an expanded macro is its instance node, the one the user sees.

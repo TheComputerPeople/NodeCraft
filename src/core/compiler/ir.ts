@@ -2,7 +2,9 @@
 // source code. Names here are raw (taken from graph ids); each generator makes them legal and
 // unique in its language.
 import { TypeRef } from '../types';
+import type { ClassMemberSpec } from './names';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
+import type { ClassInfo } from '../objects';
 
 // The node a piece of IR came from, for diagnostics and node markers in generated code.
 export interface SourceRef {
@@ -43,7 +45,15 @@ export type IrExpr =
   // One field (by id) of a struct value.
   | { kind: 'structField'; value: IrExpr; type: string; field: string }
   // An enum's value (`value` is the enumerator's id).
-  | { kind: 'enumValue'; type: string; value: string };
+  | { kind: 'enumValue'; type: string; value: string }
+  // The object the code runs in (src/core/objects.ts).
+  | { kind: 'self' }
+  // True if an object reference points at an object.
+  | { kind: 'isValid'; value: IrExpr }
+  // A variable of the Target object, of class `type` ("object:<Name>").
+  | { kind: 'objectVariable'; target: IrExpr; type: string; variable: string }
+  // A pure function of the Target object, reading one of its outputs when it has several.
+  | { kind: 'objectCall'; target: IrExpr; type: string; function: string; args: IrExpr[]; output?: string };
 
 // `+` and `-` are integer arithmetic on counters; the rest give booleans.
 export type BinaryOp = '<' | '<=' | '>=' | '==' | '!=' | '&&' | '||' | '+' | '-';
@@ -72,11 +82,17 @@ export type IrStatement =
   | { kind: 'return'; values: IrExpr[]; source: SourceRef }
   // Runs a shared block: a node reached by more than one exec wire, plus everything after it.
   | { kind: 'callBlock'; block: string; source: SourceRef }
-  // Binds (or unbinds) a custom event (an IrFunction's id) to an event dispatcher of this object.
-  | { kind: 'bindEvent'; dispatcher: string; event: string; bind: boolean; source: SourceRef }
-  | { kind: 'unbindAll'; dispatcher: string; source: SourceRef }
+  // Binds (or unbinds) a custom event of this object (an IrFunction's id) to an event dispatcher of
+  // this object, or (with `target`) of another object of class `type`.
+  | { kind: 'bindEvent'; dispatcher: string; event: string; bind: boolean; target?: IrExpr; type?: string; source: SourceRef }
+  | { kind: 'unbindAll'; dispatcher: string; target?: IrExpr; type?: string; source: SourceRef }
   // Runs every event bound to the dispatcher, in the order they were bound.
-  | { kind: 'broadcast'; dispatcher: string; args: IrExpr[]; source: SourceRef };
+  | { kind: 'broadcast'; dispatcher: string; args: IrExpr[]; target?: IrExpr; type?: string; source: SourceRef }
+  // A new object of class `type` into `slot`, its Start events run.
+  | { kind: 'construct'; type: string; slot: string; source: SourceRef }
+  | { kind: 'setObjectVariable'; target: IrExpr; type: string; variable: string; value: IrExpr; source: SourceRef }
+  // Calls a function (each output into a slot) or runs a custom event (by name) of the Target object.
+  | { kind: 'objectCall'; target: IrExpr; type: string; function?: string; event?: string; args: IrExpr[]; results: { output: string; slot: string }[]; source: SourceRef };
 
 // A member variable of the generated class, or (with `function`) a local variable of a function,
 // which starts at its initial value on every call.
@@ -179,6 +195,15 @@ export interface IrProgram {
   // A structure or enumeration document: the generated file declares this type instead of a class.
   declaration?: IrDeclaration;
   dispatchers?: IrDispatcher[];
+  // A class: its public members, as other files see them (src/core/objects.ts).
+  classInfo?: ClassInfo;
+}
+
+// The class an "object:<Name>" type names: the program's own, or one it imports.
+export function classInfo(program: Pick<IrProgram, 'imports' | 'classInfo'>, id: string): ClassInfo | undefined {
+  if (program.classInfo?.id === id) return program.classInfo;
+  const type = program.imports.find((i) => i.id === id)?.userType;
+  return type?.kind === 'class' ? type : undefined;
 }
 
 // The structs and enums a program uses, by type id.
@@ -187,7 +212,7 @@ export function userTypes(program: Pick<IrProgram, 'imports'>): Map<string, User
 }
 
 // Static type of an expression, as far as it is known.
-export type ProgramTypes = Pick<IrProgram, 'members' | 'slots' | 'helpers' | 'imports' | 'functions'>;
+export type ProgramTypes = Pick<IrProgram, 'members' | 'slots' | 'helpers' | 'imports' | 'functions' | 'className' | 'classInfo'>;
 
 export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefined {
   switch (expr.kind) {
@@ -228,6 +253,16 @@ export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefin
       const type = program.imports.find((i) => i.id === expr.type)?.userType;
       return type?.kind === 'struct' ? type.fields.find((f) => f.id === expr.field)?.type : undefined;
     }
+    case 'self':
+      return { id: `object:${program.className}` };
+    case 'isValid':
+      return { id: 'bool' };
+    case 'objectVariable':
+      return classInfo(program, expr.type)?.variables.find((v) => v.id === expr.variable)?.type;
+    case 'objectCall': {
+      const outputs = classInfo(program, expr.type)?.functions.find((f) => f.id === expr.function)?.outputs.filter((p) => p.kind === 'data') ?? [];
+      return (expr.output ? outputs.find((p) => p.id === expr.output) : outputs[0])?.type;
+    }
   }
 }
 
@@ -240,4 +275,14 @@ function literalType(value: unknown): TypeRef | undefined {
   if (typeof value === 'string') return { id: 'string' };
   if (typeof value === 'boolean') return { id: 'bool' };
   return undefined;
+}
+
+// A program's public members, in the order claimClassMembers names them (src/core/compiler/names.ts).
+export function programClassSpec(program: IrProgram): ClassMemberSpec {
+  return {
+    functions: program.functions.filter((f) => !f.event).map((f) => ({ id: f.id, name: f.name })),
+    events: program.functions.filter((f) => f.event).map((f) => ({ id: f.id, name: f.name })),
+    variables: program.members.filter((m) => !m.function).map((m) => ({ id: m.id, name: m.name })),
+    dispatchers: (program.dispatchers ?? []).map((d) => ({ id: d.id, name: d.name }))
+  };
 }

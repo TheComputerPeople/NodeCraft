@@ -8,7 +8,8 @@ import { isFunctionType, signatureChanges } from './imported-functions';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables, functionNodeDefinition } from './functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS, macroNodeDefinition } from './macros';
 import { Dispatcher, eventNodeDefinition, isDispatcherNode, isEventNode } from './events';
-import { Graph, GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
+import { declaredClass, isObjectNode, objectNodeDefinition } from './objects';
+import { Graph, GraphDocument, GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
 import { applySplits, setMembersDefinition, splitPinIds } from './user-types';
 
 export type NodeResolver = (node: GraphNode) => NodeDefinition | undefined;
@@ -43,6 +44,10 @@ export interface ResolverDocument {
   graphs?: readonly Graph[];
   importedFunctions?: Readonly<Record<string, NodeDefinition>>;
   dispatchers?: readonly Dispatcher[];
+  // A class document's name and kind: Self and member nodes may use its own members.
+  name?: string;
+  kind?: GraphDocument['kind'];
+  language?: string;
 }
 
 // `doc.importedFunctions` is the document's stored function signatures: a project function whose
@@ -60,6 +65,8 @@ export function createResolver(registry: ResolveContext, doc: ResolverDocument):
 // The resolver without split struct pins: what a node's pins are before splitting.
 export function createUnsplitResolver(registry: ResolveContext, doc: ResolverDocument): NodeResolver {
   const variables = [...doc.variables, ...allLocalVariables(doc)];
+  let own: ReturnType<typeof declaredClass> | null = null;
+  const ownClass = () => (own ??= doc.kind === 'class' && doc.name ? declaredClass(doc as GraphDocument) : undefined);
   return (node) => {
     const base = registry.get(node.type);
     if (isFunctionType(node.type)) {
@@ -71,6 +78,7 @@ export function createUnsplitResolver(registry: ResolveContext, doc: ResolverDoc
     if (node.type === FUNCTION_ENTRY || node.type === FUNCTION_RETURN || node.type === FUNCTION_CALL) return functionNodeDefinition(base, node, doc.graphs);
     if (node.type === MACRO_INPUTS || node.type === MACRO_OUTPUTS || node.type === MACRO_INSTANCE) return macroNodeDefinition(base, node, doc.graphs);
     if (isEventNode(node.type) || isDispatcherNode(node.type)) return eventNodeDefinition(base, node, doc);
+    if (isObjectNode(node.type)) return objectNodeDefinition(base, node, ownClass(), (type) => registry.get(type));
     if (node.type === SEQUENCE) return { ...base, outputs: Array.from({ length: sequencePinCount(node) }, (_, i) => execPin(`then${i}`, `Then ${i}`, 'output')) };
     if (node.type === REROUTE) return rerouteDefinition(base, node);
     if (base.implementation?.kind === 'struct' && base.implementation.operation === 'set-members') return setMembersDefinition(base, node.properties.members);

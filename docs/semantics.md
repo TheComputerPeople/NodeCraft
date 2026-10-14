@@ -76,6 +76,11 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 - An event's inputs are its outputs: they keep the values of its latest run, readable from other flows like any impure node's outputs.
 - A dispatcher's Call runs each bound event in the order they were bound, with the Call's inputs; an event bound twice runs once. Bindings changed while a Call runs apply to the next Call.
 
+## Objects
+
+- Construct makes a new object of a class with its variables at their defaults and runs its Start events before the next node runs. An object variable starts empty.
+- A member node on another object reads, sets, calls or runs that object's member; reading or calling through an empty reference stops the run with an error ("Accessed None"). Objects are references: two variables holding the same object see the same variables.
+
 ## Variables
 
 - Member variables start at their declared default, else their type's default.

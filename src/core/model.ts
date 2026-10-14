@@ -3,6 +3,7 @@ import type { SearchHit } from './search';
 import type { TypeRef } from './types';
 import type { EnumInfo, Enumerator, StructInfo } from './user-types';
 import type { Dispatcher } from './events';
+import type { ClassInfo } from './objects';
 
 export type { TypeRef } from './types';
 
@@ -44,7 +45,9 @@ export type NodeImplementation =
   | MacroImplementation
   // A struct's Make, Break and Set Members, and an enum's Switch on, == and != (src/core/user-types.ts).
   | { kind: 'struct'; operation: 'make' | 'break' | 'set-members'; type: StructInfo }
-  | { kind: 'enum'; operation: 'switch' | 'equal' | 'not-equal'; type: EnumInfo };
+  | { kind: 'enum'; operation: 'switch' | 'equal' | 'not-equal'; type: EnumInfo }
+  // A class's Construct node, which carries the class's public members (src/core/objects.ts).
+  | { kind: 'class'; operation: 'construct'; type: ClassInfo };
 
 // A macro of a macro library (src/core/libraries.ts): its graph, with the library's other macros
 // already expanded in it, so it can be expanded anywhere (src/core/macros.ts).

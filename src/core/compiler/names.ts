@@ -52,3 +52,38 @@ export function dedent(code: string): string[] {
   const indent = Math.min(...lines.filter((l) => l.trim()).map((l) => l.match(/^\s*/)![0].length));
   return lines.map((l) => l.slice(Number.isFinite(indent) ? indent : 0));
 }
+
+// ---- A class's public members (src/core/objects.ts) ---------------------------------------------
+//
+// Other files call a class's functions and events and use its variables and dispatchers by the
+// names its own generated file gives them. Both claim them through claimClassMembers, in one fixed
+// order (functions, events, variables, dispatchers), so they always agree.
+
+export interface ClassMemberSpec {
+  functions: { id: string; name: string }[];
+  events: { id: string; name: string }[];
+  variables: { id: string; name: string }[];
+  dispatchers: { id: string; name: string }[];
+}
+
+export interface ClassMemberNames {
+  functions: Map<string, string>;
+  events: Map<string, string>;
+  variables: Map<string, string>;
+  dispatchers: Map<string, string>;
+}
+
+export interface ClassMemberStyles {
+  functions: NameStyle;
+  variables: NameStyle;
+  dispatchers: NameStyle;
+}
+
+export function claimClassMembers(scope: NameScope, spec: ClassMemberSpec, styles: ClassMemberStyles): ClassMemberNames {
+  const claim = (items: { id: string; name: string }[], style: NameStyle) => new Map(items.map((item) => [item.id, scope.claim(item.name, style)]));
+  const functions = claim(spec.functions, styles.functions);
+  const events = claim(spec.events, styles.functions);
+  const variables = claim(spec.variables, styles.variables);
+  const dispatchers = claim(spec.dispatchers, styles.dispatchers);
+  return { functions, events, variables, dispatchers };
+}

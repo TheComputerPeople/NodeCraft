@@ -290,8 +290,9 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Flow-control library: For Loop (with Break), While Loop, Do Once, Do N, Gate, MultiGate, Flip Flop, Switch on Int/String | ✅ (MultiGate's Is Random later) | — |
 | Structure | For Each Loop (with Break) | ✅ | — |
 | Structure | Structs, enums, Make/Break, Set Members, Switch on Enum, the structure and enumeration editors | ✅ (sets and map keys of structs or enums later) | — |
-| Structure | Classes, inheritance, interfaces, Cast To | ⬜ | 4 |
-| Structure | Custom events (Call), event dispatchers (Call, Bind, Unbind, Unbind all, Assign) | ✅ (binding other objects' events with classes, step 9) | — |
+| Structure | Object references: Construct, Self, Is Valid, Target pins on variables, functions, events and dispatchers | ✅ | — |
+| Structure | Inheritance, overrides and Parent calls, interfaces, Cast To | ⬜ | 4 |
+| Structure | Custom events (Call), event dispatchers (Call, Bind, Unbind, Unbind all, Assign), on this object or another | ✅ | — |
 | Structure | Latent actions (Delay) | ⬜ | 4 |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python; methods with Phase 4 classes) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |

@@ -5,6 +5,8 @@ import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, UNBIND_ALL, UNBIND_EVENT, customEvents, documentDispatchers, eventName } from '../core/events';
+import { OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, classTypeId } from '../core/objects';
+import { listUserTypes } from '../core/user-types';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
 import { primaryGraph } from '../core/serializer';
 import { isTypeDocument, renderTypeEditor } from './type-editor';
@@ -40,7 +42,7 @@ export function paletteEntries(): PaletteEntry[] {
     // A function has one entry node and a macro one pair of tunnels; calls and macros are offered
     // one by one; Return Nodes only fit in functions, and events only in event graphs (as in
     // Unreal's action menu).
-    .filter((d) => ![FUNCTION_ENTRY, FUNCTION_CALL, MACRO_INPUTS, MACRO_OUTPUTS, MACRO_INSTANCE, CALL_EVENT, CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL].includes(d.type))
+    .filter((d) => ![FUNCTION_ENTRY, FUNCTION_CALL, MACRO_INPUTS, MACRO_OUTPUTS, MACRO_INSTANCE, CALL_EVENT, CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER].includes(d.type))
     .filter((d) => (kind === 'event' || !kind ? d.type !== FUNCTION_RETURN : !d.type.startsWith('core:event.') && (kind === 'function' || d.type !== FUNCTION_RETURN)))
     // A macro library's macro can't use itself.
     .filter((d) => !(d.implementation?.kind === 'macro' && kind === 'macro' && d.implementation.source.graph === state.graph?.id && state.document?.kind === 'macroLibrary'))
@@ -62,6 +64,22 @@ export function paletteEntries(): PaletteEntry[] {
   for (const { node } of customEvents(state.document?.graphs)) offer(CALL_EVENT, { event: eventName(node) }, `${CALL_EVENT}:${eventName(node)}`);
   for (const d of documentDispatchers(state.document ?? undefined)) {
     for (const type of [CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL]) offer(type, { dispatcher: d.id }, `${type}:${d.id}`);
+  }
+  // Other classes' members, each with a Target pin, under the class's name (src/core/objects.ts).
+  const own = state.document ? classTypeId(state.document.name) : '';
+  for (const type of listUserTypes(state.definitions, state.document?.language)) {
+    if (type.kind !== 'class' || type.id === own) continue;
+    const member = (nodeType: string, properties: Record<string, unknown>, key: string): void => {
+      const definition = lookupDefinition({ id: '', type: nodeType, position: { x: 0, y: 0 }, properties: { class: type.id, ...properties } });
+      if (definition) entries.push({ key: `${type.id}:${key}`, type: nodeType, properties: { class: type.id, ...properties }, definition });
+    };
+    for (const v of type.variables) {
+      member(OBJECT_GET, { variable: v.id }, `get:${v.id}`);
+      member(OBJECT_SET, { variable: v.id }, `set:${v.id}`);
+    }
+    for (const f of type.functions) member(OBJECT_CALL, { function: f.id }, `call:${f.id}`);
+    for (const e of type.events) member(OBJECT_EVENT, { event: e.id }, `event:${e.id}`);
+    for (const d of type.dispatchers) for (const action of ['call', 'bind', 'unbind', 'unbind-all']) member(OBJECT_DISPATCHER, { dispatcher: d.id, action }, `${action}:${d.id}`);
   }
   const locals = state.graph?.localVariables ?? [];
   for (const variable of [...(state.document?.variables ?? []), ...locals]) {

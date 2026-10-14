@@ -1,7 +1,7 @@
 // Generates TypeScript, or JavaScript with JSDoc types, from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, exprType, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, classInfo, exprType, programClassSpec, userTypes } from '../compiler/ir';
 import { relativeSpecifier, typescriptSpecifier } from '../compiler/module-paths';
-import { NameScope, dedent } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode } from '../language-pack';
 import { TypeRef } from '../types';
@@ -75,6 +75,9 @@ export function typescriptEnumMembers(type: EnumInfo): Map<string, string> {
   return new Map(type.enumerators.map((e) => [e.id, scope.claim(e.name, 'pascal')]));
 }
 
+// How a class's public members are named (src/core/compiler/names.ts).
+const CLASS_STYLES: ClassMemberStyles = { functions: 'camel', variables: 'keep', dispatchers: 'keep' };
+
 export function typescriptGenerator(flavor: TypeScriptFlavor): CodeGenerator {
   return {
     libraryExports: (_name, functions) => ({ names: typescriptExportNames(functions) }),
@@ -108,6 +111,8 @@ class TypeScriptEmitter {
   private needsFormat = false;
   // The structs and enums the program uses (and the one it declares), by type id.
   private readonly types: Map<string, UserType>;
+  // The public member names of each class the program uses, by type id; its own first.
+  private readonly classNames = new Map<string, ClassMemberNames>();
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions, private readonly flavor: TypeScriptFlavor) {
     this.library = !!program.library;
@@ -117,16 +122,19 @@ class TypeScriptEmitter {
     if (program.declaration) this.types.set(program.declaration.type.id, program.declaration.type);
     // A library's functions are claimed first, exactly as typescriptExportNames claims them.
     this.names = this.library ? new NameScope(RESERVED, [FORMAT_HELPER]) : new NameScope(RESERVED, ['start']);
+    // Public members first, as every file that uses the class names them.
+    const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES);
+    this.classNames.set(`object:${program.className}`, own);
     for (const f of program.functions) {
-      this.functionNames.set(f.id, this.names.claim(f.name, 'camel'));
+      this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
       this.outputFields.set(f.id, resultFields(f.outputs));
     }
+    for (const [id, name] of own.variables) this.memberNames.set(id, name);
+    for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     const moduleScope = this.library ? this.names : new NameScope(RESERVED, [this.className, FORMAT_HELPER, DISPATCHER_CLASS]);
     for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
     // Member variables keep their names; internal fields are private (TypeScript) or underscored (JavaScript).
     const internal = flavor.typed || this.library ? '' : '_';
-    for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
-    for (const d of program.dispatchers ?? []) this.dispatcherNames.set(d.id, this.names.claim(d.name));
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'keep', internal));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', internal));
@@ -170,6 +178,7 @@ class TypeScriptEmitter {
     if (!esm) {
       out.line();
       out.line(`module.exports = { ${this.className} };`);
+      this.lateRequires();
     }
     if (dispatchers.length) this.dispatcherClass();
     if (this.needsFormat) this.formatHelper();
@@ -229,6 +238,35 @@ class TypeScriptEmitter {
     out.line();
     out.line('// Unreal\'s event dispatcher: bound events run in the order they were bound, each event once.');
     for (const line of lines) out.line(line);
+  }
+
+  // CommonJS: classes this one uses are required after it is exported, so two classes that use each
+  // other both load completely.
+  private lateRequires(): void {
+    const classes = sortImports(this.program.imports.filter((i) => i.userType?.kind === 'class'));
+    if (!classes.length) return;
+    this.out.line('// Classes are required last: they may use this one.');
+    for (const i of classes) {
+      const local = this.importNames.get(i.id)!;
+      this.out.line(`const { ${local === i.name ? local : `${i.name}: ${local}`} } = require(${JSON.stringify(relativeSpecifier(this.options.outputDir ?? '', i.path))});`);
+    }
+  }
+
+  // The member names another class's generated file gives its public members.
+  private membersOf(id: string): ClassMemberNames | undefined {
+    const existing = this.classNames.get(id);
+    if (existing) return existing;
+    const info = classInfo(this.program, id);
+    if (!info) return undefined;
+    const names = claimClassMembers(new NameScope(RESERVED, ['start']), info, CLASS_STYLES);
+    this.classNames.set(id, names);
+    return names;
+  }
+
+  // An object member is reached through its object; TypeScript needs to hear it isn't null.
+  private targetRef(e: IrExpr): string {
+    if (e.kind === 'self') return 'this';
+    return this.flavor.typed ? `${this.operand(e)}!` : this.operand(e);
   }
 
   // A function library: its functions as exported module functions, its helpers as module functions.
@@ -307,7 +345,7 @@ class TypeScriptEmitter {
 
   // The name a struct or enum goes by in this file: its own, or its import's.
   private userTypeName(id: string): string | undefined {
-    if (this.program.declaration?.type.id === id) return this.className;
+    if (this.program.declaration?.type.id === id || id === `object:${this.program.className}`) return this.className;
     return this.importNames.get(id);
   }
 
@@ -336,6 +374,7 @@ class TypeScriptEmitter {
   private imports(esm: boolean): void {
     const byModule = new Map<string, IrImport[]>();
     for (const i of sortImports(this.program.imports)) {
+      if (!esm && i.userType?.kind === 'class') continue;
       const specifier = this.flavor.typed
         ? typescriptSpecifier(this.options.outputDir ?? '', i.path, this.options.importExtension ?? 'ts')
         : relativeSpecifier(this.options.outputDir ?? '', i.path);
@@ -357,7 +396,7 @@ class TypeScriptEmitter {
     if (this.flavor.typed) {
       this.out.line(`${internal ? 'private ' : ''}${name}: ${this.typeName(type)} = ${initial};`);
     } else {
-      this.out.line(`/** @type {${this.mapType(type ?? { id: 'any' })}} */`);
+      this.out.line(`/** @type {${this.typeName(type)}} */`);
       this.out.line(`${name} = ${initial};`);
     }
   }
@@ -564,16 +603,41 @@ class TypeScriptEmitter {
         }
         break;
       }
+      case 'construct':
+        out.line(`${this.slotRef(s.slot)} = new ${this.userTypeName(s.type)}();`);
+        out.line(`${this.slotRef(s.slot)}.start();`);
+        break;
+      case 'setObjectVariable':
+        out.line(`${this.targetRef(s.target)}.${this.membersOf(s.type)?.variables.get(s.variable)} = ${this.coerce(s.value, classInfo(this.program, s.type)?.variables.find((v) => v.id === s.variable)?.type)};`);
+        break;
+      case 'objectCall': {
+        const info = classInfo(this.program, s.type);
+        const names = this.membersOf(s.type);
+        const fn = s.function !== undefined ? info?.functions.find((f) => f.id === s.function) : undefined;
+        const params = (fn ? fn.inputs : info?.events.find((e) => e.id === s.event)?.inputs ?? []).filter((p) => p.kind === 'data');
+        const name = s.function !== undefined ? names?.functions.get(s.function) : names?.events.get(s.event!);
+        const call = `${this.targetRef(s.target)}.${name}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
+        if (!s.results.length) out.line(`${call};`);
+        else if (outputs.length === 1) out.line(`${this.slotRef(s.results[0].slot)} = ${call};`);
+        else {
+          const fields = resultFields(outputs);
+          out.line(`({ ${s.results.map((r) => `${fields.get(r.output)}: ${this.slotRef(r.slot)}`).join(', ')} } = ${call});`);
+        }
+        break;
+      }
       case 'bindEvent':
       case 'unbindAll': {
-        const dispatcher = `this.${this.dispatcherNames.get(s.dispatcher)}`;
+        const dispatcher = s.target && s.type ? `${this.targetRef(s.target)}.${this.membersOf(s.type)?.dispatchers.get(s.dispatcher)}` : `this.${this.dispatcherNames.get(s.dispatcher)}`;
         if (s.kind === 'unbindAll') out.line(`${dispatcher}.clear();`);
         else out.line(`${dispatcher}.${s.bind ? 'bind' : 'unbind'}(this, this.${this.functionNames.get(s.event)});`);
         break;
       }
       case 'broadcast': {
-        const params = this.program.dispatchers?.find((d) => d.id === s.dispatcher)?.params ?? [];
-        out.line(`this.${this.dispatcherNames.get(s.dispatcher)}.broadcast(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
+        const other = s.target && s.type ? classInfo(this.program, s.type)?.dispatchers.find((d) => d.id === s.dispatcher)?.inputs.filter((p) => p.kind === 'data') : undefined;
+        const params = other ?? this.program.dispatchers?.find((d) => d.id === s.dispatcher)?.params ?? [];
+        const dispatcher = s.target && s.type ? `${this.targetRef(s.target)}.${this.membersOf(s.type)?.dispatchers.get(s.dispatcher)}` : `this.${this.dispatcherNames.get(s.dispatcher)}`;
+        out.line(`${dispatcher}.broadcast(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
         break;
       }
       case 'return': {
@@ -636,6 +700,18 @@ class TypeScriptEmitter {
       case 'enumValue': {
         const type = this.types.get(e.type);
         return `${this.userTypeName(e.type)}.${type?.kind === 'enum' ? typescriptEnumMembers(type).get(e.value) : e.value}`;
+      }
+      case 'self':
+        return 'this';
+      case 'isValid':
+        return `${this.operand(e.value)} != null`;
+      case 'objectVariable':
+        return `${this.targetRef(e.target)}.${this.membersOf(e.type)?.variables.get(e.variable)}`;
+      case 'objectCall': {
+        const fn = classInfo(this.program, e.type)?.functions.find((f) => f.id === e.function);
+        const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `${this.targetRef(e.target)}.${this.membersOf(e.type)?.functions.get(e.function)}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        return e.output ? `${call}.${resultFields(fn?.outputs.filter((p) => p.kind === 'data') ?? []).get(e.output)}` : call;
       }
       case 'makeContainer': {
         const element = { id: e.type.id };

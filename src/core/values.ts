@@ -2,6 +2,7 @@
 // See docs/semantics.md ("Values").
 import { TypeRef } from './types';
 import { StructValue, TypeLookup, enumeratorName } from './user-types';
+import { ObjectValue } from './objects';
 
 // `types` describes the workspace's structs and enums (src/core/user-types.ts): a struct's default
 // has each field's default, an enum's is its first value.
@@ -73,6 +74,8 @@ export function fromStored(value: unknown, type: TypeRef | undefined, types?: Ty
 // order (they have no order of their own), maps as objects in the order their keys were added.
 export function formatValue(value: unknown): string {
   if (value === null || value === undefined) return '';
+  // Simulate's objects (src/core/objects.ts) print as their class's name.
+  if (value instanceof ObjectValue) return value.className;
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   try {

@@ -1,7 +1,7 @@
 // C# pack: generates a C# class per graph from Visual IR, and runs it through a small console
 // project (docs/program-structure.md, "C# language pack").
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, exprType, userTypes } from '../compiler/ir';
-import { NameScope, dedent } from '../compiler/names';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, exprType, userTypes, classInfo, programClassSpec } from '../compiler/ir';
+import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { scanCSharp } from '../importing/csharp-scanner';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
@@ -287,6 +287,14 @@ export function csharpEnumMembers(type: EnumInfo): Map<string, string> {
   return new Map(type.enumerators.map((e) => [e.id, scope.claim(e.name, 'pascal')]));
 }
 
+// How a class's public members are named (src/core/compiler/names.ts). A member can't share its
+// class's name in C#, so each class's scope holds its own name.
+const CLASS_STYLES: ClassMemberStyles = { functions: 'pascal', variables: 'keep', dispatchers: 'pascal' };
+
+function classScope(className: string): NameScope {
+  return new NameScope(RESERVED, ['Start', className, ...HELPER_NAMES, 'EventDispatcher']);
+}
+
 const csharpGenerator: CodeGenerator = {
   libraryExports: csharpLibraryExports,
   snippetLanguages: ['csharp'],
@@ -340,6 +348,8 @@ class CSharpEmitter {
   private readonly library: boolean;
   // The structs and enums the program uses (and the one it declares), by type id.
   private readonly types: Map<string, UserType>;
+  // The public member names of each class the program uses, by type id; its own first.
+  private readonly classNames = new Map<string, ClassMemberNames>();
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions) {
     this.library = !!program.library;
@@ -348,13 +358,16 @@ class CSharpEmitter {
     if (program.declaration) this.types.set(program.declaration.type.id, program.declaration.type);
     // A member can't share its class's name in C#. A library's functions are claimed first,
     // exactly as csharpLibraryExports claims them.
-    this.names = new NameScope(RESERVED, [...(this.library ? [] : ['Start']), this.className, ...HELPER_NAMES, 'EventDispatcher']);
+    this.names = this.library ? new NameScope(RESERVED, [this.className, ...HELPER_NAMES, 'EventDispatcher']) : classScope(this.className);
+    // Public members first, as every file that uses the class names them.
+    const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES);
+    this.classNames.set(`object:${program.className}`, own);
     for (const f of program.functions) {
-      this.functionNames.set(f.id, this.names.claim(f.name, 'pascal'));
+      this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
       this.outputFields.set(f.id, resultFields(f.outputs));
     }
-    for (const m of program.members) if (!m.function) this.memberNames.set(m.id, this.names.claim(m.name));
-    for (const d of program.dispatchers ?? []) this.dispatcherNames.set(d.id, this.names.claim(d.name, 'pascal'));
+    for (const [id, name] of own.variables) this.memberNames.set(id, name);
+    for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'pascal'));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'pascal'));
@@ -629,14 +642,35 @@ class CSharpEmitter {
         break;
       }
       case 'bindEvent':
-        out.line(`${this.dispatcherNames.get(s.dispatcher)}.${s.bind ? 'Bind' : 'Unbind'}(${this.functionNames.get(s.event)});`);
+        out.line(`${this.dispatcherRef(s)}.${s.bind ? 'Bind' : 'Unbind'}(${this.functionNames.get(s.event)});`);
         break;
       case 'unbindAll':
-        out.line(`${this.dispatcherNames.get(s.dispatcher)}.Clear();`);
+        out.line(`${this.dispatcherRef(s)}.Clear();`);
         break;
       case 'broadcast': {
-        const params = this.program.dispatchers?.find((d) => d.id === s.dispatcher)?.params ?? [];
-        out.line(`foreach (var handler in ${this.dispatcherNames.get(s.dispatcher)}.Handlers) handler(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
+        const other = s.target && s.type ? classInfo(this.program, s.type)?.dispatchers.find((d) => d.id === s.dispatcher)?.inputs.filter((p) => p.kind === 'data') : undefined;
+        const params = other ?? this.program.dispatchers?.find((d) => d.id === s.dispatcher)?.params ?? [];
+        out.line(`foreach (var handler in ${this.dispatcherRef(s)}.Handlers) handler(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
+        break;
+      }
+      case 'construct':
+        out.line(`${this.slotNames.get(s.slot)} = new ${this.userTypeName(s.type)}();`);
+        out.line(`${this.slotNames.get(s.slot)}.Start();`);
+        break;
+      case 'setObjectVariable':
+        out.line(`${this.targetRef(s.target)}.${this.membersOf(s.type)?.variables.get(s.variable)} = ${this.coerce(s.value, classInfo(this.program, s.type)?.variables.find((v) => v.id === s.variable)?.type)};`);
+        break;
+      case 'objectCall': {
+        const info = classInfo(this.program, s.type);
+        const names = this.membersOf(s.type);
+        const fn = s.function !== undefined ? info?.functions.find((f) => f.id === s.function) : undefined;
+        const params = (fn ? fn.inputs : info?.events.find((e) => e.id === s.event)?.inputs ?? []).filter((p) => p.kind === 'data');
+        const name = s.function !== undefined ? names?.functions.get(s.function) : names?.events.get(s.event!);
+        const call = `${this.targetRef(s.target)}.${name}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
+        if (!s.results.length) out.line(`${call};`);
+        else if (outputs.length === 1) out.line(`${this.slotNames.get(s.results[0].slot)} = ${call};`);
+        else out.line(`(${s.results.map((r) => this.slotNames.get(r.slot)).join(', ')}) = ${call};`);
         break;
       }
       case 'return': {
@@ -716,6 +750,18 @@ class CSharpEmitter {
       case 'enumValue': {
         const type = this.types.get(e.type);
         return `${this.userTypeName(e.type)}.${type?.kind === 'enum' ? csharpEnumMembers(type).get(e.value) : e.value}`;
+      }
+      case 'self':
+        return 'this';
+      case 'isValid':
+        return `${this.operand(e.value)} != null`;
+      case 'objectVariable':
+        return `${this.targetRef(e.target)}.${this.membersOf(e.type)?.variables.get(e.variable)}`;
+      case 'objectCall': {
+        const fn = classInfo(this.program, e.type)?.functions.find((f) => f.id === e.function);
+        const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
+        const call = `${this.targetRef(e.target)}.${this.membersOf(e.type)?.functions.get(e.function)}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        return e.output ? `${call}.${resultFields(fn?.outputs.filter((p) => p.kind === 'data') ?? []).get(e.output)}` : call;
       }
       case 'makeContainer': {
         const element = { id: e.type.id };
@@ -816,9 +862,32 @@ class CSharpEmitter {
     return params.length ? `Action<${params.map((p) => this.typeName(p.type)).join(', ')}>` : 'Action';
   }
 
-  // The name a struct or enum goes by: its own in its file, else fully qualified.
+  // The member names another class's generated file gives its public members.
+  private membersOf(id: string): ClassMemberNames | undefined {
+    const existing = this.classNames.get(id);
+    if (existing) return existing;
+    const info = classInfo(this.program, id);
+    if (!info) return undefined;
+    const names = claimClassMembers(classScope(new NameScope(RESERVED).claim(info.name, 'pascal')), info, CLASS_STYLES);
+    this.classNames.set(id, names);
+    return names;
+  }
+
+  // An object member is reached through its object, which isn't null (else the run stops, as
+  // Unreal stops on "Accessed None").
+  private targetRef(e: IrExpr): string {
+    return e.kind === 'self' ? 'this' : `${this.operand(e)}!`;
+  }
+
+  // A dispatcher of this object, or of the Target object.
+  private dispatcherRef(s: { dispatcher: string; target?: IrExpr; type?: string }): string {
+    if (s.target && s.type) return `${this.targetRef(s.target)}.${this.membersOf(s.type)?.dispatchers.get(s.dispatcher)}`;
+    return this.dispatcherNames.get(s.dispatcher)!;
+  }
+
+  // The name a struct, enum or class goes by: its own in its file, else fully qualified.
   private userTypeName(id: string): string {
-    if (this.program.declaration?.type.id === id) return this.className;
+    if (this.program.declaration?.type.id === id || id === `object:${this.program.className}`) return this.className;
     const imported = this.program.imports.find((i) => i.id === id);
     return imported ? `global::${imported.module ? `${imported.module}.` : ''}${imported.name}` : 'object';
   }
@@ -836,7 +905,8 @@ class CSharpEmitter {
     const name = this.mapType(type ?? { id: 'any' });
     // Object-like types start out null, so they must admit it (containers start out empty; structs
     // and enums are values).
-    const startsNull = !type || (!type.container && !['bool', 'int', 'float', 'string'].includes(type.id) && !this.types.has(type.id));
+    const kind = type && this.types.get(type.id)?.kind;
+    const startsNull = !type || (!type.container && !['bool', 'int', 'float', 'string'].includes(type.id) && kind !== 'struct' && kind !== 'enum');
     return startsNull && !name.endsWith('?') ? `${name}?` : name;
   }
 

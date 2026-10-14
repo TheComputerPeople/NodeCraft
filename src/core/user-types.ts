@@ -5,6 +5,7 @@
 // the type from the node registry like everything else.
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from './model';
 import { TypeRef, parseTypeId } from './types';
+import type { ClassInfo } from './objects';
 
 export interface StructField {
   id: string;
@@ -50,7 +51,8 @@ export interface EnumInfo {
   source?: TypeSource;
 }
 
-export type UserType = StructInfo | EnumInfo;
+// Workspace types: structs, enums, and classes (src/core/objects.ts).
+export type UserType = StructInfo | EnumInfo | ClassInfo;
 
 export type TypeLookup = (id: string) => UserType | undefined;
 
@@ -63,7 +65,7 @@ export function enumTypeId(name: string): string {
 }
 
 // The type a structure or enumeration document declares.
-export function declaredType(doc: GraphDocument, source?: TypeSource): UserType | undefined {
+export function declaredType(doc: GraphDocument, source?: TypeSource): StructInfo | EnumInfo | undefined {
   const common = { name: doc.name, ...(doc.language ? { language: doc.language } : {}), ...(typeof doc.metadata?.description === 'string' ? { description: doc.metadata.description } : {}), ...(source ? { source } : {}) };
   if (doc.kind === 'structure') {
     return { kind: 'struct', id: structTypeId(doc.name), ...common, fields: doc.variables.map((v) => ({ id: v.id, name: v.name, type: v.type, ...(v.defaultValue !== undefined ? { defaultValue: v.defaultValue } : {}), ...(v.description ? { description: v.description } : {}) })) };
@@ -96,7 +98,7 @@ export type StructOperation = 'make' | 'break' | 'set-members';
 export type EnumOperation = 'switch' | 'equal' | 'not-equal';
 
 // Make, Break and Set Members for a struct; Switch on, == and != for an enum.
-export function userTypeDefinitions(type: UserType): NodeDefinition[] {
+export function userTypeDefinitions(type: StructInfo | EnumInfo): NodeDefinition[] {
   return type.kind === 'struct' ? structDefinitions(type) : enumDefinitions(type);
 }
 
@@ -152,12 +154,12 @@ function enumDefinitions(type: EnumInfo): NodeDefinition[] {
   ];
 }
 
-// Every struct and enum the definitions describe, by type id, for graphs in `language`.
+// Every struct, enum and class the definitions describe, by type id, for graphs in `language`.
 export function typeLookup(definitions: Iterable<NodeDefinition>, language?: string): TypeLookup {
   const types = new Map<string, UserType>();
   for (const def of definitions) {
     const implementation = def.implementation;
-    if (implementation?.kind !== 'struct' && implementation?.kind !== 'enum') continue;
+    if (implementation?.kind !== 'struct' && implementation?.kind !== 'enum' && implementation?.kind !== 'class') continue;
     const type = implementation.type;
     if (language && type.language && type.language !== language) continue;
     if (!types.has(type.id)) types.set(type.id, type);
@@ -167,7 +169,7 @@ export function typeLookup(definitions: Iterable<NodeDefinition>, language?: str
 
 export function isUserTypeId(id: string): boolean {
   const category = parseTypeId(id).category;
-  return category === 'struct' || category === 'enum';
+  return category === 'struct' || category === 'enum' || category === 'object';
 }
 
 // ---- Values (Simulate) --------------------------------------------------------------------------
@@ -203,12 +205,12 @@ export function setMembersDefinition(base: NodeDefinition, members: unknown): No
   return { ...base, inputs: base.inputs.filter((p) => p.kind === 'exec' || p.id === 'struct' || chosen.has(p.id)) };
 }
 
-// The structs and enums graphs in `language` can use, by name.
+// The structs, enums and classes graphs in `language` can use, by name.
 export function listUserTypes(definitions: Iterable<NodeDefinition>, language?: string): UserType[] {
   const types = new Map<string, UserType>();
   for (const def of definitions) {
     const implementation = def.implementation;
-    if (implementation?.kind !== 'struct' && implementation?.kind !== 'enum') continue;
+    if (implementation?.kind !== 'struct' && implementation?.kind !== 'enum' && implementation?.kind !== 'class') continue;
     const type = implementation.type;
     if (language && type.language && type.language !== language) continue;
     if (!types.has(type.id)) types.set(type.id, type);
