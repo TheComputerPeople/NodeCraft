@@ -13,6 +13,8 @@
     "integration",
     "conformance",
     "../src/core",
+    "../src/conformance",
+    "../src/sdk",
     "../src/extension/webview-html.ts",
     "../src/extension/runner.ts",
     "../src/extension/placement.ts",

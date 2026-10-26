@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "../../packages/pack-sdk/dist/types",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "sourceMap": false
+  },
+  "include": ["index.ts"]
+}

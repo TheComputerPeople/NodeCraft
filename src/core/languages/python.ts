@@ -265,6 +265,7 @@ const pythonGenerator: CodeGenerator = {
   importLanguages: ['python'],
   outputFileName: pythonOutputFileName,
   testFileName: (graphFileName) => `test_${pythonOutputFileName(graphFileName)}`,
+  moduleName: (generatedFileName) => generatedFileName.replace(/\.py$/, ''),
   generate: (program, options) => new PythonEmitter(program, options).emit(),
   runner: pythonRunner,
   debugger: pythonDebugger

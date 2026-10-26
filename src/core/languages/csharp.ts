@@ -368,6 +368,7 @@ const csharpGenerator: CodeGenerator = {
   snippetLanguages: ['csharp'],
   importLanguages: ['csharp'],
   outputFileName: (graphFileName) => `${graphFileName}.cs`,
+  moduleName: (_generatedFileName, options) => options.namespace,
   generate: (program, options) => new CSharpEmitter(program, options).emit(),
   runner: {
     commands: () => [['dotnet']],

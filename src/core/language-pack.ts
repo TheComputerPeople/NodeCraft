@@ -127,6 +127,10 @@ export interface CodeGenerator {
   outputFileName(graphFileName: string): string;
   // Name of the generated test file, for languages that write one (GeneratedCode.testFile).
   testFileName?(graphFileName: string): string;
+  // The module (or namespace) other generated files import a generated file at the workspace's
+  // root by, for languages that import by name. The extension works it out from the project's
+  // structure; the conformance runner, which writes a program's files side by side, asks this.
+  moduleName?(generatedFileName: string, options: GenerateOptions): string | undefined;
   generate(program: IrProgram, options: GenerateOptions): GeneratedCode;
   // For a function library: the name each function (by graph id) is exported as, and the class
   // holding them in languages without free functions (C#). Callers import these names.

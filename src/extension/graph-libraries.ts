@@ -6,12 +6,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { LanguagePackRegistry } from '../core/language-pack';
-import { libraryDefinitions, macroLibraryDefinitions } from '../core/libraries';
 import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
-import { declaredType, userTypeDefinitions } from '../core/user-types';
-import { classDefinitions, declaredClass, declaredInterface, interfaceDefinitions } from '../core/objects';
+import { graphFileDefinitions } from '../core/graph-files';
 import { csharpNamespace, pythonModule } from './placement';
 
 const GLOB = '**/*.vgraph';
@@ -106,30 +104,12 @@ export class GraphLibraries implements vscode.Disposable {
       return undefined;
     }
     const root = folder.uri.fsPath;
-    if (doc.kind === 'macroLibrary') return { path: relative(root, uri.fsPath), definitions: macroLibraryDefinitions(doc, relative(root, uri.fsPath)) };
     const generator = doc.language ? this.languages.get(doc.language)?.generator : undefined;
-    if (!generator) return undefined;
     const dir = path.dirname(uri.fsPath);
-    const generated = path.join(dir, generator.outputFileName(path.basename(uri.fsPath)));
-    const module = doc.language === 'python' ? pythonModule(generated, root).module : doc.language === 'csharp' ? csharpNamespace(dir, root) : undefined;
-    // Structs and enums: their Make, Break, Switch… nodes carry the type (src/core/user-types.ts).
-    const type = declaredType(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) });
-    if (type) return { path: relative(root, uri.fsPath), definitions: userTypeDefinitions(type) };
-    // Classes: Construct, which carries the class's public members (src/core/objects.ts).
-    const cls = declaredClass(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) });
-    if (cls) return { path: relative(root, uri.fsPath), definitions: classDefinitions(cls) };
-    // Interfaces: Cast To, which carries the interface's functions.
-    const iface = declaredInterface(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) });
-    if (iface) return { path: relative(root, uri.fsPath), definitions: interfaceDefinitions(iface) };
-    if (doc.kind !== 'functionLibrary') return undefined;
-    const functions = doc.graphs.filter((g) => g.kind === 'function').map((g) => ({ id: g.id, name: g.name }));
-    const definitions = libraryDefinitions(doc, {
-      documentPath: relative(root, uri.fsPath),
-      generatedPath: relative(root, generated),
-      exports: generator.libraryExports(doc.name, functions),
-      module
-    });
-    return { path: relative(root, uri.fsPath), definitions };
+    const generated = generator ? path.join(dir, generator.outputFileName(path.basename(uri.fsPath))) : uri.fsPath;
+    const module = !generator ? undefined : doc.language === 'python' ? pythonModule(generated, root).module : doc.language === 'csharp' ? csharpNamespace(dir, root) : undefined;
+    const definitions = graphFileDefinitions(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) }, generator);
+    return definitions && { path: relative(root, uri.fsPath), definitions };
   }
 
   private publish(): void {

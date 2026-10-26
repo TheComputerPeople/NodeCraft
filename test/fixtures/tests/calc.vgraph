@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 3,
+  "name": "Calc",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [
+    {
+      "id": "v_score",
+      "name": "Score",
+      "type": {
+        "id": "float"
+      },
+      "defaultValue": 0
+    }
+  ],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "t1",
+          "type": "core:test.case",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "name": "Adds up"
+          }
+        },
+        {
+          "id": "add",
+          "type": "core:math.add",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "properties": {
+            "pin:a": 2,
+            "pin:b": 3
+          }
+        },
+        {
+          "id": "set",
+          "type": "core:variable.set",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "properties": {
+            "variable": "v_score"
+          }
+        },
+        {
+          "id": "get",
+          "type": "core:variable.get",
+          "position": {
+            "x": 0,
+            "y": 160
+          },
+          "properties": {
+            "variable": "v_score"
+          }
+        },
+        {
+          "id": "eq",
+          "type": "core:test.assert-equal",
+          "position": {
+            "x": 260,
+            "y": 160
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "float"
+            },
+            "pin:expected": 5
+          }
+        },
+        {
+          "id": "gt",
+          "type": "core:math.greater",
+          "position": {
+            "x": 520,
+            "y": 160
+          },
+          "properties": {
+            "pin:b": 4
+          }
+        },
+        {
+          "id": "at",
+          "type": "core:test.assert-true",
+          "position": {
+            "x": 0,
+            "y": 320
+          },
+          "properties": {
+            "pin:message": "more than four"
+          }
+        },
+        {
+          "id": "t2",
+          "type": "core:test.case",
+          "position": {
+            "x": 260,
+            "y": 320
+          },
+          "properties": {
+            "name": "Fails on purpose"
+          }
+        },
+        {
+          "id": "eq2",
+          "type": "core:test.assert-equal",
+          "position": {
+            "x": 520,
+            "y": 320
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:actual": 1,
+            "pin:expected": 2,
+            "pin:message": "math"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "t1.execOut->add.execIn",
+          "fromNode": "t1",
+          "fromPin": "execOut",
+          "toNode": "add",
+          "toPin": "execIn"
+        },
+        {
+          "id": "add.execOut->set.execIn",
+          "fromNode": "add",
+          "fromPin": "execOut",
+          "toNode": "set",
+          "toPin": "execIn"
+        },
+        {
+          "id": "add.result->set.value",
+          "fromNode": "add",
+          "fromPin": "result",
+          "toNode": "set",
+          "toPin": "value"
+        },
+        {
+          "id": "set.execOut->eq.execIn",
+          "fromNode": "set",
+          "fromPin": "execOut",
+          "toNode": "eq",
+          "toPin": "execIn"
+        },
+        {
+          "id": "get.value->eq.actual",
+          "fromNode": "get",
+          "fromPin": "value",
+          "toNode": "eq",
+          "toPin": "actual"
+        },
+        {
+          "id": "eq.execOut->at.execIn",
+          "fromNode": "eq",
+          "fromPin": "execOut",
+          "toNode": "at",
+          "toPin": "execIn"
+        },
+        {
+          "id": "get.value->gt.a",
+          "fromNode": "get",
+          "fromPin": "value",
+          "toNode": "gt",
+          "toPin": "a"
+        },
+        {
+          "id": "gt.returnValue->at.condition",
+          "fromNode": "gt",
+          "fromPin": "returnValue",
+          "toNode": "at",
+          "toPin": "condition"
+        },
+        {
+          "id": "t2.execOut->eq2.execIn",
+          "fromNode": "t2",
+          "fromPin": "execOut",
+          "toNode": "eq2",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Test Case events: one passes, one fails with \"Expected 2, got 1: math\"."
+  }
+}

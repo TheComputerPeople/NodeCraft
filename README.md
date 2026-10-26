@@ -42,6 +42,7 @@ The TypeScript configuration includes the DOM library definitions because VS Cod
 | `npm run test:conformance` | Runs every fixture graph in Simulate and as generated TypeScript, JavaScript, Python and C#, and checks they print the same output (part of `npm test`; needs Node.js 22.18+, Python 3 and the .NET SDK; missing tools skip their tests) |
 | `npm run test:integration` | Launches VS Code with the extension and runs smoke tests inside it (not part of `npm test`) |
 | `npm run test:integration:debuggers` | The same, with your installed VS Code extensions loaded, so debugging generated Python (Python Debugger extension) and C# (C# extension) is tested too |
+| `npm run build:sdk` / `npm run test:sdk` | Builds the language pack SDK (`packages/pack-sdk`, with the conformance suite and its `blueprint-conformance` command) / and runs its command once |
 
 The browser tests drive the real webview bundle in an installed Microsoft Edge or Google Chrome through `playwright-core` (no browser download). Set `BLUEPRINT_TEST_BROWSER` to a Chromium executable to use a different one; without any browser those tests are skipped.
 
