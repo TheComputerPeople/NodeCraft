@@ -194,6 +194,18 @@ Goal: Blueprint debugging, powered by each language's real debugger.
 
 Exit: the debugging loop works in TypeScript, Python and C# without the user ever opening a generated file.
 
+Design: [debugging.md](debugging.md). Steps, one commit each (large steps may take several):
+
+1. Design and plan (this list).
+2. Breakpoints in the editor: F9, Ctrl+Shift+F9, the node menu, markers; stored per workspace.
+3. Debugging in Simulate: the runtime's debug hook, the worker, pausing at breakpoints, Resume and Step Over/Into/Out, the current node and path, the call stack in graph terms.
+4. Values while paused in Simulate: pin hover, Watch this value.
+5. Exec wire pulses during Simulate.
+6. Debugging generated TypeScript and JavaScript through js-debug: breakpoints mirrored from nodes, stopped frames mapped to nodes, stepping by node, the call stack, pin values through `evaluate`.
+7. Debugging generated Python (debugpy) and C# (coreclr).
+8. Test Case events, Assert nodes and Run Tests (moved from Phase 4).
+9. Documentation, the parity checklist and the exit check.
+
 ### Phase 6: Language breadth
 
 Goal: support for most languages without a hand-written adapter for each.
