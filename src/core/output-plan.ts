@@ -1,0 +1,88 @@
+// Output plans (docs/output-placement.md, "Architecture"): what a language pack's placement strategy
+// asks for besides the generated file itself. Files the extension owns are rewritten freely; a
+// user's file gets at most a fenced block, added once with consent and only edited inside after.
+import { CompileDiagnostic } from './compiler/diagnostics';
+
+export interface OutputPlan {
+  // Files the extension owns (a CMake include listing the generated sources, a Rust module file),
+  // relative to the workspace folder with "/" separators. An empty `text` deletes the file.
+  ownedFiles?: { path: string; text: string }[];
+  // One-time edits to the user's files that register the generated code with the build.
+  hooks?: OutputHook[];
+  diagnostics?: CompileDiagnostic[];
+}
+
+export interface OutputHook {
+  // Stable across compiles, e.g. "cmake-include:CMakeLists.txt": the user's answer is remembered by it.
+  id: string;
+  // The user's file, relative to the workspace folder.
+  file: string;
+  // What it does and why, for the prompt: "Add include(vgraph.cmake) to CMakeLists.txt so CMake
+  // builds the generated C++ files".
+  description: string;
+  block: FencedBlock;
+}
+
+// Lines the extension manages inside a user's file, between a begin and an end marker line.
+export interface FencedBlock {
+  begin: string;
+  end: string;
+  // The lines between the markers.
+  text: string;
+  // Where a new block goes: at the end (the default), at the start, or after the last line that
+  // matches the pattern (a regular expression's source).
+  anchor?: 'end' | 'start' | { after: string };
+}
+
+// What placement knows about the project (read-only, static: nothing runs project tooling).
+export interface PlacementContext {
+  // The generated file just written, relative to the workspace folder; absent when the plan is
+  // refreshed because a graph was deleted or renamed.
+  outputFile?: string;
+  // Every generated file of the pack's language in the workspace folder, relative, sorted.
+  generatedFiles: string[];
+  readFile(path: string): string | undefined;
+  exists(path: string): boolean;
+}
+
+// The block's place in the text, if the text has it.
+export function findBlock(text: string, block: Pick<FencedBlock, 'begin' | 'end'>): { start: number; end: number; inner: string } | undefined {
+  const start = text.indexOf(block.begin);
+  if (start < 0) return undefined;
+  const endMarker = text.indexOf(block.end, start + block.begin.length);
+  if (endMarker < 0) return undefined;
+  const innerStart = text.indexOf('\n', start) + 1;
+  const innerEnd = text.lastIndexOf('\n', endMarker) + 1;
+  return { start, end: endMarker + block.end.length, inner: innerStart <= innerEnd ? text.slice(innerStart, innerEnd) : '' };
+}
+
+// The text with the block in place: its lines replaced when the markers are there, else the whole
+// block inserted at its anchor. Keeps the file's line endings.
+export function withBlock(text: string, block: FencedBlock): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const inner = block.text ? `${block.text.replace(/\r?\n$/, '').split(/\r?\n/).join(eol)}${eol}` : '';
+  const found = findBlock(text, block);
+  if (found) {
+    const innerStart = text.indexOf('\n', found.start) + 1;
+    const innerEnd = text.lastIndexOf('\n', text.indexOf(block.end, found.start)) + 1;
+    return text.slice(0, innerStart) + inner + text.slice(innerEnd);
+  }
+  const whole = `${block.begin}${eol}${inner}${block.end}${eol}`;
+  const anchor = block.anchor ?? 'end';
+  if (anchor === 'start') return whole + text;
+  if (anchor !== 'end') {
+    const lines = text.split(/(?<=\n)/);
+    const pattern = new RegExp(anchor.after);
+    const last = lines.map((line) => pattern.test(line)).lastIndexOf(true);
+    if (last >= 0) {
+      const before = lines.slice(0, last + 1).join('');
+      return `${before}${before.endsWith('\n') ? '' : eol}${whole}${lines.slice(last + 1).join('')}`;
+    }
+  }
+  return `${text}${text && !text.endsWith('\n') ? eol : ''}${whole}`;
+}
+
+// Whether the user's file has the block with this content already.
+export function hasBlock(text: string, block: FencedBlock): boolean {
+  return withBlock(text, block) === text;
+}

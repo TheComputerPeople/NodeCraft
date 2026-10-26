@@ -14,13 +14,14 @@ import { GraphLibraries } from './graph-libraries';
 import { DebugMarks } from './breakpoints';
 import { CodeDebugService } from './code-debug';
 import { createApi } from './api';
+import { OutputPlans } from './output-plans';
 import { BlueprintVisualScriptingApi } from '../core/api';
 import { ProjectFunctions } from './project-functions';
 
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
 export interface ExtensionApi extends BlueprintVisualScriptingApi {
-  testing: { marks: DebugMarks; provider: GraphEditorProvider };
+  testing: { marks: DebugMarks; provider: GraphEditorProvider; outputPlans: OutputPlans };
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
@@ -46,7 +47,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   context.subscriptions.push(graphLibraries);
 
   // Compiling waits for the first scans, so functions that are merely still loading aren't reported missing.
-  const compiler = new CompileService(registry, languages, output, () => Promise.all([projectFunctions.ready, graphLibraries.ready]).then(() => undefined));
+  // Registering generated files with the project's build, with consent (docs/output-placement.md).
+  const outputPlans = new OutputPlans(context.workspaceState, languages);
+  context.subscriptions.push(outputPlans);
+  const compiler = new CompileService(registry, languages, output, () => Promise.all([projectFunctions.ready, graphLibraries.ready]).then(() => undefined), outputPlans);
   // Breakpoints on nodes, kept per workspace (docs/debugging.md).
   const marks = new DebugMarks(context.workspaceState);
   context.subscriptions.push(marks);
@@ -113,6 +117,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     // The debugger's buttons (docs/debugging.md); the keys apply while a graph editor has focus.
     ...(['resume', 'stepOver', 'stepInto', 'stepOut', 'stop'] as const).map((action) =>
       vscode.commands.registerCommand(`blueprintVisualScripting.debug.${action}`, () => provider.debugAction(action))),
+    // Offers the build registrations the user declined again (docs/output-placement.md).
+    vscode.commands.registerCommand('blueprintVisualScripting.registerGeneratedFiles', async () => {
+      for (const folder of vscode.workspace.workspaceFolders ?? []) await outputPlans.offerAgain(folder.uri.fsPath);
+    }),
     vscode.commands.registerCommand('blueprintVisualScripting.findInAll', () => {
       if (!provider.postToActive({ type: 'openFind', findAll: true })) void vscode.commands.executeCommand('workbench.action.findInFiles');
     }),
@@ -129,7 +137,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     })
   );
 
-  context.subscriptions.push(...followGraphFileChanges(compiler, marks, compileAndReport));
+  context.subscriptions.push(...followGraphFileChanges(compiler, marks, compileAndReport, outputPlans));
 
   context.subscriptions.push(
     vscode.commands.registerCommand('blueprintVisualScripting.createGraph', async () => {
@@ -153,7 +161,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       await vscode.commands.executeCommand('vscode.open', target);
     })
   );
-  return { ...createApi(languages, registry, output), testing: { marks, provider } };
+  return { ...createApi(languages, registry, output), testing: { marks, provider, outputPlans } };
 }
 
 export function deactivate(): void {}
@@ -175,7 +183,12 @@ async function graphDocumentFor(uri?: vscode.Uri): Promise<vscode.TextDocument |
 
 // Generated files sit next to their graph, so moving a folder moves them too. Renaming, moving or
 // deleting a single graph file needs its generated file to follow (docs/output-placement.md).
-function followGraphFileChanges(compiler: CompileService, marks: DebugMarks, recompile: (document: vscode.TextDocument) => Promise<void>): vscode.Disposable[] {
+function followGraphFileChanges(compiler: CompileService, marks: DebugMarks, recompile: (document: vscode.TextDocument) => Promise<void>, outputPlans: OutputPlans): vscode.Disposable[] {
+  // Build registrations list every generated file, so they change when a graph goes or moves.
+  const refreshPlans = async (uri: vscode.Uri): Promise<void> => {
+    const root = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+    if (root) await outputPlans.refreshAll(root);
+  };
   return [
     vscode.workspace.onDidRenameFiles(async (event) => {
       for (const { oldUri, newUri } of event.files) {
@@ -192,6 +205,7 @@ function followGraphFileChanges(compiler: CompileService, marks: DebugMarks, rec
         await vscode.workspace.applyEdit(edit);
         // Refreshes the header (it names the graph file) and Python's module-derived names.
         await recompile(await vscode.workspace.openTextDocument(newUri));
+        await refreshPlans(newUri);
       }
     }),
     vscode.workspace.onDidDeleteFiles(async (event) => {
@@ -203,6 +217,7 @@ function followGraphFileChanges(compiler: CompileService, marks: DebugMarks, rec
         for (const output of compiler.outputPathsFor(uri.fsPath).filter((file) => isGeneratedFrom(file, name))) {
           await vscode.workspace.fs.delete(vscode.Uri.file(output), { useTrash: true });
         }
+        await refreshPlans(uri);
       }
     })
   ];

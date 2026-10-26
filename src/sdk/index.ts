@@ -19,6 +19,7 @@ export type {
 export type { Capability, NodeDefinition, PinDefinition } from '../core/model';
 export type { TypeRef, ContainerKind } from '../core/types';
 export type { NodeLine } from '../core/compiler/writer';
+export type { FencedBlock, OutputHook, OutputPlan, PlacementContext } from '../core/output-plan';
 export type { NameStyle } from '../core/compiler/names';
 
 // Helpers the built-in packs use.
@@ -26,6 +27,7 @@ export { CodeWriter } from '../core/compiler/writer';
 export { NameScope, toIdentifier, dedent, claimClassMembers } from '../core/compiler/names';
 export { exprType, readsStorageOnly, programClassSpec, userTypes, interfaceInfo } from '../core/compiler/ir';
 export { FULL_CAPABILITIES } from '../core/capabilities';
+export { findBlock, hasBlock, withBlock } from '../core/output-plan';
 export { formatValue } from '../core/values';
 
 // The conformance suite.

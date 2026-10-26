@@ -1,6 +1,7 @@
 // Runs inside the VS Code extension host. A tiny sequential runner keeps the suite free of a test
 // framework dependency; VS Code reports failure when the returned promise rejects.
 import * as assert from 'node:assert/strict';
+import * as fs from 'node:fs';
 import * as vscode from 'vscode';
 import type { LanguagePack } from '../../../src/core/language-pack';
 import type { NodeDefinition } from '../../../src/core/model';
@@ -392,6 +393,66 @@ test('another extension registers a language pack and a node library, then remov
   }
   await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
   assert.match(vscode.languages.getDiagnostics(graph).map((d) => d.message).join(' '), /Unknown graph language "echo"/);
+});
+
+// Output plans (docs/output-placement.md): a pack registering its generated files with a build.
+// It owns a list of every generated file, and adds a fenced block to the user's build.txt once,
+// when the user agrees; after that, only the block's lines change.
+test("a pack's output plan owns a file and adds a fenced block to the user's build file, with consent", async () => {
+  const api = (await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as PublicApi & { testing: { outputPlans: { ask: (hook: { id: string }) => Promise<string> } } };
+  const asked: string[] = [];
+  let answer = 'decline';
+  api.testing.outputPlans.ask = async (hook) => {
+    asked.push(hook.id);
+    return answer;
+  };
+  const pack = api.registerLanguagePack({
+    ...javascriptPack, id: 'built', displayName: 'Built', apiVersion: 1,
+    generator: {
+      ...javascriptPack.generator!,
+      outputFileName: (name: string) => `${name}.built.js`,
+      placement: (context) => ({
+        ownedFiles: [{ path: 'vgraph-sources.txt', text: context.generatedFiles.map((f) => `${f}\n`).join('') }],
+        hooks: [{ id: 'build-include', file: 'build.txt', description: 'Add vgraph-sources.txt to build.txt', block: { begin: '# vgraph:begin', end: '# vgraph:end', text: `sources ${context.generatedFiles.length}` } }]
+      })
+    }
+  });
+  const graph = (name: string) => workspaceFile(`${name}.vgraph`);
+  const write = (name: string) => vscode.workspace.fs.writeFile(graph(name), new TextEncoder().encode(JSON.stringify({
+    schemaVersion: 3, name, kind: 'class', language: 'built', variables: [], metadata: {},
+    graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [{ id: 's', type: 'core:event.start', position: { x: 0, y: 0 }, properties: {} }], connections: [] }]
+  }, null, 2)));
+  const text = (name: string) => fs.readFileSync(workspaceFile(name).fsPath, 'utf8');
+  fs.writeFileSync(workspaceFile('build.txt').fsPath, 'project demo\n');
+  try {
+    await write('BuiltOne');
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph('BuiltOne'));
+    assert.equal(text('vgraph-sources.txt'), 'BuiltOne.vgraph.built.js\n');
+    await waitFor(() => asked.length === 1, 'the hook to be proposed');
+    assert.match(vscode.languages.getDiagnostics(graph('BuiltOne')).map((d) => d.message).join(' '), /isn't registered with the build yet: Add vgraph-sources.txt to build.txt/);
+    assert.equal(text('build.txt'), 'project demo\n', 'declined: the file is untouched');
+
+    // Declined: not asked again, until the command offers it again; then accepted.
+    await write('BuiltTwo');
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph('BuiltTwo'));
+    assert.equal(asked.length, 1);
+    assert.equal(text('vgraph-sources.txt'), 'BuiltOne.vgraph.built.js\nBuiltTwo.vgraph.built.js\n');
+    answer = 'accept';
+    await vscode.commands.executeCommand('blueprintVisualScripting.registerGeneratedFiles');
+    await waitFor(() => asked.length === 2, 'the hook to be offered again');
+    await waitFor(() => text('build.txt').includes('# vgraph:begin'), 'the block to be added');
+    assert.equal(text('build.txt'), 'project demo\n# vgraph:begin\nsources 2\n# vgraph:end\n');
+
+    // Deleting a graph updates the owned file and the block's lines without asking.
+    const remove = new vscode.WorkspaceEdit();
+    remove.deleteFile(graph('BuiltTwo'));
+    await vscode.workspace.applyEdit(remove);
+    await waitFor(() => text('build.txt').includes('sources 1'), 'the block to follow the delete');
+    assert.equal(text('vgraph-sources.txt'), 'BuiltOne.vgraph.built.js\n');
+    assert.equal(asked.length, 2);
+  } finally {
+    pack.dispose();
+  }
 });
 
 test("Compile writes a graph's tests to their own file; Run Tests and Simulate Tests run them", async () => {

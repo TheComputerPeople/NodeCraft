@@ -4,6 +4,7 @@
 import { IrProgram } from './compiler/ir';
 import { NodeLine } from './compiler/writer';
 import { ModuleScan } from './importing/symbols';
+import { OutputPlan, PlacementContext } from './output-plan';
 import { TypeRef } from './types';
 
 // Which Blueprint concepts generated code in the language can express (not which keywords the
@@ -131,6 +132,10 @@ export interface CodeGenerator {
   // root by, for languages that import by name. The extension works it out from the project's
   // structure; the conformance runner, which writes a program's files side by side, asks this.
   moduleName?(generatedFileName: string, options: GenerateOptions): string | undefined;
+  // Registers generated files with the project's build (docs/output-placement.md): files the
+  // extension owns, and one-time hooks into the user's build files. Asked after each compile,
+  // and after a graph of the language is deleted or renamed.
+  placement?(context: PlacementContext): OutputPlan;
   generate(program: IrProgram, options: GenerateOptions): GeneratedCode;
   // For a function library: the name each function (by graph id) is exported as, and the class
   // holding them in languages without free functions (C#). Callers import these names.

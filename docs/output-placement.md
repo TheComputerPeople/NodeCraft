@@ -84,6 +84,16 @@ Placement splits into four parts, so the decision logic stays testable and langu
 
 The same machinery covers edge cases in the first three languages: a TypeScript folder outside `tsconfig.json`'s `include`, a Python folder that isn't importable, a legacy C# project. So it isn't special machinery for four languages.
 
+### As built (Phase 6)
+
+- A pack's generator has `placement(context)`, given the generated file just written, every generated file of its language in the workspace folder, and read-only access to files. It returns an `OutputPlan` (`src/core/output-plan.ts`): owned files (an empty text deletes one), hooks and diagnostics.
+- `src/extension/output-plans.ts` applies it after each compile and after a graph is deleted or renamed:
+  - It writes owned files only when they changed.
+  - A user's file that already has the hook's fenced block gets only the block's lines updated, as an undoable edit that's saved unless the file had unsaved changes.
+  - A new hook is proposed once, without holding up the compile: **Add**, **Show Change** (a diff of the proposed file) or **Never**; dismissing it asks again next time.
+  - Answers are remembered per workspace. Until a hook is in place, the graph gets a warning, and **Register Generated Files with the Build** offers declined hooks again.
+- The fenced-block functions (`findBlock`, `withBlock`, `hasBlock`) are in the SDK for pack authors.
+
 ### Security
 
 Some probes execute project tooling: configuring CMake runs the project's CMake scripts, and Cargo can run build scripts. Those probes run only in trusted workspaces, consistent with the Workspace Trust rules in [architecture.md](architecture.md). In Restricted Mode, strategies fall back to reading files statically. `cargo metadata` runs with `--no-deps --offline`, so probing never downloads anything.

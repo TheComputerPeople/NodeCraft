@@ -55,6 +55,11 @@
         "icon": "$(play)"
       },
       {
+        "command": "blueprintVisualScripting.registerGeneratedFiles",
+        "title": "Register Generated Files with the Build",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
         "command": "blueprintVisualScripting.runTests",
         "title": "Run Tests",
         "category": "Blueprint Visual Scripting",

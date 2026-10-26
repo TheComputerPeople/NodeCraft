@@ -10,6 +10,7 @@ import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { csharpNamespace, csharpRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
+import { OutputPlans } from './output-plans';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
 
 export interface CompileOutcome {
@@ -52,7 +53,9 @@ export class CompileService implements vscode.Disposable {
     private readonly languages: LanguagePackRegistry,
     private readonly output: () => vscode.OutputChannel,
     // Resolves when node definitions that load in the background (project functions) are ready.
-    private readonly ready: () => Promise<void> = () => Promise.resolve()
+    private readonly ready: () => Promise<void> = () => Promise.resolve(),
+    // Registers generated files with the project's build (docs/output-placement.md).
+    private readonly outputPlans?: OutputPlans
   ) {}
 
   lastReport(uri: vscode.Uri): CompileReport | undefined {
@@ -118,7 +121,9 @@ export class CompileService implements vscode.Disposable {
     const testPath = testFileName ? path.join(graphDir, testFileName) : undefined;
     if (testPath) await writeIfChanged(vscode.Uri.file(testPath), result.output.testFile!);
     await this.removeStaleOutputs(graphDir, graphFileName, [outputPath, ...(testPath ? [testPath] : [])]);
-    const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root)];
+    const pack = this.languages.get(language);
+    const registration = pack && this.outputPlans ? await this.outputPlans.apply(pack, root, outputPath) : [];
+    const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root), ...registration];
     const importRoots = result.output.importRoots?.map((r) => path.join(root, r));
     const sources = language === 'csharp' ? csharpRunSources(graphDir, root, outputPath, result.output.importedFiles ?? []) : undefined;
     const generated: GeneratedFile = { graph: document.uri, outputPath, language, nodeLines: result.output.nodeLines, codeBreaks: result.output.codeBreaks ?? [], pinExpressions: result.output.pinExpressions ?? [] };
