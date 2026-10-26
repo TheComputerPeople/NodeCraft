@@ -7,6 +7,8 @@ const EXTENSION_ID = 'local.blueprint-visual-scripting';
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
 
 type Test = { name: string; run: () => Promise<void> };
+// Thrown by a test that can't run here (a debugger extension that isn't loaded).
+class Skip extends Error {}
 const tests: Test[] = [];
 const test = (name: string, run: () => Promise<void>): void => {
   tests.push({ name, run });
@@ -332,50 +334,84 @@ interface ExtensionApi {
   };
 }
 
-test('Debug stops at a node breakpoint in generated JavaScript, steps by node and reads pins', async () => {
-  // The sample, in JavaScript (an earlier test switched demo.vgraph to Python).
-  const graph = workspaceFile('debugme.vgraph');
+// Debugs the sample in `language`: stops at a breakpoint on Add, reads its result before and after
+// it runs, steps node by node to the Print, and runs to the end.
+async function debugSample(language: string, generatedFile: string): Promise<void> {
+  const name = `debug_${language}.vgraph`;
+  const graph = workspaceFile(name);
+  // An earlier test switched demo.vgraph to Python; each language gets its own copy.
   const sample = JSON.parse(await readText(workspaceFile('demo.vgraph'))) as { name: string; language: string };
-  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({ ...sample, name: 'DebugMe', language: 'javascript' }, null, 2)));
-  await openInGraphEditor('debugme.vgraph');
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({ ...sample, name: 'DebugMe', language }, null, 2)));
+  await openInGraphEditor(name);
   const api = vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi;
   await api.marks.breakpoints.set(graph, [{ graphId: 'EventGraph', nodeId: 'add_1', enabled: true }]);
+  try {
+    await vscode.commands.executeCommand('blueprintVisualScripting.debug', graph);
+    const paused = () => api.provider.currentDebug()?.stack;
+    await waitFor(() => !!paused(), 'the debugger to stop at the breakpoint', 180000);
+    assert.deepEqual(paused()![0], { ...paused()![0], graphId: 'EventGraph', nodeId: 'add_1' });
+    const mirrored = vscode.debug.breakpoints.filter((b) => b instanceof vscode.SourceBreakpoint && b.location.uri.fsPath.endsWith(generatedFile));
+    assert.equal(mirrored.length, 1, 'the graph breakpoint is mirrored into the generated file');
+    const debug = api.provider.currentDebug()!;
+    const result = [{ graphId: 'EventGraph', nodeId: 'add_1', pinId: 'result' }];
+    assert.deepEqual(await debug.read(graph, result), [{ value: '0' }], "Add hasn't run yet");
 
-  await vscode.commands.executeCommand('blueprintVisualScripting.debug', graph);
-  const paused = () => api.provider.currentDebug()?.stack;
-  await waitFor(() => !!paused(), 'the debugger to stop at the breakpoint', 60000);
-  assert.deepEqual(paused()![0], { ...paused()![0], graphId: 'EventGraph', nodeId: 'add_1' });
-  const mirrored = vscode.debug.breakpoints.filter((b) => b instanceof vscode.SourceBreakpoint && b.location.uri.fsPath.endsWith('debugme.vgraph.js'));
-  assert.equal(mirrored.length, 1, 'the graph breakpoint is mirrored into the generated file');
-  const debug = api.provider.currentDebug()!;
-  const result = [{ graphId: 'EventGraph', nodeId: 'add_1', pinId: 'result' }];
-  assert.deepEqual(await debug.read(graph, result), [{ value: '0' }], "Add hasn't run yet");
+    // Each step moves one node. Some compilers drop the Branch on the constant true, so the step
+    // from Add may land on the Print directly.
+    const visited: string[] = [];
+    for (let i = 0; i < 3 && paused()?.[0].nodeId !== 'print_true'; i++) {
+      const from = paused()![0].nodeId;
+      debug.act('stepOver');
+      await waitFor(() => !!paused() && paused()![0].nodeId !== from, 'Step Over to reach the next node', 60000);
+      visited.push(paused()![0].nodeId);
+    }
+    assert.ok(['print_true', 'branch_1,print_true'].includes(visited.join(',')), `stepped through ${visited.join(', ')}`);
+    assert.deepEqual(await debug.read(graph, result), [{ value: '30' }]);
+    // VS Code showed the generated code where it stopped; the graph editor is in front instead.
+    await waitFor(() => activeCustomEditor()?.uri.toString() === graph.toString(), 'the graph editor to come back to the front');
 
-  // The Branch's condition is the constant true, which V8 compiles away, so the next node to stop
-  // at is the Print.
-  debug.act('stepOver');
-  await waitFor(() => paused()?.[0].nodeId === 'print_true', 'Step Over to reach the next node', 60000);
-  assert.deepEqual(await debug.read(graph, result), [{ value: '30' }]);
-  // VS Code showed the generated code where it stopped; the graph editor is in front instead.
-  await waitFor(() => activeCustomEditor()?.uri.toString() === graph.toString(), 'the graph editor to come back to the front');
+    debug.act('resume');
+    await waitFor(() => !api.provider.currentDebug(), 'the session to end', 60000);
+  } finally {
+    api.provider.currentDebug()?.act('stop');
+    await api.marks.breakpoints.set(graph, []);
+  }
+}
 
-  debug.act('resume');
-  await waitFor(() => !api.provider.currentDebug(), 'the session to end', 60000);
-  await api.marks.breakpoints.set(graph, []);
+test('Debug stops at a node breakpoint in generated JavaScript, steps by node and reads pins', () => debugSample('javascript', 'debug_javascript.vgraph.js'));
+
+test('Debug does the same in generated TypeScript', () => debugSample('typescript', 'debug_typescript.vgraph.ts'));
+
+// These need the language's debugger extension: run `npm run test:integration:debuggers` to load
+// the installed extensions.
+test('Debug does the same in generated Python (debugpy)', async () => {
+  if (!vscode.extensions.getExtension('ms-python.debugpy')) throw new Skip('the Python Debugger extension is not loaded');
+  await debugSample('python', 'debug_python_vgraph.py');
+});
+
+test('Debug does the same in generated C# (coreclr)', async () => {
+  if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
+  await debugSample('csharp', 'debug_csharp.vgraph.cs');
 });
 
 export async function run(): Promise<void> {
   const failures: string[] = [];
+  let skipped = 0;
   for (const { name, run: body } of tests) {
     try {
       await body();
       console.log(`  ✔ ${name}`);
     } catch (error) {
+      if (error instanceof Skip) {
+        skipped++;
+        console.log(`  - ${name} (skipped: ${error.message})`);
+        continue;
+      }
       failures.push(name);
       console.error(`  ✖ ${name}\n    ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
     }
   }
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-  console.log(`${tests.length - failures.length}/${tests.length} integration tests passed`);
+  console.log(`${tests.length - failures.length - skipped}/${tests.length - skipped} integration tests passed${skipped ? ` (${skipped} skipped)` : ''}`);
   if (failures.length) throw new Error(`${failures.length} integration test(s) failed: ${failures.join(', ')}`);
 }

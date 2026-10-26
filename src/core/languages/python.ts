@@ -5,7 +5,7 @@ import { scanPython } from '../importing/python-scanner';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
-import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression } from '../language-pack';
+import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression } from '../language-pack';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 
@@ -224,28 +224,43 @@ export function pythonExportNames(functions: { id: string; name: string }[]): Ma
   return new Map(functions.map((f) => [f.id, scope.claim(f.name, 'snake')]));
 }
 
+// Run's command line, for the Python extension's debugger (debugpy runs `code` as `python -c`).
+const pythonRunner: CodeRunner = {
+  commands: (platform) => (platform === 'win32' ? [['py', '-3'], ['python'], ['python3']] : [['python3'], ['python']]),
+  // Puts the import roots of project modules on sys.path, as running the project would.
+  args: (file, className, context) => [
+    '-c',
+    [
+      ...(context?.importRoots?.length ? [`import sys; sys.path[:0] = ${JSON.stringify(context.importRoots)}`] : []),
+      `import importlib.util as u; s = u.spec_from_file_location("vgraph_module", ${JSON.stringify(file.path)}); m = u.module_from_spec(s); s.loader.exec_module(m); o = m.${className}(); o.start()`,
+      // Then Main with the arguments, when the class has one.
+      ...(context?.mainMethod ? [`o.${context.mainMethod}(${JSON.stringify(context.args ?? [])})`] : []),
+      // Latent actions (Delay) run once start() has returned.
+      'import sys; q = sys.modules.get("_blueprint_latent"); q and q.run()'
+    ].join('; ')
+  ],
+  missingToolMessage: 'Python 3 was not found. Install Python 3.8 or later and make sure it is on the PATH.'
+};
+
+// The Python extension's debugger runs the same code as Run, with the interpreter the Python
+// extension selected (or the runCommands setting's).
+const pythonDebugger: CodeDebugger = {
+  type: 'debugpy',
+  extension: { id: 'ms-python.debugpy', name: 'Python Debugger' },
+  configuration: (file, className, context) => ({
+    type: 'debugpy', request: 'launch', code: pythonRunner.args(file, className, context)[1], cwd: context.cwd, console: 'internalConsole', justMyCode: true,
+    ...(context.command?.length === 1 ? { python: context.command[0] } : {})
+  })
+};
+
 const pythonGenerator: CodeGenerator = {
   libraryExports: (_name, functions) => ({ names: pythonExportNames(functions) }),
   snippetLanguages: ['python'],
   importLanguages: ['python'],
   outputFileName: (graphFileName) => `${toIdentifier(graphFileName.replace(/\.vgraph$/i, ''), 'snake')}_vgraph.py`,
   generate: (program, options) => new PythonEmitter(program, options).emit(),
-  runner: {
-    commands: (platform) => (platform === 'win32' ? [['py', '-3'], ['python'], ['python3']] : [['python3'], ['python']]),
-    // Puts the import roots of project modules on sys.path, as running the project would.
-    args: (file, className, context) => [
-      '-c',
-      [
-        ...(context?.importRoots?.length ? [`import sys; sys.path[:0] = ${JSON.stringify(context.importRoots)}`] : []),
-        `import importlib.util as u; s = u.spec_from_file_location("vgraph_module", ${JSON.stringify(file.path)}); m = u.module_from_spec(s); s.loader.exec_module(m); o = m.${className}(); o.start()`,
-        // Then Main with the arguments, when the class has one.
-        ...(context?.mainMethod ? [`o.${context.mainMethod}(${JSON.stringify(context.args ?? [])})`] : []),
-        // Latent actions (Delay) run once start() has returned.
-        'import sys; q = sys.modules.get("_blueprint_latent"); q and q.run()'
-      ].join('; ')
-    ],
-    missingToolMessage: 'Python 3 was not found. Install Python 3.8 or later and make sure it is on the PATH.'
-  }
+  runner: pythonRunner,
+  debugger: pythonDebugger
 };
 
 export const pythonPack: LanguagePack = {

@@ -15,6 +15,7 @@ import { parseDocument } from '../core/serializer';
 import { DebugMarks } from './breakpoints';
 import { CompileService, GeneratedFile } from './compile-service';
 import { GraphDebug, GraphStackFrame, NOT_RUNNING } from './graph-debug';
+import { BuildError, ToolNotFoundError, prepareDebugging } from './runner';
 
 // Marks a launch configuration as a graph's debugging session.
 const GRAPH_KEY = '__blueprintGraph';
@@ -53,7 +54,8 @@ export class CodeDebugService implements vscode.Disposable {
     readonly compiler: CompileService,
     private readonly marks: DebugMarks,
     private readonly registry: NodeRegistry,
-    private readonly languages: LanguagePackRegistry
+    private readonly languages: LanguagePackRegistry,
+    private readonly output: () => vscode.OutputChannel
   ) {
     this.disposables.push(
       compiler.onDidGenerate((generated) => this.mirror(generated.graph)),
@@ -99,17 +101,31 @@ export class CodeDebugService implements vscode.Disposable {
     // The compile above mirrors the breakpoints; they must be in place before the code starts.
     await this.mirror(uri);
     const command = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {})[pack!.id];
+    const cwd = path.dirname(outcome.outputPath);
+    const options = {
+      cwd, command, importRoots: outcome.importRoots, sources: outcome.sources, mainMethod: outcome.mainMethod,
+      args: vscode.workspace.getConfiguration('blueprintVisualScripting', uri).get<string[]>('runArguments', [])
+    };
+    // C# builds Run's project first.
+    const runner = pack!.generator!.runner;
+    let context;
+    try {
+      context = runner
+        ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `Preparing ${language} for debugging…` }, () => prepareDebugging(runner, spec, outcome.outputPath!, outcome.className!, options))
+        : { importRoots: options.importRoots, sources: options.sources, mainMethod: options.mainMethod, args: options.args };
+    } catch (error) {
+      const message = error instanceof ToolNotFoundError ? error.message : error instanceof BuildError ? `The ${language} build failed; see the Output panel.` : String(error);
+      if (error instanceof BuildError) {
+        this.output().appendLine(error.message);
+        this.output().show(true);
+      }
+      void vscode.window.showErrorMessage(message);
+      return;
+    }
     const id = `${uri.toString()}#${++this.launches}`;
     const configuration: vscode.DebugConfiguration = {
       name: `Debug ${path.basename(uri.fsPath)}`,
-      ...spec.configuration({ path: outcome.outputPath, url: pathToFileURL(outcome.outputPath).href }, outcome.className, {
-        cwd: path.dirname(outcome.outputPath),
-        importRoots: outcome.importRoots,
-        sources: outcome.sources,
-        mainMethod: outcome.mainMethod,
-        args: vscode.workspace.getConfiguration('blueprintVisualScripting', uri).get<string[]>('runArguments', []),
-        command
-      }),
+      ...spec.configuration({ path: outcome.outputPath, url: pathToFileURL(outcome.outputPath).href }, outcome.className, { ...context, cwd, command }),
       type: spec.type,
       request: 'launch',
       [GRAPH_KEY]: id

@@ -124,6 +124,9 @@ export interface CodeDebugger {
   // The debug type, and the extension that provides it when VS Code doesn't.
   type: string;
   extension?: { id: string; name: string };
+  // Arguments for the runner's command that build the code before launching it (C# builds Run's
+  // project), after the runner's probe and scaffold.
+  build?(file: { path: string; url: string }, className: string, context: RunContext): string[];
   // A launch configuration running the generated file as Run does: Start, then Main. `command`
   // replaces the runner's executable (and leading arguments), as the runCommands setting does.
   configuration(file: { path: string; url: string }, className: string, context: RunContext & { cwd: string; command?: string[] }): Record<string, unknown>;

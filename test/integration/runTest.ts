@@ -27,12 +27,15 @@ async function main(): Promise<void> {
   // start as plain Node and try to execute the workspace folder as a script.
   delete process.env.ELECTRON_RUN_AS_NODE;
   const workspace = createWorkspace();
+  const withDebuggers = process.argv.includes('--with-debuggers');
   try {
     await runTests({
       version: minimumVsCodeVersion(),
       extensionDevelopmentPath: repoRoot,
       extensionTestsPath: path.join(__dirname, 'suite'),
-      launchArgs: [workspace, '--disable-extensions', '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes']
+      // With --with-debuggers, the installed extensions load (Python's and C#'s debuggers), so their
+      // debugging tests run instead of being skipped.
+      launchArgs: [workspace, ...(withDebuggers ? [`--extensions-dir=${path.join(os.homedir(), '.vscode', 'extensions')}`] : ['--disable-extensions']), '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes']
     });
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });

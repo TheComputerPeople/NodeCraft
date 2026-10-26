@@ -50,7 +50,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   context.subscriptions.push(marks);
   const provider = new GraphEditorProvider(context, registry, languages, compiler, output, () => projectFunctions.loaded, marks);
   // Debugging generated code with the language's debugger (docs/debugging.md).
-  const codeDebug = new CodeDebugService(provider, compiler, marks, registry, languages);
+  const codeDebug = new CodeDebugService(provider, compiler, marks, registry, languages, output);
   context.subscriptions.push(
     compiler,
     codeDebug,

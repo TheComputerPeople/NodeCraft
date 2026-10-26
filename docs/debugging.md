@@ -43,7 +43,9 @@ Shortcut sources are in [unreal-conventions.md](unreal-conventions.md). Unreal s
 - **Values**: each generator reports, per stored pin (an impure node's output slot, a variable, a function input), the expression that reads it in a paused frame (`GeneratedCode.pinExpressions`). Hovering a pin sends DAP `evaluate` with that expression in the top frame of the node's method; a pure node's value isn't stored, and the bubble says so rather than running it.
 - **Pulses** come from Simulate's events; generated code doesn't report each node as it runs (that would slow it down), so pulses show only in Simulate.
 
-As built (TypeScript and JavaScript; src/extension/code-debug.ts):
+As built (src/extension/code-debug.ts; each pack's `CodeDebugger` in src/core/languages):
+
+- TypeScript and JavaScript launch `node` with Run's arguments through js-debug. Python launches Run's `python -c` code through debugpy, with the Python extension's interpreter (or the runCommands setting's). C# builds Run's scaffold project in Debug (`dotnet build`), then launches its DLL through coreclr with Run's arguments.
 
 - Each compile records the generated file's `nodeLines`, `codeBreaks` (where a method opens, so a helper's lines don't count as the last node's) and `pinExpressions`. The lowering lists every pin read straight from storage (an impure node's slot, a variable, a parameter, a literal); each generator writes the expression for it.
 - Graph breakpoints are mirrored as VS Code breakpoints after each compile, and Debug compiles first. Removing a mirrored breakpoint in VS Code (the Breakpoints view, the margin) removes the graph breakpoint. A breakpoint on a node whose code V8 compiles away (a Branch on the constant true) stops at the next statement, as a line breakpoint there would.
@@ -61,4 +63,4 @@ As built (TypeScript and JavaScript; src/extension/code-debug.ts):
 
 ## Exit check
 
-In each of TypeScript, Python and C#: set a breakpoint on a node in a function graph, Debug, stop there with the node highlighted and the call stack shown in graph terms, read a pin's value by hovering, step into and out of a function graph, and continue to the end, all without opening a generated file. Simulate does the same without a toolchain. The TypeScript path runs in the integration suite (js-debug is built into VS Code); Python and C# need their debugger extensions, so they are checked by hand and their launch configurations by unit tests.
+In each of TypeScript, Python and C#: set a breakpoint on a node in a function graph, Debug, stop there with the node highlighted and the call stack shown in graph terms, read a pin's value by hovering, step into and out of a function graph, and continue to the end, all without opening a generated file. Simulate does the same without a toolchain. The TypeScript and JavaScript paths run in the integration suite (js-debug is built into VS Code). Python and C# need their debugger extensions: `npm run test:integration:debuggers` loads the installed extensions and runs the same tests for them (the normal suite skips them), and unit tests check their launch configurations.

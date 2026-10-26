@@ -358,6 +358,16 @@ const csharpGenerator: CodeGenerator = {
     // The class, then its Main method (or nothing) and the arguments.
     args: (_file, className, context) => ['run', '--project', `${context?.scaffoldDir}/${RUN_PROJECT_FILE}`, '--', className, context?.mainMethod ?? '', ...(context?.args ?? [])],
     missingToolMessage: 'The .NET SDK was not found. Install .NET 8 or later and make sure `dotnet` is on the PATH.'
+  },
+  // The C# extension's debugger runs Run's project, built in Debug first.
+  debugger: {
+    type: 'coreclr',
+    extension: { id: 'ms-dotnettools.csharp', name: 'C#' },
+    build: (_file, _className, context) => ['build', `${context.scaffoldDir}/${RUN_PROJECT_FILE}`, '-c', 'Debug', '-nologo', '-v', 'quiet'],
+    configuration: (_file, className, context) => ({
+      type: 'coreclr', request: 'launch', program: `${context.scaffoldDir}/bin/Debug/${context.targetFramework ?? 'net8.0'}/BlueprintRun.dll`,
+      args: [className, context.mainMethod ?? '', ...(context.args ?? [])], cwd: context.cwd, console: 'internalConsole', stopAtEntry: false, justMyCode: true
+    })
   }
 };
 

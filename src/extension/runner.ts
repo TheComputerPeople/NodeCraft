@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { CodeRunner, RunContext } from '../core/language-pack';
+import { CodeDebugger, CodeRunner, RunContext } from '../core/language-pack';
 
 export interface RunOutcome {
   // The command that ran, with its arguments.
@@ -55,6 +55,36 @@ export async function runGeneratedCode(runner: CodeRunner, filePath: string, cla
     }
     const outcome = await runCommand([...candidate, ...runner.args(file, className, context)], { ...options, env: runner.env });
     if (outcome) return outcome;
+  }
+  throw new ToolNotFoundError(runner.missingToolMessage);
+}
+
+// Building the code for the debugger failed; the message is the build's output.
+export class BuildError extends Error {}
+
+// Gets generated code ready for a debugger as Run would run it (the runner's probe and scaffold),
+// building it first when the debugger needs that (C#). Returns what the launch configuration needs.
+export async function prepareDebugging(runner: CodeRunner, codeDebugger: CodeDebugger, filePath: string, className: string, options: RunOptions): Promise<RunContext> {
+  const file = { path: filePath, url: pathToFileURL(filePath).href };
+  const base: RunContext = { importRoots: options.importRoots, sources: options.sources, mainMethod: options.mainMethod, args: options.args };
+  if (!runner.probe && !runner.scaffold && !codeDebugger.build) return base;
+  const candidates = options.command?.length ? [options.command] : runner.commands(process.platform);
+  for (const candidate of candidates) {
+    const context: RunContext = { ...base };
+    if (runner.probe) {
+      const probe = await runCommand([...candidate, ...runner.probe.args], { cwd: options.cwd, env: runner.env, timeoutMs: 30000 });
+      if (!probe) continue;
+      Object.assign(context, runner.probe.parse(probe.stdout) ?? {});
+    }
+    if (runner.scaffold) {
+      context.scaffoldDir = scaffoldDir(filePath);
+      writeScaffold(context.scaffoldDir, runner.scaffold(file, className, context));
+    }
+    if (!codeDebugger.build) return context;
+    const built = await runCommand([...candidate, ...codeDebugger.build(file, className, context)], { ...options, env: runner.env });
+    if (!built) continue;
+    if (built.exitCode !== 0) throw new BuildError(`${built.stdout}${built.stderr}`.trim() || `The build failed (exit code ${built.exitCode}).`);
+    return context;
   }
   throw new ToolNotFoundError(runner.missingToolMessage);
 }

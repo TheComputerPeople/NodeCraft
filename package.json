@@ -252,6 +252,7 @@
     "test:webview": "npm run compile:webview && npm run build:test && node --test \"out/test/webview/**/*.test.js\"",
     "test:conformance": "npm run build:test && node --test \"out/test/conformance/**/*.test.js\"",
     "test:integration": "npm run compile && npm run build:test && node out/test/integration/runTest.js",
+    "test:integration:debuggers": "npm run compile && npm run build:test && node out/test/integration/runTest.js --with-debuggers",
     "build:test": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\" && tsc -p test",
     "package": "npm run compile && npx --yes @vscode/vsce package"
   },
