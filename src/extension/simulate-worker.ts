@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { MessagePort, parentPort, receiveMessageOnPort, workerData } from 'worker_threads';
 import { DebugCommand, SimulateBreakpoint, SimulateDebugger } from '../core/debugger';
+import type { DebugStop } from '../core/runtime';
 import { builtinLanguagePacks } from '../core/languages';
 import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
@@ -39,22 +40,28 @@ function loadDocument(documentPath: string): GraphDocument | undefined {
   }
 }
 
-// Applies a command that doesn't resume (breakpoint changes), or returns one that does.
-function handle(command: SimulateCommand): DebugCommand | undefined {
-  if (command.kind === 'breakpoints') {
-    debug.setBreakpoints(command.breakpoints);
-    return undefined;
+// Applies a command that doesn't resume (breakpoint changes, value reads while paused at `stop`),
+// or returns one that does.
+function handle(command: SimulateCommand, stop?: DebugStop): DebugCommand | undefined {
+  switch (command.kind) {
+    case 'breakpoints':
+      debug.setBreakpoints(command.breakpoints);
+      return undefined;
+    case 'read':
+      post({ kind: 'values', id: command.id, values: command.reads.map((r) => stop ? stop.read(r.frame, r.nodeId, r.pinId) : { unavailable: 'Values are read while paused.' }) });
+      return undefined;
+    case 'resume':
+      return command.command;
   }
-  return command.command;
 }
 
 // While paused: blocks until a resuming command arrives.
-function waitForCommand(): DebugCommand {
+function waitForCommand(stop: DebugStop): DebugCommand {
   for (;;) {
     const seen = Atomics.load(signal, 0);
     const message = receiveMessageOnPort(data.commands);
     if (message) {
-      const command = handle(message.message as SimulateCommand);
+      const command = handle(message.message as SimulateCommand, stop);
       if (command) return command;
       continue;
     }
@@ -64,7 +71,7 @@ function waitForCommand(): DebugCommand {
 
 const debug = new SimulateDebugger(data.breakpoints, (stop, reason) => {
   post({ kind: 'paused', stack: stop.stack, reason });
-  const command = waitForCommand();
+  const command = waitForCommand(stop);
   post({ kind: 'resumed' });
   return command;
 }, () => {

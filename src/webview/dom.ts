@@ -38,6 +38,8 @@ export const dom = {
   debugTitle: element<HTMLSpanElement>('debug-title'),
   debugActions: element<HTMLSpanElement>('debug-actions'),
   callStack: element<HTMLOListElement>('call-stack'),
+  // A hovered pin's value while paused.
+  valueBubble: element<HTMLDivElement>('value-bubble'),
   // Structure and enumeration files are edited here instead of on the canvas.
   typeEditor: element<HTMLElement>('type-editor'),
   palette: element<HTMLElement>('palette'),

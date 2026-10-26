@@ -75,6 +75,16 @@ describe('Simulate session', () => {
     assert.deepEqual(recorder.pauses.map((s) => s[0].nodeId), ['add_1', 'end_true']);
   });
 
+  test('reads values while paused', async () => {
+    const { session, recorder } = start([{ graphId: 'EventGraph', nodeId: 'print_true' }]);
+    await recorder.nextPause();
+    const values = await session.read([{ frame: 0, nodeId: 'print_true', pinId: 'value' }, { frame: 0, nodeId: 'add_1', pinId: 'result' }]);
+    assert.deepEqual(values, [{ value: '30' }, { value: '30' }]);
+    session.resume('continue');
+    await recorder.ended;
+    assert.deepEqual(await session.read([{ frame: 0, nodeId: 'add_1', pinId: 'result' }]), [{ unavailable: 'Values are read while paused.' }]);
+  });
+
   test('Stop ends a paused run', async () => {
     const { session, recorder } = start([{ graphId: 'EventGraph', nodeId: 'start_1' }]);
     await recorder.nextPause();

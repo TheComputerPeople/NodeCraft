@@ -12,7 +12,7 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 - Workspace `*.node.json` user node libraries, with a code snippet per language. Example: `Double`.
 - **Code generation**: each graph compiles to readable source code in its target language, written next to the graph and meant to be committed. TypeScript, JavaScript, Python and C# are supported.
 - Unreal-style **Compile** (F7) and **Compiler Results**, with error and warning badges on nodes and entries in the Problems panel.
-- **Run** (the generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter). With breakpoints set (F9), Simulate pauses at them: step node by node and see the call stack in graph terms.
+- **Run** (the generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter). With breakpoints set (F9), Simulate pauses at them: step node by node, see the call stack in graph terms, hover a pin to see its value, or **Watch this value** from the pin's menu.
 - Saving goes through VS Code's text document, so undo, redo, dirty state and source control work as usual.
 
 ## Open and run

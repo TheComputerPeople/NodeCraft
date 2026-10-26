@@ -8,6 +8,7 @@ import { postToHost } from './host';
 import { openGraph } from './my-blueprint';
 import { render } from './render';
 import { state } from './state';
+import { clearValues, hideHoverValue, refreshWatches } from './values';
 import { centerOnNode } from './view';
 
 const ACTIONS: { action: DebugAction; label: string; keys: string; whilePaused: boolean }[] = [
@@ -32,6 +33,8 @@ export function pausedNodeId(): string | undefined {
 export function showDebugState(debug: DebugState): void {
   state.debug = debug.state === 'ended' ? null : debug;
   dom.debugger.hidden = !state.debug;
+  if (!state.debug) clearValues();
+  else hideHoverValue();
   const paused = debug.state === 'paused' && !!debug.stack?.length;
   dom.debugActions.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
     button.disabled = !paused && ACTIONS.find((a) => a.action === button.dataset.debugAction)!.whilePaused;
@@ -49,6 +52,7 @@ export function showDebugState(debug: DebugState): void {
   });
   if (paused && top?.here) showFrame(top, true);
   else render();
+  if (paused) void refreshWatches();
 }
 
 // The node's title as this editor shows it, when the frame is in this file.

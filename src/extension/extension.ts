@@ -11,7 +11,7 @@ import { detectWorkspaceLanguage } from './languages';
 import { watchWorkspaceNodeLibraries } from './node-libraries';
 import { isGeneratedFrom } from './placement';
 import { GraphLibraries } from './graph-libraries';
-import { BreakpointStore } from './breakpoints';
+import { DebugMarks } from './breakpoints';
 import { ProjectFunctions } from './project-functions';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -39,9 +39,9 @@ export function activate(context: vscode.ExtensionContext): void {
   // Compiling waits for the first scans, so functions that are merely still loading aren't reported missing.
   const compiler = new CompileService(registry, languages, output, () => Promise.all([projectFunctions.ready, graphLibraries.ready]).then(() => undefined));
   // Breakpoints on nodes, kept per workspace (docs/debugging.md).
-  const breakpoints = new BreakpointStore(context.workspaceState);
-  context.subscriptions.push(breakpoints);
-  const provider = new GraphEditorProvider(context, registry, languages, compiler, output, () => projectFunctions.loaded, breakpoints);
+  const marks = new DebugMarks(context.workspaceState);
+  context.subscriptions.push(marks);
+  const provider = new GraphEditorProvider(context, registry, languages, compiler, output, () => projectFunctions.loaded, marks);
   context.subscriptions.push(
     compiler,
     vscode.window.registerCustomEditorProvider(GRAPH_VIEW_TYPE, provider, { supportsMultipleEditorsPerDocument: true })
@@ -90,7 +90,7 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
-  context.subscriptions.push(...followGraphFileChanges(compiler, breakpoints, compileAndReport));
+  context.subscriptions.push(...followGraphFileChanges(compiler, marks, compileAndReport));
 
   context.subscriptions.push(
     vscode.commands.registerCommand('blueprintVisualScripting.createGraph', async () => {
@@ -135,13 +135,13 @@ async function graphDocumentFor(uri?: vscode.Uri): Promise<vscode.TextDocument |
 
 // Generated files sit next to their graph, so moving a folder moves them too. Renaming, moving or
 // deleting a single graph file needs its generated file to follow (docs/output-placement.md).
-function followGraphFileChanges(compiler: CompileService, breakpoints: BreakpointStore, recompile: (document: vscode.TextDocument) => Promise<void>): vscode.Disposable[] {
+function followGraphFileChanges(compiler: CompileService, marks: DebugMarks, recompile: (document: vscode.TextDocument) => Promise<void>): vscode.Disposable[] {
   return [
     vscode.workspace.onDidRenameFiles(async (event) => {
       for (const { oldUri, newUri } of event.files) {
         if (!isGraph(oldUri) || !isGraph(newUri)) continue;
         compiler.forget(oldUri);
-        await breakpoints.move(oldUri, newUri);
+        await marks.move(oldUri, newUri);
         const oldName = path.basename(oldUri.fsPath);
         const moves = compiler.outputPathsFor(oldUri.fsPath)
           .map((from, i) => ({ from, to: compiler.outputPathsFor(newUri.fsPath)[i] }))
@@ -158,7 +158,7 @@ function followGraphFileChanges(compiler: CompileService, breakpoints: Breakpoin
       for (const uri of event.files) {
         if (!isGraph(uri)) continue;
         compiler.forget(uri);
-        await breakpoints.set(uri, []);
+        await marks.forget(uri);
         const name = path.basename(uri.fsPath);
         for (const output of compiler.outputPathsFor(uri.fsPath).filter((file) => isGeneratedFrom(file, name))) {
           await vscode.workspace.fs.delete(vscode.Uri.file(output), { useTrash: true });

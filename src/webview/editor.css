@@ -160,6 +160,14 @@ button, input { font: inherit; color: inherit; }
 .node-breakpoint.disabled { background: transparent; }
 .node.paused { box-shadow: 0 0 0 3px #ffd400, 0 0 22px rgba(255, 212, 0, .55); }
 .node-paused-arrow { position: absolute; left: -26px; top: 2px; color: #ffd400; font-size: 18px; line-height: 1; pointer-events: none; text-shadow: 0 0 3px #000; }
+.pin.watched { box-shadow: 0 0 0 2px #ffd400; }
+.pin-row.has-watch { position: relative; }
+.watch-bubble { position: absolute; bottom: calc(100% - 2px); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 6px; border-radius: 3px; background: #2b2b2b; color: #ffd400; border: 1px solid #ffd400; font-size: 11px; pointer-events: none; z-index: 3; }
+.pin-row.input .watch-bubble { left: 0; }
+.pin-row.output .watch-bubble { right: 0; }
+.watch-bubble.unavailable, .value-bubble.unavailable { color: var(--muted); border-color: var(--panel-border); font-style: italic; }
+.value-bubble { position: absolute; z-index: 20; max-width: 320px; white-space: pre-wrap; word-break: break-word; padding: 3px 8px; border-radius: 3px; background: #2b2b2b; color: #fff; border: 1px solid #ffd400; font-size: 12px; pointer-events: none; }
+.value-bubble[hidden] { display: none; }
 #debugger { max-height: 180px; display: flex; flex-direction: column; border-top: 1px solid var(--panel-border); background: var(--panel); }
 #debugger[hidden] { display: none; }
 #debugger header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 9px; font-weight: 700; }

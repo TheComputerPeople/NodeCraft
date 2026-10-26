@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { SimulateBreakpoint } from '../core/debugger';
 import { LanguagePackRegistry } from '../core/language-pack';
-import { CompileReport, DebugAction, DebugFrame, DebugState, FileSearchHit, GraphDocument, HostMessage, LanguageOption, RevealTarget, RuntimeLogEvent, UIMessage } from '../core/model';
+import { CompileReport, DebugAction, DebugFrame, DebugState, DebugValue, FileSearchHit, PinRef, GraphDocument, HostMessage, LanguageOption, RevealTarget, RuntimeLogEvent, UIMessage } from '../core/model';
 import { createResolver } from '../core/resolve';
 import { searchDocument } from '../core/search';
 import { NodeRegistry } from '../core/registry';
@@ -10,7 +10,7 @@ import { GraphRuntime } from '../core/runtime';
 import { parseDocument, serializeDocument } from '../core/serializer';
 import { CompileService } from './compile-service';
 import { loadGraphDocument } from './graph-libraries';
-import { BreakpointStore } from './breakpoints';
+import { DebugMarks } from './breakpoints';
 import { SimulateSession } from './simulate-session';
 import { createNonce, renderEditorHtml } from './webview-html';
 
@@ -33,11 +33,12 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     private readonly output: () => vscode.OutputChannel,
     // Whether the project's functions have been scanned (src/extension/project-functions.ts).
     private readonly functionsLoaded: () => boolean = () => true,
-    private readonly breakpoints: BreakpointStore = new BreakpointStore(context.workspaceState)
+    private readonly marks: DebugMarks = new DebugMarks(context.workspaceState)
   ) {
-    // Every panel of a file shows its breakpoints, wherever they were changed.
-    context.subscriptions.push(breakpoints.onDidChange((uri) => {
-      this.broadcast(uri.toString(), { type: 'breakpoints', breakpoints: breakpoints.get(uri) });
+    // Every panel of a file shows its breakpoints and watches, wherever they were changed.
+    context.subscriptions.push(marks.watches.onDidChange((uri) => this.broadcast(uri.toString(), { type: 'watches', watches: marks.watches.get(uri) })));
+    context.subscriptions.push(marks.breakpoints.onDidChange((uri) => {
+      this.broadcast(uri.toString(), { type: 'breakpoints', breakpoints: marks.breakpoints.get(uri) });
       if (this.debugSession) this.debugSession.session.setBreakpoints(this.simulateBreakpoints(this.debugSession.uri));
     }));
     context.subscriptions.push({ dispose: () => this.debugSession?.session.stop() });
@@ -102,7 +103,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
               trusted: vscode.workspace.isTrusted,
               languages: this.languageOptions(),
               compile: this.compiler.lastReport(document.uri),
-              breakpoints: this.breakpoints.get(document.uri)
+              breakpoints: this.marks.breakpoints.get(document.uri),
+              watches: this.marks.watches.get(document.uri)
             });
             if (parseError) this.post(webviewPanel, { type: 'error', message: parseError });
             const reveal = this.pendingReveals.get(key);
@@ -121,7 +123,13 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
             this.post(webviewPanel, { type: 'findResults', results: await this.findInAll(message.query ?? '', key) });
             break;
           case 'setBreakpoints':
-            await this.breakpoints.set(document.uri, message.breakpoints ?? []);
+            await this.marks.breakpoints.set(document.uri, message.breakpoints ?? []);
+            break;
+          case 'setWatches':
+            await this.marks.watches.set(document.uri, message.watches ?? []);
+            break;
+          case 'readValues':
+            this.post(webviewPanel, { type: 'debugValues', requestId: message.requestId, values: await this.readValues(document.uri, message.pins ?? []) });
             break;
           case 'reveal':
             if (message.target?.uri) await this.reveal(message.target);
@@ -341,7 +349,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   // The workspace's enabled breakpoints, with their files named as a Simulate of `uri` names them.
   private simulateBreakpoints(uri: vscode.Uri): SimulateBreakpoint[] {
     const root = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
-    return Object.entries(this.breakpoints.all()).flatMap(([key, list]) => {
+    return Object.entries(this.marks.breakpoints.all()).flatMap(([key, list]) => {
       const file = vscode.Uri.parse(key);
       const document = key === uri.toString() ? undefined : root && file.scheme === 'file' ? relativePath(root, file.fsPath) : null;
       if (document === null || document?.startsWith('..')) return [];
@@ -354,6 +362,18 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   private fileUri(simulated: vscode.Uri, document: string | undefined): vscode.Uri {
     const root = vscode.workspace.getWorkspaceFolder(simulated)?.uri;
     return document && root ? vscode.Uri.joinPath(root, ...document.split('/')) : simulated;
+  }
+
+  // Pins' values while paused, each read in the innermost frame running its graph (pins of `file`).
+  private async readValues(file: vscode.Uri, pins: PinRef[]): Promise<DebugValue[]> {
+    const session = this.debugSession;
+    const stack = session?.stack;
+    if (!session || !stack) return pins.map(() => ({ unavailable: 'Values are read while paused.' }));
+    const frames = pins.map((pin) => stack.findIndex((f) => f.graphId === pin.graphId && this.fileUri(session.uri, f.document).toString() === file.toString()));
+    const reads = pins.flatMap((pin, i) => (frames[i] >= 0 ? [{ frame: frames[i], nodeId: pin.nodeId, pinId: pin.pinId }] : []));
+    const values = reads.length ? await session.session.read(reads) : [];
+    let next = 0;
+    return frames.map((frame) => (frame >= 0 ? values[next++] ?? { unavailable: 'Values are read while paused.' } : { unavailable: "No value: this graph isn't running." }));
   }
 
   private debugStateFor(panelKey: string): DebugState {

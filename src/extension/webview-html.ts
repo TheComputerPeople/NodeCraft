@@ -47,6 +47,7 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
       <div id="world"></div>
       <div id="selection-box" hidden></div>
       <div id="context-menu" hidden></div>
+      <div id="value-bubble" class="value-bubble" hidden></div>
       <section id="type-editor" hidden aria-label="Type Editor"></section>
     </div>
     <section id="compiler-results" hidden aria-label="Compiler Results">

@@ -96,4 +96,56 @@ describe('debugger', () => {
     const reveal = (await e.posted()).filter((m) => m.type === 'reveal').pop();
     assert.deepEqual(reveal?.target, { uri: 'file:///lib/Math.vgraph', kind: 'node', id: 'n1', graphId: 'Lib' });
   });
+
+  // The latest 'readValues' request, once it has been posted.
+  async function lastRead(e: EditorPage, count: number): Promise<{ requestId: number; pins: unknown[] }> {
+    await e.page.waitForFunction((n) => (window as unknown as { __posted: { type: string }[] }).__posted.filter((m) => m.type === 'readValues').length >= n, count);
+    const read = (await e.posted()).filter((m) => m.type === 'readValues').pop()!;
+    return { requestId: read.requestId!, pins: read.pins! };
+  }
+
+  test('while paused, hovering a data pin shows its value', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const pin = await e.pinCenter('print_true', 'value');
+    await e.page.mouse.move(pin.x, pin.y);
+    assert.equal((await e.posted()).filter((m) => m.type === 'readValues').length, 0, 'no reads unless paused');
+
+    // Pausing brings the node into view, which moves it.
+    await e.send({ type: 'debugState', debug: { state: 'paused', stack: [here('EventGraph', 'print_true')] } });
+    const exec = await e.pinCenter('print_true', 'execIn');
+    await e.page.mouse.move(exec.x, exec.y);
+    const value = await e.pinCenter('print_true', 'value');
+    await e.page.mouse.move(value.x, value.y);
+    const read = await lastRead(e, 1);
+    assert.deepEqual(read.pins, [{ graphId: 'EventGraph', nodeId: 'print_true', pinId: 'value' }], 'exec pins aren\'t read');
+    await e.send({ type: 'debugValues', requestId: read.requestId, values: [{ value: '30' }] });
+    assert.equal(await e.page.textContent('#value-bubble'), '30');
+    assert.equal(await e.page.isVisible('#value-bubble'), true);
+    await e.page.mouse.move(value.x + 200, value.y + 200);
+    assert.equal(await e.page.isVisible('#value-bubble'), false);
+  });
+
+  test('Watch this value keeps the pin\'s value in a bubble at each pause', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const pin = await e.pinCenter('add_1', 'result');
+    await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
+    await e.page.locator('#context-menu button', { hasText: 'Watch this value' }).click();
+    assert.deepEqual((await e.posted()).filter((m) => m.type === 'setWatches').pop()?.watches, [{ graphId: 'EventGraph', nodeId: 'add_1', pinId: 'result' }]);
+    assert.equal(await e.count('.pin.watched[data-node="add_1"][data-pin="result"]'), 1);
+
+    await e.send({ type: 'debugState', debug: { state: 'paused', stack: [here('EventGraph', 'branch_1')] } });
+    const read = await lastRead(e, 1);
+    await e.send({ type: 'debugValues', requestId: read.requestId, values: [{ value: '30' }] });
+    assert.equal(await e.page.textContent('.pin-row:has(.pin[data-node="add_1"][data-pin="result"]) .watch-bubble'), '30');
+    await e.send({ type: 'debugState', debug: { state: 'running' } });
+    assert.equal(await e.count('.watch-bubble'), 1, 'the last value stays while running');
+    await e.send({ type: 'debugState', debug: { state: 'ended' } });
+    assert.equal(await e.count('.watch-bubble'), 0);
+
+    await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
+    await e.page.locator('#context-menu button', { hasText: 'Stop watching this value' }).click();
+    assert.deepEqual((await e.posted()).filter((m) => m.type === 'setWatches').pop()?.watches, []);
+  });
 });

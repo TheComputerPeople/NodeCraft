@@ -11,6 +11,7 @@ import { GraphNode, NodeDefinition, PinDefinition } from '../core/model';
 import { structInfo } from '../core/user-types';
 import { CUSTOM_EVENT } from '../core/events';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } from './document';
+import { isWatched, toggleWatch } from './values';
 import { dom, eventElement, pinElement, setStatus } from './dom';
 import { newConnectionId } from './host';
 import { clearCommentSelection } from './comments';
@@ -290,6 +291,10 @@ export function pinMenuItems(nodeId: string, pinId: string): MenuItem[] {
     items.push({ label: 'Break Link(s)', action: () => disconnectPin(nodeId, pinId) });
   }
   const pin = pinDef(nodeId, pinId);
+  // Unreal's Watch this value: the pin's value shows in a bubble whenever the debugger pauses.
+  if (pin?.kind === 'data') {
+    items.push({ label: isWatched(nodeId, pinId) ? 'Stop watching this value' : 'Watch this value', action: () => toggleWatch(nodeId, pinId) });
+  }
   if (pin?.kind === 'data' && state.document?.kind === 'class') {
     items.push({ label: 'Promote to Variable', action: () => promoteToVariable(nodeId, pinId) });
   }

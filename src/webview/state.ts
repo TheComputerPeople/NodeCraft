@@ -1,6 +1,6 @@
 import { PinAddress } from '../core/editing';
 import type { PaletteEntry } from './document';
-import { CompileReport, DebugState, Graph, GraphBreakpoint, GraphDocument, GraphNode, LanguageOption, NodeDefinition, PinDirection, PinKind } from '../core/model';
+import { CompileReport, DebugState, DebugValue, Graph, GraphBreakpoint, GraphDocument, GraphNode, LanguageOption, NodeDefinition, PinDirection, PinKind, PinRef } from '../core/model';
 
 export interface Point {
   x: number;
@@ -119,6 +119,9 @@ export interface EditorState {
   breakpoints: GraphBreakpoint[];
   // Simulate's debugger, while a debug run is in progress.
   debug: DebugState | null;
+  // Watched pins (kept by the host, per workspace), and their values at the latest pause.
+  watches: PinRef[];
+  watchValues: Map<string, DebugValue>;
 }
 
 export const state: EditorState = {
@@ -155,5 +158,7 @@ export const state: EditorState = {
   variableDrag: null,
   viewByGraph: new Map(),
   breakpoints: [],
-  debug: null
+  debug: null,
+  watches: [],
+  watchValues: new Map()
 };

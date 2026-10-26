@@ -21,7 +21,8 @@ export class SimulateDebugger implements DebugHook {
 
   constructor(
     private breakpoints: SimulateBreakpoint[],
-    // Shows the pause and blocks until the user resumes, returning how.
+    // Shows the pause and blocks until the user resumes, returning how. The stop reads values
+    // until then.
     private readonly pause: (stop: DebugStop, reason: 'breakpoint' | 'step') => DebugCommand,
     // Called before each node, to take breakpoint changes made while running.
     private readonly poll: () => void = () => {}

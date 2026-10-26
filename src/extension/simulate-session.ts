@@ -3,8 +3,8 @@
 import * as path from 'path';
 import { MessageChannel, Worker } from 'worker_threads';
 import { DebugCommand, SimulateBreakpoint } from '../core/debugger';
-import { DebugFrame, RuntimeLogEvent } from '../core/model';
-import { SimulateCommand, WorkerMessage } from './simulate-protocol';
+import { DebugFrame, DebugValue, RuntimeLogEvent } from '../core/model';
+import { SimulateCommand, ValueRead, WorkerMessage } from './simulate-protocol';
 import type { SimulateWorkerData } from './simulate-worker';
 
 export interface SimulateListener {
@@ -22,6 +22,9 @@ export class SimulateSession {
   private readonly signal = new Int32Array(new SharedArrayBuffer(4));
   private readonly commands = new MessageChannel();
   private finished = false;
+  // Value reads waiting for the worker's answer, by request id.
+  private readonly reads = new Map<number, (values: DebugValue[]) => void>();
+  private nextRead = 0;
   // The call stack while paused.
   stack: DebugFrame[] | undefined;
 
@@ -41,6 +44,10 @@ export class SimulateSession {
           this.stack = undefined;
           listener.resumed();
           break;
+        case 'values':
+          this.reads.get(message.id)?.(message.values);
+          this.reads.delete(message.id);
+          break;
         case 'done':
           this.finish();
           break;
@@ -59,6 +66,16 @@ export class SimulateSession {
 
   resume(command: DebugCommand): void {
     if (this.stack) this.send({ kind: 'resume', command });
+  }
+
+  // Reads pins' values while paused.
+  read(reads: ValueRead[]): Promise<DebugValue[]> {
+    if (!this.stack || this.finished) return Promise.resolve(reads.map(() => ({ unavailable: 'Values are read while paused.' })));
+    const id = this.nextRead++;
+    return new Promise((resolve) => {
+      this.reads.set(id, resolve);
+      this.send({ kind: 'read', id, reads });
+    });
   }
 
   setBreakpoints(breakpoints: SimulateBreakpoint[]): void {
@@ -83,6 +100,8 @@ export class SimulateSession {
     if (this.finished) return;
     this.finished = true;
     this.stack = undefined;
+    for (const resolve of this.reads.values()) resolve([]);
+    this.reads.clear();
     this.commands.port1.close();
     void this.worker.terminate();
     this.listener.ended();

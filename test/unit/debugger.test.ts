@@ -94,6 +94,60 @@ describe('Simulate debugger', () => {
     assert.deepEqual(pauses, ['p2']);
   });
 
+  test('while paused, pins read as the run sees them, in any frame of the stack', () => {
+    const d = program();
+    // An impure Add that never runs.
+    d.graphs[0].nodes.push(node('add', 'core:math.add', { 'pin:a': 1, 'pin:b': 2 }));
+    const events: RuntimeLogEvent[] = [];
+    const read: Record<string, unknown> = {};
+    const runtime = new GraphRuntime(new NodeRegistry(), (event) => events.push(event));
+    runtime.debug = new SimulateDebugger([{ graphId: 'F', nodeId: 'fp' }], (stop) => {
+      const before = events.length;
+      read.input = stop.read(0, 'fp', 'value');
+      read.callerInput = stop.read(1, 'p1', 'value');
+      read.pure = stop.read(1, 'gt', 'returnValue');
+      read.literal = stop.read(1, 'p2', 'value');
+      read.notRun = stop.read(1, 'add', 'result');
+      read.exec = stop.read(0, 'fp', 'execIn');
+      read.missing = stop.read(5, 'fp', 'value');
+      read.quiet = events.length === before;
+      return 'continue';
+    });
+    runtime.run(d);
+    assert.deepEqual(read, {
+      input: { value: '"in F"' },
+      callerInput: { value: 'true' },
+      pure: { value: 'true' },
+      literal: { value: '"after"' },
+      notRun: { unavailable: "This node hasn't run yet." },
+      exec: { unavailable: 'No value.' },
+      missing: { unavailable: 'That call has returned.' },
+      quiet: true
+    });
+  });
+
+  test("reading a pure function's value runs it without pausing in it or reporting it", () => {
+    const d = program();
+    d.graphs.push({
+      id: 'Pure', name: 'Pure', kind: 'function', comments: [],
+      signature: { pure: true, inputs: [], outputs: [{ id: 'out', name: 'Out', kind: 'data', type: { id: 'int' } }] },
+      nodes: [node('pe', 'core:function.entry', { graph: 'Pure' }), node('ret', 'core:function.return', { graph: 'Pure', 'pin:out': 7 })],
+      connections: [wire('pe', 'execOut', 'ret', 'execIn')]
+    });
+    d.graphs[0].nodes.push(node('pc', 'core:function.call', { graph: 'Pure' }));
+    let value: unknown;
+    const pauses: string[] = [];
+    const runtime = new GraphRuntime(new NodeRegistry(), () => {});
+    runtime.debug = new SimulateDebugger([{ graphId: 'EventGraph', nodeId: 'p2' }, { graphId: 'Pure', nodeId: 'ret' }], (stop) => {
+      pauses.push(stop.stack[0].nodeId);
+      if (stop.stack[0].nodeId === 'p2') value = stop.read(0, 'pc', 'out');
+      return 'continue';
+    });
+    runtime.run(d);
+    assert.deepEqual(value, { value: '7' });
+    assert.deepEqual(pauses, ['p2']);
+  });
+
   test('without a debugger, a run reports no pauses and behaves as before', () => {
     const events: RuntimeLogEvent[] = [];
     new GraphRuntime(new NodeRegistry(), (event) => events.push(event)).run(program());

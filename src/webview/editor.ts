@@ -9,6 +9,7 @@ import { postToHost } from './host';
 import { openFind, reveal, showResults } from './find';
 import { AlignEdge, alignSelection, straightenConnections } from './align';
 import { showDebugState } from './debugger';
+import { receiveValues, setWatches } from './values';
 import { clearBreakpoints, pruneBreakpoints, setBreakpoints, toggleSelectedBreakpoints } from './breakpoints';
 import { finishVariableDrag, removeVariable, startRename, updateVariableDrag } from './my-blueprint';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showNodeContextMenu } from './menus';
@@ -64,6 +65,7 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       state.languages = message.languages ?? [];
       setDefinitions(message.definitions ?? []);
       state.breakpoints = message.breakpoints ?? [];
+      state.watches = message.watches ?? [];
       // No document means the file could not be parsed; editing stays disabled until it can.
       if (message.document) loadDocument(message.document);
       else renderLanguagePicker();
@@ -74,6 +76,12 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       break;
     case 'debugState':
       if (message.debug) showDebugState(message.debug);
+      break;
+    case 'watches':
+      setWatches(message.watches ?? []);
+      break;
+    case 'debugValues':
+      receiveValues(message.requestId ?? -1, message.values ?? []);
       break;
     case 'compileResult':
       if (message.compile) showCompileResult(message.compile);

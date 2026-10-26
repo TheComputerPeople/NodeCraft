@@ -64,14 +64,21 @@ export function clearBreakpoints(): void {
   setStatus(`Removed ${count} breakpoint${count === 1 ? '' : 's'}.`);
 }
 
-// Drops breakpoints whose node or graph is gone (deleted, or removed by an edit outside the editor).
+// Drops breakpoints and watches whose node or graph is gone (deleted, or removed by an edit outside
+// the editor).
 export function pruneBreakpoints(): void {
   const document = state.document;
-  if (!document || !state.breakpoints.length) return;
+  if (!document || (!state.breakpoints.length && !state.watches.length)) return;
   const nodes = new Map(document.graphs.map((g) => [g.id, new Set(g.nodes.map((n) => n.id))]));
-  const kept = state.breakpoints.filter((b) => nodes.get(b.graphId)?.has(b.nodeId));
+  const exists = (b: { graphId: string; nodeId: string }): boolean => !!nodes.get(b.graphId)?.has(b.nodeId);
+  const kept = state.breakpoints.filter(exists);
   if (kept.length !== state.breakpoints.length) {
     state.breakpoints = kept;
     postToHost({ type: 'setBreakpoints', breakpoints: kept });
+  }
+  const watched = state.watches.filter(exists);
+  if (watched.length !== state.watches.length) {
+    state.watches = watched;
+    postToHost({ type: 'setWatches', watches: watched });
   }
 }

@@ -5,6 +5,7 @@ import { SEQUENCE } from '../core/resolve';
 import { addPin, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { breakpointOn } from './breakpoints';
 import { pausedNodeId } from './debugger';
+import { hideHoverValue, isWatched, showHoverValue, watchedValue } from './values';
 import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
 import { functionProblem, lookupDefinition, markDirty, pinDef } from './document';
@@ -178,8 +179,28 @@ function renderPin(node: GraphNode, pin: PinDefinition, showLabel: boolean): HTM
   handle.addEventListener('mousedown', (e) => onPinMouseDown(node, pin, e));
   handle.addEventListener('dragstart', (e) => e.preventDefault());
   // Hovering a pin highlights its wires, as in Unreal.
-  handle.addEventListener('mouseenter', () => setHoverPin({ node: node.id, pin: pin.id }));
-  handle.addEventListener('mouseleave', () => setHoverPin(null));
+  // While paused, it also shows the pin's value.
+  handle.addEventListener('mouseenter', () => {
+    setHoverPin({ node: node.id, pin: pin.id });
+    void showHoverValue(node.id, pin.id, handle);
+  });
+  handle.addEventListener('mouseleave', () => {
+    setHoverPin(null);
+    hideHoverValue();
+  });
+  // A watched pin's value stays in a bubble over it.
+  if (pin.kind === 'data' && isWatched(node.id, pin.id)) {
+    handle.classList.add('watched');
+    const value = watchedValue(node.id, pin.id);
+    if (value) {
+      const bubble = document.createElement('span');
+      bubble.className = 'watch-bubble' + (value.value === undefined ? ' unavailable' : '');
+      bubble.textContent = value.value ?? value.unavailable ?? '';
+      bubble.title = `${pin.name || pin.id}: ${bubble.textContent}`;
+      row.classList.add('has-watch');
+      row.appendChild(bubble);
+    }
+  }
 
   if (pin.direction === 'input') {
     row.append(handle, label);

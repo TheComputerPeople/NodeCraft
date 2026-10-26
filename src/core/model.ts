@@ -214,6 +214,19 @@ export interface DebugFrame {
   document?: string;
 }
 
+// A pin's value while paused, as text, or why there is none.
+export interface DebugValue {
+  value?: string;
+  unavailable?: string;
+}
+
+// A pin whose value the editor asks for (hovered or watched).
+export interface PinRef {
+  graphId: string;
+  nodeId: string;
+  pinId: string;
+}
+
 // What the debugger's buttons and keys do (F5, F10, F11, Shift+F11, Shift+F5).
 export type DebugAction = 'resume' | 'stepOver' | 'stepInto' | 'stepOut' | 'stop';
 
@@ -280,11 +293,15 @@ export interface GraphBreakpoint {
 export interface UIMessage {
   // run: compile, then run the generated code; simulate: run in the editor's interpreter.
   // findInAll: search every graph in the workspace; reveal: open another file at a hit.
-  // setBreakpoints: the file's breakpoints changed; debugAction: a debugger button.
-  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'debugAction';
+  // setBreakpoints, setWatches: the file's breakpoints or watched pins changed; debugAction: a
+  // debugger button; readValues: pins' values while paused (answered by 'debugValues').
+  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues';
   document?: GraphDocument;
   breakpoints?: GraphBreakpoint[];
+  watches?: PinRef[];
   action?: DebugAction;
+  requestId?: number;
+  pins?: PinRef[];
   query?: string;
   target?: RevealTarget;
 }
@@ -305,11 +322,18 @@ export interface HostMessage {
     | 'refreshAll'
     // The file's breakpoints (also part of 'init').
     | 'breakpoints'
+    // The file's watched pins (also part of 'init').
+    | 'watches'
     // Simulate's debugger paused, resumed or ended.
     | 'debugState'
+    // Answers 'readValues', in the order asked.
+    | 'debugValues'
     | 'error';
   breakpoints?: GraphBreakpoint[];
+  watches?: PinRef[];
   debug?: DebugState;
+  requestId?: number;
+  values?: DebugValue[];
   // Absent on 'init' when the file could not be parsed; the webview then stays read-only.
   document?: GraphDocument;
   definitions?: NodeDefinition[];

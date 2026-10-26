@@ -2,7 +2,7 @@
 // generated code must match it (docs/semantics.md, enforced by test/conformance).
 import { LanguagePackRegistry } from './language-pack';
 import { DEFAULT_LANGUAGE, builtinLanguagePacks } from './languages';
-import { DebugFrame, Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent } from './model';
+import { DebugFrame, DebugValue, Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent } from './model';
 import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
@@ -77,6 +77,9 @@ export interface DebugStop {
   // The pure nodes this node reads (their visible ids, in its graph): a breakpoint on one of them
   // stops here, as in Unreal.
   pureSources(): string[];
+  // A pin's value in a frame of the stack (0 is the innermost), read without running anything that
+  // isn't pure.
+  read(frame: number, nodeId: string, pinId: string): DebugValue;
 }
 
 interface BoundEvent {
@@ -114,6 +117,8 @@ export class GraphRuntime {
   // The debugger, when Simulate runs under one, and the contexts of the calls in progress.
   debug?: DebugHook;
   private debugStack: GraphContext[] = [];
+  // Set while the debugger reads a value: nothing is reported, and the debugger isn't called.
+  private evaluating = false;
 
   constructor(
     private readonly registry: NodeRegistry,
@@ -161,6 +166,7 @@ export class GraphRuntime {
   }
 
   private report(context: GraphContext, event: RuntimeLogEvent): void {
+    if (this.evaluating) return;
     const inner = event.nodeId !== undefined && isExpandedNode(event.nodeId);
     const { values, ...rest } = event;
     this.emit({
@@ -185,10 +191,11 @@ export class GraphRuntime {
     if (reentering && !isStateInput(definition, pin)) this.fail(context, node, `Execution cycle through ${node.id}: exec wires loop back to a node that is still running.`);
     if (!reentering) context.executing.add(node.id);
     // A call (or a latent action resuming) enters a context; the nodes it runs in turn don't.
-    const entered = this.debug !== undefined && this.debugStack[this.debugStack.length - 1] !== context;
+    const debugging = this.debug !== undefined && !this.evaluating;
+    const entered = debugging && this.debugStack[this.debugStack.length - 1] !== context;
     if (entered) this.debugStack.push(context);
     try {
-      if (this.debug) this.debugBefore(context, node);
+      if (debugging) this.debugBefore(context, node);
       this.runNode(context, node, definition, pin);
     } finally {
       if (!reentering) context.executing.delete(node.id);
@@ -207,7 +214,36 @@ export class GraphRuntime {
     const stack = this.debugStack.map((c): DebugFrame => ({
       graphId: c.graph.id, graphName: c.graph.name, nodeId: c.current ?? '', nodeName: c.currentName ?? '', ...(c.run.document ? { document: c.run.document } : {})
     })).reverse();
-    this.debug!.beforeNode({ stack, pureSources: () => this.pureSources(context, node) });
+    const contexts = [...this.debugStack].reverse();
+    this.debug!.beforeNode({
+      stack,
+      pureSources: () => this.pureSources(context, node),
+      read: (frame, nodeId, pinId) => (contexts[frame] ? this.readValue(contexts[frame], nodeId, pinId) : { unavailable: 'That call has returned.' })
+    });
+  }
+
+  // A pin's value for the debugger (docs/debugging.md, "Values"): an impure node's output as it
+  // stored it, a pure node's computed as reading it would, an input as the node reads it.
+  private readValue(context: GraphContext, nodeId: string, pinId: string): DebugValue {
+    const node = context.graph.nodes.find((n) => n.id === nodeId);
+    const definition = node && context.run.resolve(node);
+    // A macro's node is replaced by its insides when the graph runs.
+    if (!node || !definition) return { unavailable: "No value: this node doesn't run as it is shown." };
+    const input = definition.inputs.find((p) => p.id === pinId);
+    const pin = input ?? definition.outputs.find((p) => p.id === pinId);
+    if (!pin || pin.kind !== 'data') return { unavailable: 'No value.' };
+    const operation = nativeOperation(definition);
+    const stored = isPure(definition) || operation === 'set-variable' || operation === 'function-entry' || context.frame.outputs.has(outputKey(context.graph, node, pinId));
+    if (!input && !stored) return { unavailable: "This node hasn't run yet." };
+    this.evaluating = true;
+    try {
+      const value = input ? this.inputValue(context, node, definition, pinId) : this.outputValue(context, node, pinId, new Set());
+      return { value: typeof value === 'string' ? JSON.stringify(value) : formatValue(value) };
+    } catch (error) {
+      return { unavailable: error instanceof Error ? error.message : String(error) };
+    } finally {
+      this.evaluating = false;
+    }
   }
 
   // The pure nodes whose outputs feed `node`'s inputs, directly or through other pure nodes.
