@@ -196,6 +196,12 @@ Exit: the debugging loop works in TypeScript, Python and C# without the user eve
 
 Status: complete (October 2026), with the deferrals below. The exit check is in the integration suite: a graph whose Start calls a function graph stops at a breakpoint on the call, steps into the function graph (the call stack in graph terms), reads the function's input, resumes to a breakpoint in the function graph, reads a computed value, steps out to the caller and runs to the end, with the graph editor in front throughout. It runs in generated TypeScript and JavaScript on every run, and in Python and C# with `npm run test:integration:debuggers` (which loads the Python Debugger and C# extensions). Simulate's debugger does the same in the unit tests, without a toolchain.
 
+- **Known issue: narrow editors.** The editor's layout doesn't adapt to a narrow window:
+  - My Blueprint/Palette (240 px) and Details (260 px) keep their widths and squeeze the canvas.
+  - Toolbar items wrap ("▶ Run" on two lines) or are cut off (the language picker, the graph name, the status).
+  - The help bar is cut off.
+
+  To fix before more panels arrive: toolbar items that don't wrap and an overflow for what doesn't fit, side panels that narrow or collapse below a width, and a check at a small window size in the browser tests. (The Blueprint Debugger panel's buttons now wrap.)
 - **Deferred:** stepping into a macro's graph (a macro use steps as one node); pin values in frames other than the innermost one running a graph; pure nodes' values in generated code (they aren't stored, so the bubble says so); xUnit test files for C# (C# tests run through Run's project); syncing a mirrored breakpoint's enabled state from VS Code back to the graph; Simulate calling project functions (Phase 3's deferral: Debug runs the real code instead).
 
 Design: [debugging.md](debugging.md). Steps, one commit each (large steps may take several):

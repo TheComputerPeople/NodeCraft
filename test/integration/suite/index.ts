@@ -450,6 +450,7 @@ async function exitCheck(language: string): Promise<void> {
     debug.act('stepInto');
     await until('Step Into Twice', (frames) => frames[0] !== 'EventGraph/call');
     assert.deepEqual(stack(), ['Twice/add', 'EventGraph/call'], 'the call stack, in graph terms');
+    assert.equal(api.provider.currentDebug()!.stack!.length, 2, 'the code that started the program is left out');
     assert.deepEqual(await debug.read(graph, [{ graphId: 'Twice', nodeId: 'entry', pinId: 'n' }]), [{ value: '21' }]);
 
     debug.act('resume');

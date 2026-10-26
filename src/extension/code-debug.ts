@@ -305,7 +305,14 @@ class CodeDebug implements GraphDebug {
     }
     // Async stack traces separate their parts with label frames.
     frames = frames.filter((f) => f.presentationHint !== 'label');
-    const stack = await Promise.all(frames.map((f) => this.service.mapFrame(f, this.graph)));
+    let stack = await Promise.all(frames.map((f) => this.service.mapFrame(f, this.graph)));
+    // Below the outermost graph frame is only the code that started the program (Run's launcher,
+    // the runtime's own startup): left out, as Unreal's call stack ends at the event.
+    const outermost = stack.map((f) => !f.external).lastIndexOf(true);
+    if (outermost >= 0) {
+      stack = stack.slice(0, outermost + 1);
+      frames = frames.slice(0, outermost + 1);
+    }
     const step = this.stepping;
     if (step) {
       const top = stack[0];
