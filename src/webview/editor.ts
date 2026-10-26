@@ -6,6 +6,7 @@ import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, 
 import { applySettings, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
 import { dom, eventElement, nodeElement, setStatus } from './dom';
 import { postToHost } from './host';
+import './layout';
 import { openFind, reveal, showResults } from './find';
 import { AlignEdge, alignSelection, straightenConnections } from './align';
 import { showDebugState } from './debugger';

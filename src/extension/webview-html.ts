@@ -20,8 +20,9 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
 <body>
 <div id="app">
   <aside id="left" class="panel">
+    <button class="panel-strip" data-panel-toggle="left" title="Show My Blueprint and the Palette"><span>My Blueprint · Palette</span></button>
     <section id="my-blueprint" aria-label="My Blueprint">
-      <div class="panel-title">My Blueprint</div>
+      <div class="panel-title"><span>My Blueprint</span><button class="panel-toggle" data-panel-toggle="left" title="Hide My Blueprint and the Palette" aria-label="Hide My Blueprint and the Palette">&#x2039;</button></div>
       <div id="mb-sections"></div>
     </section>
     <section id="palette" aria-label="Palette">
@@ -67,7 +68,8 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
     <div id="help">Drag pins to connect · Alt+click a pin breaks its links · Ctrl+drag a pin moves them · Right-click for menus, right-drag to pan · Hold B, S, P, F, G, M, N, O or D and click to place · F7 compiles</div>
   </main>
   <aside id="inspector" class="panel">
-    <div class="panel-title">Details</div>
+    <button class="panel-strip" data-panel-toggle="details" title="Show Details"><span>Details</span></button>
+    <div class="panel-title"><span>Details</span><button class="panel-toggle" data-panel-toggle="details" title="Hide Details" aria-label="Hide Details">&#x203A;</button></div>
     <div id="inspector-content" class="muted">Select a node to see its details.</div>
   </aside>
 </div>
