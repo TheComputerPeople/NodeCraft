@@ -53,6 +53,11 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
       <header><span id="results-title">Compiler Results</span><button id="results-close" title="Close">×</button></header>
       <ul id="results-list"></ul>
     </section>
+    <section id="debugger" hidden aria-label="Blueprint Debugger">
+      <header><span id="debug-title">Running</span><span id="debug-actions"></span></header>
+      <div class="debug-heading">Call Stack</div>
+      <ol id="call-stack"></ol>
+    </section>
     <section id="find-results" hidden aria-label="Find Results">
       <header><span id="find-title">Find Results</span><input id="find-input" class="find-input" placeholder="Search this graph file" aria-label="Find"><label class="find-scope"><input type="checkbox" id="find-all"> All files</label><button id="find-close" title="Close">×</button></header>
       <ul id="find-list"></ul>

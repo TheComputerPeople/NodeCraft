@@ -12,7 +12,7 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 - Workspace `*.node.json` user node libraries, with a code snippet per language. Example: `Double`.
 - **Code generation**: each graph compiles to readable source code in its target language, written next to the graph and meant to be committed. TypeScript, JavaScript, Python and C# are supported.
 - Unreal-style **Compile** (F7) and **Compiler Results**, with error and warning badges on nodes and entries in the Problems panel.
-- **Run** (the generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter).
+- **Run** (the generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter). With breakpoints set (F9), Simulate pauses at them: step node by node and see the call stack in graph terms.
 - Saving goes through VS Code's text document, so undo, redo, dirty state and source control work as usual.
 
 ## Open and run
@@ -228,4 +228,5 @@ The editor follows Unreal Engine 5's Blueprint editor. [docs/unreal-conventions.
 | Find in this file | Ctrl + F |
 | Find in all graph files | Ctrl + Shift + F |
 | Toggle a breakpoint on the selected nodes / remove all of the file's breakpoints | F9 / Ctrl + Shift + F9 (also Add, Remove, Disable and Enable Breakpoint in the node menu) |
+| While Simulate is paused at a breakpoint: Resume, Step Over, Step Into, Step Out, Stop | F5, F10, F11, Shift + F11, Shift + F5 (also the Blueprint Debugger panel's buttons) |
 | Cancel the current gesture or close a menu | Escape |

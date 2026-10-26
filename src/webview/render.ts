@@ -4,6 +4,7 @@ import { formatType } from '../core/types';
 import { SEQUENCE } from '../core/resolve';
 import { addPin, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { breakpointOn } from './breakpoints';
+import { pausedNodeId } from './debugger';
 import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
 import { functionProblem, lookupDefinition, markDirty, pinDef } from './document';
@@ -52,6 +53,14 @@ function renderNode(node: GraphNode): HTMLElement {
     marker.className = 'node-breakpoint' + (breakpoint.enabled ? '' : ' disabled');
     marker.title = breakpoint.enabled ? 'Breakpoint' : 'Breakpoint (disabled)';
     el.appendChild(marker);
+  }
+  // Where the debugger paused: the node about to run, with Unreal's arrow pointing at it.
+  if (pausedNodeId() === node.id) {
+    el.classList.add('paused');
+    const arrow = document.createElement('span');
+    arrow.className = 'node-paused-arrow';
+    arrow.textContent = '▶';
+    el.appendChild(arrow);
   }
 
   // Unreal-style badge for compiler errors and warnings on this node, and for a project function

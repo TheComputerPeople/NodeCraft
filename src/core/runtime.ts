@@ -2,7 +2,7 @@
 // generated code must match it (docs/semantics.md, enforced by test/conformance).
 import { LanguagePackRegistry } from './language-pack';
 import { DEFAULT_LANGUAGE, builtinLanguagePacks } from './languages';
-import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent } from './model';
+import { DebugFrame, Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent } from './model';
 import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
@@ -60,6 +60,23 @@ interface GraphContext {
   frame: Frame;
   // Nodes currently on the execution call stack; reaching one again is an exec cycle.
   executing: Set<string>;
+  // The node running in this context (its visible id and title), for the debugger's call stack.
+  current?: string;
+  currentName?: string;
+}
+
+// Simulate's debugger (docs/debugging.md, "Debugging in Simulate"): told before each node with exec
+// pins runs, it may block there until the user resumes.
+export interface DebugHook {
+  beforeNode(stop: DebugStop): void;
+}
+
+export interface DebugStop {
+  // The call stack, innermost frame first; its first frame is the node about to run.
+  stack: DebugFrame[];
+  // The pure nodes this node reads (their visible ids, in its graph): a breakpoint on one of them
+  // stops here, as in Unreal.
+  pureSources(): string[];
 }
 
 interface BoundEvent {
@@ -94,6 +111,9 @@ export class GraphRuntime {
   private latent: { due: number; order: number; run: () => void }[] = [];
   private clock = 0;
   private latentOrder = 0;
+  // The debugger, when Simulate runs under one, and the contexts of the calls in progress.
+  debug?: DebugHook;
+  private debugStack: GraphContext[] = [];
 
   constructor(
     private readonly registry: NodeRegistry,
@@ -164,11 +184,49 @@ export class GraphRuntime {
     const reentering = context.executing.has(node.id);
     if (reentering && !isStateInput(definition, pin)) this.fail(context, node, `Execution cycle through ${node.id}: exec wires loop back to a node that is still running.`);
     if (!reentering) context.executing.add(node.id);
+    // A call (or a latent action resuming) enters a context; the nodes it runs in turn don't.
+    const entered = this.debug !== undefined && this.debugStack[this.debugStack.length - 1] !== context;
+    if (entered) this.debugStack.push(context);
     try {
+      if (this.debug) this.debugBefore(context, node);
       this.runNode(context, node, definition, pin);
     } finally {
       if (!reentering) context.executing.delete(node.id);
+      if (entered) this.debugStack.pop();
     }
+  }
+
+  // Tells the debugger a node is about to run. The nodes of one macro use run as one node: the
+  // debugger shows the macro's node, and steps over its insides.
+  private debugBefore(context: GraphContext, node: GraphNode): void {
+    const visible = visibleNodeId(node.id);
+    if (isExpandedNode(node.id) && context.current === visible) return;
+    context.current = visible;
+    // A macro's insides stand for its node (whose name expansion doesn't keep).
+    context.currentName = isExpandedNode(node.id) ? 'Macro' : context.run.resolve(node)?.displayName ?? node.type;
+    const stack = this.debugStack.map((c): DebugFrame => ({
+      graphId: c.graph.id, graphName: c.graph.name, nodeId: c.current ?? '', nodeName: c.currentName ?? '', ...(c.run.document ? { document: c.run.document } : {})
+    })).reverse();
+    this.debug!.beforeNode({ stack, pureSources: () => this.pureSources(context, node) });
+  }
+
+  // The pure nodes whose outputs feed `node`'s inputs, directly or through other pure nodes.
+  private pureSources(context: GraphContext, node: GraphNode): string[] {
+    const { graph } = context;
+    const found = new Set<string>();
+    const pending = [node.id];
+    while (pending.length) {
+      const id = pending.pop()!;
+      for (const c of graph.connections) {
+        if (c.toNode !== id || found.has(c.fromNode)) continue;
+        const source = graph.nodes.find((n) => n.id === c.fromNode);
+        const definition = source && context.run.resolve(source);
+        if (!definition || !isPure(definition)) continue;
+        found.add(c.fromNode);
+        pending.push(c.fromNode);
+      }
+    }
+    return [...new Set([...found].map(visibleNodeId))];
   }
 
   private runNode(context: GraphContext, node: GraphNode, definition: NodeDefinition, entry: string): void {

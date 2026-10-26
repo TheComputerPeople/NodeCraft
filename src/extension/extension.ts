@@ -71,6 +71,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('blueprintVisualScripting.refreshAllNodes', () => {
       if (!provider.postToActive({ type: 'refreshAll' })) void vscode.window.showInformationMessage('Open a graph to refresh its nodes.');
     }),
+    // Simulate's debugger (docs/debugging.md); the keys apply while a graph editor has focus.
+    ...(['resume', 'stepOver', 'stepInto', 'stepOut', 'stop'] as const).map((action) =>
+      vscode.commands.registerCommand(`blueprintVisualScripting.debug.${action}`, () => provider.debugAction(action))),
     vscode.commands.registerCommand('blueprintVisualScripting.findInAll', () => {
       if (!provider.postToActive({ type: 'openFind', findAll: true })) void vscode.commands.executeCommand('workbench.action.findInFiles');
     }),

@@ -8,6 +8,7 @@ import { dom, eventElement, nodeElement, setStatus } from './dom';
 import { postToHost } from './host';
 import { openFind, reveal, showResults } from './find';
 import { AlignEdge, alignSelection, straightenConnections } from './align';
+import { showDebugState } from './debugger';
 import { clearBreakpoints, pruneBreakpoints, setBreakpoints, toggleSelectedBreakpoints } from './breakpoints';
 import { finishVariableDrag, removeVariable, startRename, updateVariableDrag } from './my-blueprint';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showNodeContextMenu } from './menus';
@@ -70,6 +71,9 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       break;
     case 'breakpoints':
       setBreakpoints(message.breakpoints ?? []);
+      break;
+    case 'debugState':
+      if (message.debug) showDebugState(message.debug);
       break;
     case 'compileResult':
       if (message.compile) showCompileResult(message.compile);

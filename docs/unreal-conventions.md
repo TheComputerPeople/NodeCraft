@@ -83,6 +83,7 @@ Sources:
 | Find in this Blueprint | Ctrl + F | Epic |
 | Find in all Blueprints | Ctrl + Shift + F | Epic |
 | Toggle breakpoint / clear all breakpoints | F9 / Ctrl + Shift + F9 | Epic |
+| Resume / Step Over / Step Into / Step Out / Stop (while paused) | F5 / F10 / F11 / Alt + Shift + F11 (also Shift + F11, VS Code's) / Shift + F5 | Epic |
 
 On macOS, Ctrl is Cmd and Alt is Option.
 

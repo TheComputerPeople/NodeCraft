@@ -1,6 +1,8 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
+import { SimulateBreakpoint } from '../core/debugger';
 import { LanguagePackRegistry } from '../core/language-pack';
-import { CompileReport, FileSearchHit, GraphDocument, HostMessage, LanguageOption, RevealTarget, UIMessage } from '../core/model';
+import { CompileReport, DebugAction, DebugFrame, DebugState, FileSearchHit, GraphDocument, HostMessage, LanguageOption, RevealTarget, RuntimeLogEvent, UIMessage } from '../core/model';
 import { createResolver } from '../core/resolve';
 import { searchDocument } from '../core/search';
 import { NodeRegistry } from '../core/registry';
@@ -9,6 +11,7 @@ import { parseDocument, serializeDocument } from '../core/serializer';
 import { CompileService } from './compile-service';
 import { loadGraphDocument } from './graph-libraries';
 import { BreakpointStore } from './breakpoints';
+import { SimulateSession } from './simulate-session';
 import { createNonce, renderEditorHtml } from './webview-html';
 
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
@@ -19,6 +22,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly panelsByDocument = new Map<string, PanelSet>();
   // Find in All Blueprints hits to show once their file's editor has loaded.
   private readonly pendingReveals = new Map<string, RevealTarget>();
+  // A debug Simulate run (docs/debugging.md): the file simulated, and the stack while paused.
+  private debugSession: DebugSession | undefined;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -31,7 +36,11 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     private readonly breakpoints: BreakpointStore = new BreakpointStore(context.workspaceState)
   ) {
     // Every panel of a file shows its breakpoints, wherever they were changed.
-    context.subscriptions.push(breakpoints.onDidChange((uri) => this.broadcast(uri.toString(), { type: 'breakpoints', breakpoints: breakpoints.get(uri) })));
+    context.subscriptions.push(breakpoints.onDidChange((uri) => {
+      this.broadcast(uri.toString(), { type: 'breakpoints', breakpoints: breakpoints.get(uri) });
+      if (this.debugSession) this.debugSession.session.setBreakpoints(this.simulateBreakpoints(this.debugSession.uri));
+    }));
+    context.subscriptions.push({ dispose: () => this.debugSession?.session.stop() });
     context.subscriptions.push(
       registry.onDidChange(() => {
         const message: HostMessage = { type: 'definitions', definitions: registry.all(), functionsLoaded: this.functionsLoaded() };
@@ -101,8 +110,13 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
               this.pendingReveals.delete(key);
               this.post(webviewPanel, { type: 'reveal', target: reveal });
             }
+            // A file opened while debugging (the debugger opens the one it stopped in).
+            if (this.debugSession) this.post(webviewPanel, { type: 'debugState', debug: this.debugStateFor(key) });
             break;
           }
+          case 'debugAction':
+            if (message.action) this.debugAction(message.action);
+            break;
           case 'findInAll':
             this.post(webviewPanel, { type: 'findResults', results: await this.findInAll(message.query ?? '', key) });
             break;
@@ -244,7 +258,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     await vscode.workspace.applyEdit(edit);
   }
 
-  // Runs the graph in the editor's reference interpreter.
+  // Runs the graph in the editor's reference interpreter: under the debugger, in a worker, when
+  // breakpoints are set anywhere in the workspace.
   private simulate(document: vscode.TextDocument): void {
     let graphDocument: GraphDocument;
     try {
@@ -257,14 +272,105 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     const output = this.output();
     output.clear();
     output.show(true);
-    output.appendLine('Simulating in the editor');
-    const runtime = new GraphRuntime(this.registry, (event) => {
-      // Nodes of a function library's graph aren't in this editor.
-      if (!event.document) this.broadcast(document.uri.toString(), { type: 'runtimeEvent', event });
+    const args = vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<string[]>('runArguments', []);
+    const emit = (event: RuntimeLogEvent): void => {
+      // Each event goes to the editors of the file its node is in.
+      this.broadcast(this.fileUri(document.uri, event.document).toString(), { type: 'runtimeEvent', event });
       if (event.kind === 'log') output.appendLine(event.message ?? '');
       else if (event.kind === 'error') output.appendLine(`[error] ${event.document ? `${event.document}: ` : ''}${event.message ?? ''}`);
-    }, this.languages, (path) => loadGraphDocument(document.uri, path));
-    runtime.run(graphDocument, vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<string[]>('runArguments', []));
+    };
+    this.debugSession?.session.stop();
+    const breakpoints = this.simulateBreakpoints(document.uri);
+    if (breakpoints.length) {
+      output.appendLine('Simulating in the editor, with breakpoints');
+      this.debugSimulate(document.uri, graphDocument, args, breakpoints, emit);
+      return;
+    }
+    output.appendLine('Simulating in the editor');
+    new GraphRuntime(this.registry, emit, this.languages, (file) => loadGraphDocument(document.uri, file)).run(graphDocument, args);
+  }
+
+  private debugSimulate(uri: vscode.Uri, graphDocument: GraphDocument, args: string[], breakpoints: SimulateBreakpoint[], emit: (event: RuntimeLogEvent) => void): void {
+    const root = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+    // Open graph files' unsaved text wins over the file on disk, as in loadGraphDocument.
+    const openDocuments: Record<string, string> = {};
+    for (const d of vscode.workspace.textDocuments) {
+      if (root && d.uri.scheme === 'file' && d.uri.fsPath.toLowerCase().endsWith('.vgraph')) openDocuments[relativePath(root, d.uri.fsPath)] = d.getText();
+    }
+    const setContext = (key: string, value: boolean): void => void vscode.commands.executeCommand('setContext', `blueprintVisualScripting.${key}`, value);
+    const debugSession: DebugSession = {
+      uri,
+      session: new SimulateSession({ definitions: this.registry.all(), document: graphDocument, root, openDocuments, args, breakpoints }, {
+        event: emit,
+        paused: (stack) => {
+          debugSession.stack = stack;
+          setContext('simulatePaused', true);
+          this.broadcastDebugState();
+          // Shows the file the debugger stopped in.
+          const top = this.fileUri(uri, stack[0].document);
+          if (!this.panelsByDocument.get(top.toString())?.size) void vscode.commands.executeCommand('vscode.openWith', top, VIEW_TYPE);
+        },
+        resumed: () => {
+          debugSession.stack = undefined;
+          setContext('simulatePaused', false);
+          this.broadcastDebugState();
+        },
+        ended: () => {
+          debugSession.stack = undefined;
+          if (this.debugSession !== debugSession) return;
+          this.debugSession = undefined;
+          setContext('simulatePaused', false);
+          setContext('simulateDebugging', false);
+          this.broadcastDebugState();
+        }
+      })
+    };
+    this.debugSession = debugSession;
+    setContext('simulateDebugging', true);
+    this.broadcastDebugState();
+  }
+
+  // Resume, Step Over/Into/Out and Stop (the editor's buttons, and the keys while it has focus).
+  debugAction(action: DebugAction): void {
+    const session = this.debugSession?.session;
+    if (!session) return;
+    if (action === 'stop') session.stop();
+    else session.resume(action === 'resume' ? 'continue' : action);
+  }
+
+  // The workspace's enabled breakpoints, with their files named as a Simulate of `uri` names them.
+  private simulateBreakpoints(uri: vscode.Uri): SimulateBreakpoint[] {
+    const root = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+    return Object.entries(this.breakpoints.all()).flatMap(([key, list]) => {
+      const file = vscode.Uri.parse(key);
+      const document = key === uri.toString() ? undefined : root && file.scheme === 'file' ? relativePath(root, file.fsPath) : null;
+      if (document === null || document?.startsWith('..')) return [];
+      return list.filter((b) => b.enabled).map((b) => ({ graphId: b.graphId, nodeId: b.nodeId, ...(document ? { document } : {}) }));
+    });
+  }
+
+  // A graph file as runtime events and frames name it: relative to the workspace, or absent for
+  // the file simulated.
+  private fileUri(simulated: vscode.Uri, document: string | undefined): vscode.Uri {
+    const root = vscode.workspace.getWorkspaceFolder(simulated)?.uri;
+    return document && root ? vscode.Uri.joinPath(root, ...document.split('/')) : simulated;
+  }
+
+  private debugStateFor(panelKey: string): DebugState {
+    const session = this.debugSession;
+    if (!session) return { state: 'ended' };
+    if (!session.stack) return { state: 'running' };
+    return {
+      state: 'paused',
+      stack: session.stack.map((frame) => {
+        const uri = this.fileUri(session.uri, frame.document);
+        return { ...frame, uri: uri.toString(), fileName: path.basename(uri.path, '.vgraph'), here: uri.toString() === panelKey };
+      })
+    };
+  }
+
+  private broadcastDebugState(): void {
+    this.panelsByDocument.forEach((panels, key) => panels.forEach((panel) => this.post(panel, { type: 'debugState', debug: this.debugStateFor(key) })));
   }
 
   private getHtml(webview: vscode.Webview): string {
@@ -290,6 +396,16 @@ const MAX_FIND_RESULTS = 500;
 const RESTRICTED_MODE_MESSAGE = 'Running graphs is disabled in Restricted Mode. Trust this workspace to run graphs.';
 const SAVE_DELAY_SETTING = 'blueprintVisualScripting.autoSaveDelay';
 const DEFAULT_SAVE_DELAY_MS = 150;
+
+interface DebugSession {
+  session: SimulateSession;
+  uri: vscode.Uri;
+  stack?: DebugFrame[];
+}
+
+function relativePath(root: string, file: string): string {
+  return path.relative(root, file).split(path.sep).join('/');
+}
 
 function getSaveDelay(): number {
   const value = vscode.workspace.getConfiguration().get<number>(SAVE_DELAY_SETTING, DEFAULT_SAVE_DELAY_MS);

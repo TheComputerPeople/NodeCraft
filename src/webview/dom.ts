@@ -33,6 +33,11 @@ export const dom = {
   findList: element<HTMLUListElement>('find-list'),
   findClose: element<HTMLButtonElement>('find-close'),
   fitButton: element<HTMLButtonElement>('fit'),
+  // Simulate's debugger: its state, buttons and call stack.
+  debugger: element<HTMLElement>('debugger'),
+  debugTitle: element<HTMLSpanElement>('debug-title'),
+  debugActions: element<HTMLSpanElement>('debug-actions'),
+  callStack: element<HTMLOListElement>('call-stack'),
   // Structure and enumeration files are edited here instead of on the canvas.
   typeEditor: element<HTMLElement>('type-editor'),
   palette: element<HTMLElement>('palette'),

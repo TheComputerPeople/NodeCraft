@@ -25,7 +25,10 @@ Shortcut sources are in [unreal-conventions.md](unreal-conventions.md). Unreal s
 - The extension runs a debug Simulate in a worker thread. When the hook decides to pause (an enabled breakpoint, or a step that has arrived), the worker posts "paused" with the location and stack, then blocks on `Atomics.wait`. Commands from the editor (continue, step over/into/out, stop, read a value) arrive as messages; the editor wakes the worker with `Atomics.notify`, and the worker takes the message with `receiveMessageOnPort`. Reading a value answers right away and blocks again; the others resume. The interpreter needs no async rewrite.
 - **Stepping** is by node: Step Into pauses at the next node that runs anywhere; Step Over at the next node at the same call depth or shallower (a function call runs to its end); Step Out at the next node shallower than now.
 - **Values**: an output pin's value is the one the node stored (impure nodes) or is computed on demand (pure nodes, evaluated as reading them would, without running anything impure); an input pin shows the value it would read; variables and function inputs are read from the frame.
-- Simulate's normal Run stays as it is (in the extension host, no worker); Simulate with breakpoints set, or the Debug command, uses the worker.
+- Simulate's normal Run stays as it is (in the extension host, no worker); Simulate with enabled breakpoints anywhere in the workspace uses the worker. Breakpoints changed during the run apply at the next node.
+- The nodes of one macro use run as one node: the debugger shows the macro's node and Step Over/Into move past its insides (Unreal steps into macro graphs; that waits for the macro graph to be shown with the values of one use).
+- While paused, the editor shows a **Blueprint Debugger** panel under the graph: the node it stopped at, Resume, Step Over, Step Into, Step Out and Stop, and the call stack (clicking a frame shows its node, opening its file if it is another one). The paused node gets Unreal's arrow and a highlight; the editor opens the graph, and the file, it stopped in.
+- F5, F10, F11, Shift+F11 (and Alt+Shift+F11) and Shift+F5 are VS Code keybindings that apply only while a graph editor has focus and the debugger is paused (Shift+F5: running), so they never reach VS Code's own debugger or full-screen toggle.
 
 ## Debugging generated code (DAP)
 

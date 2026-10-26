@@ -202,6 +202,35 @@ export interface RuntimeLogEvent {
   message?: string;
 }
 
+// A frame of the call stack in graph terms (docs/debugging.md): the graph, and the node running in
+// it (in the frames below the top, the node that made the call).
+export interface DebugFrame {
+  graphId: string;
+  graphName: string;
+  nodeId: string;
+  // The node's title, for frames in files the editor doesn't have open.
+  nodeName: string;
+  // Set when the graph is in another graph file, relative to the workspace (as in RuntimeLogEvent).
+  document?: string;
+}
+
+// What the debugger's buttons and keys do (F5, F10, F11, Shift+F11, Shift+F5).
+export type DebugAction = 'resume' | 'stepOver' | 'stepInto' | 'stepOut' | 'stop';
+
+// A frame as an editor panel shows it: which file it is in, and whether that is the panel's own.
+export interface DebugStackFrame extends DebugFrame {
+  uri: string;
+  fileName: string;
+  here: boolean;
+}
+
+// A debug Simulate session, as the editor shows it. While paused, `stack` is the call stack,
+// innermost first; its first frame's node is about to run.
+export interface DebugState {
+  state: 'running' | 'paused' | 'ended';
+  stack?: DebugStackFrame[];
+}
+
 // The outcome of compiling a graph, shown in the editor's Compiler Results panel.
 export interface CompileReport {
   status: 'ok' | 'warnings' | 'errors';
@@ -251,10 +280,11 @@ export interface GraphBreakpoint {
 export interface UIMessage {
   // run: compile, then run the generated code; simulate: run in the editor's interpreter.
   // findInAll: search every graph in the workspace; reveal: open another file at a hit.
-  // setBreakpoints: the file's breakpoints changed.
-  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'findInAll' | 'reveal' | 'setBreakpoints';
+  // setBreakpoints: the file's breakpoints changed; debugAction: a debugger button.
+  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'debugAction';
   document?: GraphDocument;
   breakpoints?: GraphBreakpoint[];
+  action?: DebugAction;
   query?: string;
   target?: RevealTarget;
 }
@@ -275,8 +305,11 @@ export interface HostMessage {
     | 'refreshAll'
     // The file's breakpoints (also part of 'init').
     | 'breakpoints'
+    // Simulate's debugger paused, resumed or ended.
+    | 'debugState'
     | 'error';
   breakpoints?: GraphBreakpoint[];
+  debug?: DebugState;
   // Absent on 'init' when the file could not be parsed; the webview then stays read-only.
   document?: GraphDocument;
   definitions?: NodeDefinition[];
