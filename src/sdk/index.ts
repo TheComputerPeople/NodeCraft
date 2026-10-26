@@ -2,9 +2,11 @@
 // author needs to write a language pack, and the conformance suite to check it. Published as
 // @blueprint-visual-scripting/pack-sdk; nothing here depends on VS Code.
 
-// The API version packs are written against. A change to these types that breaks packs is a new
-// major version of the SDK and of this number.
-export const API_VERSION = 1;
+// The API version packs are written against (a pack sets `apiVersion` to it), and the API the
+// extension gives other extensions. A change that breaks packs is a new major version of the SDK
+// and of this number.
+export { API_VERSION } from '../core/api';
+export type { BlueprintVisualScriptingApi, Disposable, NodeLibrary } from '../core/api';
 
 // A language pack and its parts.
 export type {

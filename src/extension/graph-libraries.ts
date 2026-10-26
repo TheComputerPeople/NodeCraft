@@ -40,7 +40,9 @@ export class GraphLibraries implements vscode.Disposable {
       watcher.onDidCreate((uri) => this.queue(uri)),
       watcher.onDidChange((uri) => this.queue(uri)),
       watcher.onDidDelete((uri) => this.queue(uri)),
-      vscode.workspace.onDidChangeWorkspaceFolders(() => void this.rescan())
+      vscode.workspace.onDidChangeWorkspaceFolders(() => void this.rescan()),
+      // A pack registered or removed changes which libraries generate code, and their names.
+      languages.onDidChange(() => void this.rescan())
     );
     void this.rescan().then(() => this.readyResolve());
   }

@@ -163,6 +163,8 @@ export interface SymbolImporter {
 export interface LanguagePack {
   // The value of a graph's `language` field, e.g. "typescript".
   id: string;
+  // The API version a pack from another extension was built for (src/core/api.ts).
+  apiVersion?: number;
   displayName: string;
   // Extension of generated source files, including the dot.
   generatedFileExtension: string;
@@ -178,6 +180,7 @@ export interface LanguagePack {
 
 export class LanguagePackRegistry {
   private readonly packs = new Map<string, LanguagePack>();
+  private readonly listeners = new Set<() => void>();
 
   constructor(packs: LanguagePack[] = []) {
     packs.forEach((p) => this.register(p));
@@ -187,6 +190,17 @@ export class LanguagePackRegistry {
   // (TypeScript before JavaScript, since TypeScript projects also have a package.json).
   register(pack: LanguagePack): void {
     this.packs.set(pack.id, pack);
+    this.listeners.forEach((listener) => listener());
+  }
+
+  unregister(id: string): void {
+    if (this.packs.delete(id)) this.listeners.forEach((listener) => listener());
+  }
+
+  // Packs registered or removed (another extension's, through the API).
+  onDidChange(listener: () => void): { dispose(): void } {
+    this.listeners.add(listener);
+    return { dispose: () => this.listeners.delete(listener) };
   }
 
   get(id: string): LanguagePack | undefined {

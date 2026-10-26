@@ -22,6 +22,8 @@ Language and framework packs can ship as separate VS Code extensions.
   - `registerNodeLibrary(library)`: node definitions with a name and version (framework packs' events and nodes).
 
   Each returns a disposable. A pack declares the API version it was built for; a mismatch is refused with a message naming both versions. Packs and libraries can come and go while editors are open: the language picker, the palette and compile results update.
+
+  As built: the types are in `src/core/api.ts` (and in the SDK). Another extension gets the API with `vscode.extensions.getExtension('local.blueprint-visual-scripting').activate()`. `registerLanguagePack` throws (and logs to the Output panel) when the pack's `apiVersion` differs, its id is taken or a required member is missing; `registerNodeLibrary` throws for a library name already registered. When packs change, open editors get the new language list (with capabilities), and the scans of graph libraries and project functions run again (a pack can bring a symbol importer). `registerDeclarativePack` arrives with the declarative format (step 10).
 - **The pack SDK** is an npm package built from this repository (`packages/pack-sdk`, `@blueprint-visual-scripting/pack-sdk`). It holds what a pack author needs and nothing that depends on VS Code:
   - the types: `LanguagePack` and its parts, the Visual IR, the canonical types;
   - helpers the built-in packs use: `CodeWriter` (with node lines for debugging), `NameScope` and `toIdentifier`, `exprType`, the value-formatting rules as reference code;

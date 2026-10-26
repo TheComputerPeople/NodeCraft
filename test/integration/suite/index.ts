@@ -2,6 +2,9 @@
 // framework dependency; VS Code reports failure when the returned promise rejects.
 import * as assert from 'node:assert/strict';
 import * as vscode from 'vscode';
+import type { LanguagePack } from '../../../src/core/language-pack';
+import type { NodeDefinition } from '../../../src/core/model';
+import { javascriptPack } from '../../../src/core/languages/javascript';
 
 const EXTENSION_ID = 'local.blueprint-visual-scripting';
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
@@ -328,6 +331,17 @@ test('structs and enums in the workspace become types and nodes that graphs impo
 
 // What activation returns (src/extension/extension.ts), as far as these tests use it.
 interface ExtensionApi {
+  testing: ExtensionInternals;
+}
+
+// The public part (src/core/api.ts).
+interface PublicApi {
+  apiVersion: number;
+  registerLanguagePack(pack: LanguagePack): vscode.Disposable;
+  registerNodeLibrary(library: { name: string; version: string; nodes: NodeDefinition[] }): vscode.Disposable;
+}
+
+interface ExtensionInternals {
   marks: { breakpoints: { set(uri: vscode.Uri, breakpoints: { graphId: string; nodeId: string; enabled: boolean }[]): Promise<void> } };
   provider: {
     currentDebug(): {
@@ -337,6 +351,48 @@ interface ExtensionApi {
     } | undefined;
   };
 }
+
+// The public API, as another extension uses it (docs/language-breadth.md): a language pack and a
+// node library registered while the extension runs, then removed.
+test('another extension registers a language pack and a node library, then removes them', async () => {
+  // As another extension gets it: activating returns the API.
+  const api = (await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as PublicApi;
+  assert.equal(api.apiVersion, 1);
+  assert.throws(() => api.registerLanguagePack({ ...javascriptPack, id: 'echo', displayName: 'Echo', apiVersion: 99 }), /built for API version 99/);
+  const pack = api.registerLanguagePack({
+    ...javascriptPack, id: 'echo', displayName: 'Echo', apiVersion: 1,
+    generator: { ...javascriptPack.generator!, outputFileName: (name: string) => `${name}.echo.js` }
+  });
+  const library = api.registerNodeLibrary({
+    name: 'greetings', version: '1.0.0',
+    nodes: [{
+      type: 'greetings:hello', version: 1, displayName: 'Hello', category: 'Greetings',
+      inputs: [{ id: 'execIn', name: '', kind: 'exec', direction: 'input' }, { id: 'name', name: 'Name', kind: 'data', direction: 'input', type: { id: 'string' } }],
+      outputs: [{ id: 'execOut', name: '', kind: 'exec', direction: 'output' }, { id: 'result', name: 'Result', kind: 'data', direction: 'output', type: { id: 'string' } }],
+      implementation: { kind: 'code', languages: { javascript: "return 'Hello, ' + ${name};" } }
+    }]
+  });
+  const graph = workspaceFile('echo.vgraph');
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({
+    schemaVersion: 3, name: 'Echo', kind: 'class', language: 'echo', variables: [], metadata: {},
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('h', 'greetings:hello', { 'pin:name': 'graphs' })],
+      connections: [{ id: 'c', fromNode: 's', fromPin: 'execOut', toNode: 'h', toPin: 'execIn' }]
+    }]
+  }, null, 2)));
+  try {
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    assert.match(await readText(workspaceFile('echo.vgraph.echo.js')), /return 'Hello, ' \+ name;/);
+    assert.deepEqual(vscode.languages.getDiagnostics(graph), []);
+  } finally {
+    library.dispose();
+    pack.dispose();
+  }
+  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  assert.match(vscode.languages.getDiagnostics(graph).map((d) => d.message).join(' '), /Unknown graph language "echo"/);
+});
 
 test("Compile writes a graph's tests to their own file; Run Tests and Simulate Tests run them", async () => {
   const graph = workspaceFile('tested.vgraph');
@@ -375,7 +431,7 @@ async function debugSample(language: string, generatedFile: string): Promise<voi
   const sample = JSON.parse(await readText(workspaceFile('demo.vgraph'))) as { name: string; language: string };
   await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({ ...sample, name: 'DebugMe', language }, null, 2)));
   await openInGraphEditor(name);
-  const api = vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi;
+  const api = (vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi).testing;
   await api.marks.breakpoints.set(graph, [{ graphId: 'EventGraph', nodeId: 'add_1', enabled: true }]);
   try {
     await vscode.commands.executeCommand('blueprintVisualScripting.debug', graph);
@@ -437,7 +493,7 @@ async function exitCheck(language: string): Promise<void> {
   };
   await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify(document, null, 2)));
   await openInGraphEditor(name);
-  const api = vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi;
+  const api = (vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi).testing;
   await api.marks.breakpoints.set(graph, [{ graphId: 'EventGraph', nodeId: 'call', enabled: true }, { graphId: 'Twice', nodeId: 'ret', enabled: true }]);
   const stack = () => api.provider.currentDebug()?.stack?.filter((f) => !f.external).map((f) => `${f.graphId}/${f.nodeId}`);
   const until = (what: string, ready: (frames: string[]) => boolean) => waitFor(() => !!stack() && ready(stack()!), what, 60000)

@@ -43,6 +43,11 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       this.debug?.breakpointsChanged();
     }));
     context.subscriptions.push({ dispose: () => this.debug?.act('stop') });
+    // Language packs from other extensions come and go: editors update their language lists.
+    context.subscriptions.push(languages.onDidChange(() => {
+      const message: HostMessage = { type: 'languages', languages: this.languageOptions() };
+      this.panelsByDocument.forEach((panels) => panels.forEach((panel) => this.post(panel, message)));
+    }));
     context.subscriptions.push(
       registry.onDidChange(() => {
         const message: HostMessage = { type: 'definitions', definitions: registry.all(), functionsLoaded: this.functionsLoaded() };

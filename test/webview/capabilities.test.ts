@@ -61,6 +61,15 @@ describe('capabilities in the editor', () => {
     assert.deepEqual(containers, ['Single', 'Array']);
   });
 
+  test('the language list follows packs registered and removed while the editor is open', async (t) => {
+    const e = await open(t, { id: 'javascript', displayName: 'JavaScript', callable: ['javascript'], capabilities: full });
+    if (!e) return;
+    const options = () => e.page.$$eval('#language option', (els) => els.map((el) => el.textContent));
+    assert.deepEqual(await options(), ['JavaScript']);
+    await e.send({ type: 'languages', languages: [{ id: 'javascript', displayName: 'JavaScript', callable: ['javascript'], capabilities: full }, { id: 'echo', displayName: 'Echo', callable: [], capabilities: { ...full, async: false } }] });
+    assert.deepEqual(await options(), ['JavaScript', 'Echo']);
+  });
+
   test('a language with every capability offers everything', async (t) => {
     const e = await open(t, { id: 'javascript', displayName: 'JavaScript', callable: ['javascript'], capabilities: full });
     if (!e) return;

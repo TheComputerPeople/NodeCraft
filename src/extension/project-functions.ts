@@ -29,7 +29,8 @@ export class ProjectFunctions implements vscode.Disposable {
   private readonly packs = new Map<string, LanguagePack>();
   private readonly subscriptions: vscode.Disposable[] = [];
   private readonly changed = new Set<string>();
-  private readonly glob: string;
+  private glob = '';
+  private watcher: vscode.FileSystemWatcher | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private generation = 0;
   private lastReport = '';
@@ -39,22 +40,34 @@ export class ProjectFunctions implements vscode.Disposable {
   // Resolves after the first full scan.
   readonly ready = new Promise<void>((resolve) => (this.readyResolve = resolve));
 
-  constructor(private readonly registry: NodeRegistry, languages: LanguagePackRegistry, private readonly output: () => vscode.OutputChannel) {
-    for (const pack of languages.all()) for (const ext of pack.importer?.extensions ?? []) this.packs.set(ext, pack);
-    this.glob = `**/*{${[...this.packs.keys()].join(',')}}`;
-
-    const watcher = vscode.workspace.createFileSystemWatcher(this.glob);
+  constructor(private readonly registry: NodeRegistry, private readonly languages: LanguagePackRegistry, private readonly output: () => vscode.OutputChannel) {
+    this.watchSources();
     this.subscriptions.push(
-      watcher,
-      watcher.onDidCreate((uri) => this.queue(uri)),
-      watcher.onDidChange((uri) => this.queue(uri)),
-      watcher.onDidDelete((uri) => this.queue(uri)),
+      { dispose: () => this.watcher?.dispose() },
+      // A pack registered or removed (through the API) may read other source files.
+      languages.onDidChange(() => {
+        this.watchSources();
+        void this.rescan();
+      }),
       vscode.workspace.onDidChangeWorkspaceFolders(() => void this.rescan()),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration('blueprintVisualScripting.exposeAllFunctions')) void this.rescan();
       })
     );
     void this.rescan().then(() => this.readyResolve());
+  }
+
+  // Which packs read which source files, and a watcher for those files.
+  private watchSources(): void {
+    this.packs.clear();
+    for (const pack of this.languages.all()) for (const ext of pack.importer?.extensions ?? []) this.packs.set(ext, pack);
+    this.glob = `**/*{${[...this.packs.keys()].join(',')}}`;
+    this.watcher?.dispose();
+    const watcher = vscode.workspace.createFileSystemWatcher(this.glob);
+    watcher.onDidCreate((uri) => this.queue(uri));
+    watcher.onDidChange((uri) => this.queue(uri));
+    watcher.onDidDelete((uri) => this.queue(uri));
+    this.watcher = watcher;
   }
 
   // Scans every source file in the workspace.

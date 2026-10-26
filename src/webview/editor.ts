@@ -85,6 +85,12 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
     case 'watches':
       setWatches(message.watches ?? []);
       break;
+    case 'languages':
+      state.languages = message.languages ?? [];
+      renderLanguagePicker();
+      renderPalette();
+      render();
+      break;
     case 'debugValues':
       receiveValues(message.requestId ?? -1, message.values ?? []);
       break;

@@ -13,12 +13,14 @@ import { isGeneratedFrom } from './placement';
 import { GraphLibraries } from './graph-libraries';
 import { DebugMarks } from './breakpoints';
 import { CodeDebugService } from './code-debug';
+import { createApi } from './api';
+import { BlueprintVisualScriptingApi } from '../core/api';
 import { ProjectFunctions } from './project-functions';
 
-// What activation returns: the integration tests drive debugging through it.
-export interface ExtensionApi {
-  marks: DebugMarks;
-  provider: GraphEditorProvider;
+// What activation returns: the public API (src/core/api.ts), and, for this extension's own
+// integration tests only, a few internals.
+export interface ExtensionApi extends BlueprintVisualScriptingApi {
+  testing: { marks: DebugMarks; provider: GraphEditorProvider };
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
@@ -151,7 +153,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       await vscode.commands.executeCommand('vscode.open', target);
     })
   );
-  return { marks, provider };
+  return { ...createApi(languages, registry, output), testing: { marks, provider } };
 }
 
 export function deactivate(): void {}

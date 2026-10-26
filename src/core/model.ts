@@ -340,6 +340,8 @@ export interface HostMessage {
     | 'breakpoints'
     // The file's watched pins (also part of 'init').
     | 'watches'
+    // The languages changed (a pack registered or removed); `languages` is the new list.
+    | 'languages'
     // Simulate's debugger paused, resumed or ended.
     | 'debugState'
     // Answers 'readValues', in the order asked.
