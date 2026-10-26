@@ -198,6 +198,8 @@ export interface RuntimeLogEvent {
   document?: string;
   nodeId?: string;
   nodeType?: string;
+  // node.enter: the exec wire execution arrived through, if any (the editor pulses it).
+  connectionId?: string;
   values?: Record<string, unknown>;
   message?: string;
 }

@@ -184,7 +184,7 @@ export class GraphRuntime {
   // Runs `node` through its exec input `entry` (its main one by default). Re-entering a node that
   // is still running is a cycle, except through an input that only changes its state (a loop's
   // Break, Gate's Close, …), as in Unreal.
-  private executeNode(context: GraphContext, node: GraphNode, entry?: string): void {
+  private executeNode(context: GraphContext, node: GraphNode, entry?: string, via?: string): void {
     const definition = context.run.resolve(node) ?? this.fail(context, node, `Unknown node type: ${node.type}`);
     const pin = entry ?? mainExecInput(definition);
     const reentering = context.executing.has(node.id);
@@ -196,7 +196,7 @@ export class GraphRuntime {
     if (entered) this.debugStack.push(context);
     try {
       if (debugging) this.debugBefore(context, node);
-      this.runNode(context, node, definition, pin);
+      this.runNode(context, node, definition, pin, via);
     } finally {
       if (!reentering) context.executing.delete(node.id);
       if (entered) this.debugStack.pop();
@@ -265,9 +265,11 @@ export class GraphRuntime {
     return [...new Set([...found].map(visibleNodeId))];
   }
 
-  private runNode(context: GraphContext, node: GraphNode, definition: NodeDefinition, entry: string): void {
+  private runNode(context: GraphContext, node: GraphNode, definition: NodeDefinition, entry: string, via?: string): void {
     const { graph } = context;
-    this.report(context, { kind: 'node.enter', nodeId: node.id, nodeType: node.type });
+    // Wires inside a macro's expansion aren't on screen.
+    const wire = via && !isExpandedNode(via) ? { connectionId: via } : {};
+    this.report(context, { kind: 'node.enter', nodeId: node.id, nodeType: node.type, ...wire });
 
     let exited = false;
     const exit = (values?: Record<string, unknown>): void => {
@@ -283,7 +285,7 @@ export class GraphRuntime {
       for (const c of graph.connections) {
         if (c.fromNode !== node.id || c.fromPin !== pinId) continue;
         const next = graph.nodes.find((n) => n.id === c.toNode);
-        if (next) this.executeNode(context, next, c.toPin);
+        if (next) this.executeNode(context, next, c.toPin, c.id);
       }
     };
 

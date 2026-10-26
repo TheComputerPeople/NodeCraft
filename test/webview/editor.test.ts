@@ -170,6 +170,22 @@ describe('webview editor', () => {
     assert.equal(await e.count('.node.executing'), 1);
   });
 
+  test('the exec wire a run goes through pulses, briefly', async (t) => {
+    const e = await openSample(t);
+    if (!e) return;
+    await e.send({ type: 'runtimeEvent', event: { kind: 'node.enter', nodeId: 'start_1' } });
+    await e.send({ type: 'runtimeEvent', event: { kind: 'node.enter', nodeId: 'add_1', connectionId: 'c1' } });
+    await e.page.waitForSelector('.edge-pulse[data-connection-id="c1"]', { state: 'attached' });
+    assert.equal(await e.count('.edge-pulse'), 1);
+    // Redrawing the wires keeps the pulse where it was in its run.
+    await e.send({ type: 'runtimeEvent', event: { kind: 'log', message: 'x' } });
+    await e.page.waitForTimeout(50);
+    assert.equal(await e.count('.edge-pulse[data-connection-id="c1"]'), 1);
+    await e.page.waitForTimeout(800);
+    await e.send({ type: 'runtimeEvent', event: { kind: 'log', message: 'y' } });
+    await e.page.waitForFunction(() => !document.querySelector('.edge-pulse'));
+  });
+
   test('ignores run highlights from other graphs', async (t) => {
     const e = await openSample(t);
     if (!e) return;

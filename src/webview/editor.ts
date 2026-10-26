@@ -414,7 +414,11 @@ function handleRuntimeEvent(event: RuntimeLogEvent): void {
     state.executedNodeIds.clear();
   }
   // Node ids are only unique within a graph, so only highlight events from the graph on screen.
-  if (event.kind === 'node.enter' && event.nodeId && (!event.graphId || event.graphId === state.graph?.id)) state.executedNodeIds.add(event.nodeId);
+  if (event.kind === 'node.enter' && event.nodeId && (!event.graphId || event.graphId === state.graph?.id)) {
+    state.executedNodeIds.add(event.nodeId);
+    // The exec wire it came through pulses, as in Unreal.
+    if (event.connectionId) state.pulses.set(event.connectionId, performance.now());
+  }
   // A graph-level error (no nodeId) ends the run without a graph.complete event.
   if (event.kind === 'graph.complete' || (event.kind === 'error' && !event.nodeId)) {
     state.runActive = false;

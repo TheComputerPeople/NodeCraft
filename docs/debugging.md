@@ -45,7 +45,7 @@ Shortcut sources are in [unreal-conventions.md](unreal-conventions.md). Unreal s
 
 ## Exec wire pulses
 
-- During a Simulate run, each exec wire a node leaves through gets a short animated pulse (CSS, on the existing SVG paths), as Unreal animates them; the run trail (nodes that ran) stays as it is today.
+- During a Simulate run, each exec wire a node leaves through gets a short animated pulse, as Unreal animates them; the run trail (nodes that ran) stays as it is today. The runtime names the wire each node was entered through (`connectionId` on `node.enter`), and the editor draws a bright dash running along it for 0.7 s (an SVG path over the wire, redrawn with its elapsed time when the wires are redrawn). A normal Simulate runs in one burst, so its wires pulse together; under the debugger they pulse as execution reaches them. With reduced motion requested, there are no pulses.
 
 ## Test Case (moved from Phase 4)
 

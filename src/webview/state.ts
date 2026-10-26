@@ -119,6 +119,8 @@ export interface EditorState {
   breakpoints: GraphBreakpoint[];
   // Simulate's debugger, while a debug run is in progress.
   debug: DebugState | null;
+  // Exec wires execution just went through, with when (performance.now()): each pulses briefly.
+  pulses: Map<string, number>;
   // Watched pins (kept by the host, per workspace), and their values at the latest pause.
   watches: PinRef[];
   watchValues: Map<string, DebugValue>;
@@ -159,6 +161,7 @@ export const state: EditorState = {
   viewByGraph: new Map(),
   breakpoints: [],
   debug: null,
+  pulses: new Map(),
   watches: [],
   watchValues: new Map()
 };

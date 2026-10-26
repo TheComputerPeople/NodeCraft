@@ -411,6 +411,31 @@ function addWire(a: Point, b: Point, className: string, style: WireStyle, connec
   path.setAttribute('pointer-events', 'none');
   parent.appendChild(path);
   if (connectionId && hit) wireElements.set(connectionId, { hit, path });
+  if (connectionId) addPulse(connectionId, d, style);
+}
+
+const PULSE_MS = 700;
+
+// A bright dash running along an exec wire execution just went through. Wires are redrawn as the
+// run goes on, so the pulse is redrawn with the time it has already run.
+function addPulse(connectionId: string, d: string, style: WireStyle): void {
+  const started = state.pulses.get(connectionId);
+  if (started === undefined) return;
+  const elapsed = performance.now() - started;
+  if (elapsed >= PULSE_MS) {
+    state.pulses.delete(connectionId);
+    return;
+  }
+  const pulse = document.createElementNS(SVG_NS, 'path');
+  pulse.setAttribute('d', d);
+  pulse.setAttribute('class', 'edge-pulse');
+  pulse.setAttribute('pathLength', '100');
+  pulse.setAttribute('pointer-events', 'none');
+  pulse.dataset.connectionId = connectionId;
+  pulse.style.setProperty('--wire-color', style.color);
+  pulse.style.animationDuration = `${PULSE_MS}ms`;
+  pulse.style.animationDelay = `${-elapsed}ms`;
+  dom.edges.appendChild(pulse);
 }
 
 function bezierPath(a: Point, b: Point): string {

@@ -31,6 +31,12 @@ describe('GraphRuntime: sample graph', () => {
     assert.equal(events.at(-1)?.kind, 'graph.complete');
   });
 
+  test('each node entered through an exec wire names it (the editor pulses it)', () => {
+    const entered = events.filter((e) => e.kind === 'node.enter').map((e) => [e.nodeId, e.connectionId]);
+    assert.deepEqual(entered[0], ['start_1', undefined]);
+    assert.ok(entered.slice(1).every(([, wire]) => typeof wire === 'string'));
+  });
+
   test('every executed node exits exactly once', () => {
     for (const [id, count] of Object.entries(exitCounts(events))) assert.equal(count, 1, id);
   });

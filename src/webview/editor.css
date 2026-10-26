@@ -60,6 +60,9 @@ button, input { font: inherit; color: inherit; }
 .edge.exec.hover { stroke-width: 4.4; }
 .edge.active { filter: drop-shadow(0 0 4px var(--wire-color)); }
 .edge.draft { stroke-dasharray: 7 5; opacity: .75; }
+.edge-pulse { fill: none; stroke: #fff; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 10 100; stroke-dashoffset: 10; filter: drop-shadow(0 0 5px var(--wire-color)); animation: wire-pulse linear forwards; }
+@media (prefers-reduced-motion: reduce) { .edge-pulse { display: none; } }
+@keyframes wire-pulse { from { stroke-dashoffset: 10; opacity: 1; } 85% { opacity: 1; } to { stroke-dashoffset: -100; opacity: 0; } }
 .edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: grab; }
 .edge-hit:active { cursor: grabbing; }
 
