@@ -40,6 +40,21 @@ describe('debug configurations', () => {
     assert.equal(d.configuration(file, 'Game', { ...context, command: ['/usr/bin/python3.12'] }).python, '/usr/bin/python3.12');
   });
 
+  test('cpp: cppdbg runs the scaffold Run builds, with gdb (lldb on macOS)', () => {
+    const { generator, debugger: d } = debuggerFor('cpp');
+    const scaffold = { ...context, scaffoldDir: '/tmp/run', platform: 'linux' };
+    assert.equal(d.extension?.id, 'ms-vscode.cpptools');
+    assert.deepEqual(d.build!(file, 'Game', scaffold), generator.runner!.build!(file, 'Game', scaffold));
+    assert.ok(d.build!(file, 'Game', scaffold).includes('-g'), 'with debug information');
+    const config = d.configuration(file, 'Game', scaffold);
+    assert.equal(config.type, 'cppdbg');
+    assert.equal(config.program, '/tmp/run/run');
+    assert.equal(config.MIMode, 'gdb');
+    assert.deepEqual(config.args, ['--fast']);
+    assert.equal(d.configuration(file, 'Game', { ...scaffold, platform: 'darwin' }).MIMode, 'lldb');
+    assert.equal(d.configuration(file, 'Game', { ...scaffold, platform: 'win32' }).program, '/tmp/run/run.exe');
+  });
+
   test('csharp: coreclr runs Run\'s project, built in Debug first', () => {
     const { debugger: d } = debuggerFor('csharp');
     const scaffold = { ...context, scaffoldDir: '/tmp/run', targetFramework: 'net9.0' };

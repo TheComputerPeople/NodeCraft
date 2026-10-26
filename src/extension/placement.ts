@@ -154,6 +154,42 @@ function listFiles(dir: string, extension: string, skip: string[]): string[] {
   return found;
 }
 
+// The C++ sources Run compiles with a generated file: the generated files it includes, theirs in
+// turn, and the implementation file next to each project header they include (.cpp, .cc or .cxx).
+export function cppRunSources(outputFile: string): string[] {
+  const sources = new Set<string>();
+  const seen = new Set<string>();
+  const pending = [path.resolve(outputFile)];
+  const sibling = (header: string) => ['.cpp', '.cc', '.cxx'].map((ext) => header.replace(/\.(h|hpp|hh|hxx)$/i, ext)).find((file) => fs.existsSync(file));
+  while (pending.length) {
+    const file = pending.pop()!;
+    if (seen.has(file.toLowerCase())) continue;
+    seen.add(file.toLowerCase());
+    let text: string;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const match of text.matchAll(/^\s*#include\s+"([^"]+)"/gm)) {
+      const included = path.resolve(path.dirname(file), match[1]);
+      if (/\.vgraph\.h$/i.test(included)) {
+        const source = included.replace(/\.h$/i, '.cpp');
+        pending.push(included);
+        if (fs.existsSync(source)) {
+          sources.add(source);
+          pending.push(source);
+        }
+      } else {
+        const implementation = sibling(included);
+        if (implementation) sources.add(implementation);
+      }
+    }
+  }
+  sources.delete(path.resolve(outputFile));
+  return [...sources].sort();
+}
+
 // Placement warnings for a generated file (docs/output-placement.md, "Verification").
 export function verifyPlacement(language: string, outputFile: string, stopDir: string): CompileDiagnostic[] {
   const dir = path.dirname(outputFile);

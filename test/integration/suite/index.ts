@@ -595,6 +595,11 @@ test('exit check: debugging a function graph in generated Python', async () => {
   await exitCheck('python');
 });
 
+test('exit check: debugging a function graph in generated C++', async () => {
+  if (!vscode.extensions.getExtension('ms-vscode.cpptools')) throw new Skip('the C/C++ extension is not loaded');
+  await exitCheck('cpp');
+});
+
 test('exit check: debugging a function graph in generated C#', async () => {
   if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
   await exitCheck('csharp');
@@ -609,6 +614,11 @@ test('Debug does the same in generated TypeScript', () => debugSample('typescrip
 test('Debug does the same in generated Python (debugpy)', async () => {
   if (!vscode.extensions.getExtension('ms-python.debugpy')) throw new Skip('the Python Debugger extension is not loaded');
   await debugSample('python', 'debug_python_vgraph.py');
+});
+
+test('Debug does the same in generated C++ (cppdbg)', async () => {
+  if (!vscode.extensions.getExtension('ms-vscode.cpptools')) throw new Skip('the C/C++ extension is not loaded');
+  await debugSample('cpp', 'debug_cpp.vgraph.cpp');
 });
 
 test('Debug does the same in generated C# (coreclr)', async () => {
