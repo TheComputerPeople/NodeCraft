@@ -28,6 +28,8 @@ export type IrExpr =
   | { kind: 'toBoolean'; value: IrExpr }
   // The value as text, following docs/semantics.md ("Values").
   | { kind: 'toText'; value: IrExpr }
+  // Text values joined.
+  | { kind: 'concat'; parts: IrExpr[] }
   // A pure node: the callee is evaluated where the value is used, every time. `output` picks one
   // output of an imported function with several (IrImport.outputs).
   | { kind: 'call'; callee: IrCallee; args: IrExpr[]; output?: string }
@@ -67,6 +69,8 @@ export type IrCallee = { kind: 'helper' | 'import'; id: string };
 
 export type IrStatement =
   | { kind: 'print'; value: IrExpr; source: SourceRef }
+  // Fails (throws) with `message`, a text value, unless `condition` holds (Assert nodes).
+  | { kind: 'assert'; condition: IrExpr; message: IrExpr; source: SourceRef }
   | { kind: 'store'; slot: string; value: IrExpr; source: SourceRef }
   | { kind: 'setMember'; member: string; value: IrExpr; source: SourceRef }
   | { kind: 'if'; condition: IrExpr; then: IrStatement[]; else: IrStatement[]; source: SourceRef }
@@ -258,6 +262,15 @@ export interface IrProgram {
   allInterfaces?: InterfaceInfo[];
   // Pins the debugger can read, for GeneratedCode.pinExpressions.
   pinValues?: IrPinValue[];
+  // The class's Test Case events (docs/debugging.md, "Test Case"): each a method a test runs on a
+  // new object.
+  tests?: IrTest[];
+}
+
+export interface IrTest {
+  id: string;
+  name: string;
+  body: IrStatement[];
 }
 
 // An interface a program knows: one it implements, or one it imports.
@@ -302,6 +315,7 @@ export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefin
     case 'toBoolean':
       return { id: 'bool' };
     case 'toText':
+    case 'concat':
       return { id: 'string' };
     case 'call': {
       const signature = calleeSignature(expr.callee, program);

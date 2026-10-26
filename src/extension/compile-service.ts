@@ -23,6 +23,9 @@ export interface CompileOutcome {
   sources?: string[];
   // The method the class's Main event became.
   mainMethod?: string;
+  // The class's tests, and their generated test file (docs/debugging.md, "Test Case").
+  tests?: { name: string; method: string }[];
+  testPath?: string;
 }
 
 // What the debugger needs to know about a graph's generated file (docs/debugging.md).
@@ -111,23 +114,34 @@ export class CompileService implements vscode.Disposable {
 
     const outputPath = path.join(graphDir, result.output.fileName);
     await writeIfChanged(vscode.Uri.file(outputPath), result.output.text);
-    await this.removeStaleOutputs(graphDir, graphFileName, outputPath);
+    const testFileName = result.output.testFile !== undefined ? this.languages.get(language)?.generator?.testFileName?.(graphFileName) : undefined;
+    const testPath = testFileName ? path.join(graphDir, testFileName) : undefined;
+    if (testPath) await writeIfChanged(vscode.Uri.file(testPath), result.output.testFile!);
+    await this.removeStaleOutputs(graphDir, graphFileName, [outputPath, ...(testPath ? [testPath] : [])]);
     const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root)];
     const importRoots = result.output.importRoots?.map((r) => path.join(root, r));
     const sources = language === 'csharp' ? csharpRunSources(graphDir, root, outputPath, result.output.importedFiles ?? []) : undefined;
     const generated: GeneratedFile = { graph: document.uri, outputPath, language, nodeLines: result.output.nodeLines, codeBreaks: result.output.codeBreaks ?? [], pinExpressions: result.output.pinExpressions ?? [] };
     this.generated.set(document.uri.toString(), generated);
     this.compiled.fire(generated);
-    return finish({ report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, mainMethod: result.output.mainMethod }, graph);
+    return finish({
+      report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, mainMethod: result.output.mainMethod,
+      ...(result.output.tests?.length ? { tests: result.output.tests, ...(testPath ? { testPath } : {}) } : {})
+    }, graph);
   }
 
-  // Compiles, then runs the generated code with the project's toolchain. A new run of the same
-  // graph stops the previous one.
-  async run(document: vscode.TextDocument, onStatus: (status: RunStatus) => void, onCompiled?: (report: CompileReport) => void): Promise<void> {
+  // Compiles, then runs the generated code with the project's toolchain: Start and Main, or with
+  // `tests`, the class's Test Case events (Run Tests). A new run of the same graph stops the
+  // previous one.
+  async run(document: vscode.TextDocument, onStatus: (status: RunStatus) => void, onCompiled?: (report: CompileReport) => void, tests = false): Promise<void> {
     const outcome = await this.compile(document);
     onCompiled?.(outcome.report);
     if (!outcome.outputPath || !outcome.className) {
-      onStatus({ state: 'failed', message: 'Fix the compile errors before running.' });
+      onStatus({ state: 'failed', message: `Fix the compile errors before ${tests ? 'running tests' : 'running'}.` });
+      return;
+    }
+    if (tests && !outcome.tests?.length) {
+      onStatus({ state: 'failed', message: 'This graph has no Test Case events.' });
       return;
     }
     const pack = this.languages.get(outcome.report.language);
@@ -145,8 +159,8 @@ export class CompileService implements vscode.Disposable {
     const out = this.output();
     out.clear();
     out.show(true);
-    out.appendLine(`Running ${outcome.report.outputFile} (${pack.displayName})`);
-    onStatus({ state: 'running', message: `Running ${pack.displayName}…` });
+    out.appendLine(tests ? `Running the tests of ${outcome.report.outputFile} (${pack.displayName})` : `Running ${outcome.report.outputFile} (${pack.displayName})`);
+    onStatus({ state: 'running', message: tests ? `Running ${pack.displayName} tests…` : `Running ${pack.displayName}…` });
     const configured = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {});
     try {
       const result = await runGeneratedCode(runner, outcome.outputPath, outcome.className, {
@@ -157,16 +171,17 @@ export class CompileService implements vscode.Disposable {
         args: vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<string[]>('runArguments', []),
         command: configured[pack.id],
         signal: controller.signal,
+        ...(tests ? { tests: { testFile: outcome.testPath, cases: outcome.tests! } } : {}),
         onStdout: (text) => out.append(text),
         onStderr: (text) => out.append(text)
       });
       if (result.aborted) return;
       if (result.exitCode === 0) {
         out.appendLine('[finished]');
-        onStatus({ state: 'finished', message: 'Run complete' });
+        onStatus({ state: 'finished', message: tests ? 'All tests passed' : 'Run complete' });
       } else {
         out.appendLine(`[exited with code ${result.exitCode}]`);
-        onStatus({ state: 'failed', message: `Run failed (exit code ${result.exitCode}); see the Output panel.` });
+        onStatus({ state: 'failed', message: tests ? 'Some tests failed; see the Output panel.' : `Run failed (exit code ${result.exitCode}); see the Output panel.` });
       }
     } catch (error) {
       const message = error instanceof ToolNotFoundError ? error.message : `Couldn't run the graph: ${error instanceof Error ? error.message : String(error)}`;
@@ -177,11 +192,12 @@ export class CompileService implements vscode.Disposable {
     }
   }
 
-  // Output paths every pack would use for a graph file, e.g. for following renames and deletes.
+  // Output paths every pack would use for a graph file (generated code and test files), e.g. for
+  // following renames and deletes.
   outputPathsFor(graphPath: string): string[] {
     const dir = path.dirname(graphPath);
     const name = path.basename(graphPath);
-    return this.languages.all().flatMap((p) => (p.generator ? [path.join(dir, p.generator.outputFileName(name))] : []));
+    return this.languages.all().flatMap((p) => (p.generator ? [p.generator.outputFileName(name), ...(p.generator.testFileName ? [p.generator.testFileName(name)] : [])].map((f) => path.join(dir, f)) : []));
   }
 
   forget(uri: vscode.Uri): void {
@@ -198,9 +214,9 @@ export class CompileService implements vscode.Disposable {
 
   // After switching a graph's language, its old generated file would linger; remove it, but only
   // if it really was generated from this graph.
-  private async removeStaleOutputs(graphDir: string, graphFileName: string, current: string): Promise<void> {
+  private async removeStaleOutputs(graphDir: string, graphFileName: string, current: string[]): Promise<void> {
     for (const candidate of this.outputPathsFor(path.join(graphDir, graphFileName))) {
-      if (candidate !== current && isGeneratedFrom(candidate, graphFileName)) {
+      if (!current.includes(candidate) && isGeneratedFrom(candidate, graphFileName)) {
         await vscode.workspace.fs.delete(vscode.Uri.file(candidate), { useTrash: false });
       }
     }

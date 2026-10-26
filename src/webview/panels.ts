@@ -20,8 +20,9 @@ import { state } from './state';
 import { screenToWorld } from './view';
 import { UserType, listUserTypes } from '../core/user-types';
 import { CUSTOM_EVENT } from '../core/events';
+import { TEST_CASE } from '../core/tests';
 import { ClassInfo, ancestors, classTypeId } from '../core/objects';
-import { renderDispatcherDetails, renderEventDetails } from './event-details';
+import { renderDispatcherDetails, renderEventDetails, renderTestDetails } from './event-details';
 
 export function renderPalette(): void {
   dom.categories.innerHTML = '';
@@ -64,6 +65,10 @@ export function renderInspector(): void {
   if (!node && state.selectedDispatcherId && renderDispatcherDetails(state.selectedDispatcherId)) return;
   if (node?.type === CUSTOM_EVENT) {
     renderEventDetails(node);
+    return;
+  }
+  if (node?.type === TEST_CASE) {
+    renderTestDetails(node);
     return;
   }
   // A function's or macro's settings: when its graph is open with nothing selected, or its entry

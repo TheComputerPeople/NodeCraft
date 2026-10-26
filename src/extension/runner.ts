@@ -35,6 +35,8 @@ export interface RunOptions {
   timeoutMs?: number;
   // Aborting kills the process (e.g. when the same graph is run again).
   signal?: AbortSignal;
+  // Runs the class's tests (CodeRunner.testArgs) instead of Start and Main.
+  tests?: { testFile?: string; cases: { name: string; method: string }[] };
   onStdout?: (text: string) => void;
   onStderr?: (text: string) => void;
 }
@@ -53,7 +55,10 @@ export async function runGeneratedCode(runner: CodeRunner, filePath: string, cla
       context.scaffoldDir = scaffoldDir(filePath);
       writeScaffold(context.scaffoldDir, runner.scaffold(file, className, context));
     }
-    const outcome = await runCommand([...candidate, ...runner.args(file, className, context)], { ...options, env: runner.env });
+    const args = options.tests
+      ? runner.testArgs?.(file, className, { ...context, testFile: options.tests.testFile, tests: options.tests.cases }) ?? []
+      : runner.args(file, className, context);
+    const outcome = await runCommand([...candidate, ...args], { ...options, env: runner.env });
     if (outcome) return outcome;
   }
   throw new ToolNotFoundError(runner.missingToolMessage);
@@ -111,6 +116,8 @@ export function runCommand(command: string[], options: RunOptions & { env?: Reco
     // Python on Windows otherwise writes in the console code page, garbling non-ASCII output.
     const env: NodeJS.ProcessEnv = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...(options.env ?? {}) };
     delete env.ELECTRON_RUN_AS_NODE;
+    // Set inside a node --test run; it makes a nested node --test report to it instead of printing.
+    delete env.NODE_TEST_CONTEXT;
     const child = spawn(executable, args, { cwd: options.cwd, env, windowsHide: true, signal: options.signal });
     let stdout = '';
     let stderr = '';

@@ -55,6 +55,17 @@
         "icon": "$(play)"
       },
       {
+        "command": "blueprintVisualScripting.runTests",
+        "title": "Run Tests",
+        "category": "Blueprint Visual Scripting",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "blueprintVisualScripting.simulateTests",
+        "title": "Simulate Tests",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
         "command": "blueprintVisualScripting.debug",
         "title": "Debug Graph",
         "category": "Blueprint Visual Scripting",
@@ -164,6 +175,11 @@
           "command": "blueprintVisualScripting.run",
           "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor",
           "group": "navigation@2"
+        },
+        {
+          "command": "blueprintVisualScripting.runTests",
+          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor",
+          "group": "navigation@3"
         }
       ],
       "explorer/context": [
@@ -176,6 +192,11 @@
           "command": "blueprintVisualScripting.run",
           "when": "resourceExtname == .vgraph",
           "group": "blueprint@2"
+        },
+        {
+          "command": "blueprintVisualScripting.runTests",
+          "when": "resourceExtname == .vgraph",
+          "group": "blueprint@3"
         }
       ],
       "commandPalette": [

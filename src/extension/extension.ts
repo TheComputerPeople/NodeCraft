@@ -81,6 +81,29 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     vscode.commands.registerCommand('blueprintVisualScripting.refreshAllNodes', () => {
       if (!provider.postToActive({ type: 'refreshAll' })) void vscode.window.showInformationMessage('Open a graph to refresh its nodes.');
     }),
+    // Test Case events (docs/debugging.md): with the language's test tool, or in Simulate.
+    vscode.commands.registerCommand('blueprintVisualScripting.runTests', async (uri?: vscode.Uri) => {
+      const document = await graphDocumentFor(uri);
+      if (!document) return;
+      if (!vscode.workspace.isTrusted) {
+        void vscode.window.showWarningMessage('Running graphs is disabled in Restricted Mode. Trust this workspace to run graphs.');
+        return;
+      }
+      await compiler.run(document, (status) => {
+        provider.notifyRunStatus(document.uri, status);
+        if (status.state === 'failed') void vscode.window.showErrorMessage(status.message);
+        else if (status.state === 'finished') void vscode.window.showInformationMessage(status.message);
+      }, (report) => provider.notifyCompiled(document.uri, report), true);
+    }),
+    vscode.commands.registerCommand('blueprintVisualScripting.simulateTests', async (uri?: vscode.Uri) => {
+      const document = await graphDocumentFor(uri);
+      if (!document) return;
+      if (!vscode.workspace.isTrusted) {
+        void vscode.window.showWarningMessage('Running graphs is disabled in Restricted Mode. Trust this workspace to run graphs.');
+        return;
+      }
+      provider.simulateTests(document);
+    }),
     vscode.commands.registerCommand('blueprintVisualScripting.debug', async (uri?: vscode.Uri) => {
       const document = await graphDocumentFor(uri);
       if (document) await codeDebug.start(document.uri);

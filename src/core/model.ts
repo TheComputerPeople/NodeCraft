@@ -191,7 +191,8 @@ export interface GraphDocument {
 }
 
 export interface RuntimeLogEvent {
-  kind: 'node.enter' | 'node.exit' | 'log' | 'error' | 'graph.complete';
+  // test.pass, test.fail: a test finished (Run Tests in Simulate); `test` is its name.
+  kind: 'node.enter' | 'node.exit' | 'log' | 'error' | 'graph.complete' | 'test.pass' | 'test.fail';
   // The graph the node belongs to; node ids are only unique within a graph.
   graphId?: string;
   // Set when the node is in another graph file (a function library's), relative to the workspace.
@@ -200,6 +201,7 @@ export interface RuntimeLogEvent {
   nodeType?: string;
   // node.enter: the exec wire execution arrived through, if any (the editor pulses it).
   connectionId?: string;
+  test?: string;
   values?: Record<string, unknown>;
   message?: string;
 }

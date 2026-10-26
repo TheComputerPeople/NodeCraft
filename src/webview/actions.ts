@@ -10,6 +10,7 @@ import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { GraphNode, NodeDefinition, PinDefinition } from '../core/model';
 import { structInfo } from '../core/user-types';
 import { CUSTOM_EVENT } from '../core/events';
+import { TEST_CASE } from '../core/tests';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } from './document';
 import { isWatched, toggleWatch } from './values';
 import { dom, eventElement, pinElement, setStatus } from './dom';
@@ -29,6 +30,7 @@ export function addNode(type: string, position: Point, properties: Record<string
   if (!state.graph) return null;
   // A new custom event takes a name no function, event or dispatcher has.
   if (type === CUSTOM_EVENT && !properties.name && state.document) properties = { ...properties, name: edits.uniqueEventName(state.document) };
+  if (type === TEST_CASE && !properties.name && state.document) properties = { ...properties, name: edits.uniqueTestName(state.document) };
   const definition = lookupDefinition({ id: '', type, position, properties });
   const node = editing.createNode(type, definition, position, editing.nodeIdFor(type), properties);
   state.graph.nodes.push(node);

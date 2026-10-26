@@ -1,5 +1,6 @@
 // Edits to a document's structure: its graphs and member variables (Unreal's My Blueprint panel).
 // Pure data operations shared by the editor and tests; each mutates the document passed in.
+import { testCases } from './tests';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables } from './functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from './macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, CUSTOM_EVENT, DELEGATE_PIN, Dispatcher, UNBIND_EVENT, customEvents, documentDispatchers, eventName, isDispatcherNode } from './events';
@@ -532,6 +533,19 @@ function memberNames(doc: GraphDocument): string[] {
 
 export function uniqueEventName(doc: GraphDocument, base = 'CustomEvent'): string {
   return uniqueName(base, memberNames(doc));
+}
+
+// A name for a new test that no other test of the document has.
+export function uniqueTestName(doc: GraphDocument): string {
+  return uniqueName('New Test', testCases(doc).map((t) => t.name));
+}
+
+export function renameTest(doc: GraphDocument, node: GraphNode, name: string): string | undefined {
+  const trimmed = name.trim();
+  if (!trimmed) return 'A test needs a name.';
+  if (testCases(doc).some((t) => t.node !== node && t.name === trimmed)) return `There is already a test named "${trimmed}".`;
+  node.properties.name = trimmed;
+  return undefined;
 }
 
 // Renames a custom event and the Call nodes that run it.

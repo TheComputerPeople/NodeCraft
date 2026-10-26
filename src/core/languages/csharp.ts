@@ -221,7 +221,7 @@ export function csharpRunProject(targetFramework: string, sources: string[]): Re
     ].join('\n'),
     'BlueprintRun.cs': [
       '// Runs a generated class\'s Start(), named by the first argument, then the Main method the second',
-      '// names (if any) with the rest.',
+      '// names (if any) with the rest. With --test first: runs the class\'s tests, given as name and method.',
       'namespace BlueprintRun;',
       '',
       'public static class Runner',
@@ -229,6 +229,7 @@ export function csharpRunProject(targetFramework: string, sources: string[]): Re
       '    public static int Main(string[] args)',
       '    {',
       '        System.Console.OutputEncoding = System.Text.Encoding.UTF8;',
+      '        if (args.Length > 0 && args[0] == "--test") return Test(args);',
       '        System.Type? type = null;',
       '        foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies()) type ??= assembly.GetType(args[0]);',
       '        if (type is null) { System.Console.Error.WriteLine("No class named " + args[0]); return 2; }',
@@ -247,6 +248,31 @@ export function csharpRunProject(targetFramework: string, sources: string[]): Re
       '            System.Console.Error.WriteLine(error.InnerException);',
       '            return 1;',
       '        }',
+      '    }',
+      '',
+      '    // Each test on a new object, then the latent actions it started.',
+      '    private static int Test(string[] args)',
+      '    {',
+      '        System.Type? type = null;',
+      '        foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies()) type ??= assembly.GetType(args[1]);',
+      '        if (type is null) { System.Console.Error.WriteLine("No class named " + args[1]); return 2; }',
+      '        var failed = 0;',
+      '        for (var i = 2; i + 1 < args.Length; i += 2)',
+      '        {',
+      '            try',
+      '            {',
+      '                type.GetMethod(args[i + 1])!.Invoke(System.Activator.CreateInstance(type), null);',
+      '                (System.AppDomain.CurrentDomain.GetData("blueprint.latent.run") as System.Action)?.Invoke();',
+      '                System.Console.WriteLine("PASS " + args[i]);',
+      '            }',
+      '            catch (System.Reflection.TargetInvocationException error)',
+      '            {',
+      '                failed++;',
+      '                System.Console.WriteLine("FAIL " + args[i] + ": " + error.InnerException?.Message);',
+      '            }',
+      '        }',
+      '        System.Console.WriteLine(failed == 0 ? "All tests passed." : failed + " test(s) failed.");',
+      '        return failed == 0 ? 0 : 1;',
       '    }',
       '}',
       ''
@@ -357,6 +383,8 @@ const csharpGenerator: CodeGenerator = {
     scaffold: (file, _className, context) => csharpRunProject(context.targetFramework ?? 'net8.0', [file.path, ...(context.sources ?? [])]),
     // The class, then its Main method (or nothing) and the arguments.
     args: (_file, className, context) => ['run', '--project', `${context?.scaffoldDir}/${RUN_PROJECT_FILE}`, '--', className, context?.mainMethod ?? '', ...(context?.args ?? [])],
+    // The run project's test mode: each test's name, then its method.
+    testArgs: (_file, className, context) => ['run', '--project', `${context.scaffoldDir}/${RUN_PROJECT_FILE}`, '--', '--test', className, ...context.tests.flatMap((t) => [t.name, t.method])],
     missingToolMessage: 'The .NET SDK was not found. Install .NET 8 or later and make sure `dotnet` is on the PATH.'
   },
   // The C# extension's debugger runs Run's project, built in Debug first.
@@ -383,6 +411,8 @@ export const csharpPack: LanguagePack = {
 };
 
 class CSharpEmitter {
+  // The class's tests and their methods (claimed in emit).
+  private tests: { name: string; method: string }[] = [];
   private readonly out = new CodeWriter('    ');
   private readonly names: NameScope;
   private readonly memberNames = new Map<string, string>();
@@ -455,6 +485,9 @@ class CSharpEmitter {
         });
       }
     }
+    // Test Case events: methods Run Tests calls, named after every other member.
+    this.tests = (this.program.tests ?? []).map((t) => ({ name: t.name, method: this.names.claim(`test ${t.name}`, 'pascal') }));
+    this.program.tests?.forEach((t, i) => this.method('public', this.tests[i].method, [], undefined, () => this.statements(t.body)));
     for (const block of this.program.blocks) this.method('private', this.blockNames.get(block.id)!, [], undefined, () => this.statements(block.body));
     for (const helper of this.program.helpers) this.helperMethod(helper);
     if (dispatchers.length) {
@@ -570,7 +603,8 @@ class CSharpEmitter {
       codeBreaks: body.breaks.map((line) => line + offset),
       ...(importedFiles.length ? { importedFiles } : {}),
       ...(main ? { mainMethod: this.functionNames.get(main.id) } : {}),
-      ...this.pinExpressions()
+      ...this.pinExpressions(),
+      ...(this.tests.length ? { tests: this.tests } : {})
     };
   }
 
@@ -655,6 +689,9 @@ class CSharpEmitter {
     switch (s.kind) {
       case 'print':
         out.line(`Console.WriteLine(${this.text(s.value)});`);
+        break;
+      case 'assert':
+        out.line(`if (!(${this.expr(s.condition)})) throw new Exception(${this.expr(s.message)});`);
         break;
       case 'store': {
         const slot = this.program.slots.find((x) => x.id === s.slot);
@@ -878,6 +915,8 @@ class CSharpEmitter {
         return `ToNumber(${this.expr(e.value)})`;
       case 'toText':
         return this.text(e.value);
+      case 'concat':
+        return e.parts.map((part) => this.expr(part)).join(' + ');
       case 'toBoolean': {
         const type = this.typeOf(e.value);
         if (type?.id === 'bool' && !type.container && !type.nullable) return this.expr(e.value);

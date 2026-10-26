@@ -8,7 +8,7 @@ import { hasWildcard } from '../containers';
 import { NodeResolver, REROUTE, createResolver, createUnsplitResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
-import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrPinValue, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType, readsStorageOnly } from './ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrPinValue, IrProgram, IrSlot, IrStatement, IrTest, ProgramTypes, SourceRef, exprType, readsStorageOnly } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
 import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest } from '../objects';
@@ -16,6 +16,7 @@ import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNod
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
 import { isLatentType } from '../latent';
+import { TEST_CASE, assertEqualMessage, assertTrueMessage, testName } from '../tests';
 import { toIdentifier } from './names';
 
 export interface LowerOptions {
@@ -158,6 +159,7 @@ class Lowerer {
     const events = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === CUSTOM_EVENT || isEntryEvent(info, n)).map((node) => ({ info, node, fn: this.registerEvent(info, node) })));
     for (const info of functionGraphs) this.lowerFunction(info);
     for (const { info, node, fn } of events) this.lowerEvent(info, node, fn);
+    const tests = this.lowerTests(eventGraphs);
     const start = entries.flatMap(({ info, start: node }) => this.lowerNode(info, node.id));
     this.checkInheritance();
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
@@ -172,6 +174,7 @@ class Lowerer {
       blocks: [...this.blocks.values()],
       functions: this.functions,
       start,
+      ...(tests.length ? { tests } : {}),
       pinValues: this.debugPins(),
       ...(this.ownClass ? { classInfo: this.ownClass } : {}),
       ...(this.ancestors.length ? { ancestors: this.ancestors } : {}),
@@ -369,6 +372,19 @@ class Lowerer {
     };
     this.functions.push(fn);
     return fn;
+  }
+
+  // Test Case events: each a method of its own, which no other code calls.
+  private lowerTests(eventGraphs: GraphInfo[]): IrTest[] {
+    const tests: IrTest[] = [];
+    for (const info of eventGraphs) {
+      for (const node of info.graph.nodes.filter((n) => n.type === TEST_CASE)) {
+        const name = testName(node);
+        if (tests.some((t) => t.name === name)) this.error('duplicate-test', `There is already a test named "${name}".`, info.graph.id, node.id);
+        tests.push({ id: eventFunctionId(info.graph.id, node.id), name, body: this.lowerNode(info, node.id) });
+      }
+    }
+    return tests;
   }
 
   private lowerEvent(info: GraphInfo, node: GraphNode, fn: IrFunction): void {
@@ -719,7 +735,26 @@ class Lowerer {
 
     switch (nativeOperation(def)) {
       case 'start':
+      case 'test-case':
         return next('execOut');
+      case 'assert-true': {
+        const message = input('message');
+        const text: IrExpr = message.kind === 'literal'
+          ? { kind: 'literal', value: assertTrueMessage(String(message.value ?? '')) }
+          : { kind: 'concat', parts: [{ kind: 'literal', value: 'Assert failed: ' }, { kind: 'toText', value: message }] };
+        return [{ kind: 'assert', condition: { kind: 'toBoolean', value: input('condition') }, message: text, source }, ...next('execOut')];
+      }
+      case 'assert-equal': {
+        const actual = input('actual');
+        const expected = input('expected');
+        const message = input('message');
+        const [before, between] = assertEqualMessage('\u0000', '\u0001', '').split(/\u0001|\u0000/);
+        const note: IrExpr[] = message.kind === 'literal'
+          ? (message.value ? [{ kind: 'literal', value: `: ${String(message.value)}` }] : [])
+          : [{ kind: 'literal', value: ': ' }, { kind: 'toText', value: message }];
+        const text: IrExpr = { kind: 'concat', parts: [{ kind: 'literal', value: before }, { kind: 'toText', value: expected }, { kind: 'literal', value: between }, { kind: 'toText', value: actual }, ...note] };
+        return [{ kind: 'assert', condition: { kind: 'binary', op: '==', left: actual, right: expected }, message: text, source }, ...next('execOut')];
+      }
       case 'add':
         return [
           { kind: 'store', slot: this.slot(info, node, def, 'result'), value: { kind: 'add', left: { kind: 'toNumber', value: input('a') }, right: { kind: 'toNumber', value: input('b') } }, source },

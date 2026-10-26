@@ -61,6 +61,13 @@ As built (src/extension/code-debug.ts; each pack's `CodeDebugger` in src/core/la
 
 - A **Test Case** event (with a name) and **Assert** nodes (Assert True, Assert Equal) make a graph's tests. Each language pack writes them to a separate generated test file (`node:test`, `unittest`; C# when the project references xUnit) so a normal Run doesn't run them, and a **Run Tests** command runs them and reports each test in the Output panel. Simulate runs them too.
 
+As built (src/core/tests.ts):
+
+- Each test runs on a new object of the class; its Start doesn't run (a test sets up what it needs), and latent actions it starts run before it ends (in TypeScript and JavaScript, Node's own timers run them). A test fails at the first Assert that doesn't hold, or at any error. Test names are unique in a class (a compile error otherwise); a new Test Case gets one, and Details renames it.
+- Assert True fails with "Assert failed" (": message" when it has one); Assert Equal compares as the language's `==` does and fails with "Expected X, got Y" (": message"). A failing Assert outside a test stops the run with that error.
+- Each test is a method of the generated class (named after the class's other members, so no other file's names change): `testAddsUp`, `test_adds_up`, `TestAddsUp`. TypeScript and JavaScript write `Name.vgraph.test.ts` (`node:test`), Python `test_name_vgraph.py` (`unittest`, the test name as the docstring); the files follow renames and deletes like generated code, and go when the graph has no tests. C# writes no test file yet (xUnit needs a NuGet package Run can't fetch offline): Run Tests runs the test methods through Run's project, which reports PASS or FAIL for each.
+- **Run Tests** (editor title, Explorer, command palette) compiles, then runs the tests with the language's test tool (`node --test`, `python -m unittest -v`, Run's C# project); **Simulate Tests** runs them in the interpreter. Both report each test in the Output panel. The conformance suite checks that Simulate and every language agree.
+
 ## Exit check
 
 In each of TypeScript, Python and C#: set a breakpoint on a node in a function graph, Debug, stop there with the node highlighted and the call stack shown in graph terms, read a pin's value by hovering, step into and out of a function graph, and continue to the end, all without opening a generated file. Simulate does the same without a toolchain. The TypeScript and JavaScript paths run in the integration suite (js-debug is built into VS Code). Python and C# need their debugger extensions: `npm run test:integration:debuggers` loads the installed extensions and runs the same tests for them (the normal suite skips them), and unit tests check their launch configurations.

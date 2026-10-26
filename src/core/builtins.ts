@@ -4,6 +4,7 @@ import { flowControlDefinitions } from './flow-control';
 import { functionDefinitions } from './functions';
 import { macroDefinitions } from './macros';
 import { eventDefinitions } from './events';
+import { testDefinitions } from './tests';
 import { objectDefinitions } from './objects';
 import { latentDefinitions } from './latent';
 import { standardLibraryDefinitions } from './stdlib';
@@ -100,6 +101,7 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
     ...eventDefinitions(),
     ...objectDefinitions(),
     ...latentDefinitions(),
+    ...testDefinitions(),
     ...standardLibraryDefinitions()
   ];
 }

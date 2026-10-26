@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { SimulateBreakpoint } from '../core/debugger';
 import { LanguagePackRegistry } from '../core/language-pack';
-import { CompileReport, DebugAction, DebugState, DebugValue, FileSearchHit, PinRef, GraphDocument, HostMessage, LanguageOption, RevealTarget, RuntimeLogEvent, UIMessage } from '../core/model';
+import { CompileReport, DebugAction, DebugState, DebugValue, FileSearchHit, PinRef, GraphDocument, HostMessage, LanguageOption, RevealTarget, RuntimeLogEvent, UIMessage, RunStatus } from '../core/model';
 import { createResolver } from '../core/resolve';
 import { searchDocument } from '../core/search';
 import { NodeRegistry } from '../core/registry';
@@ -247,6 +247,11 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     return false;
   }
 
+  // Shows a run's progress in every editor open on the graph.
+  notifyRunStatus(uri: vscode.Uri, run: RunStatus): void {
+    this.broadcast(uri.toString(), { type: 'runStatus', run });
+  }
+
   // Shows a compile result in every editor open on the graph.
   notifyCompiled(uri: vscode.Uri, report: CompileReport): void {
     this.broadcast(uri.toString(), { type: 'compileResult', compile: report });
@@ -300,6 +305,31 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     }
     output.appendLine('Simulating in the editor');
     new GraphRuntime(this.registry, emit, this.languages, (file) => loadGraphDocument(document.uri, file)).run(graphDocument, args);
+  }
+
+  // Runs the graph's Test Case events in the editor's interpreter (docs/debugging.md, "Test Case").
+  simulateTests(document: vscode.TextDocument): void {
+    let graphDocument: GraphDocument;
+    try {
+      graphDocument = parseDocument(document.getText(), this.getFallbackName(document)).document;
+    } catch (error) {
+      vscode.window.showErrorMessage(describeError(error));
+      return;
+    }
+    const output = this.output();
+    output.clear();
+    output.show(true);
+    output.appendLine(`Simulating the tests of ${path.basename(document.uri.fsPath)}`);
+    const results = new GraphRuntime(this.registry, (event) => {
+      this.broadcast(this.fileUri(document.uri, event.document).toString(), { type: 'runtimeEvent', event });
+      if (event.kind === 'log') output.appendLine(`  ${event.message ?? ''}`);
+      else if (event.kind === 'test.pass') output.appendLine(`\u2714 ${event.test}`);
+      else if (event.kind === 'test.fail') output.appendLine(`\u2716 ${event.test}: ${event.message ?? ''}`);
+    }, this.languages, (file) => loadGraphDocument(document.uri, file)).runTests(graphDocument);
+    const failed = results.filter((r) => !r.passed).length;
+    const summary = !results.length ? 'This graph has no Test Case events.' : failed ? `${failed} of ${results.length} tests failed.` : `All ${results.length} tests passed.`;
+    output.appendLine(summary);
+    this.broadcast(document.uri.toString(), { type: 'runStatus', run: { state: failed || !results.length ? 'failed' : 'finished', message: summary } });
   }
 
   private debugSimulate(uri: vscode.Uri, graphDocument: GraphDocument, args: string[], breakpoints: SimulateBreakpoint[], emit: (event: RuntimeLogEvent) => void): void {

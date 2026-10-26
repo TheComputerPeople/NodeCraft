@@ -334,6 +334,34 @@ interface ExtensionApi {
   };
 }
 
+test("Compile writes a graph's tests to their own file; Run Tests and Simulate Tests run them", async () => {
+  const graph = workspaceFile('tested.vgraph');
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const document = {
+    schemaVersion: 3, name: 'Tested', kind: 'class', language: 'javascript', variables: [], metadata: {},
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('t', 'core:test.case', { name: 'Holds' }), node('a', 'core:test.assert-true', { 'pin:condition': true })],
+      connections: [{ id: 'c', fromNode: 't', fromPin: 'execOut', toNode: 'a', toPin: 'execIn' }]
+    }]
+  };
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify(document, null, 2)));
+  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  const tests = workspaceFile('tested.vgraph.test.js');
+  assert.match(await readText(tests), /test\("Holds", \(\) => \{\n {2}new Tested\(\)\.testHolds\(\);/);
+  await vscode.commands.executeCommand('blueprintVisualScripting.runTests', graph);
+  await vscode.commands.executeCommand('blueprintVisualScripting.simulateTests', graph);
+
+  // Without tests, the test file goes.
+  await editGraph(graph, (g) => {
+    const [events] = g.graphs as { nodes: unknown[]; connections: unknown[] }[];
+    events.nodes = [];
+    events.connections = [];
+  });
+  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  assert.equal(await exists(tests), false);
+});
+
 // Debugs the sample in `language`: stops at a breakpoint on Add, reads its result before and after
 // it runs, steps node by node to the Print, and runs to the end.
 async function debugSample(language: string, generatedFile: string): Promise<void> {

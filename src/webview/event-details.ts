@@ -1,8 +1,8 @@
 // Details for a custom event (its name and inputs) and for an event dispatcher (its name and
 // parameters), as in Unreal's Details panel for each (src/core/events.ts).
+import { testName } from '../core/tests';
 import {
-  EventOwner, addEventParam, eventUses, removeEventParam, renameCustomEvent, renameDispatcher, renameEventParam, setEventParamType
-} from '../core/blueprint-edits';
+  EventOwner, addEventParam, eventUses, removeEventParam, renameCustomEvent, renameDispatcher, renameEventParam, setEventParamType, renameTest } from '../core/blueprint-edits';
 import { documentDispatchers, eventInputs, eventName } from '../core/events';
 import { GraphNode, GraphPin } from '../core/model';
 import { markDirty } from './document';
@@ -21,6 +21,17 @@ export function renderEventDetails(node: GraphNode): void {
     field('Event Name', name),
     ...paramRows({ event: node }, eventInputs(node), 'Inputs'),
     note(uses ? `Called by ${uses} node${uses === 1 ? '' : 's'}.` : 'Not called yet: find it in the action menu, or bind it to an event dispatcher.')
+  ]);
+}
+
+// A Test Case: its name, which Run Tests reports.
+export function renderTestDetails(node: GraphNode): void {
+  const doc = state.document;
+  if (!doc) return;
+  const name = textField('Test Name', testName(node), (value) => renameTest(doc, node, value));
+  show(testName(node), 'Test Case', [
+    field('Test Name', name),
+    note('Run Tests runs it on a new object of this class (its Start doesn\'t run). It passes unless an Assert fails.')
   ]);
 }
 

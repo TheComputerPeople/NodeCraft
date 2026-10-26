@@ -12,6 +12,17 @@ import { expandDocument, isExpandedNode, macroProblemKey, visibleNodeId } from '
 import { StructValue, TypeLookup, expandSplitPins, typeLookup } from './user-types';
 import { NodeResolver, createResolver, createUnsplitResolver, isPure } from './resolve';
 import { defaultValue, formatValue, fromStored, toBoolean, toNumber } from './values';
+import { assertEqualMessage, assertTrueMessage, testCases } from './tests';
+
+// A test's outcome (Run Tests in Simulate).
+export interface TestResult {
+  name: string;
+  graphId: string;
+  nodeId: string;
+  passed: boolean;
+  // Why it failed: the failing Assert's message, or the error that stopped it.
+  message?: string;
+}
 
 interface RunState {
   doc: GraphDocument;
@@ -119,6 +130,8 @@ export class GraphRuntime {
   private debugStack: GraphContext[] = [];
   // Set while the debugger reads a value: nothing is reported, and the debugger isn't called.
   private evaluating = false;
+  // The errors of the test running (runTests).
+  private testErrors: string[] | undefined;
 
   constructor(
     private readonly registry: NodeRegistry,
@@ -165,8 +178,48 @@ export class GraphRuntime {
     }
   }
 
+  // Runs each Test Case on a new object of the document's class (its Start doesn't run), then the
+  // latent actions it started. A test fails at the first Assert that doesn't hold, or any error.
+  runTests(doc: GraphDocument): TestResult[] {
+    const results: TestResult[] = [];
+    for (const { graph, node, name } of testCases(doc)) {
+      const layers = this.instantiate(doc);
+      let failure: string | undefined;
+      if (typeof layers === 'string') failure = layers;
+      else {
+        const run = layers[0];
+        const expanded = run.doc.graphs.find((g) => g.id === graph.id) ?? graph;
+        const testNode = expanded.nodes.find((n) => n.id === node.id) ?? node;
+        this.latent = [];
+        this.clock = 0;
+        // A failing Assert reports an error; the test's result carries its message.
+        const errors: string[] = [];
+        this.testErrors = errors;
+        try {
+          this.executeNode({ run, graph: expanded, frame: run.objectFrame, executing: new Set() }, testNode);
+          for (let ran = 0; this.latent.length && ran < MAX_LATENT_ACTIONS; ran++) {
+            this.latent.sort((a, b) => a.due - b.due || a.order - b.order);
+            const next = this.latent.shift()!;
+            this.clock = next.due;
+            next.run();
+          }
+        } catch (error) {
+          if (!(error instanceof RunStopped)) errors.push(error instanceof Error ? error.message : String(error));
+        } finally {
+          this.testErrors = undefined;
+        }
+        failure = errors[0];
+      }
+      const result: TestResult = { name, graphId: graph.id, nodeId: node.id, passed: failure === undefined, ...(failure !== undefined ? { message: failure } : {}) };
+      results.push(result);
+      this.emit({ kind: result.passed ? 'test.pass' : 'test.fail', test: name, graphId: graph.id, nodeId: node.id, ...(failure !== undefined ? { message: failure } : {}) });
+    }
+    return results;
+  }
+
   private report(context: GraphContext, event: RuntimeLogEvent): void {
     if (this.evaluating) return;
+    if (event.kind === 'error') this.testErrors?.push(event.message ?? '');
     const inner = event.nodeId !== undefined && isExpandedNode(event.nodeId);
     const { values, ...rest } = event;
     this.emit({
@@ -327,6 +380,24 @@ export class GraphRuntime {
       }
       case 'self':
         return;
+      case 'test-case':
+        exit();
+        continueFrom('execOut');
+        return;
+      case 'assert-true': {
+        if (!toBoolean(input('condition'))) this.fail(context, node, assertTrueMessage(String(input('message') ?? '')));
+        exit();
+        continueFrom('execOut');
+        return;
+      }
+      case 'assert-equal': {
+        const actual = input('actual');
+        const expected = input('expected');
+        if (actual !== expected) this.fail(context, node, assertEqualMessage(formatValue(actual), formatValue(expected), String(input('message') ?? '')));
+        exit();
+        continueFrom('execOut');
+        return;
+      }
       case 'delay':
       case 'retriggerable-delay': {
         if (context.frame.depth > 0) this.fail(context, node, "Delay belongs in event graphs: a function can't wait.");

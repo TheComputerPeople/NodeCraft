@@ -310,7 +310,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents later) | — |
 | Structure | Blueprint Interfaces (implemented in Class Settings, interface calls), Cast To class or interface | ✅ (pure Cast later) | — |
 | Structure | Access (Public, Protected, Private) for variables and functions | ✅ | — |
-| Structure | Entry points: Main with command-line arguments; framework packs' events | ✅ (Test Case with Phase 5) | — |
+| Structure | Entry points: Main with command-line arguments; framework packs' events; Test Case events with Assert nodes and Run Tests | ✅ (C# tests run through Run's project, not xUnit) | — |
 | Structure | Custom events (Call), event dispatchers (Call, Bind, Unbind, Unbind all, Assign), on this object or another | ✅ | — |
 | Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python; methods with Phase 4 classes) | — |

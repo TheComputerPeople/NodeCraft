@@ -62,6 +62,10 @@ export interface GeneratedCode {
   // Expressions that read pins' values in a paused frame of the node's method (docs/debugging.md,
   // "Values"), evaluated through the debugger.
   pinExpressions?: PinExpression[];
+  // The class's Test Case events, each a method of the class (docs/debugging.md, "Test Case"), and
+  // the test file that runs them with the language's test tool (CodeGenerator.testFileName).
+  tests?: { name: string; method: string }[];
+  testFile?: string;
 }
 
 export interface PinExpression {
@@ -95,6 +99,9 @@ export interface CodeRunner {
   args(file: { path: string; url: string }, className: string, context?: RunContext): string[];
   // Environment variables for the command.
   env?: Record<string, string>;
+  // Arguments that run a class's tests: its test file (when the language writes one), or each test
+  // method by name. Run Tests uses them (docs/debugging.md, "Test Case").
+  testArgs?(file: { path: string; url: string }, className: string, context: RunContext & { testFile?: string; tests: { name: string; method: string }[] }): string[];
   // Asks the tool about itself before running (e.g. its version); the parsed values join the context.
   probe?: { args: string[]; parse(stdout: string): Partial<RunContext> | undefined };
   // Languages that run from a project: the files to write into a scratch folder before running.
@@ -111,6 +118,8 @@ export interface CodeGenerator {
   // Name of the generated file for a graph file, following the language's import rules
   // (docs/output-placement.md): "Inventory.vgraph" → "Inventory.vgraph.ts" or "inventory_vgraph.py".
   outputFileName(graphFileName: string): string;
+  // Name of the generated test file, for languages that write one (GeneratedCode.testFile).
+  testFileName?(graphFileName: string): string;
   generate(program: IrProgram, options: GenerateOptions): GeneratedCode;
   // For a function library: the name each function (by graph id) is exported as, and the class
   // holding them in languages without free functions (C#). Callers import these names.
