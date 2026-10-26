@@ -404,7 +404,7 @@ export const csharpPack: LanguagePack = {
   displayName: 'C#',
   generatedFileExtension: '.cs',
   workspaceMarkers: ['**/*.csproj', '**/*.sln', '**/*.slnx'],
-  capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true },
+  capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   generator: csharpGenerator,
   importer: { extensions: ['.cs'], scan: scanCSharp }

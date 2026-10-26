@@ -3,7 +3,9 @@ import { GenerateOptions, GeneratedCode, LanguagePackRegistry } from '../languag
 import { DEFAULT_LANGUAGE } from '../languages';
 import { GraphDocument } from '../model';
 import { NodeRegistry } from '../registry';
-import { CompileDiagnostic } from './diagnostics';
+import { checkCapabilities } from '../capabilities';
+import { createResolver } from '../resolve';
+import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { lowerDocument } from './lower';
 
 export interface CompileOptions {
@@ -33,6 +35,9 @@ export function compileDocument(doc: GraphDocument, options: CompileOptions): Co
     return { diagnostics: [{ severity: 'error', code: 'no-generator', message: `${pack.displayName} graphs can't be compiled yet.` }] };
   }
 
+  // What the language can't express is reported on the nodes that use it, before lowering.
+  const unsupported = checkCapabilities(doc, createResolver(options.registry, doc), pack.capabilities, pack.displayName);
+  if (hasErrors(unsupported)) return { diagnostics: unsupported };
   const lowered = lowerDocument(doc, { registry: options.registry, languageName: pack.displayName, snippetLanguages: generator.snippetLanguages, importLanguages: generator.importLanguages });
   if (!lowered.program) return { diagnostics: lowered.diagnostics };
   const code = generator.generate(lowered.program, options.generate);

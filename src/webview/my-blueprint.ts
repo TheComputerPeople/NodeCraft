@@ -1,5 +1,6 @@
 // The My Blueprint panel, as in Unreal: the document's graphs, functions, macros and variables.
 // Variables are dragged onto the canvas to place Get and Set nodes.
+import { supports } from '../core/capabilities';
 import * as edits from '../core/blueprint-edits';
 import * as editing from '../core/editing';
 import { FUNCTION_CALL } from '../core/functions';
@@ -9,7 +10,7 @@ import { GraphKind, GraphVariable } from '../core/model';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { formatType } from '../core/types';
 import { addNode } from './actions';
-import { documentAncestors, documentInterfaceFunctions, lookupDefinition, markDirty } from './document';
+import { documentAncestors, documentInterfaceFunctions, lookupDefinition, markDirty, languageCapabilities } from './document';
 import { dom, eventElement, setStatus } from './dom';
 import { MenuItem, showFloatingMenu } from './floating-menu';
 import { newConnectionId } from './host';
@@ -146,7 +147,8 @@ export function renderMyBlueprint(): void {
       });
       dispatchers.appendChild(item);
     }
-    root.appendChild(dispatchers);
+    // A language without event dispatchers shows the section only for ones the class already has.
+    if (supports(languageCapabilities(), 'delegates') || declared.length) root.appendChild(dispatchers);
   }
 }
 

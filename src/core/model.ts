@@ -1,3 +1,4 @@
+import type { LanguageCapabilities } from './language-pack';
 import type { CompileDiagnostic } from './compiler/diagnostics';
 import type { SearchHit } from './search';
 import type { TypeRef } from './types';
@@ -35,7 +36,13 @@ export interface NodeDefinition {
   compact?: boolean;
   // Extra words the action menu matches when searching, as in Unreal (e.g. "if" for Branch).
   keywords?: string[];
+  // What the node needs from a graph's language beyond what its kind and pin types already say
+  // (src/core/capabilities.ts), e.g. "async" for a latent node of a library.
+  requires?: Capability[];
 }
+
+// A language feature a graph can need (docs/language-breadth.md, "Capabilities, enforced").
+export type Capability = 'classes' | 'inheritance' | 'interfaces' | 'async' | 'delegates' | 'generics' | 'exceptions' | 'array' | 'set' | 'map';
 
 export type NodeImplementation =
   | { kind: 'native'; operation: string }
@@ -270,6 +277,8 @@ export interface LanguageOption {
   displayName: string;
   // Languages of project functions a graph in this language can call (docs/code-as-nodes.md).
   callable: string[];
+  // What it can express; the editor hides the rest.
+  capabilities?: LanguageCapabilities;
 }
 
 // A Find in All Blueprints hit: a search hit plus the file it is in.

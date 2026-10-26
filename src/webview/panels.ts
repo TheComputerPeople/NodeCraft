@@ -1,4 +1,5 @@
 // The node palette (left) and the Details panel (right).
+import { supports } from '../core/capabilities';
 import {
   addSignaturePin, findVariable, functionUses, removeSignaturePin, renameGraph, renameSignaturePin, renameVariable, setFunctionPure, setSignaturePinType, setVariableType, variableUses
 } from '../core/blueprint-edits';
@@ -11,7 +12,7 @@ import { ContainerKind, TypeRef } from '../core/types';
 import { defaultValue } from '../core/values';
 import { formatType } from '../core/types';
 import { addNode, addPin } from './actions';
-import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText, updateClassHierarchy } from './document';
+import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText, updateClassHierarchy, languageCapabilities } from './document';
 import { dom, escapeHtml, setStatus } from './dom';
 import { renderMyBlueprint } from './my-blueprint';
 import { render } from './render';
@@ -137,10 +138,12 @@ function renderClassSettings(): void {
     else delete doc.parent;
     changed();
   });
-  fields.appendChild(field('Parent Class', parent));
+  // A language without inheritance or interfaces offers neither (unless the class already has one).
+  const capabilities = languageCapabilities();
+  if (supports(capabilities, 'inheritance') || doc.parent) fields.appendChild(field('Parent Class', parent));
 
   // Implemented Interfaces, as in Unreal's Class Settings.
-  fields.insertAdjacentHTML('beforeend', '<div class="details-heading">Implemented Interfaces</div>');
+  if (supports(capabilities, 'interfaces') || doc.interfaces?.length) fields.insertAdjacentHTML('beforeend', '<div class="details-heading">Implemented Interfaces</div>');
   const implemented = doc.interfaces ?? [];
   for (const id of implemented) {
     const row = document.createElement('div');
@@ -159,7 +162,7 @@ function renderClassSettings(): void {
     fields.appendChild(row);
   }
   const available = workspaceTypes().filter((t) => t.kind === 'interface' && !implemented.includes(t.id));
-  if (available.length) {
+  if (available.length && supports(capabilities, 'interfaces')) {
     const add = select([{ id: '', label: 'Add interface…' }, ...available.map((t) => ({ id: t.id, label: t.name }))], '', 'Add Interface');
     add.addEventListener('change', () => {
       if (!add.value) return;
@@ -376,7 +379,7 @@ export function typePicker<T extends TypeRef | 'exec'>(type: T, label: string, a
   row.className = 'type-row';
   const data = type === 'exec' ? undefined : (type as TypeRef);
   const elementType = select(allowExec ? [{ id: 'exec', label: 'Exec' }, ...typeOptions(exclude)] : typeOptions(exclude), data?.id ?? 'exec', label);
-  const container = select(CONTAINERS, data?.container ?? '', `${label} Container`);
+  const container = select(containerOptions(data?.container), data?.container ?? '', `${label} Container`);
   const valueType = select(typeOptions(), data?.valueType?.id ?? 'any', `${label} Map Value`);
   container.hidden = !data;
   valueType.hidden = data?.container !== 'map';
@@ -420,6 +423,12 @@ const CONTAINERS: { id: '' | ContainerKind; label: string }[] = [
   { id: 'set', label: 'Set' },
   { id: 'map', label: 'Map' }
 ];
+
+// The containers the graph's language has (and the one a type already uses, so it still shows).
+function containerOptions(current?: ContainerKind): { id: '' | ContainerKind; label: string }[] {
+  const capabilities = languageCapabilities();
+  return CONTAINERS.filter((c) => !c.id || c.id === current || supports(capabilities, c.id));
+}
 
 function field(label: string, control: HTMLElement): HTMLElement {
   const row = document.createElement('label');
@@ -479,7 +488,7 @@ function renderVariableDetails(variableId: string): boolean {
   const typeRow = document.createElement('div');
   typeRow.className = 'type-row';
   const elementType = select(typeOptions(), variable.type.id, 'Variable Type');
-  const container = select(CONTAINERS, variable.type.container ?? '', 'Container Type');
+  const container = select(containerOptions(variable.type.container), variable.type.container ?? '', 'Container Type');
   const valueType = select(typeOptions(), variable.type.valueType?.id ?? 'any', 'Map Value Type');
   valueType.hidden = variable.type.container !== 'map';
   const applyType = (): void => {

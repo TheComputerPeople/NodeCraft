@@ -41,6 +41,31 @@
     },
     "implementation": {
       "$ref": "#/$defs/implementation"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Extra words the action menu matches when searching."
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "classes",
+          "inheritance",
+          "interfaces",
+          "async",
+          "delegates",
+          "generics",
+          "exceptions",
+          "array",
+          "set",
+          "map"
+        ]
+      },
+      "description": "What the node needs from a graph's language beyond what its pin types say; the editor hides it, and the compiler reports it, in languages without these."
     }
   },
   "$defs": {

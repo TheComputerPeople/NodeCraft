@@ -6,16 +6,23 @@ import { NodeLine } from './compiler/writer';
 import { ModuleScan } from './importing/symbols';
 import { TypeRef } from './types';
 
-// What the language can express. The editor hides features a graph's language can't support
-// instead of producing code that won't compile.
+// Which Blueprint concepts generated code in the language can express (not which keywords the
+// language has: JavaScript has no interface keyword but expresses Blueprint interfaces). The
+// compiler reports and the editor hides what a graph's language can't (src/core/capabilities.ts).
 export interface LanguageCapabilities {
   staticTyping: boolean;
+  // Object references: Construct, Target pins, Self as a value, class-typed pins.
   classes: boolean;
   inheritance: boolean;
   interfaces: boolean;
   generics: boolean;
+  // Latent actions such as Delay.
   async: boolean;
   exceptions: boolean;
+  // Which containers it has (all three when absent).
+  containers?: ('array' | 'set' | 'map')[];
+  // Event dispatchers and bound events (true when absent).
+  delegates?: boolean;
 }
 
 // Executes code-node snippets inside the extension host, for Simulate mode. Only languages the

@@ -275,7 +275,7 @@ export const pythonPack: LanguagePack = {
   displayName: 'Python',
   generatedFileExtension: '.py',
   workspaceMarkers: ['**/pyproject.toml', '**/setup.py', '**/setup.cfg', '**/requirements.txt', '**/Pipfile'],
-  capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true },
+  capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   generator: pythonGenerator,
   importer: { extensions: ['.py'], scan: scanPython }

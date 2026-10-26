@@ -1,4 +1,7 @@
 // The document being edited, the node definitions it uses, and syncing changes back to the host.
+import { DEFAULT_LANGUAGE } from '../core/languages';
+import { FULL_CAPABILITIES, missingCapabilities, nodeRequirements } from '../core/capabilities';
+import type { LanguageCapabilities } from '../core/language-pack';
 import { pinDefinition, releaseWildcards } from '../core/editing';
 import { Access, GraphDocument, GraphNode, GraphPin, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
 import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions } from '../core/imported-functions';
@@ -37,6 +40,12 @@ export interface PaletteEntry {
 // Every node type, except that variable Get/Set nodes are offered once per declared variable
 // ("Get Score", "Set Score"), as in Unreal's action menu, and project functions only when the
 // graph's language can call them.
+// What the graph's language can express (src/core/capabilities.ts); the editor offers nothing else.
+export function languageCapabilities(): LanguageCapabilities {
+  const id = state.document?.language || DEFAULT_LANGUAGE;
+  return state.languages.find((l) => l.id === id)?.capabilities ?? FULL_CAPABILITIES;
+}
+
 export function paletteEntries(): PaletteEntry[] {
   const kind = state.graph?.kind;
   const entries: PaletteEntry[] = state.definitions
@@ -112,7 +121,8 @@ export function paletteEntries(): PaletteEntry[] {
       if (definition) entries.push({ key: `${type}:${variable.id}`, type, properties, definition });
     }
   }
-  return entries;
+  const capabilities = languageCapabilities();
+  return entries.filter((e) => !missingCapabilities(nodeRequirements(e.definition), capabilities).length);
 }
 
 function callable(definition: NodeDefinition): boolean {
