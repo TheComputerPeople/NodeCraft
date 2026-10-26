@@ -105,9 +105,16 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions): NodeDefinit
     ...(fn.doc.description ? { description: fn.doc.description } : {}),
     inputs: [...exec('input'), ...inputs],
     outputs: [...exec('output'), ...outputs],
-    implementation: { kind: 'function', language: options.language, path: options.path, name: fn.name, ...((fn.container ?? options.module) ? { module: fn.container ?? options.module } : {}) },
+    implementation: { kind: 'function', language: options.language, path: options.path, name: fn.name, ...(moduleOf(fn, options) ? { module: moduleOf(fn, options) } : {}) },
     ...(keywords?.length ? { keywords } : {})
   };
+}
+
+// What generated code calls the function through. A C# method's container is its class (with its
+// namespace); a Rust function's is the inline modules inside its file's module.
+function moduleOf(fn: ScannedFunction, options: ExposeOptions): string | undefined {
+  if (options.language === 'rust') return [options.module, fn.container].filter(Boolean).join('::') || undefined;
+  return fn.container ?? options.module;
 }
 
 // A name in words, as Unreal displays function and parameter names: "applyDamage",

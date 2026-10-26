@@ -6,7 +6,7 @@ import { pathToFileURL } from 'url';
 import * as vscode from 'vscode';
 import { breakpointLines, nodeAtLine } from '../core/debug-lines';
 import { definitionFor } from '../core/editing';
-import { LanguagePackRegistry } from '../core/language-pack';
+import { LanguagePackRegistry, debuggerOn } from '../core/language-pack';
 import { visibleNodeId } from '../core/macros';
 import { CompileReport, DebugAction, DebugValue, GraphDocument, PinRef } from '../core/model';
 import { NodeRegistry } from '../core/registry';
@@ -93,9 +93,10 @@ export class CodeDebugService implements vscode.Disposable {
       void vscode.window.showErrorMessage(`${language} graphs can't be debugged yet.`);
       return;
     }
-    if (spec.extension && !vscode.extensions.getExtension(spec.extension.id)) {
-      const show = await vscode.window.showErrorMessage(`Debugging ${language} graphs needs the ${spec.extension.name} extension.`, 'Show Extension');
-      if (show) await vscode.commands.executeCommand('workbench.extensions.search', spec.extension.id);
+    const { type, extension } = debuggerOn(spec, process.platform);
+    if (extension && !vscode.extensions.getExtension(extension.id)) {
+      const show = await vscode.window.showErrorMessage(`Debugging ${language} graphs needs the ${extension.name} extension.`, 'Show Extension');
+      if (show) await vscode.commands.executeCommand('workbench.extensions.search', extension.id);
       return;
     }
     // The compile above mirrors the breakpoints; they must be in place before the code starts.
@@ -103,7 +104,7 @@ export class CodeDebugService implements vscode.Disposable {
     const command = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {})[pack!.id];
     const cwd = path.dirname(outcome.outputPath);
     const options = {
-      cwd, command, importRoots: outcome.importRoots, sources: outcome.sources, mainMethod: outcome.mainMethod,
+      cwd, command, importRoots: outcome.importRoots, sources: outcome.sources, crate: outcome.crate, mainMethod: outcome.mainMethod,
       args: vscode.workspace.getConfiguration('blueprintVisualScripting', uri).get<string[]>('runArguments', [])
     };
     // C# builds Run's project first.
@@ -112,7 +113,7 @@ export class CodeDebugService implements vscode.Disposable {
     try {
       context = runner
         ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `Preparing ${language} for debugging…` }, () => prepareDebugging(runner, spec, outcome.outputPath!, outcome.className!, options))
-        : { importRoots: options.importRoots, sources: options.sources, mainMethod: options.mainMethod, args: options.args };
+        : { importRoots: options.importRoots, sources: options.sources, crate: options.crate, mainMethod: options.mainMethod, args: options.args };
     } catch (error) {
       const message = error instanceof ToolNotFoundError ? error.message : error instanceof BuildError ? `The ${language} build failed; see the Output panel.` : String(error);
       if (error instanceof BuildError) {
@@ -126,7 +127,7 @@ export class CodeDebugService implements vscode.Disposable {
     const configuration: vscode.DebugConfiguration = {
       name: `Debug ${path.basename(uri.fsPath)}`,
       ...spec.configuration({ path: outcome.outputPath, url: pathToFileURL(outcome.outputPath).href }, outcome.className, { ...context, cwd, command }),
-      type: spec.type,
+      type,
       request: 'launch',
       [GRAPH_KEY]: id
     };
@@ -160,7 +161,7 @@ export class CodeDebugService implements vscode.Disposable {
       const nodeId = visibleNodeId(at.nodeId);
       const node = graph?.nodes.find((n) => n.id === nodeId);
       const nodeName = node && doc ? definitionFor(node, createResolver(this.registry, doc)).displayName : nodeId;
-      return { graphId: at.graphId, graphName: graph?.name ?? at.graphId, nodeId, nodeName, uri: generated.graph };
+      return { graphId: at.graphId, graphName: graph?.name ?? at.graphId, nodeId, nodeName, uri: generated.graph, ...(at.line > frame.line ? { prologue: true } : {}) };
     }
     return {
       graphId: '', graphName: frame.name, nodeId: '', nodeName: file ? `${path.basename(file)}:${frame.line}` : frame.source?.name ?? '',
@@ -283,8 +284,9 @@ class CodeDebug implements GraphDebug {
   private session: vscode.DebugSession | undefined;
   private threadId: number | undefined;
   private frameIds: number[] = [];
-  // A step in progress: line steps repeat until execution reaches another node.
-  private stepping: { request: string; from?: GraphStackFrame; depth: number; steps: number } | undefined;
+  // A step in progress: line steps repeat until execution reaches another node (`entered`: a method,
+  // then past its prologue).
+  private stepping: { request: string; from?: GraphStackFrame; depth: number; steps: number; entered?: boolean } | undefined;
 
   constructor(readonly id: string, readonly graph: vscode.Uri, private readonly service: CodeDebugService, readonly userTabs: Set<string>) {}
 
@@ -317,8 +319,14 @@ class CodeDebug implements GraphDebug {
     if (step) {
       const top = stack[0];
       const same = !!top && !top.external && !!step.from && top.uri.toString() === step.from.uri.toString() && top.graphId === step.from.graphId && top.nodeId === step.from.nodeId;
-      if (same && graphDepth(stack) === step.depth && step.steps < MAX_LINE_STEPS) {
+      // A step into a method stops at its opening; it goes on, line by line, to the first node's
+      // code, where the parameters can be read (the Visual Studio debugger can't before).
+      const inPrologue = !!top?.prologue && !top.external;
+      const entering = inPrologue && (step.request === 'next' && step.entered ? graphDepth(stack) === step.depth : graphDepth(stack) > step.depth);
+      const leaving = !step.entered && same && graphDepth(stack) === step.depth;
+      if ((leaving || entering) && step.steps < MAX_LINE_STEPS) {
         step.steps++;
+        if (entering) Object.assign(step, { request: 'next', depth: graphDepth(stack), entered: true });
         try {
           await session.customRequest(step.request, { threadId });
           return;
@@ -372,7 +380,7 @@ class CodeDebug implements GraphDebug {
       if (!expression) return { unavailable: "No value: it isn't stored, it's computed where it's used." };
       try {
         const response = await session.customRequest('evaluate', { expression, frameId: this.frameIds[frame], context: 'watch' });
-        return { value: String(response?.result ?? '') };
+        return { value: shortestDecimal(String(response?.result ?? '')) };
       } catch (error) {
         return { unavailable: error instanceof Error ? error.message : String(error) };
       }
@@ -382,6 +390,12 @@ class CodeDebug implements GraphDebug {
   breakpointsChanged(): void {
     // The service mirrors them into the generated files, which the debugger picks up.
   }
+}
+
+// A decimal a debugger pads (the Visual Studio debugger shows 30.0 as "30.000000000000000") in its
+// shortest form; short ones, such as Python's "30.0", are left as they are.
+export function shortestDecimal(text: string): string {
+  return /^-?\d+\.\d{6,}$/.test(text) ? String(Number(text)) : text;
 }
 
 // How many graph calls deep a stack is (frames outside generated code don't count).

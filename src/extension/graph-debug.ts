@@ -9,6 +9,8 @@ import { SimulateSession } from './simulate-session';
 export interface GraphStackFrame extends DebugFrame {
   uri: vscode.Uri;
   external?: boolean;
+  // In a method's prologue, before its first node's code: its parameters may not be readable yet.
+  prologue?: boolean;
 }
 
 export interface GraphDebug {

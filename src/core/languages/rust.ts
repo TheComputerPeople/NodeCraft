@@ -5,10 +5,12 @@
 import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, classInfo, exprType, programClassSpec, userTypes } from '../compiler/ir';
 import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
-import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression } from '../language-pack';
+import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
+import { OutputPlan, PlacementContext } from '../output-plan';
 import type { ClassInfo } from '../objects';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
+import { scanRust } from '../importing/rust-scanner';
 import { RUST_RUNTIME, RUST_RUNTIME_MODULE } from './rust-runtime';
 
 const RESERVED = new Set([
@@ -56,8 +58,22 @@ export function rustEnumMembers(type: EnumInfo): Map<string, string> {
   return new Map(type.enumerators.map((e) => [e.id, scope.claim(e.name, 'pascal')]));
 }
 
+// The project crate's modules, declared in an inline module whose path is the crate's src folder
+// (so each loads, with its own submodules, as in the crate) and used at the root, so
+// `crate::game::combat` resolves in the scaffold as in the project.
+function projectModules(crate: { src: string; modules: string[] } | undefined): string[] {
+  if (!crate?.modules.length) return [];
+  return [
+    `#[path = "${crate.src.replace(/\\/g, '/')}"]`,
+    'mod vgraph_project {',
+    ...crate.modules.map((m) => `    pub mod ${m};`),
+    '}',
+    `pub use vgraph_project::{${crate.modules.join(', ')}};`
+  ];
+}
+
 // The Cargo project Run builds around generated modules.
-export function rustRunProject(modules: { name: string; path: string }[], entry: { module: string; className: string; mainMethod?: string }): Record<string, string> {
+export function rustRunProject(modules: { name: string; path: string }[], entry: { module: string; className: string; mainMethod?: string }, crate?: { src: string; modules: string[] }): Record<string, string> {
   const slash = (p: string) => p.replace(/\\/g, '/');
   return {
     'Cargo.toml': ['# Built by Blueprint Visual Scripting to run generated Rust. Safe to delete.', '[package]', 'name = "blueprint_run"', 'version = "0.1.0"', 'edition = "2021"', '', '[[bin]]', 'name = "blueprint_run"', 'path = "main.rs"', '', '[workspace]', ''].join('\n'),
@@ -68,6 +84,7 @@ export function rustRunProject(modules: { name: string; path: string }[], entry:
       '#![allow(unused)]',
       `mod ${RUST_RUNTIME_MODULE};`,
       ...modules.map((m) => `#[path = "${slash(m.path)}"]\nmod ${m.name};`),
+      ...projectModules(crate),
       '',
       'fn main() {',
       '    let args: Vec<String> = std::env::args().skip(1).collect();',
@@ -102,17 +119,94 @@ export function rustRunProject(modules: { name: string; path: string }[], entry:
 
 const moduleOf = (file: string) => (file.split(/[\\/]/).pop() ?? file).replace(/\.rs$/, '');
 
+// The program Run's Cargo project builds, in its target folder.
+function rustExecutable(context: RunContext | undefined): string {
+  return `${context?.scaffoldDir}/target/debug/blueprint_run${context?.platform === 'win32' ? '.exe' : ''}`;
+}
+
 const rustRunner: CodeRunner = {
   commands: () => [['cargo']],
   env: { CARGO_TERM_COLOR: 'never' },
   scaffold: (file, className, context) => rustRunProject(
     [file.path, ...(context.sources ?? [])].map((p) => ({ name: moduleOf(p), path: p })),
-    { module: moduleOf(file.path), className, mainMethod: context.mainMethod }
+    { module: moduleOf(file.path), className, mainMethod: context.mainMethod },
+    context.crate
   ),
   args: (_file, _className, context) => ['run', '--quiet', '--manifest-path', `${context?.scaffoldDir}/Cargo.toml`, '--', ...(context?.args ?? [])],
   testArgs: (_file, _className, context) => ['run', '--quiet', '--manifest-path', `${context.scaffoldDir}/Cargo.toml`, '--', '--test', ...context.tests.flatMap((t) => [t.name, t.method])],
   missingToolMessage: 'Cargo was not found. Install Rust (rustup.rs) and make sure `cargo` is on the PATH.'
 };
+
+export const RUST_BLOCK = { begin: '// vgraph:begin (managed by Blueprint Visual Scripting)', end: '// vgraph:end' };
+
+// Declares generated modules at the crate root (docs/output-placement.md, "Rust"): the extension owns
+// src/vgraph_runtime.rs, and a fenced block in lib.rs (or main.rs) declares it and each generated
+// file by its path, so generated code's `crate::name_vgraph::` paths resolve as they do under Run.
+export function rustPlacement(context: PlacementContext): OutputPlan {
+  const crateOf = (file: string): string | undefined => {
+    const parts = file.split('/');
+    for (let n = parts.length - 1; n >= 0; n--) {
+      const dir = parts.slice(0, n).join('/');
+      if (context.exists(dir ? `${dir}/Cargo.toml` : 'Cargo.toml')) return dir;
+    }
+    return undefined;
+  };
+  const crates = new Map<string, string[]>();
+  const outside: string[] = [];
+  for (const file of context.generatedFiles) {
+    const crate = crateOf(file);
+    if (crate === undefined) outside.push(file);
+    else crates.set(crate, [...(crates.get(crate) ?? []), file]);
+  }
+  // A crate whose last graph went away keeps its runtime and a block emptied of modules, so no
+  // declaration names a deleted file. Such crates are found at the root and among the workspace's
+  // listed members.
+  const manifest = context.readFile('Cargo.toml');
+  if (manifest !== undefined) {
+    const members = /^\s*members\s*=\s*\[([^\]]*)\]/m.exec(manifest)?.[1] ?? '';
+    for (const crate of ['', ...[...members.matchAll(/"([^"*?]+)"/g)].map((m) => m[1].replace(/\/+$/, ''))]) {
+      if (!crates.has(crate) && context.exists(join(crate, `src/${RUST_RUNTIME_MODULE}.rs`))) crates.set(crate, []);
+    }
+  }
+  const plan: Required<OutputPlan> = { ownedFiles: [], hooks: [], diagnostics: [] };
+  if (context.outputFile && outside.includes(context.outputFile)) {
+    plan.diagnostics.push({ severity: 'warning', code: 'build-registration', message: `${context.outputFile} isn't in a Cargo crate, so it can't be added to one: move the graph into a crate's folder.` });
+  }
+  for (const [crate, files] of crates) {
+    const root = ['src/lib.rs', 'src/main.rs'].map((f) => join(crate, f)).find((f) => context.exists(f));
+    if (!root) {
+      plan.diagnostics.push({ severity: 'warning', code: 'build-registration', message: `${join(crate, 'Cargo.toml')}'s crate has no src/lib.rs or src/main.rs, so the generated modules can't be declared: add \`#[path = "…"] pub mod name_vgraph;\` for each to the crate root.` });
+      continue;
+    }
+    const src = join(crate, 'src');
+    const lines = [`pub mod ${RUST_RUNTIME_MODULE};`];
+    for (const file of files) {
+      const module = file.split('/').pop()!.replace(/\.rs$/, '');
+      const local = relativePath(src, file);
+      lines.push(local === `${module}.rs` ? `pub mod ${module};` : `#[path = "${local}"]\npub mod ${module};`);
+    }
+    plan.ownedFiles.push({ path: join(src, `${RUST_RUNTIME_MODULE}.rs`), text: RUST_RUNTIME });
+    plan.hooks.push({
+      id: `rust-mod:${root}`,
+      file: root,
+      description: `Declare the Rust modules generated from graphs in ${root}, so Cargo builds them`,
+      // A new block goes after the root's last `mod x;` or `use …;` line, else at the end.
+      block: { ...RUST_BLOCK, text: lines.join('\n'), anchor: { after: String.raw`^(pub(\([^)]*\))?\s+)?(mod|use)\s[^{]*;\s*$` } }
+    });
+  }
+  return plan;
+}
+
+const join = (dir: string, file: string): string => (dir ? `${dir}/${file}` : file);
+
+// `to` relative to the folder `from`, both relative to the workspace folder with "/" separators.
+function relativePath(from: string, to: string): string {
+  const a = from.split('/').filter(Boolean);
+  const b = to.split('/');
+  let common = 0;
+  while (common < a.length && common < b.length - 1 && a[common] === b[common]) common++;
+  return [...a.slice(common).map(() => '..'), ...b.slice(common)].join('/');
+}
 
 const rustGenerator: CodeGenerator = {
   libraryExports: rustLibraryExports,
@@ -120,8 +214,20 @@ const rustGenerator: CodeGenerator = {
   importLanguages: ['rust'],
   outputFileName: rustOutputFileName,
   moduleName: (generatedFileName) => generatedFileName.replace(/\.rs$/, ''),
+  placement: rustPlacement,
   generate: (program, options) => new RustEmitter(program, options).emit(),
-  runner: rustRunner
+  runner: rustRunner,
+  // CodeLLDB runs the program Run's Cargo project builds; on Windows (the MSVC toolchain), the
+  // C/C++ extension's Visual Studio debugger does.
+  debugger: {
+    type: 'lldb',
+    extension: { id: 'vadimcn.vscode-lldb', name: 'CodeLLDB' },
+    platforms: { win32: { type: 'cppvsdbg', extension: { id: 'ms-vscode.cpptools', name: 'C/C++' } } },
+    build: (_file, _className, context) => ['build', '--quiet', '--manifest-path', `${context.scaffoldDir}/Cargo.toml`],
+    configuration: (_file, _className, context) => context.platform === 'win32'
+      ? { type: 'cppvsdbg', request: 'launch', program: rustExecutable(context), args: context.args ?? [], cwd: context.cwd, stopAtEntry: false, console: 'internalConsole' }
+      : { type: 'lldb', request: 'launch', program: rustExecutable(context), args: context.args ?? [], cwd: context.cwd, sourceLanguages: ['rust'], expressions: 'native' }
+  }
 };
 
 export const rustPack: LanguagePack = {
@@ -132,7 +238,9 @@ export const rustPack: LanguagePack = {
   // No inheritance; interfaces (traits) arrive later.
   capabilities: { staticTyping: true, classes: true, inheritance: false, interfaces: false, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
-  generator: rustGenerator
+  generator: rustGenerator,
+  // pub functions marked /// @blueprint, called through their module in the crate.
+  importer: { extensions: ['.rs'], scan: scanRust }
 };
 
 class RustEmitter {
@@ -270,8 +378,40 @@ class RustEmitter {
   }
 
   private pinExpressions(): { pinExpressions?: PinExpression[] } {
-    const pins = (this.program.pinValues ?? []).map((p) => ({ graphId: p.graphId, nodeId: p.nodeId, pinId: p.pinId, expression: this.expr(p.value) }));
+    const pins = (this.program.pinValues ?? []).flatMap((p) => {
+      const expression = this.debugExpr(p.value);
+      return expression ? [{ graphId: p.graphId, nodeId: p.nodeId, pinId: p.pinId, expression }] : [];
+    });
     return pins.length ? { pinExpressions: pins } : {};
+  }
+
+  // A pin's value as a debugger reads it in a paused method: a field through its RefCell
+  // (`self->score.value.value`), a local or parameter by name, a literal as is. Undefined when the
+  // debugger can't read it without running code.
+  private debugExpr(e: IrExpr): string | undefined {
+    switch (e.kind) {
+      case 'literal':
+        return typeof e.value === 'string' ? JSON.stringify(e.value) : literal(e.value);
+      case 'member':
+      case 'output': {
+        const kind = e.kind === 'member' ? 'member' : 'slot';
+        const id = e.kind === 'member' ? e.member : e.slot;
+        const name = kind === 'slot' ? this.slotNames.get(id) : this.memberNames.get(id);
+        if (!name) return undefined;
+        return this.locals.has(`${kind}:${id}`) ? name : `self->${name}.value.value`;
+      }
+      case 'param':
+        return this.paramNames.get(`${e.function}\u0000${e.id}`);
+      case 'self':
+        return 'self';
+      case 'structField': {
+        const value = this.debugExpr(e.value);
+        const type = this.types.get(e.type);
+        return value && `${value}.${type?.kind === 'struct' ? rustFieldNames(type).get(e.field) : e.field}`;
+      }
+      default:
+        return undefined;
+    }
   }
 
   // A struct (a value, copied on assignment as in Unreal), an enum, or an interface (a trait).
@@ -769,9 +909,10 @@ class RustEmitter {
     return `{ ${lets.join(' ')} ${name}(${list.join(', ')}) }`;
   }
 
+  // A function from the project's code or a library graph, through its module in the crate.
   private importName(id: string): string {
     const imported = this.program.imports.find((i) => i.id === id)!;
-    return `${imported.module ? `crate::${imported.module}::` : ''}${imported.name}`;
+    return `crate::${imported.module ? `${imported.module}::` : ''}${imported.name}`;
   }
 
   // The value as text, per docs/semantics.md ("Values").

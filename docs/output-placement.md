@@ -93,6 +93,13 @@ The same machinery covers edge cases in the first three languages: a TypeScript 
   - A new hook is proposed once, without holding up the compile: **Add**, **Show Change** (a diff of the proposed file) or **Never**; dismissing it asks again next time.
   - Answers are remembered per workspace. Until a hook is in place, the graph gets a warning, and **Register Generated Files with the Build** offers declined hooks again.
 - The fenced-block functions (`findBlock`, `withBlock`, `hasBlock`) are in the SDK for pack authors.
+- **C++:** an owned `vgraph.cmake` and a block in `CMakeLists.txt` ([language-breadth.md](language-breadth.md), "C++").
+- **Rust** differs from the design above:
+  - Generated files always stay next to their graphs; there's no `src/vgraph/` folder.
+  - Every generated module is declared at the crate root, with `#[path]`, not in its parent module. Generated code then refers to other graphs and to the runtime as `crate::name_vgraph` and `crate::vgraph_runtime` wherever the file is, as it does in Run's scaffold.
+  - The extension owns `src/vgraph_runtime.rs`; the block goes in `src/lib.rs`, else `src/main.rs`.
+  - Probing reads `Cargo.toml` files, not `cargo metadata`.
+  - Details are in [language-breadth.md](language-breadth.md), "Rust".
 
 ### Security
 

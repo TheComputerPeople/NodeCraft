@@ -3,6 +3,7 @@
 // `npm run test:integration:debuggers`.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { debuggerOn } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
 
 const file = { path: '/work/game/Game.vgraph.x', url: 'file:///work/game/Game.vgraph.x' };
@@ -64,5 +65,20 @@ describe('debug configurations', () => {
     assert.equal(config.type, 'coreclr');
     assert.equal(config.program, '/tmp/run/bin/Debug/net9.0/BlueprintRun.dll');
     assert.deepEqual(config.args, ['Game', 'main', '--fast']);
+  });
+
+  test("rust: CodeLLDB (the Visual Studio debugger on Windows) runs the program Run's Cargo project builds", () => {
+    const { debugger: d } = debuggerFor('rust');
+    const scaffold = { ...context, scaffoldDir: '/tmp/run', platform: 'linux' };
+    assert.deepEqual(debuggerOn(d, 'linux'), { type: 'lldb', extension: { id: 'vadimcn.vscode-lldb', name: 'CodeLLDB' } });
+    assert.deepEqual(debuggerOn(d, 'win32'), { type: 'cppvsdbg', extension: { id: 'ms-vscode.cpptools', name: 'C/C++' } });
+    assert.deepEqual(d.build!(file, 'Game', scaffold), ['build', '--quiet', '--manifest-path', '/tmp/run/Cargo.toml']);
+    const config = d.configuration(file, 'Game', scaffold);
+    assert.equal(config.type, 'lldb');
+    assert.equal(config.program, '/tmp/run/target/debug/blueprint_run');
+    assert.deepEqual(config.args, ['--fast']);
+    const windows = d.configuration(file, 'Game', { ...scaffold, platform: 'win32' });
+    assert.equal(windows.type, 'cppvsdbg');
+    assert.equal(windows.program, '/tmp/run/target/debug/blueprint_run.exe');
   });
 });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { configCovers, csharpNamespace, detectImportExtension, detectModuleFormat, generatedFrom, globToRegExp, isGeneratedFrom, parseJsonc, pythonModule, verifyPlacement } from '../../src/extension/placement';
+import { configCovers, csharpNamespace, detectImportExtension, detectModuleFormat, generatedFrom, globToRegExp, isGeneratedFrom, parseJsonc, pythonModule, rustModule, rustRunSources, verifyPlacement } from '../../src/extension/placement';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-placement-'));
 after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -72,6 +72,34 @@ describe('imports of project code', () => {
     assert.deepEqual(pythonModule(path.join(dir, 'src/game/ai/brain.py'), dir), { module: 'game.ai.brain', root: path.join(dir, 'src') });
     assert.deepEqual(pythonModule(path.join(dir, 'src/game/__init__.py'), dir), { module: 'game', root: path.join(dir, 'src') });
     assert.deepEqual(pythonModule(path.join(dir, 'scripts/tools.py'), dir), { module: 'tools', root: path.join(dir, 'scripts') });
+  });
+});
+
+describe('Rust modules', () => {
+  test("follow the crate's src folder", () => {
+    const dir = project({ 'Cargo.toml': '[package]', 'src/main.rs': '', 'src/game/mod.rs': '', 'src/game/combat.rs': '', 'tools/x.rs': '' });
+    assert.equal(rustModule(path.join(dir, 'src/main.rs'), dir), '');
+    assert.equal(rustModule(path.join(dir, 'src/game/mod.rs'), dir), 'game');
+    assert.equal(rustModule(path.join(dir, 'src/game/combat.rs'), dir), 'game::combat');
+    assert.equal(rustModule(path.join(dir, 'tools/x.rs'), dir), undefined, 'outside src');
+    const loose = project({ 'a.rs': '' });
+    assert.equal(rustModule(path.join(loose, 'a.rs'), loose), undefined, 'not in a crate');
+  });
+
+  test("Run builds the generated modules a graph uses, in turn, and the crate's modules when it calls them", () => {
+    const dir = project({
+      'Cargo.toml': '[package]',
+      'src/main.rs': 'mod game;\npub(crate) mod util;\n// vgraph:begin (managed by Blueprint Visual Scripting)\npub mod vgraph_runtime;\n#[path = "graphs/duel_vgraph.rs"]\npub mod duel_vgraph;\n// vgraph:end\nfn main() {}\n',
+      'src/game/combat.rs': '',
+      'src/graphs/duel_vgraph.rs': 'crate::fighter_vgraph::Fighter::new(); crate::game::combat::damage(1.0)',
+      'src/graphs/fighter_vgraph.rs': 'crate::stats_vgraph::Stats::new()',
+      'src/graphs/stats_vgraph.rs': '',
+      'src/graphs/unused_vgraph.rs': ''
+    });
+    const sources = rustRunSources(path.join(dir, 'src/graphs/duel_vgraph.rs'), dir, ['src/game/combat.rs']);
+    assert.deepEqual(sources.generated, [path.join(dir, 'src/graphs/fighter_vgraph.rs'), path.join(dir, 'src/graphs/stats_vgraph.rs')]);
+    assert.deepEqual(sources.crate, { src: path.join(dir, 'src'), modules: ['game', 'util'] }, 'not the generated modules');
+    assert.equal(rustRunSources(path.join(dir, 'src/graphs/duel_vgraph.rs'), dir, []).crate, undefined, 'no project functions');
   });
 });
 

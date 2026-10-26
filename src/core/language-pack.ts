@@ -93,6 +93,9 @@ export interface RunContext {
   // Absolute paths of the project's own source files that must be compiled with the generated file
   // (languages that build before running, such as C#).
   sources?: string[];
+  // Rust: the crate the code calls into, as its src folder and the top-level modules its root
+  // declares, for the scaffold to declare the same way (`crate::game::combat` resolves as in the crate).
+  crate?: { src: string; modules: string[] };
   // Where `scaffold`'s files were written.
   scaffoldDir?: string;
   // From `probe`, e.g. the .NET target framework.
@@ -160,12 +163,20 @@ export interface CodeDebugger {
   // The debug type, and the extension that provides it when VS Code doesn't.
   type: string;
   extension?: { id: string; name: string };
+  // Another type and extension on some platforms (process.platform values): Rust uses the C/C++
+  // extension's Visual Studio debugger on Windows.
+  platforms?: Record<string, { type: string; extension?: { id: string; name: string } }>;
   // Arguments for the runner's command that build the code before launching it (C# builds Run's
   // project), after the runner's probe and scaffold.
   build?(file: { path: string; url: string }, className: string, context: RunContext): string[];
   // A launch configuration running the generated file as Run does: Start, then Main. `command`
   // replaces the runner's executable (and leading arguments), as the runCommands setting does.
   configuration(file: { path: string; url: string }, className: string, context: RunContext & { cwd: string; command?: string[] }): Record<string, unknown>;
+}
+
+// The debug type and extension a debugger uses on the platform.
+export function debuggerOn(spec: CodeDebugger, platform: string): { type: string; extension?: { id: string; name: string } } {
+  return spec.platforms?.[platform] ?? { type: spec.type, ...(spec.extension ? { extension: spec.extension } : {}) };
 }
 
 // Reads the functions in the language's source files, for exposing them as nodes

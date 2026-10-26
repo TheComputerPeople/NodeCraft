@@ -600,6 +600,17 @@ test('exit check: debugging a function graph in generated C++', async () => {
   await exitCheck('cpp');
 });
 
+// CodeLLDB, or on Windows the C/C++ extension's Visual Studio debugger.
+function requireRustDebugger(): void {
+  const [id, name] = process.platform === 'win32' ? ['ms-vscode.cpptools', 'C/C++'] : ['vadimcn.vscode-lldb', 'CodeLLDB'];
+  if (!vscode.extensions.getExtension(id)) throw new Skip(`the ${name} extension is not loaded`);
+}
+
+test('exit check: debugging a function graph in generated Rust', async () => {
+  requireRustDebugger();
+  await exitCheck('rust');
+});
+
 test('exit check: debugging a function graph in generated C#', async () => {
   if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
   await exitCheck('csharp');
@@ -619,6 +630,11 @@ test('Debug does the same in generated Python (debugpy)', async () => {
 test('Debug does the same in generated C++ (cppdbg)', async () => {
   if (!vscode.extensions.getExtension('ms-vscode.cpptools')) throw new Skip('the C/C++ extension is not loaded');
   await debugSample('cpp', 'debug_cpp.vgraph.cpp');
+});
+
+test('Debug does the same in generated Rust', async () => {
+  requireRustDebugger();
+  await debugSample('rust', 'debug_rust_vgraph.rs');
 });
 
 test('Debug does the same in generated C# (coreclr)', async () => {

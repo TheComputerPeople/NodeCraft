@@ -99,6 +99,18 @@ An IR construct without a template is reported as `unsupported` on the node that
   - **Run and tests:** Run builds a scaffold Cargo project with `cargo run`. Run Tests uses its `--test` mode, as C++ does, rather than `cargo test`, so tests report the same way in every compiled language.
   - **Interfaces:** traits are deferred, so the pack says it has no interfaces. Casting an object to a trait at runtime needs more machinery than this phase gives it.
   - **Conformance:** every fixture passes except the arena (inheritance), which is not applicable. The duel program (the arena without inheritance, in `test/fixtures/programs`) covers objects of other classes, events bound across objects, structs, enums and several outputs in Rust and in every other language.
+  - **Placement:** `rustPlacement`. Generated files stay next to their graphs. Every generated module is declared at the crate root, not in its parent module, so generated code's `crate::name_vgraph::` paths are the same in the project and in Run's scaffold:
+    - The extension owns `src/vgraph_runtime.rs`.
+    - A fenced block in `src/lib.rs` (else `src/main.rs`) declares the runtime and each generated file, with `#[path]` when it isn't directly in `src/`. A new block goes after the root's last `mod x;` or `use …;` line.
+    - Each crate of a workspace gets its own block. A crate whose last graph is deleted keeps an emptied block, so no declaration names a deleted file.
+    - A generated file outside a crate, or a crate with no root file, gets a warning.
+    - A test builds and runs a crate registered this way with Cargo.
+  - **Symbol import:** `src/core/importing/rust-scanner.ts` reads `pub` and `pub(crate)` free functions marked `/// @blueprint`, in the file's module or in its inline modules. A function's module comes from its file's place under the crate's `src/` (`src/game/combat.rs` is `game::combat`; `mod.rs`, `main.rs` and `lib.rs` follow Rust's rules), and generated code calls it as `crate::game::combat::name`. Parameters are owned values (`f64`, `i64`, `bool`, `String`, `Vec<T>`); references, generics, `async`, `unsafe`, `extern` and methods are reported with the reason, and `#[cfg(test)]` code is left out.
+  - **Run with project functions:** the scaffold declares the crate's top-level modules (those its root declares, minus the generated ones) inside an inline module whose `#[path]` is the crate's `src/` folder, and re-exports them at the root. Each module then loads with its own submodules exactly as in the crate, and `crate::` paths between them resolve (`rustRunSources`, `rustCrateModules`). It does this only when the graph calls project functions. A project module that needs the crate's dependencies doesn't build under Run yet.
+  - **Debugging:** on Windows, the C/C++ extension's `cppvsdbg` debugs the MSVC toolchain's output; elsewhere, CodeLLDB (`lldb`, with native expressions). A pack's debugger can now name a different type and extension per platform (`CodeDebugger.platforms`). Debug builds the scaffold with `cargo build` and launches `target/debug/blueprint_run`. Pins read fields through their `RefCell` (`self->score.value.value`).
+    - A step into a method now goes on, line by line, past the method's opening to its first node's code, for every language. The Visual Studio debugger can't read parameters before then.
+    - Decimals the Visual Studio debugger pads (`30.000000000000000`) are shown in their shortest form.
+    - The Debug integration test and the exit check pass for Rust with the C/C++ extension on Windows. CodeLLDB isn't installed here, so the non-Windows configuration is covered only by a unit test.
 
 ## Output plans and consented hooks
 

@@ -6,7 +6,7 @@ import { SkippedFunction, exposeFunctions } from '../core/importing/symbols';
 import { LanguagePack, LanguagePackRegistry } from '../core/language-pack';
 import { NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
-import { pythonModule } from './placement';
+import { pythonModule, rustModule } from './placement';
 
 // Build output, dependencies and virtual environments hold no project functions.
 const EXCLUDE = '**/{node_modules,.git,.venv,venv,env,__pycache__,site-packages,dist,out,build,.tox,bin,obj}/**';
@@ -135,7 +135,7 @@ export class ProjectFunctions implements vscode.Disposable {
     // Most files mark nothing; skip parsing them.
     if (!exposeAll && !text.includes('@blueprint')) return undefined;
     const relative = path.relative(folder.uri.fsPath, uri.fsPath).split(path.sep).join('/');
-    const module = pack.id === 'python' ? pythonModule(uri.fsPath, folder.uri.fsPath).module : undefined;
+    const module = pack.id === 'python' ? pythonModule(uri.fsPath, folder.uri.fsPath).module : pack.id === 'rust' ? rustModule(uri.fsPath, folder.uri.fsPath) : undefined;
     const exposed = exposeFunctions(pack.importer.scan(text), { language: pack.id, path: relative, module, exposeAll });
     if (!exposed.definitions.length && !exposed.skipped.length) return undefined;
     return { definitions: exposed.definitions, path: relative, skipped: exposed.skipped };

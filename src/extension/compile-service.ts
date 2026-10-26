@@ -9,7 +9,7 @@ import { PinExpression } from '../core/language-pack';
 import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
-import { cppRunSources, csharpNamespace, csharpRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
+import { cppRunSources, csharpNamespace, csharpRunSources, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
 import { OutputPlans } from './output-plans';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
 
@@ -20,8 +20,10 @@ export interface CompileOutcome {
   className?: string;
   // Absolute folders where the runtime finds imported project modules.
   importRoots?: string[];
-  // Project source files compiled with the generated file to run it (C#).
+  // Project source files compiled with the generated file to run it (C#, C++, Rust).
   sources?: string[];
+  // Rust: the project crate the code calls into.
+  crate?: { src: string; modules: string[] };
   // The method the class's Main event became.
   mainMethod?: string;
   // The class's tests, and their generated test file (docs/debugging.md, "Test Case").
@@ -127,12 +129,15 @@ export class CompileService implements vscode.Disposable {
     const registration = pack && this.outputPlans ? await this.outputPlans.apply(pack, root, outputPath) : [];
     const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root), ...registration];
     const importRoots = result.output.importRoots?.map((r) => path.join(root, r));
-    const sources = language === 'csharp' ? csharpRunSources(graphDir, root, outputPath, result.output.importedFiles ?? []) : language === 'cpp' ? cppRunSources(outputPath) : undefined;
+    const sources = language === 'csharp' ? csharpRunSources(graphDir, root, outputPath, result.output.importedFiles ?? [])
+      : language === 'cpp' ? cppRunSources(outputPath)
+      : language === 'rust' ? rustRunSources(outputPath, root, result.output.importedFiles ?? []).generated : undefined;
+    const crate = language === 'rust' ? rustRunSources(outputPath, root, result.output.importedFiles ?? []).crate : undefined;
     const generated: GeneratedFile = { graph: document.uri, outputPath, language, nodeLines: result.output.nodeLines, codeBreaks: result.output.codeBreaks ?? [], pinExpressions: result.output.pinExpressions ?? [] };
     this.generated.set(document.uri.toString(), generated);
     this.compiled.fire(generated);
     return finish({
-      report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, mainMethod: result.output.mainMethod,
+      report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, ...(crate ? { crate } : {}), mainMethod: result.output.mainMethod,
       ...(result.output.tests?.length ? { tests: result.output.tests, ...(testPath ? { testPath } : {}) } : {})
     }, graph);
   }
@@ -174,6 +179,7 @@ export class CompileService implements vscode.Disposable {
         cwd: path.dirname(outcome.outputPath),
         importRoots: outcome.importRoots,
         sources: outcome.sources,
+        crate: outcome.crate,
         mainMethod: outcome.mainMethod,
         args: vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<string[]>('runArguments', []),
         command: configured[pack.id],

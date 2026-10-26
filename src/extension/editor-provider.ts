@@ -434,7 +434,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     if (!debug.stack) return { state: 'running' };
     return {
       state: 'paused',
-      stack: debug.stack.map(({ uri, ...frame }) => ({
+      stack: debug.stack.map(({ uri, prologue: _prologue, ...frame }) => ({
         ...frame, uri: uri.toString(), fileName: path.basename(uri.path).replace(/\.vgraph$/i, ''), here: !frame.external && uri.toString() === panelKey
       }))
     };

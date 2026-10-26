@@ -27,6 +27,8 @@ export interface RunOptions {
   importRoots?: string[];
   // Project source files compiled with the generated file (RunContext.sources).
   sources?: string[];
+  // The project crate the code calls into (RunContext.crate, Rust).
+  crate?: { src: string; modules: string[] };
   // The class's Main method, and the program's command-line arguments for it.
   mainMethod?: string;
   args?: string[];
@@ -45,7 +47,7 @@ export async function runGeneratedCode(runner: CodeRunner, filePath: string, cla
   const file = { path: filePath, url: pathToFileURL(filePath).href };
   const candidates = options.command?.length ? [options.command] : runner.commands(process.platform);
   for (const candidate of candidates) {
-    const context: RunContext = { importRoots: options.importRoots, sources: options.sources, mainMethod: options.mainMethod, args: options.args, platform: process.platform };
+    const context: RunContext = { importRoots: options.importRoots, sources: options.sources, crate: options.crate, mainMethod: options.mainMethod, args: options.args, platform: process.platform };
     if (runner.probe) {
       const probe = await runCommand([...candidate, ...runner.probe.args], { cwd: options.cwd, env: runner.env, timeoutMs: 30000 });
       if (!probe) continue;
@@ -82,7 +84,7 @@ export class BuildError extends Error {}
 // building it first when the debugger needs that (C#). Returns what the launch configuration needs.
 export async function prepareDebugging(runner: CodeRunner, codeDebugger: CodeDebugger, filePath: string, className: string, options: RunOptions): Promise<RunContext> {
   const file = { path: filePath, url: pathToFileURL(filePath).href };
-  const base: RunContext = { importRoots: options.importRoots, sources: options.sources, mainMethod: options.mainMethod, args: options.args };
+  const base: RunContext = { importRoots: options.importRoots, sources: options.sources, crate: options.crate, mainMethod: options.mainMethod, args: options.args };
   if (!runner.probe && !runner.scaffold && !codeDebugger.build) return base;
   const candidates = options.command?.length ? [options.command] : runner.commands(process.platform);
   for (const candidate of candidates) {
