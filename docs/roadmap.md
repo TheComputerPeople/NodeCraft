@@ -223,6 +223,22 @@ Goal: support for most languages without a hand-written adapter for each.
 
 Exit: a new language pack, written as a separate extension using only the public API, passes the conformance suite.
 
+Design: [language-breadth.md](language-breadth.md). Java is deferred (no JDK here to test it with); C is the declarative pack and the exit check's separate extension. Steps, one commit each (large steps may take several):
+
+1. Design and plan (this list).
+2. Capabilities enforced: finer flags, nodes' `requires`, `unsupported` diagnostics, and the editor hiding what a language can't express.
+3. The pack SDK package and the published conformance runner (applicability by capability), with the built-in packs' conformance tests moved onto it.
+4. The public API: registering language packs, declarative packs and node libraries at runtime, with API versions; editors follow the changes.
+5. Output plans: extension-owned files and consented one-time hooks.
+6. C++: the generator and runner, passing the conformance suite.
+7. C++: CMake placement, symbol import, debugging and tests.
+8. Rust: the generator and runner, passing the conformance suite.
+9. Rust: `mod` placement, symbol import, debugging and tests.
+10. The declarative pack format: schema, template interpreter, helpers, and workspace (Tier 3) packs.
+11. Tier 2 symbol import through the language server.
+12. Node library packages: manifests, versions, dependencies, and graphs remembering versions.
+13. The exit check: the C pack as a separate extension in `examples/`, passing the published suite; documentation and the parity checklist.
+
 ### Phase 7: Multi-language projects
 
 Goal: identify where multi-language workspaces break, then decide which gaps to close. This phase is analysis first, by design.
