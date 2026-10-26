@@ -329,7 +329,7 @@ describe('editing tools', () => {
     const pin = await e.pinCenter('start_1', 'execOut');
     await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
     assert.equal(await menuTitle(e), 'Start');
-    assert.deepEqual(await menuHeadings(e), ['Pin Actions', 'Node Actions', 'Alignment']);
+    assert.deepEqual(await menuHeadings(e), ['Pin Actions', 'Node Actions', 'Breakpoints', 'Alignment']);
     const buttons = await menuButtons(e);
     assert.equal(buttons[0], 'Break Link(s)');
     assert.ok(buttons.includes('Duplicate') && buttons.includes('Delete Node'));
@@ -348,7 +348,7 @@ describe('editing tools', () => {
     const pin = await e.pinCenter('lonely', 'execIn');
     await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
     assert.equal(await menuTitle(e), 'End');
-    assert.deepEqual(await menuHeadings(e), ['Alignment'], 'no empty Pin Actions section');
+    assert.deepEqual(await menuHeadings(e), ['Breakpoints', 'Alignment'], 'no empty Pin Actions section');
     assert.equal((await menuButtons(e))[0], 'Duplicate');
   });
 

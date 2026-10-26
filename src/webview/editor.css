@@ -156,6 +156,8 @@ button, input { font: inherit; color: inherit; }
 .node-badge { position: absolute; top: -11px; right: 8px; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 800; letter-spacing: .04em; color: #fff; }
 .node-badge.error { background: var(--vscode-errorForeground); }
 .node-badge.warning { background: var(--vscode-editorWarning-foreground); color: #000; }
+.node-breakpoint { position: absolute; top: -6px; left: -6px; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%; background: #e51400; border: 2px solid #e51400; box-shadow: 0 0 0 1px rgba(0, 0, 0, .6); pointer-events: none; z-index: 2; }
+.node-breakpoint.disabled { background: transparent; }
 
 /* Left column: My Blueprint above the Palette, as in Unreal's default layout. */
 #left { display: grid; grid-template-rows: minmax(140px, 46%) minmax(0, 1fr); overflow: hidden; padding: 0; }

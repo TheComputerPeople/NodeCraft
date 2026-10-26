@@ -8,6 +8,7 @@ import { dom, eventElement, nodeElement, setStatus } from './dom';
 import { postToHost } from './host';
 import { openFind, reveal, showResults } from './find';
 import { AlignEdge, alignSelection, straightenConnections } from './align';
+import { clearBreakpoints, pruneBreakpoints, setBreakpoints, toggleSelectedBreakpoints } from './breakpoints';
 import { finishVariableDrag, removeVariable, startRename, updateVariableDrag } from './my-blueprint';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showNodeContextMenu } from './menus';
 import { renderPalette } from './panels';
@@ -61,10 +62,14 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       applySettings(message);
       state.languages = message.languages ?? [];
       setDefinitions(message.definitions ?? []);
+      state.breakpoints = message.breakpoints ?? [];
       // No document means the file could not be parsed; editing stays disabled until it can.
       if (message.document) loadDocument(message.document);
       else renderLanguagePicker();
       if (message.compile) showCompileResult(message.compile);
+      break;
+    case 'breakpoints':
+      setBreakpoints(message.breakpoints ?? []);
       break;
     case 'compileResult':
       if (message.compile) showCompileResult(message.compile);
@@ -94,6 +99,7 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
         state.selectedNodeId = exists(primary) ? primary : [...state.selectedNodeIds][0] ?? null;
         render();
       }
+      pruneBreakpoints();
       break;
     }
     case 'definitions':
@@ -150,6 +156,12 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
   } else if (e.key === 'F7') {
     compileNow();
+    e.preventDefault();
+  } else if (e.key === 'F9' && mod && e.shiftKey) {
+    clearBreakpoints();
+    e.preventDefault();
+  } else if (e.key === 'F9' && !mod) {
+    toggleSelectedBreakpoints();
     e.preventDefault();
   } else if (e.key === 'Home') {
     fitGraph(true);

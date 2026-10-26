@@ -8,6 +8,7 @@ import { GraphRuntime } from '../core/runtime';
 import { parseDocument, serializeDocument } from '../core/serializer';
 import { CompileService } from './compile-service';
 import { loadGraphDocument } from './graph-libraries';
+import { BreakpointStore } from './breakpoints';
 import { createNonce, renderEditorHtml } from './webview-html';
 
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
@@ -26,8 +27,11 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     private readonly compiler: CompileService,
     private readonly output: () => vscode.OutputChannel,
     // Whether the project's functions have been scanned (src/extension/project-functions.ts).
-    private readonly functionsLoaded: () => boolean = () => true
+    private readonly functionsLoaded: () => boolean = () => true,
+    private readonly breakpoints: BreakpointStore = new BreakpointStore(context.workspaceState)
   ) {
+    // Every panel of a file shows its breakpoints, wherever they were changed.
+    context.subscriptions.push(breakpoints.onDidChange((uri) => this.broadcast(uri.toString(), { type: 'breakpoints', breakpoints: breakpoints.get(uri) })));
     context.subscriptions.push(
       registry.onDidChange(() => {
         const message: HostMessage = { type: 'definitions', definitions: registry.all(), functionsLoaded: this.functionsLoaded() };
@@ -88,7 +92,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
               saveDelay: getSaveDelay(),
               trusted: vscode.workspace.isTrusted,
               languages: this.languageOptions(),
-              compile: this.compiler.lastReport(document.uri)
+              compile: this.compiler.lastReport(document.uri),
+              breakpoints: this.breakpoints.get(document.uri)
             });
             if (parseError) this.post(webviewPanel, { type: 'error', message: parseError });
             const reveal = this.pendingReveals.get(key);
@@ -100,6 +105,9 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
           }
           case 'findInAll':
             this.post(webviewPanel, { type: 'findResults', results: await this.findInAll(message.query ?? '', key) });
+            break;
+          case 'setBreakpoints':
+            await this.breakpoints.set(document.uri, message.breakpoints ?? []);
             break;
           case 'reveal':
             if (message.target?.uri) await this.reveal(message.target);

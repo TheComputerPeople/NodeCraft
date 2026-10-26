@@ -241,11 +241,20 @@ export interface RevealTarget {
   graphId?: string;
 }
 
+// A breakpoint on a node (docs/debugging.md): editor state, never part of the graph file.
+export interface GraphBreakpoint {
+  graphId: string;
+  nodeId: string;
+  enabled: boolean;
+}
+
 export interface UIMessage {
   // run: compile, then run the generated code; simulate: run in the editor's interpreter.
   // findInAll: search every graph in the workspace; reveal: open another file at a hit.
-  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'findInAll' | 'reveal';
+  // setBreakpoints: the file's breakpoints changed.
+  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'findInAll' | 'reveal' | 'setBreakpoints';
   document?: GraphDocument;
+  breakpoints?: GraphBreakpoint[];
   query?: string;
   target?: RevealTarget;
 }
@@ -264,7 +273,10 @@ export interface HostMessage {
     | 'openFind'
     // Refresh every project function node whose code changed (Unreal's Refresh All Nodes).
     | 'refreshAll'
+    // The file's breakpoints (also part of 'init').
+    | 'breakpoints'
     | 'error';
+  breakpoints?: GraphBreakpoint[];
   // Absent on 'init' when the file could not be parsed; the webview then stays read-only.
   document?: GraphDocument;
   definitions?: NodeDefinition[];

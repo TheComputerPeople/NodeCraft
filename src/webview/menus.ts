@@ -4,6 +4,7 @@ import { PinAddress, definitionFor } from '../core/editing';
 import { PinKind } from '../core/model';
 import { addNode, collapseToFunction, collapseToMacro, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected, refreshFunctionNodes, replaceFunctionNode } from './actions';
 import { alignSelection, distributeSelection, straightenConnections } from './align';
+import { addBreakpoints, breakpointOn, enableBreakpoints, removeBreakpoints } from './breakpoints';
 import { PaletteEntry, functionProblem, lookupDefinition, paletteEntries, searchText } from './document';
 import { dom, escapeHtml } from './dom';
 import { headerColor } from './style';
@@ -83,6 +84,7 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
   const node = state.graph?.nodes.find((n) => n.id === nodeId);
   if (!node) return;
   const def = definitionFor(node, lookupDefinition);
+  const breakpoint = breakpointOn(nodeId);
   const pinSection = pinItems?.length
     ? `<div class="context-heading">Pin Actions</div>
       ${pinItems.map((item, i) => `<button data-pin-action="${i}"${item.danger ? ' class="context-danger"' : ''}>${escapeHtml(item.label)}</button>`).join('')}
@@ -108,6 +110,12 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
       <button data-action="collapse-function">Collapse to Function</button>
       <button data-action="collapse-macro">Collapse to Macro</button>
       <div class="context-separator"></div>
+      <div class="context-heading">Breakpoints</div>
+      ${breakpoint
+        ? `<button data-action="remove-breakpoint" title="F9">Remove Breakpoint</button>
+      <button data-action="toggle-breakpoint-enabled">${breakpoint.enabled ? 'Disable' : 'Enable'} Breakpoint</button>`
+        : '<button data-action="add-breakpoint" title="F9">Add Breakpoint</button>'}
+      <div class="context-separator"></div>
       <div class="context-heading">Alignment</div>
       <button data-action="straighten" title="Q">Straighten Connections</button>
       <button data-action="align-top" title="Shift+W">Align Top</button>
@@ -130,6 +138,9 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
     center: () => centerOnNode(nodeId),
     'collapse-function': collapseToFunction,
     'collapse-macro': collapseToMacro,
+    'add-breakpoint': () => addBreakpoints([nodeId]),
+    'remove-breakpoint': () => removeBreakpoints([nodeId]),
+    'toggle-breakpoint-enabled': () => enableBreakpoints([nodeId], !breakpoint?.enabled),
     delete: deleteSelected,
     straighten: straightenConnections,
     'align-top': () => alignSelection('top'),

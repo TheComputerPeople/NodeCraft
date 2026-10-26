@@ -16,6 +16,7 @@ import { dom, setStatus } from './dom';
 import { postToHost } from './host';
 import { renderMyBlueprint } from './my-blueprint';
 import { renderPalette } from './panels';
+import { pruneBreakpoints } from './breakpoints';
 import { render } from './render';
 import { state } from './state';
 import { applyTransform } from './view';
@@ -245,6 +246,7 @@ export function flushSave(): void {
   if (!state.document || !state.dirty) return;
   clearTimeout(state.saveTimer);
   state.dirty = false;
+  pruneBreakpoints();
   // Store the signature of each project function the graph calls, with the graph.
   syncImportedFunctions(state.document, (type) => state.defByType.get(type));
   postToHost({ type: 'applyDocument', document: state.document });

@@ -1,6 +1,6 @@
 import { PinAddress } from '../core/editing';
 import type { PaletteEntry } from './document';
-import { CompileReport, Graph, GraphDocument, GraphNode, LanguageOption, NodeDefinition, PinDirection, PinKind } from '../core/model';
+import { CompileReport, Graph, GraphBreakpoint, GraphDocument, GraphNode, LanguageOption, NodeDefinition, PinDirection, PinKind } from '../core/model';
 
 export interface Point {
   x: number;
@@ -115,6 +115,8 @@ export interface EditorState {
   variableDrag: { variableId: string; functionId?: string; dispatcherId?: string; startX: number; startY: number; moved: boolean } | null;
   // The view (pan and zoom) last used for each graph, restored when switching back.
   viewByGraph: Map<string, { pan: Point; zoom: number }>;
+  // The file's breakpoints, in every graph (kept by the host, per workspace).
+  breakpoints: GraphBreakpoint[];
 }
 
 export const state: EditorState = {
@@ -149,5 +151,6 @@ export const state: EditorState = {
   selectedVariableId: null,
   selectedDispatcherId: null,
   variableDrag: null,
-  viewByGraph: new Map()
+  viewByGraph: new Map(),
+  breakpoints: []
 };

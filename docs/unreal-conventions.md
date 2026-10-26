@@ -82,7 +82,7 @@ Sources:
 | Undo / redo | Ctrl + Z / Ctrl + Y | Epic |
 | Find in this Blueprint | Ctrl + F | Epic |
 | Find in all Blueprints | Ctrl + Shift + F | Epic |
-| Toggle breakpoint / clear all breakpoints | F9 / Ctrl + Shift + F9 (Phase 5) | Epic |
+| Toggle breakpoint / clear all breakpoints | F9 / Ctrl + Shift + F9 | Epic |
 
 On macOS, Ctrl is Cmd and Alt is Option.
 

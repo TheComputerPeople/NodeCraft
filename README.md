@@ -227,4 +227,5 @@ The editor follows Unreal Engine 5's Blueprint editor. [docs/unreal-conventions.
 | Undo / redo | Ctrl + Z / Ctrl + Y |
 | Find in this file | Ctrl + F |
 | Find in all graph files | Ctrl + Shift + F |
+| Toggle a breakpoint on the selected nodes / remove all of the file's breakpoints | F9 / Ctrl + Shift + F9 (also Add, Remove, Disable and Enable Breakpoint in the node menu) |
 | Cancel the current gesture or close a menu | Escape |

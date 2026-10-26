@@ -3,6 +3,7 @@ import { GraphConnection, GraphNode, PinDefinition } from '../core/model';
 import { formatType } from '../core/types';
 import { SEQUENCE } from '../core/resolve';
 import { addPin, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
+import { breakpointOn } from './breakpoints';
 import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
 import { functionProblem, lookupDefinition, markDirty, pinDef } from './document';
@@ -43,6 +44,15 @@ function renderNode(node: GraphNode): HTMLElement {
   el.style.setProperty('--node-color', headerColor(def));
   // Unreal shows a node's description as a tooltip rather than on the node.
   if (def.description) el.title = def.description;
+
+  // A breakpoint is a red dot on the node's corner, hollow when disabled, as in Unreal.
+  const breakpoint = breakpointOn(node.id);
+  if (breakpoint) {
+    const marker = document.createElement('span');
+    marker.className = 'node-breakpoint' + (breakpoint.enabled ? '' : ' disabled');
+    marker.title = breakpoint.enabled ? 'Breakpoint' : 'Breakpoint (disabled)';
+    el.appendChild(marker);
+  }
 
   // Unreal-style badge for compiler errors and warnings on this node, and for a project function
   // whose code changed or is gone (shown at once, without compiling).
