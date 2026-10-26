@@ -14,12 +14,14 @@ import { repoRoot } from '../unit/helpers';
 
 describe('published conformance suite', () => {
   for (const pack of builtinLanguagePacks().all()) {
-    test(`${pack.displayName} passes every fixture`, async (t) => {
+    // Every fixture passes, except those needing what the language lacks (Rust: inheritance).
+    test(`${pack.displayName} passes every fixture it can express`, async (t) => {
       const report = await runConformance(pack, { fixtures: repoFixtures() });
       if (report.skipped === report.results.length) return t.skip(report.results[0]?.message ?? 'no toolchain');
       assert.equal(report.failed, 0, formatReport(report));
-      assert.equal(report.notApplicable, 0, formatReport(report));
-      assert.equal(report.passed, report.results.length, formatReport(report));
+      assert.equal(report.skipped, 0, formatReport(report));
+      for (const result of report.results.filter((r) => r.status === 'not-applicable')) assert.match(result.message ?? '', /has no (inheritance|interfaces)/, formatReport(report));
+      assert.deepEqual(report.results.filter((r) => r.status === 'not-applicable').map((r) => r.fixture), pack.capabilities.inheritance ? [] : ['programs/arena']);
     });
   }
 

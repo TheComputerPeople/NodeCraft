@@ -92,6 +92,13 @@ An IR construct without a template is reported as `unsupported` on the node that
 - **Placement:** the `mod` declaration lives in a fenced, extension-managed block in the parent module, added once with consent (`src/vgraph/mod.rs` is fully owned when output goes there).
 - **Symbol import:** a scanner for `pub fn` items marked `/// @blueprint`.
 - **Debugging:** `cppvsdbg` (C/C++ extension) for MSVC builds on Windows, CodeLLDB (`lldb`) elsewhere.
+- **As built** (`src/core/languages/rust.ts`, `rust-runtime.ts`):
+  - **Objects:** objects are `Rc<Self>`, with a weak reference to themselves for Self, bound events and latent actions. Every member and stored output is a `RefCell`, read and written through `vgraph::get`/`vgraph::set`, so no borrow outlives a call. That lets an object be called back while one of its methods runs, which a `RefCell` around the whole object would turn into a panic.
+  - **Containers and values:** sets and maps are the runtime's own (`vgraph::Set`, an insertion-ordered `vgraph::Map`), needing only `PartialEq`/`PartialOrd` because `f64` has neither `Ord` nor `Hash`. Untyped values are `vgraph::Value`.
+  - **Runtime:** a crate has the support module once (`vgraph_runtime`), and generated modules refer to each other as `crate::<module>`. Rust's standard library has no random numbers or regular expressions, so the runtime has an xorshift generator and the plain-number checks String To Float and String To Int need.
+  - **Run and tests:** Run builds a scaffold Cargo project with `cargo run`. Run Tests uses its `--test` mode, as C++ does, rather than `cargo test`, so tests report the same way in every compiled language.
+  - **Interfaces:** traits are deferred, so the pack says it has no interfaces. Casting an object to a trait at runtime needs more machinery than this phase gives it.
+  - **Conformance:** every fixture passes except the arena (inheritance), which is not applicable. The duel program (the arena without inheritance, in `test/fixtures/programs`) covers objects of other classes, events bound across objects, structs, enums and several outputs in Rust and in every other language.
 
 ## Output plans and consented hooks
 

@@ -33,8 +33,15 @@ describe('layout', () => {
       return undefined;
     }
     editor = await EditorPage.withSample(browser);
-    await editor.page.setViewportSize({ width, height });
+    await resize(editor, width, height);
     return editor;
+  }
+
+  // A new size, once the page has applied it (the panels follow the resize event).
+  async function resize(e: EditorPage, width: number, height: number): Promise<void> {
+    await e.page.setViewportSize({ width, height });
+    await e.page.waitForFunction((w) => window.innerWidth === w, width);
+    await e.page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   }
 
   const collapsed = (e: EditorPage, panel: 'left' | 'details') => e.page.evaluate((p) => document.getElementById('app')!.classList.contains(`${p}-collapsed`), panel);
@@ -80,7 +87,7 @@ describe('layout', () => {
     await e.page.click('#inspector .panel-strip');
     assert.equal(await collapsed(e, 'details'), false, 'the user opened it');
     assert.equal(await e.page.isVisible('#inspector-content'), true);
-    await e.page.setViewportSize({ width: 680, height: 600 });
+    await resize(e, 680, 600);
     assert.equal(await collapsed(e, 'details'), false, "the user's choice outlasts a resize");
     await e.page.click('#inspector .panel-toggle');
     assert.equal(await collapsed(e, 'details'), true);

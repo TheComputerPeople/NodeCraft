@@ -72,13 +72,46 @@ const CPP: Record<string, string> = {
   'core:map.values': 'std::vector<typename std::decay_t<decltype(target)>::mapped_type> values;\nfor (const auto& entry : target) values.push_back(entry.second);\nreturn values;'
 };
 
+// The Rust snippets, by node type: the container comes by mutable reference.
+const RUST_RANGE = 'if index < 0 || index >= target.len() as i64 { panic!("Index out of range"); }';
+const RUST: Record<string, string> = {
+  'core:array.add': 'target.push(item);\nreturn target.len() as i64 - 1;',
+  'core:array.add-unique': 'if target.contains(&item) { return -1; }\ntarget.push(item);\nreturn target.len() as i64 - 1;',
+  'core:array.insert': 'if index < 0 || index > target.len() as i64 { panic!("Index out of range"); }\ntarget.insert(index as usize, item);',
+  'core:array.remove-index': `${RUST_RANGE}\ntarget.remove(index as usize);`,
+  'core:array.remove-item': 'let before = target.len();\ntarget.retain(|x| x != &item);\nreturn target.len() != before;',
+  'core:array.set': `${RUST_RANGE}\ntarget[index as usize] = item;`,
+  'core:array.clear': 'target.clear();',
+  'core:array.get': `${RUST_RANGE}\nreturn target[index as usize].clone();`,
+  'core:array.length': 'return target.len() as i64;',
+  'core:array.last-index': 'return target.len() as i64 - 1;',
+  'core:array.find': 'return target.iter().position(|x| x == &item).map(|i| i as i64).unwrap_or(-1);',
+  'core:array.contains': 'return target.contains(&item);',
+  'core:array.is-valid-index': 'return index >= 0 && index < target.len() as i64;',
+  'core:array.is-empty': 'return target.is_empty();',
+  'core:set.add': 'target.insert(item);',
+  'core:set.remove': 'return target.remove(&item);',
+  'core:set.clear': 'target.clear();',
+  'core:set.contains': 'return target.contains(&item);',
+  'core:set.length': 'return target.len() as i64;',
+  'core:set.to-array': 'return target.sorted();',
+  'core:map.add': 'target.insert(key, value);',
+  'core:map.remove': 'return target.remove(&key);',
+  'core:map.clear': 'target.clear();',
+  'core:map.find': 'return target.get(&key).unwrap_or_else(|| panic!("Key not found"));',
+  'core:map.contains': 'return target.contains(&key);',
+  'core:map.length': 'return target.len() as i64;',
+  'core:map.keys': 'return target.keys();',
+  'core:map.values': 'return target.values();'
+};
+
 // An Unreal container function as a code node: impure ones have exec pins.
 function fn(type: string, displayName: string, category: string, inputs: PinDefinition[], result: TypeRef | undefined, code: Snippets, description: string, options: { impure?: boolean; keywords?: string[] } = {}): NodeDefinition {
   return {
     type, version: 1, displayName, category, description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [pin('returnValue', 'Return Value', 'output', result)] : [])],
-    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}) } },
+    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {})
   };
 }

@@ -1,0 +1,428 @@
+{
+  "schemaVersion": 3,
+  "language": "typescript",
+  "name": "Fighter",
+  "kind": "class",
+  "variables": [
+    {
+      "id": "name",
+      "name": "Name",
+      "type": {
+        "id": "string"
+      },
+      "defaultValue": "Fighter"
+    },
+    {
+      "id": "stats",
+      "name": "Stats",
+      "type": {
+        "id": "struct:Stats"
+      },
+      "defaultValue": {}
+    }
+  ],
+  "dispatchers": [
+    {
+      "id": "defeated",
+      "name": "Defeated",
+      "inputs": [
+        {
+          "id": "name",
+          "name": "Name",
+          "kind": "data",
+          "type": {
+            "id": "string"
+          }
+        }
+      ]
+    }
+  ],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [],
+      "connections": [],
+      "comments": []
+    },
+    {
+      "id": "TakeHit",
+      "name": "Take Hit",
+      "kind": "function",
+      "signature": {
+        "inputs": [
+          {
+            "id": "damage",
+            "name": "Damage",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "remaining",
+            "name": "Remaining",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          },
+          {
+            "id": "defeated",
+            "name": "Defeated",
+            "kind": "data",
+            "type": {
+              "id": "bool"
+            }
+          }
+        ]
+      },
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "TakeHit"
+          }
+        },
+        {
+          "id": "stats",
+          "type": "core:variable.get",
+          "position": {
+            "x": 0,
+            "y": 200
+          },
+          "properties": {
+            "variable": "stats"
+          }
+        },
+        {
+          "id": "before",
+          "type": "struct:Stats.break",
+          "position": {
+            "x": 200,
+            "y": 160
+          },
+          "properties": {}
+        },
+        {
+          "id": "sub",
+          "type": "core:math.subtract",
+          "position": {
+            "x": 420,
+            "y": 160
+          },
+          "properties": {}
+        },
+        {
+          "id": "lower",
+          "type": "struct:Stats.set-members",
+          "position": {
+            "x": 620,
+            "y": 0
+          },
+          "properties": {
+            "members": [
+              "health"
+            ]
+          }
+        },
+        {
+          "id": "after",
+          "type": "struct:Stats.break",
+          "position": {
+            "x": 820,
+            "y": 220
+          },
+          "properties": {}
+        },
+        {
+          "id": "stats2",
+          "type": "core:variable.get",
+          "position": {
+            "x": 620,
+            "y": 260
+          },
+          "properties": {
+            "variable": "stats"
+          }
+        },
+        {
+          "id": "down",
+          "type": "core:math.less-equal",
+          "position": {
+            "x": 1040,
+            "y": 140
+          },
+          "properties": {
+            "pin:b": 0
+          }
+        },
+        {
+          "id": "branch",
+          "type": "core:flow.branch",
+          "position": {
+            "x": 1240,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "name",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1240,
+            "y": 200
+          },
+          "properties": {
+            "variable": "name"
+          }
+        },
+        {
+          "id": "defeated",
+          "type": "core:dispatcher.call",
+          "position": {
+            "x": 1460,
+            "y": -80
+          },
+          "properties": {
+            "dispatcher": "defeated"
+          }
+        },
+        {
+          "id": "lost",
+          "type": "core:function.return",
+          "position": {
+            "x": 1700,
+            "y": -80
+          },
+          "properties": {
+            "graph": "TakeHit",
+            "pin:defeated": true
+          }
+        },
+        {
+          "id": "standing",
+          "type": "core:function.return",
+          "position": {
+            "x": 1700,
+            "y": 120
+          },
+          "properties": {
+            "graph": "TakeHit",
+            "pin:defeated": false
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "lower",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "stats",
+          "fromPin": "value",
+          "toNode": "before",
+          "toPin": "struct"
+        },
+        {
+          "id": "w3",
+          "fromNode": "before",
+          "fromPin": "health",
+          "toNode": "sub",
+          "toPin": "a"
+        },
+        {
+          "id": "w4",
+          "fromNode": "entry",
+          "fromPin": "damage",
+          "toNode": "sub",
+          "toPin": "b"
+        },
+        {
+          "id": "w5",
+          "fromNode": "stats",
+          "fromPin": "value",
+          "toNode": "lower",
+          "toPin": "struct"
+        },
+        {
+          "id": "w6",
+          "fromNode": "sub",
+          "fromPin": "returnValue",
+          "toNode": "lower",
+          "toPin": "health"
+        },
+        {
+          "id": "w7",
+          "fromNode": "lower",
+          "fromPin": "execOut",
+          "toNode": "branch",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w8",
+          "fromNode": "stats2",
+          "fromPin": "value",
+          "toNode": "after",
+          "toPin": "struct"
+        },
+        {
+          "id": "w9",
+          "fromNode": "after",
+          "fromPin": "health",
+          "toNode": "down",
+          "toPin": "a"
+        },
+        {
+          "id": "w10",
+          "fromNode": "down",
+          "fromPin": "returnValue",
+          "toNode": "branch",
+          "toPin": "condition"
+        },
+        {
+          "id": "w11",
+          "fromNode": "branch",
+          "fromPin": "true",
+          "toNode": "defeated",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "name",
+          "fromPin": "value",
+          "toNode": "defeated",
+          "toPin": "name"
+        },
+        {
+          "id": "w13",
+          "fromNode": "defeated",
+          "fromPin": "execOut",
+          "toNode": "lost",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w14",
+          "fromNode": "branch",
+          "fromPin": "false",
+          "toNode": "standing",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w15",
+          "fromNode": "after",
+          "fromPin": "health",
+          "toNode": "lost",
+          "toPin": "remaining"
+        },
+        {
+          "id": "w16",
+          "fromNode": "after",
+          "fromPin": "health",
+          "toNode": "standing",
+          "toPin": "remaining"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "AttackPower",
+      "name": "Attack Power",
+      "kind": "function",
+      "signature": {
+        "pure": true,
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "power",
+            "name": "Power",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ]
+      },
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "AttackPower"
+          }
+        },
+        {
+          "id": "stats",
+          "type": "core:variable.get",
+          "position": {
+            "x": 0,
+            "y": 160
+          },
+          "properties": {
+            "variable": "stats"
+          }
+        },
+        {
+          "id": "fields",
+          "type": "struct:Stats.break",
+          "position": {
+            "x": 220,
+            "y": 120
+          },
+          "properties": {}
+        },
+        {
+          "id": "ret",
+          "type": "core:function.return",
+          "position": {
+            "x": 460,
+            "y": 0
+          },
+          "properties": {
+            "graph": "AttackPower"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "ret",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "stats",
+          "fromPin": "value",
+          "toNode": "fields",
+          "toPin": "struct"
+        },
+        {
+          "id": "w3",
+          "fromNode": "fields",
+          "fromPin": "attack",
+          "toNode": "ret",
+          "toPin": "power"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

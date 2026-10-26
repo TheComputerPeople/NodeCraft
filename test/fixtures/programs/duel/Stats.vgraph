@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 3,
+  "language": "typescript",
+  "name": "Stats",
+  "kind": "structure",
+  "graphs": [],
+  "variables": [
+    {
+      "id": "health",
+      "name": "Health",
+      "type": {
+        "id": "int"
+      },
+      "defaultValue": 10
+    },
+    {
+      "id": "attack",
+      "name": "Attack",
+      "type": {
+        "id": "int"
+      },
+      "defaultValue": 3
+    },
+    {
+      "id": "team",
+      "name": "Team",
+      "type": {
+        "id": "enum:Team"
+      },
+      "defaultValue": "red"
+    }
+  ]
+}

@@ -24,6 +24,9 @@ const vgraphs = (dir) => fs.readdirSync(dir).filter((f) => f.endsWith('.vgraph')
 copy(path.join(root, 'sample/demo.vgraph'), path.join(fixtures, 'graphs/demo.vgraph'));
 for (const f of vgraphs(path.join(root, 'test/fixtures/graphs'))) copy(path.join(root, 'test/fixtures/graphs', f), path.join(fixtures, 'graphs', f));
 for (const f of vgraphs(path.join(root, 'sample/arena'))) copy(path.join(root, 'sample/arena', f), path.join(fixtures, 'programs/arena', f));
+for (const program of fs.readdirSync(path.join(root, 'test/fixtures/programs'))) {
+  for (const f of vgraphs(path.join(root, 'test/fixtures/programs', program))) copy(path.join(root, 'test/fixtures/programs', program, f), path.join(fixtures, 'programs', program, f));
+}
 for (const f of vgraphs(path.join(root, 'test/fixtures/tests'))) copy(path.join(root, 'test/fixtures/tests', f), path.join(fixtures, 'tests', f));
 copy(path.join(root, 'sample/visual-nodes/Math/Double.node.json'), path.join(fixtures, 'nodes/Double.node.json'));
 copy(path.join(root, 'test/fixtures/nodes/Fail.node.json'), path.join(fixtures, 'nodes/Fail.node.json'));

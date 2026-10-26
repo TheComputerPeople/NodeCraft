@@ -1,0 +1,790 @@
+{
+  "schemaVersion": 3,
+  "language": "typescript",
+  "name": "Duel",
+  "kind": "class",
+  "variables": [
+    {
+      "id": "hero",
+      "name": "Hero",
+      "type": {
+        "id": "object:Fighter"
+      }
+    },
+    {
+      "id": "villain",
+      "name": "Villain",
+      "type": {
+        "id": "object:Fighter"
+      }
+    }
+  ],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "makeKnight",
+          "type": "object:Fighter.construct",
+          "position": {
+            "x": 180,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "setHero",
+          "type": "core:variable.set",
+          "position": {
+            "x": 420,
+            "y": 0
+          },
+          "properties": {
+            "variable": "hero"
+          }
+        },
+        {
+          "id": "nameHero",
+          "type": "core:object.set",
+          "position": {
+            "x": 660,
+            "y": 0
+          },
+          "properties": {
+            "class": "object:Fighter",
+            "variable": "name",
+            "pin:value": "Knight"
+          }
+        },
+        {
+          "id": "makeGoblin",
+          "type": "object:Fighter.construct",
+          "position": {
+            "x": 920,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "setVillain",
+          "type": "core:variable.set",
+          "position": {
+            "x": 1160,
+            "y": 0
+          },
+          "properties": {
+            "variable": "villain"
+          }
+        },
+        {
+          "id": "nameVillain",
+          "type": "core:object.set",
+          "position": {
+            "x": 1400,
+            "y": 0
+          },
+          "properties": {
+            "class": "object:Fighter",
+            "variable": "name",
+            "pin:value": "Goblin"
+          }
+        },
+        {
+          "id": "bind",
+          "type": "core:object.dispatcher",
+          "position": {
+            "x": 1660,
+            "y": 0
+          },
+          "properties": {
+            "class": "object:Fighter",
+            "dispatcher": "defeated",
+            "action": "bind"
+          }
+        },
+        {
+          "id": "loop",
+          "type": "core:flow.for-loop-with-break",
+          "position": {
+            "x": 1920,
+            "y": 0
+          },
+          "properties": {
+            "pin:firstIndex": 1,
+            "pin:lastIndex": 3
+          }
+        },
+        {
+          "id": "announce",
+          "type": "core:macro.instance",
+          "position": {
+            "x": 2200,
+            "y": 220
+          },
+          "properties": {
+            "graph": "Announce"
+          }
+        },
+        {
+          "id": "hit",
+          "type": "core:object.call",
+          "position": {
+            "x": 2440,
+            "y": 220
+          },
+          "properties": {
+            "class": "object:Fighter",
+            "function": "TakeHit"
+          }
+        },
+        {
+          "id": "power",
+          "type": "core:object.call",
+          "position": {
+            "x": 2280,
+            "y": 480
+          },
+          "properties": {
+            "class": "object:Fighter",
+            "function": "AttackPower"
+          }
+        },
+        {
+          "id": "printRemaining",
+          "type": "core:console.print",
+          "position": {
+            "x": 2700,
+            "y": 220
+          },
+          "properties": {}
+        },
+        {
+          "id": "wasDefeated",
+          "type": "core:flow.branch",
+          "position": {
+            "x": 2940,
+            "y": 220
+          },
+          "properties": {}
+        },
+        {
+          "id": "victory",
+          "type": "core:console.print",
+          "position": {
+            "x": 2200,
+            "y": -40
+          },
+          "properties": {
+            "pin:value": "victory"
+          }
+        },
+        {
+          "id": "villainStats",
+          "type": "core:object.get",
+          "position": {
+            "x": 2380,
+            "y": -320
+          },
+          "properties": {
+            "class": "object:Fighter",
+            "variable": "stats"
+          }
+        },
+        {
+          "id": "statFields",
+          "type": "struct:Stats.break",
+          "position": {
+            "x": 2600,
+            "y": -320
+          },
+          "properties": {}
+        },
+        {
+          "id": "printTeam",
+          "type": "core:console.print",
+          "position": {
+            "x": 2440,
+            "y": -40
+          },
+          "properties": {}
+        },
+        {
+          "id": "teamSwitch",
+          "type": "enum:Team.switch",
+          "position": {
+            "x": 2700,
+            "y": -40
+          },
+          "properties": {}
+        },
+        {
+          "id": "red",
+          "type": "core:console.print",
+          "position": {
+            "x": 2960,
+            "y": -120
+          },
+          "properties": {
+            "pin:value": "red team"
+          }
+        },
+        {
+          "id": "blue",
+          "type": "core:console.print",
+          "position": {
+            "x": 2960,
+            "y": 40
+          },
+          "properties": {
+            "pin:value": "blue team"
+          }
+        },
+        {
+          "id": "wait",
+          "type": "core:latent.delay",
+          "position": {
+            "x": 3200,
+            "y": -40
+          },
+          "properties": {
+            "pin:duration": 0.1
+          }
+        },
+        {
+          "id": "end",
+          "type": "core:console.print",
+          "position": {
+            "x": 3440,
+            "y": -40
+          },
+          "properties": {
+            "pin:value": "the end"
+          }
+        },
+        {
+          "id": "onDefeated",
+          "type": "core:event.custom",
+          "position": {
+            "x": 1280,
+            "y": 420
+          },
+          "properties": {
+            "name": "On Defeated",
+            "inputs": [
+              {
+                "id": "name",
+                "name": "Name",
+                "kind": "data",
+                "type": {
+                  "id": "string"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "sayDefeated",
+          "type": "core:string.append",
+          "position": {
+            "x": 1520,
+            "y": 480
+          },
+          "properties": {
+            "pin:b": " is defeated"
+          }
+        },
+        {
+          "id": "printDefeated",
+          "type": "core:console.print",
+          "position": {
+            "x": 1760,
+            "y": 420
+          },
+          "properties": {}
+        },
+        {
+          "id": "hero1",
+          "type": "core:variable.get",
+          "position": {
+            "x": 560,
+            "y": 140
+          },
+          "properties": {
+            "variable": "hero"
+          }
+        },
+        {
+          "id": "hero2",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2160,
+            "y": 520
+          },
+          "properties": {
+            "variable": "hero"
+          }
+        },
+        {
+          "id": "villain1",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1300,
+            "y": 140
+          },
+          "properties": {
+            "variable": "villain"
+          }
+        },
+        {
+          "id": "villain2",
+          "type": "core:variable.get",
+          "position": {
+            "x": 1560,
+            "y": 180
+          },
+          "properties": {
+            "variable": "villain"
+          }
+        },
+        {
+          "id": "villain3",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2340,
+            "y": 400
+          },
+          "properties": {
+            "variable": "villain"
+          }
+        },
+        {
+          "id": "villain4",
+          "type": "core:variable.get",
+          "position": {
+            "x": 2240,
+            "y": -320
+          },
+          "properties": {
+            "variable": "villain"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "makeKnight",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "makeKnight",
+          "fromPin": "execOut",
+          "toNode": "setHero",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w3",
+          "fromNode": "makeKnight",
+          "fromPin": "object",
+          "toNode": "setHero",
+          "toPin": "value"
+        },
+        {
+          "id": "w4",
+          "fromNode": "setHero",
+          "fromPin": "execOut",
+          "toNode": "nameHero",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w5",
+          "fromNode": "hero1",
+          "fromPin": "value",
+          "toNode": "nameHero",
+          "toPin": "target"
+        },
+        {
+          "id": "w6",
+          "fromNode": "nameHero",
+          "fromPin": "execOut",
+          "toNode": "makeGoblin",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w7",
+          "fromNode": "makeGoblin",
+          "fromPin": "execOut",
+          "toNode": "setVillain",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w8",
+          "fromNode": "makeGoblin",
+          "fromPin": "object",
+          "toNode": "setVillain",
+          "toPin": "value"
+        },
+        {
+          "id": "w9",
+          "fromNode": "setVillain",
+          "fromPin": "execOut",
+          "toNode": "nameVillain",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "villain1",
+          "fromPin": "value",
+          "toNode": "nameVillain",
+          "toPin": "target"
+        },
+        {
+          "id": "w11",
+          "fromNode": "nameVillain",
+          "fromPin": "execOut",
+          "toNode": "bind",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "villain2",
+          "fromPin": "value",
+          "toNode": "bind",
+          "toPin": "target"
+        },
+        {
+          "id": "w13",
+          "fromNode": "onDefeated",
+          "fromPin": "delegate",
+          "toNode": "bind",
+          "toPin": "event"
+        },
+        {
+          "id": "w14",
+          "fromNode": "bind",
+          "fromPin": "execOut",
+          "toNode": "loop",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w15",
+          "fromNode": "loop",
+          "fromPin": "loopBody",
+          "toNode": "announce",
+          "toPin": "in"
+        },
+        {
+          "id": "w16",
+          "fromNode": "loop",
+          "fromPin": "index",
+          "toNode": "announce",
+          "toPin": "round"
+        },
+        {
+          "id": "w17",
+          "fromNode": "announce",
+          "fromPin": "out",
+          "toNode": "hit",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w18",
+          "fromNode": "villain3",
+          "fromPin": "value",
+          "toNode": "hit",
+          "toPin": "target"
+        },
+        {
+          "id": "w19",
+          "fromNode": "hero2",
+          "fromPin": "value",
+          "toNode": "power",
+          "toPin": "target"
+        },
+        {
+          "id": "w20",
+          "fromNode": "power",
+          "fromPin": "power",
+          "toNode": "hit",
+          "toPin": "damage"
+        },
+        {
+          "id": "w21",
+          "fromNode": "hit",
+          "fromPin": "execOut",
+          "toNode": "printRemaining",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w22",
+          "fromNode": "hit",
+          "fromPin": "remaining",
+          "toNode": "printRemaining",
+          "toPin": "value"
+        },
+        {
+          "id": "w23",
+          "fromNode": "printRemaining",
+          "fromPin": "execOut",
+          "toNode": "wasDefeated",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w24",
+          "fromNode": "hit",
+          "fromPin": "defeated",
+          "toNode": "wasDefeated",
+          "toPin": "condition"
+        },
+        {
+          "id": "w25",
+          "fromNode": "wasDefeated",
+          "fromPin": "true",
+          "toNode": "loop",
+          "toPin": "break"
+        },
+        {
+          "id": "w26",
+          "fromNode": "loop",
+          "fromPin": "completed",
+          "toNode": "victory",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w27",
+          "fromNode": "victory",
+          "fromPin": "execOut",
+          "toNode": "printTeam",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w28",
+          "fromNode": "villain4",
+          "fromPin": "value",
+          "toNode": "villainStats",
+          "toPin": "target"
+        },
+        {
+          "id": "w29",
+          "fromNode": "villainStats",
+          "fromPin": "value",
+          "toNode": "statFields",
+          "toPin": "struct"
+        },
+        {
+          "id": "w30",
+          "fromNode": "statFields",
+          "fromPin": "team",
+          "toNode": "printTeam",
+          "toPin": "value"
+        },
+        {
+          "id": "w31",
+          "fromNode": "printTeam",
+          "fromPin": "execOut",
+          "toNode": "teamSwitch",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w32",
+          "fromNode": "statFields",
+          "fromPin": "team",
+          "toNode": "teamSwitch",
+          "toPin": "selection"
+        },
+        {
+          "id": "w33",
+          "fromNode": "teamSwitch",
+          "fromPin": "red",
+          "toNode": "red",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w34",
+          "fromNode": "teamSwitch",
+          "fromPin": "blue",
+          "toNode": "blue",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w35",
+          "fromNode": "red",
+          "fromPin": "execOut",
+          "toNode": "wait",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w36",
+          "fromNode": "blue",
+          "fromPin": "execOut",
+          "toNode": "wait",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w37",
+          "fromNode": "wait",
+          "fromPin": "completed",
+          "toNode": "end",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w38",
+          "fromNode": "onDefeated",
+          "fromPin": "execOut",
+          "toNode": "printDefeated",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w39",
+          "fromNode": "onDefeated",
+          "fromPin": "name",
+          "toNode": "sayDefeated",
+          "toPin": "a"
+        },
+        {
+          "id": "w40",
+          "fromNode": "sayDefeated",
+          "fromPin": "returnValue",
+          "toNode": "printDefeated",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "Announce",
+      "name": "Announce",
+      "kind": "macro",
+      "signature": {
+        "inputs": [
+          {
+            "id": "in",
+            "name": "In",
+            "kind": "exec"
+          },
+          {
+            "id": "round",
+            "name": "Round",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "kind": "exec"
+          }
+        ]
+      },
+      "nodes": [
+        {
+          "id": "inputs",
+          "type": "core:macro.inputs",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Announce"
+          }
+        },
+        {
+          "id": "label",
+          "type": "core:console.print",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "round"
+          }
+        },
+        {
+          "id": "number",
+          "type": "core:console.print",
+          "position": {
+            "x": 500,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "outputs",
+          "type": "core:macro.outputs",
+          "position": {
+            "x": 760,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Announce"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "inputs",
+          "fromPin": "in",
+          "toNode": "label",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "label",
+          "fromPin": "execOut",
+          "toNode": "number",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w3",
+          "fromNode": "inputs",
+          "fromPin": "round",
+          "toNode": "number",
+          "toPin": "value"
+        },
+        {
+          "id": "w4",
+          "fromNode": "number",
+          "fromPin": "execOut",
+          "toNode": "outputs",
+          "toPin": "out"
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "The arena without inheritance: Game constructs two Fighters (Phase 6, for languages without inheritance).",
+    "expectedOutput": [
+      "round",
+      "1",
+      "7",
+      "round",
+      "2",
+      "4",
+      "round",
+      "3",
+      "1",
+      "victory",
+      "Red",
+      "red team",
+      "the end"
+    ]
+  }
+}

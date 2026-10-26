@@ -10,7 +10,7 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 - **Your code as nodes**, the equivalent of Unreal's `BlueprintCallable`: functions marked `@blueprint` in the project's TypeScript, JavaScript, Python, C# or C++ code (C++: in headers) appear in the palette, generated code imports them, and nodes notice when the code changes (see below).
 - Built-in Flow, Debug and Variable nodes (Start, Branch, Sequence, Print, Get and Set, To String, End), and Unreal's **standard library** of math, string, utility and file nodes, with the same meaning in every language.
 - Workspace `*.node.json` user node libraries, with a code snippet per language. Example: `Double`.
-- **Code generation**: each graph compiles to readable source code in its target language, written next to the graph and meant to be committed. TypeScript, JavaScript, Python, C# and C++ are supported.
+- **Code generation**: each graph compiles to readable source code in its target language, written next to the graph and meant to be committed. TypeScript, JavaScript, Python, C#, C++ and Rust are supported (Rust without inheritance or interfaces).
 - Unreal-style **Compile** (F7) and **Compiler Results**, with error and warning badges on nodes and entries in the Problems panel.
 - **Run** (the generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter). With breakpoints set (F9), Simulate pauses at them: step node by node, see the call stack in graph terms, hover a pin to see its value, or **Watch this value** from the pin's menu.
 - **Tests**: Test Case events with Assert True and Assert Equal nodes. **Run Tests** runs them with the language's test tool (from a generated test file: `node --test`, `unittest`), **Simulate Tests** in the editor.
@@ -39,7 +39,7 @@ The TypeScript configuration includes the DOM library definitions because VS Cod
 | `npm run check` | Type-checks the extension, the webview and the tests without emitting output |
 | `npm test` | Runs every test: unit tests, then browser tests of the webview |
 | `npm run test:unit` / `npm run test:webview` | Run one group |
-| `npm run test:conformance` | Runs every fixture graph in Simulate and as generated TypeScript, JavaScript, Python, C# and C++, and checks they print the same output (part of `npm test`; needs Node.js 22.18+, Python 3, the .NET SDK and g++ or clang++; missing tools skip their tests) |
+| `npm run test:conformance` | Runs every fixture graph in Simulate and as generated TypeScript, JavaScript, Python, C#, C++ and Rust, and checks they print the same output (part of `npm test`; needs Node.js 22.18+, Python 3, the .NET SDK, g++ or clang++, and Cargo; missing tools skip their tests) |
 | `npm run test:integration` | Launches VS Code with the extension and runs smoke tests inside it (not part of `npm test`) |
 | `npm run test:integration:debuggers` | The same, with your installed VS Code extensions loaded, so debugging generated Python (Python Debugger extension) and C# (C# extension) is tested too |
 | `npm run build:sdk` / `npm run test:sdk` | Builds the language pack SDK (`packages/pack-sdk`, with the conformance suite and its `blueprint-conformance` command) / and runs its command once |

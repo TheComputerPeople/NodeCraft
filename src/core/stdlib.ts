@@ -32,11 +32,12 @@ interface Options {
 function node(type: string, displayName: string, category: string, inputs: PinDefinition[], result: PinDefinition | undefined, code: Snippets, options: Options): NodeDefinition {
   const { typescript, ...rest } = code;
   const cpp = CPP[type];
+  const rust = RUST[type];
   return {
     type, version: 1, displayName, category, description: options.description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [result] : [])],
-    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}) } },
+    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {}),
     ...(options.compact ? { compact: true } : {})
   };
@@ -106,6 +107,49 @@ const CPP: Record<string, string> = {
   'core:utilities.select': 'return pickA ? a : b;',
   'core:file.load-to-string': 'std::ifstream file(filename, std::ios::binary);\nif (!file) throw std::runtime_error("Can\'t read " + filename);\nstd::stringstream contents;\ncontents << file.rdbuf();\nreturn contents.str();',
   'core:file.save-string': 'std::ofstream file(filename, std::ios::binary);\nif (!file) throw std::runtime_error("Can\'t write " + filename);\nfile << text;'
+};
+
+// The Rust snippets, by node type: errors are panics, which stop the run (or fail the test).
+const RUST_DIVIDE_BY_ZERO = 'if b == 0.0 { panic!("Divide by zero"); }';
+const RUST: Record<string, string> = {
+  'core:math.subtract': 'return a - b;',
+  'core:math.multiply': 'return a * b;',
+  'core:math.divide': `${RUST_DIVIDE_BY_ZERO}\nreturn a / b;`,
+  'core:math.modulo': `${RUST_DIVIDE_BY_ZERO}\nreturn a % b;`,
+  'core:math.less': 'return a < b;',
+  'core:math.less-equal': 'return a <= b;',
+  'core:math.greater': 'return a > b;',
+  'core:math.greater-equal': 'return a >= b;',
+  'core:math.equal': 'return a == b;',
+  'core:math.not-equal': 'return a != b;',
+  'core:math.and': 'return a && b;',
+  'core:math.or': 'return a || b;',
+  'core:math.not': 'return !a;',
+  'core:math.min': 'return if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) };',
+  'core:math.max': 'return if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) };',
+  'core:math.clamp': 'return value.max(minimum).min(maximum);',
+  'core:math.abs': 'return value.abs();',
+  'core:math.round': 'return (value + 0.5).floor() as i64;',
+  'core:math.floor': 'return value.floor() as i64;',
+  'core:math.ceil': 'return value.ceil() as i64;',
+  'core:math.sqrt': 'return value.sqrt();',
+  'core:math.power': 'return base.powf(exponent);',
+  'core:math.random-float-in-range': 'return minimum + vgraph::random() * (maximum - minimum);',
+  'core:math.random-integer-in-range': 'return minimum + (vgraph::random() * ((maximum - minimum + 1) as f64)).floor() as i64;',
+  'core:string.append': 'return a + &b;',
+  'core:string.len': 'return text.chars().count() as i64;',
+  'core:string.contains': 'return text.contains(part.as_str());',
+  'core:string.to-upper': 'return text.to_uppercase();',
+  'core:string.to-lower': 'return text.to_lowercase();',
+  'core:string.trim': 'return text.trim().to_string();',
+  'core:string.replace': 'return if find.is_empty() { text } else { text.replace(find.as_str(), replacement.as_str()) };',
+  'core:string.substring': 'return text.chars().skip(start.max(0) as usize).take(count.max(0) as usize).collect();',
+  'core:string.to-float': 'return vgraph::parse_decimal(&text).unwrap_or(0.0);',
+  'core:string.to-int': 'return vgraph::parse_integer(&text).unwrap_or(0);',
+  'core:utilities.is-valid': 'return value != vgraph::Value::None;',
+  'core:utilities.select': 'return if pickA { a } else { b };',
+  'core:file.load-to-string': 'return std::fs::read_to_string(&filename).unwrap_or_else(|e| panic!("Can\'t read {}: {}", filename, e));',
+  'core:file.save-string': 'std::fs::write(&filename, text).unwrap_or_else(|e| panic!("Can\'t write {}: {}", filename, e));'
 };
 
 export function standardLibraryDefinitions(): NodeDefinition[] {
