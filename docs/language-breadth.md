@@ -68,6 +68,13 @@ An IR construct without a template is reported as `unsupported` on the node that
 - **Files:** `Name.vgraph.h` (the class) and `Name.vgraph.cpp` (its methods), next to the graph; the `.cpp` includes the header by relative path.
 - **Representation:** `object:<Class>` is `std::shared_ptr<Class>` (Construct is `std::make_shared`); `string` is `std::string`; arrays, sets and maps are `std::vector`, `std::unordered_set` and `std::unordered_map`; event dispatchers hold `std::function`s; interfaces are abstract classes with pure virtual functions; Cast To is `std::dynamic_pointer_cast`; errors are exceptions; Delay uses a latent queue run after Start, as in C# and Python.
 - **Run:** the extension writes a scaffold (a `main` that constructs the class, calls `start`, then `Main`, then the latent queue; or the test methods) and builds it with the first compiler found (`g++`, `clang++`, then MSVC's `cl`) at C++20, or with the runCommands setting.
+- **As built** (`src/core/languages/cpp.ts`, `cpp-runtime.ts`):
+  - **Support code:** each header carries the support code (`vgraph::` and the `vgraph_format`/`vgraph_json` overloads) behind one include guard.
+  - **Types:** values print through overloads chosen by their static types, with `std::any` only for untyped values. Maps are `vgraph::Map` (insertion-ordered) and sets `std::set`. User types are written `::Name`, because a member may share its type's name.
+  - **Snippets:** standard library and container snippets live in a table per file (`CPP` in `stdlib.ts` and `containers.ts`). Container parameters are forwarding references, so a node changes the container it was given. Text is UTF-8, so lengths count code points; To Upper and To Lower change ASCII letters only.
+  - **Compilers:** Run builds with `g++` or `clang++` (MSVC's `cl` isn't supported yet).
+  - **Tests:** a class gets `run_test(name)`, because C++ has no reflection for the scaffold to find test methods by name.
+  - **Conformance:** all 19 fixtures pass.
 - **Placement:** CMake projects get an extension-owned `vgraph.cmake` listing the generated sources and a one-time, consented `include()` plus `target_sources` in `CMakeLists.txt`, through the output plan machinery below; other build systems get a Compiler Results note listing the files to add.
 - **Symbol import:** a scanner for free functions marked `// @blueprint` in headers and sources, with the same marker options as the other languages (category, display name, pure).
 - **Debugging:** the C/C++ extension (`cppdbg` with gdb or lldb; `cppvsdbg` for MSVC builds), launching the scaffold built with debug information.

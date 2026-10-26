@@ -9,7 +9,6 @@ import { formatReport, runConformance } from '../../src/conformance/conformance'
 import { repoFixtures } from './fixtures';
 import { main } from '../../src/conformance/cli';
 import { builtinLanguagePacks } from '../../src/core/languages';
-import { cppPack } from '../../src/core/languages/cpp';
 import { javascriptPack } from '../../src/core/languages/javascript';
 import { repoRoot } from '../unit/helpers';
 
@@ -23,14 +22,6 @@ describe('published conformance suite', () => {
       assert.equal(report.passed, report.results.length, formatReport(report));
     });
   }
-
-  // Not built in yet: its standard library snippets arrive in the next steps.
-  test('C++ passes every fixture it has the nodes for', async (t) => {
-    const report = await runConformance(cppPack, { fixtures: repoFixtures() });
-    if (report.skipped === report.results.length) return t.skip(report.results[0]?.message ?? 'no C++ compiler');
-    assert.equal(report.failed, 0, formatReport(report));
-    assert.ok(report.passed >= 9, formatReport(report));
-  });
 
   test('JavaScript as CommonJS passes too', async () => {
     const report = await runConformance(javascriptPack, { fixtures: repoFixtures(), generate: { moduleFormat: 'commonjs' } });

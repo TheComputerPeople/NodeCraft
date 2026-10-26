@@ -5,8 +5,8 @@
 export const CPP_RUNTIME_GUARD = 'VGRAPH_RUNTIME_1';
 
 export const CPP_RUNTIME_INCLUDES = [
-  '<algorithm>', '<any>', '<charconv>', '<chrono>', '<cmath>', '<cstdint>', '<cstdio>', '<functional>', '<iostream>', '<memory>', '<set>',
-  '<stdexcept>', '<string>', '<thread>', '<tuple>', '<typeinfo>', '<utility>', '<vector>'
+  '<algorithm>', '<any>', '<cctype>', '<charconv>', '<chrono>', '<cmath>', '<cstdint>', '<cstdio>', '<fstream>', '<functional>', '<iostream>',
+  '<memory>', '<random>', '<regex>', '<set>', '<sstream>', '<stdexcept>', '<string>', '<thread>', '<tuple>', '<typeinfo>', '<utility>', '<vector>'
 ];
 
 export const CPP_RUNTIME = String.raw`namespace vgraph {
@@ -34,6 +34,8 @@ template <class T> bool is_valid(const std::shared_ptr<T>& object) {
 // A map that keeps its keys in the order they were added, as every other target's maps do.
 template <class K, class V> class Map {
 public:
+    using key_type = K;
+    using mapped_type = V;
     Map() = default;
     Map(std::initializer_list<std::pair<K, V>> items) {
         for (const auto& item : items) (*this)[item.first] = item.second;

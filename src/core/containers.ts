@@ -35,13 +35,50 @@ interface Snippets {
   csharp: string;
 }
 
+// The C++ snippets, by node type (docs/language-breadth.md, "C++"). The container is passed by
+// reference, so changes reach the variable it came from, as in the other languages.
+const CPP_SIZE = 'static_cast<long long>(target.size())';
+const CPP_RANGE = `if (index < 0 || index >= ${CPP_SIZE}) throw std::out_of_range("Index out of range");`;
+const CPP_FIND = 'auto found = std::find(target.begin(), target.end(), item);';
+const CPP: Record<string, string> = {
+  'core:array.add': `target.push_back(item);\nreturn ${CPP_SIZE} - 1;`,
+  'core:array.add-unique': `if (std::find(target.begin(), target.end(), item) != target.end()) return -1;\ntarget.push_back(item);\nreturn ${CPP_SIZE} - 1;`,
+  'core:array.insert': `if (index < 0 || index > ${CPP_SIZE}) throw std::out_of_range("Index out of range");\ntarget.insert(target.begin() + index, item);`,
+  'core:array.remove-index': `${CPP_RANGE}\ntarget.erase(target.begin() + index);`,
+  'core:array.remove-item': 'auto before = target.size();\nstd::erase(target, item);\nreturn target.size() != before;',
+  'core:array.set': `${CPP_RANGE}\ntarget[index] = item;`,
+  'core:array.clear': 'target.clear();',
+  'core:array.get': `${CPP_RANGE}\nreturn target[index];`,
+  'core:array.length': `return ${CPP_SIZE};`,
+  'core:array.last-index': `return ${CPP_SIZE} - 1;`,
+  'core:array.find': `${CPP_FIND}\nreturn found == target.end() ? -1 : static_cast<long long>(found - target.begin());`,
+  'core:array.contains': `${CPP_FIND}\nreturn found != target.end();`,
+  'core:array.is-valid-index': `return index >= 0 && index < ${CPP_SIZE};`,
+  'core:array.is-empty': 'return target.empty();',
+  'core:set.add': 'target.insert(item);',
+  'core:set.remove': 'return target.erase(item) > 0;',
+  'core:set.clear': 'target.clear();',
+  'core:set.contains': 'return target.count(item) > 0;',
+  'core:set.length': `return ${CPP_SIZE};`,
+  // A std::set is already in ascending order.
+  'core:set.to-array': 'return std::vector(target.begin(), target.end());',
+  'core:map.add': 'target[key] = value;',
+  'core:map.remove': 'return target.erase(key);',
+  'core:map.clear': 'target.clear();',
+  'core:map.find': 'if (!target.contains(key)) throw std::out_of_range("Key not found");\nreturn target.at(key);',
+  'core:map.contains': 'return target.contains(key);',
+  'core:map.length': `return ${CPP_SIZE};`,
+  'core:map.keys': 'std::vector<typename std::decay_t<decltype(target)>::key_type> keys;\nfor (const auto& entry : target) keys.push_back(entry.first);\nreturn keys;',
+  'core:map.values': 'std::vector<typename std::decay_t<decltype(target)>::mapped_type> values;\nfor (const auto& entry : target) values.push_back(entry.second);\nreturn values;'
+};
+
 // An Unreal container function as a code node: impure ones have exec pins.
 function fn(type: string, displayName: string, category: string, inputs: PinDefinition[], result: TypeRef | undefined, code: Snippets, description: string, options: { impure?: boolean; keywords?: string[] } = {}): NodeDefinition {
   return {
     type, version: 1, displayName, category, description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [pin('returnValue', 'Return Value', 'output', result)] : [])],
-    implementation: { kind: 'code', languages: { ...code } },
+    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {})
   };
 }

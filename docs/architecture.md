@@ -54,7 +54,7 @@ Project functions become IR imports; each generator imports them relative to the
 
 ## Simulate vs generated code
 
-`GraphRuntime` (Simulate) is the reference semantics, written down in [semantics.md](semantics.md). Generated code in every language must behave the same way. The conformance suite (`test/conformance/`) runs every fixture graph in Simulate and as generated TypeScript, JavaScript, Python and C# with the real toolchains, and requires identical output. C# fixtures are compiled into one project with warnings as errors, C#'s counterpart of the TypeScript `--strict` check.
+`GraphRuntime` (Simulate) is the reference semantics, written down in [semantics.md](semantics.md). Generated code in every language must behave the same way. The conformance suite (`test/conformance/`) runs every fixture graph in Simulate and as generated TypeScript, JavaScript, Python and C# with the real toolchains, and requires identical output; the published suite (`src/conformance/`) runs the same fixtures for every built-in pack, C++ included. C# fixtures are compiled into one project with warnings as errors, C#'s counterpart of the TypeScript `--strict` check.
 
 ## Security
 

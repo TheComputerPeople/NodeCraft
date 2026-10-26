@@ -908,11 +908,12 @@ class CppEmitter {
     return this.dispatcherNames.get(s.dispatcher)!;
   }
 
-  // The name a struct, enum, interface or class goes by.
+  // The name a struct, enum, interface or class goes by, from the global namespace: a member may
+  // have its type's name (a Stats variable called Stats), which hides the type inside the class.
   private userTypeName(id: string): string {
-    if (this.program.declaration?.type.id === id || id === `object:${this.program.className}`) return this.className;
+    if (this.program.declaration?.type.id === id || id === `object:${this.program.className}`) return `::${this.className}`;
     const imported = this.program.imports.find((i) => i.id === id);
-    return imported ? imported.name : 'std::any';
+    return imported ? `::${imported.name}` : 'std::any';
   }
 
   private mapType(type: TypeRef): string {

@@ -31,11 +31,12 @@ interface Options {
 
 function node(type: string, displayName: string, category: string, inputs: PinDefinition[], result: PinDefinition | undefined, code: Snippets, options: Options): NodeDefinition {
   const { typescript, ...rest } = code;
+  const cpp = CPP[type];
   return {
     type, version: 1, displayName, category, description: options.description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [result] : [])],
-    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}) } },
+    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {}),
     ...(options.compact ? { compact: true } : {})
   };
@@ -59,6 +60,53 @@ const DIVIDE_BY_ZERO = {
 // Plain decimal numbers, in each language's regular expression syntax.
 const DECIMAL = '^\\s*[+-]?([0-9]+\\.?[0-9]*|\\.[0-9]+)([eE][+-]?[0-9]+)?\\s*';
 const INTEGER = '^\\s*[+-]?[0-9]+\\s*';
+
+// The C++ snippets (docs/language-breadth.md, "C++"), by node type: the same rules as the others.
+// Text is UTF-8, so lengths and positions count code points; To Upper and To Lower change only
+// ASCII letters.
+const CPP_DIVIDE_BY_ZERO = 'if (b == 0) throw std::runtime_error("Divide by zero");';
+const CPP_RANDOM = 'static std::mt19937_64 engine{std::random_device{}()};';
+const CPP_CODE_POINTS = 'std::vector<std::string> characters;\nfor (std::size_t i = 0; i < text.size();) {\n    std::size_t length = 1;\n    while (i + length < text.size() && (static_cast<unsigned char>(text[i + length]) & 0xC0) == 0x80) length++;\n    characters.push_back(text.substr(i, length));\n    i += length;\n}';
+const CPP: Record<string, string> = {
+  'core:math.subtract': 'return a - b;',
+  'core:math.multiply': 'return a * b;',
+  'core:math.divide': `${CPP_DIVIDE_BY_ZERO}\nreturn a / b;`,
+  'core:math.modulo': `${CPP_DIVIDE_BY_ZERO}\nreturn std::fmod(a, b);`,
+  'core:math.less': 'return a < b;',
+  'core:math.less-equal': 'return a <= b;',
+  'core:math.greater': 'return a > b;',
+  'core:math.greater-equal': 'return a >= b;',
+  'core:math.equal': 'return a == b;',
+  'core:math.not-equal': 'return a != b;',
+  'core:math.and': 'return a && b;',
+  'core:math.or': 'return a || b;',
+  'core:math.not': 'return !a;',
+  'core:math.min': 'return std::isnan(a) || std::isnan(b) ? NAN : std::min(a, b);',
+  'core:math.max': 'return std::isnan(a) || std::isnan(b) ? NAN : std::max(a, b);',
+  'core:math.clamp': 'return std::min(std::max(value, minimum), maximum);',
+  'core:math.abs': 'return std::fabs(value);',
+  'core:math.round': 'return static_cast<long long>(std::floor(value + 0.5));',
+  'core:math.floor': 'return static_cast<long long>(std::floor(value));',
+  'core:math.ceil': 'return static_cast<long long>(std::ceil(value));',
+  'core:math.sqrt': 'return std::sqrt(value);',
+  'core:math.power': 'return std::pow(base, exponent);',
+  'core:math.random-float-in-range': `${CPP_RANDOM}\nreturn minimum + std::uniform_real_distribution<double>(0.0, 1.0)(engine) * (maximum - minimum);`,
+  'core:math.random-integer-in-range': `${CPP_RANDOM}\nreturn std::uniform_int_distribution<long long>(minimum, maximum)(engine);`,
+  'core:string.append': 'return a + b;',
+  'core:string.len': 'long long length = 0;\nfor (unsigned char c : text) if ((c & 0xC0) != 0x80) length++;\nreturn length;',
+  'core:string.contains': 'return text.find(part) != std::string::npos;',
+  'core:string.to-upper': 'for (auto& c : text) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));\nreturn text;',
+  'core:string.to-lower': 'for (auto& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));\nreturn text;',
+  'core:string.trim': 'auto first = text.find_first_not_of(" \\t\\n\\r\\f\\v");\nif (first == std::string::npos) return "";\nreturn text.substr(first, text.find_last_not_of(" \\t\\n\\r\\f\\v") - first + 1);',
+  'core:string.replace': 'if (find.empty()) return text;\nstd::string result;\nstd::size_t at = 0;\nfor (std::size_t next; (next = text.find(find, at)) != std::string::npos; at = next + find.size()) result += text.substr(at, next - at) + replacement;\nreturn result + text.substr(at);',
+  'core:string.substring': `${CPP_CODE_POINTS}\nlong long begin = std::max(0LL, start);\nstd::string result;\nfor (long long i = begin; i < static_cast<long long>(characters.size()) && i < begin + std::max(0LL, count); i++) result += characters[i];\nreturn result;`,
+  'core:string.to-float': `return std::regex_match(text, std::regex(R"re(${DECIMAL})re")) ? std::stod(text) : 0.0;`,
+  'core:string.to-int': `return std::regex_match(text, std::regex(R"re(${INTEGER})re")) ? std::stoll(text) : 0LL;`,
+  'core:utilities.is-valid': 'return value.has_value();',
+  'core:utilities.select': 'return pickA ? a : b;',
+  'core:file.load-to-string': 'std::ifstream file(filename, std::ios::binary);\nif (!file) throw std::runtime_error("Can\'t read " + filename);\nstd::stringstream contents;\ncontents << file.rdbuf();\nreturn contents.str();',
+  'core:file.save-string': 'std::ofstream file(filename, std::ios::binary);\nif (!file) throw std::runtime_error("Can\'t write " + filename);\nfile << text;'
+};
 
 export function standardLibraryDefinitions(): NodeDefinition[] {
   return [

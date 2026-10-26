@@ -15,7 +15,8 @@
     "languages": {
       "javascript": "throw new Error(\"boom\");",
       "python": "raise ValueError(\"boom\")",
-      "csharp": "throw new InvalidOperationException(\"boom\");"
+      "csharp": "throw new InvalidOperationException(\"boom\");",
+      "cpp": "throw std::runtime_error(\"boom\");"
     }
   }
 }
