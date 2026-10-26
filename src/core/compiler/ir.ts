@@ -195,6 +195,34 @@ export type IrDeclaration =
   | { kind: 'enum'; type: EnumInfo }
   | { kind: 'interface'; type: InterfaceInfo };
 
+// A pin whose value a paused debugger can read (docs/debugging.md, "Values"): its storage in the
+// generated code (an impure node's slot, a variable, a function input) or a literal.
+export interface IrPinValue {
+  graphId: string;
+  nodeId: string;
+  pinId: string;
+  value: IrExpr;
+}
+
+// Expressions that only read storage, so evaluating them in a paused frame runs nothing.
+export function readsStorageOnly(e: IrExpr): boolean {
+  switch (e.kind) {
+    case 'literal':
+    case 'member':
+    case 'output':
+    case 'param':
+    case 'self':
+    case 'enumValue':
+      return true;
+    case 'structField':
+      return readsStorageOnly(e.value);
+    case 'objectVariable':
+      return readsStorageOnly(e.target);
+    default:
+      return false;
+  }
+}
+
 export interface IrBlock {
   id: string;
   name: string;
@@ -228,6 +256,8 @@ export interface IrProgram {
   interfaces?: { type: InterfaceInfo; stubs: ClassInfo['functions'] }[];
   // Every interface the class and its ancestors implement: generated code names their functions.
   allInterfaces?: InterfaceInfo[];
+  // Pins the debugger can read, for GeneratedCode.pinExpressions.
+  pinValues?: IrPinValue[];
 }
 
 // An interface a program knows: one it implements, or one it imports.

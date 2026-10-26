@@ -97,6 +97,17 @@ describe('debugger', () => {
     assert.deepEqual(reveal?.target, { uri: 'file:///lib/Math.vgraph', kind: 'node', id: 'n1', graphId: 'Lib' });
   });
 
+  test("frames outside the graphs show their own function, dimmed, and can't be opened", async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const external: DebugStackFrame = { graphId: '', graphName: 'formatValue', nodeId: '', nodeName: 'helpers.js:12', uri: 'file:///helpers.js', fileName: 'helpers.js', here: false, external: true };
+    await e.send({ type: 'debugState', debug: { state: 'paused', stack: [external, here('EventGraph', 'add_1')] } });
+    assert.equal(await e.page.textContent('#debug-title'), 'Paused at formatValue');
+    assert.equal(await e.page.textContent('#call-stack li.external'), 'formatValue helpers.js:12');
+    await e.page.click('#call-stack li.external');
+    assert.equal((await e.posted()).filter((m) => m.type === 'reveal').length, 0);
+  });
+
   // The latest 'readValues' request, once it has been posted.
   async function lastRead(e: EditorPage, count: number): Promise<{ requestId: number; pins: unknown[] }> {
     await e.page.waitForFunction((n) => (window as unknown as { __posted: { type: string }[] }).__posted.filter((m) => m.type === 'readValues').length >= n, count);

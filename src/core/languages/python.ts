@@ -5,7 +5,7 @@ import { scanPython } from '../importing/python-scanner';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
-import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
+import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression } from '../language-pack';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 
@@ -537,9 +537,17 @@ class PythonEmitter {
       text: headerText + body.toString() + footer.join('\n') + '\n',
       className: this.className,
       nodeLines: body.nodeLines.map((n) => ({ ...n, line: n.line + offset })),
+      codeBreaks: body.breaks.map((line) => line + offset),
       ...(roots.length ? { importRoots: roots } : {}),
-      ...(mainName ? { mainMethod: mainName } : {})
+      ...(mainName ? { mainMethod: mainName } : {}),
+      ...this.pinExpressions()
     };
+  }
+
+  // How the debugger reads each pin it can (docs/debugging.md, "Values").
+  private pinExpressions(): { pinExpressions?: PinExpression[] } {
+    const pins = (this.program.pinValues ?? []).map((p) => ({ graphId: p.graphId, nodeId: p.nodeId, pinId: p.pinId, expression: this.expr(p.value) }));
+    return pins.length ? { pinExpressions: pins } : {};
   }
 
   // ---- Class members ------------------------------------------------------------------------

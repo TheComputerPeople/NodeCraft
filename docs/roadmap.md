@@ -316,6 +316,6 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python; methods with Phase 4 classes) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
 | Library | Standard math, string, utility and file nodes | ✅ (collection nodes need Phase 4) | — |
-| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | 🟡 (in Simulate; generated code next) | 5 |
-| Debugging | Pin value hover, Watch this value | 🟡 (in Simulate; generated code next) | 5 |
+| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | 🟡 (Simulate, TypeScript and JavaScript; Python and C# next) | 5 |
+| Debugging | Pin value hover, Watch this value | 🟡 (Simulate, TypeScript and JavaScript; Python and C# next) | 5 |
 | Debugging | Execution flow highlighting | ✅ (run trail and exec wire pulses, in Simulate) | 5 |

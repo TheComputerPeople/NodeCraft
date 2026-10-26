@@ -5,7 +5,7 @@ import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claim
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { scanCSharp } from '../importing/csharp-scanner';
-import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack } from '../language-pack';
+import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression } from '../language-pack';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 import { TypeRef, parseTypeId } from '../types';
 
@@ -557,9 +557,17 @@ class CSharpEmitter {
       text: `${headerText}${body.toString()}}\n`,
       className: this.options.namespace ? `${this.options.namespace}.${this.className}` : this.className,
       nodeLines: body.nodeLines.map((n) => ({ ...n, line: n.line + offset })),
+      codeBreaks: body.breaks.map((line) => line + offset),
       ...(importedFiles.length ? { importedFiles } : {}),
-      ...(main ? { mainMethod: this.functionNames.get(main.id) } : {})
+      ...(main ? { mainMethod: this.functionNames.get(main.id) } : {}),
+      ...this.pinExpressions()
     };
+  }
+
+  // How the debugger reads each pin it can (docs/debugging.md, "Values").
+  private pinExpressions(): { pinExpressions?: PinExpression[] } {
+    const pins = (this.program.pinValues ?? []).map((p) => ({ graphId: p.graphId, nodeId: p.nodeId, pinId: p.pinId, expression: this.expr(p.value) }));
+    return pins.length ? { pinExpressions: pins } : {};
   }
 
   // ---- Class members ------------------------------------------------------------------------

@@ -320,6 +320,50 @@ test('structs and enums in the workspace become types and nodes that graphs impo
   assert.match(text, /Side: Faction = Faction\.LightBlue;/);
 });
 
+// What activation returns (src/extension/extension.ts), as far as these tests use it.
+interface ExtensionApi {
+  marks: { breakpoints: { set(uri: vscode.Uri, breakpoints: { graphId: string; nodeId: string; enabled: boolean }[]): Promise<void> } };
+  provider: {
+    currentDebug(): {
+      stack?: { graphId: string; nodeId: string; external?: boolean }[];
+      act(action: string): void;
+      read(file: vscode.Uri, pins: { graphId: string; nodeId: string; pinId: string }[]): Promise<{ value?: string; unavailable?: string }[]>;
+    } | undefined;
+  };
+}
+
+test('Debug stops at a node breakpoint in generated JavaScript, steps by node and reads pins', async () => {
+  // The sample, in JavaScript (an earlier test switched demo.vgraph to Python).
+  const graph = workspaceFile('debugme.vgraph');
+  const sample = JSON.parse(await readText(workspaceFile('demo.vgraph'))) as { name: string; language: string };
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({ ...sample, name: 'DebugMe', language: 'javascript' }, null, 2)));
+  await openInGraphEditor('debugme.vgraph');
+  const api = vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi;
+  await api.marks.breakpoints.set(graph, [{ graphId: 'EventGraph', nodeId: 'add_1', enabled: true }]);
+
+  await vscode.commands.executeCommand('blueprintVisualScripting.debug', graph);
+  const paused = () => api.provider.currentDebug()?.stack;
+  await waitFor(() => !!paused(), 'the debugger to stop at the breakpoint', 60000);
+  assert.deepEqual(paused()![0], { ...paused()![0], graphId: 'EventGraph', nodeId: 'add_1' });
+  const mirrored = vscode.debug.breakpoints.filter((b) => b instanceof vscode.SourceBreakpoint && b.location.uri.fsPath.endsWith('debugme.vgraph.js'));
+  assert.equal(mirrored.length, 1, 'the graph breakpoint is mirrored into the generated file');
+  const debug = api.provider.currentDebug()!;
+  const result = [{ graphId: 'EventGraph', nodeId: 'add_1', pinId: 'result' }];
+  assert.deepEqual(await debug.read(graph, result), [{ value: '0' }], "Add hasn't run yet");
+
+  // The Branch's condition is the constant true, which V8 compiles away, so the next node to stop
+  // at is the Print.
+  debug.act('stepOver');
+  await waitFor(() => paused()?.[0].nodeId === 'print_true', 'Step Over to reach the next node', 60000);
+  assert.deepEqual(await debug.read(graph, result), [{ value: '30' }]);
+  // VS Code showed the generated code where it stopped; the graph editor is in front instead.
+  await waitFor(() => activeCustomEditor()?.uri.toString() === graph.toString(), 'the graph editor to come back to the front');
+
+  debug.act('resume');
+  await waitFor(() => !api.provider.currentDebug(), 'the session to end', 60000);
+  await api.marks.breakpoints.set(graph, []);
+});
+
 export async function run(): Promise<void> {
   const failures: string[] = [];
   for (const { name, run: body } of tests) {

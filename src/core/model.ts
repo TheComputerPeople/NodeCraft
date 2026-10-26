@@ -237,6 +237,8 @@ export interface DebugStackFrame extends DebugFrame {
   uri: string;
   fileName: string;
   here: boolean;
+  // A frame outside generated code (a library's, the runtime's), named by its own function.
+  external?: boolean;
 }
 
 // A debug Simulate session, as the editor shows it. While paused, `stack` is the call stack,
@@ -297,7 +299,8 @@ export interface UIMessage {
   // findInAll: search every graph in the workspace; reveal: open another file at a hit.
   // setBreakpoints, setWatches: the file's breakpoints or watched pins changed; debugAction: a
   // debugger button; readValues: pins' values while paused (answered by 'debugValues').
-  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues';
+  // debug: compile, then run the generated code under the language's debugger.
+  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'debug' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues';
   document?: GraphDocument;
   breakpoints?: GraphBreakpoint[];
   watches?: PinRef[];

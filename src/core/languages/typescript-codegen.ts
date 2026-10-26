@@ -4,7 +4,7 @@ import { relativeSpecifier, typescriptSpecifier } from '../compiler/module-paths
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
-import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode } from '../language-pack';
+import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, PinExpression } from '../language-pack';
 import { TypeRef } from '../types';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 
@@ -55,6 +55,18 @@ const nodeRunner: CodeRunner = {
   missingToolMessage: 'Node.js was not found. Install Node.js 22.18 or later (it runs TypeScript directly) and make sure `node` is on the PATH.'
 };
 
+// js-debug, built into VS Code, runs the same command as Run.
+const nodeDebugger: CodeDebugger = {
+  type: 'node',
+  configuration: (file, className, context) => {
+    const [executable, ...leading] = context.command?.length ? context.command : ['node'];
+    return {
+      type: 'node', request: 'launch', runtimeExecutable: executable, runtimeArgs: [...leading, ...nodeRunner.args(file, className, context)],
+      cwd: context.cwd, console: 'internalConsole', outputCapture: 'std'
+    };
+  }
+};
+
 // The names a function library's functions are exported as (camelCase, unique in the module). The
 // library's own generated file and every file that imports it use these.
 export function typescriptExportNames(functions: { id: string; name: string }[]): Map<string, string> {
@@ -90,7 +102,8 @@ export function typescriptGenerator(flavor: TypeScriptFlavor): CodeGenerator {
     importLanguages: flavor.typed ? ['typescript', 'javascript'] : ['javascript'],
     outputFileName: (graphFileName) => `${graphFileName}.${flavor.typed ? 'ts' : 'js'}`,
     generate: (program, options) => new TypeScriptEmitter(program, options, flavor).emit(),
-    runner: nodeRunner
+    runner: nodeRunner,
+    debugger: nodeDebugger
   };
 }
 
@@ -197,7 +210,13 @@ class TypeScriptEmitter {
     if (dispatchers.length) this.dispatcherClass();
     if (this.needsFormat) this.formatHelper();
     const main = this.program.functions.find((f) => f.event?.entry === 'Main');
-    return { text: out.toString(), className: this.className, nodeLines: out.nodeLines, ...(main ? { mainMethod: this.functionNames.get(main.id) } : {}) };
+    return { text: out.toString(), className: this.className, nodeLines: out.nodeLines, codeBreaks: out.breaks, ...(main ? { mainMethod: this.functionNames.get(main.id) } : {}), ...this.pinExpressions() };
+  }
+
+  // How the debugger reads each pin it can (docs/debugging.md, "Values").
+  private pinExpressions(): { pinExpressions?: PinExpression[] } {
+    const pins = (this.program.pinValues ?? []).map((p) => ({ graphId: p.graphId, nodeId: p.nodeId, pinId: p.pinId, expression: this.expr(p.value) }));
+    return pins.length ? { pinExpressions: pins } : {};
   }
 
   // Unreal's event dispatcher: bound events run in the order they were bound, each event once. An
@@ -344,7 +363,7 @@ class TypeScriptEmitter {
       out.line(`module.exports = { ${this.program.functions.map((f) => this.functionNames.get(f.id)).join(', ')} };`);
     }
     if (this.needsFormat) this.formatHelper();
-    return { text: out.toString(), className: this.className, nodeLines: out.nodeLines };
+    return { text: out.toString(), className: this.className, nodeLines: out.nodeLines, codeBreaks: out.breaks, ...this.pinExpressions() };
   }
 
   // A structure or enumeration: a class whose instances are never changed (Set Members makes a new
@@ -356,7 +375,7 @@ class TypeScriptEmitter {
     const exported = this.esm ? 'export ' : '';
     if (declaration.kind === 'interface') {
       this.interfaceDeclaration(declaration.type);
-      return { text: out.toString(), className: this.className, nodeLines: out.nodeLines };
+      return { text: out.toString(), className: this.className, nodeLines: out.nodeLines, codeBreaks: out.breaks };
     }
     if (declaration.kind === 'enum') {
       const members = typescriptEnumMembers(declaration.type);
@@ -408,7 +427,7 @@ class TypeScriptEmitter {
       out.line();
       out.line(`module.exports = { ${this.className} };`);
     }
-    return { text: out.toString(), className: this.className, nodeLines: out.nodeLines };
+    return { text: out.toString(), className: this.className, nodeLines: out.nodeLines, codeBreaks: out.breaks };
   }
 
   // An interface: its functions' signatures, and a tag classes that implement it carry, which its

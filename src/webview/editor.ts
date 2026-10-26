@@ -50,6 +50,10 @@ dom.simulateButton.addEventListener('click', () => {
   flushSave();
   postToHost({ type: 'simulate' });
 });
+dom.debugButton.addEventListener('click', () => {
+  flushSave();
+  postToHost({ type: 'debug' });
+});
 dom.languageSelect.addEventListener('change', () => setLanguage(dom.languageSelect.value));
 dom.resultsClose.addEventListener('click', hideResults);
 dom.fitButton.addEventListener('click', () => fitGraph());

@@ -55,6 +55,12 @@
         "icon": "$(play)"
       },
       {
+        "command": "blueprintVisualScripting.debug",
+        "title": "Debug Graph",
+        "category": "Blueprint Visual Scripting",
+        "icon": "$(debug-alt)"
+      },
+      {
         "command": "blueprintVisualScripting.findInAll",
         "title": "Find in All Blueprints",
         "category": "Blueprint Visual Scripting"
@@ -68,31 +74,31 @@
         "command": "blueprintVisualScripting.debug.resume",
         "title": "Resume",
         "category": "Blueprint Visual Scripting",
-        "enablement": "blueprintVisualScripting.simulatePaused"
+        "enablement": "blueprintVisualScripting.debugPaused"
       },
       {
         "command": "blueprintVisualScripting.debug.stepOver",
         "title": "Step Over",
         "category": "Blueprint Visual Scripting",
-        "enablement": "blueprintVisualScripting.simulatePaused"
+        "enablement": "blueprintVisualScripting.debugPaused"
       },
       {
         "command": "blueprintVisualScripting.debug.stepInto",
         "title": "Step Into",
         "category": "Blueprint Visual Scripting",
-        "enablement": "blueprintVisualScripting.simulatePaused"
+        "enablement": "blueprintVisualScripting.debugPaused"
       },
       {
         "command": "blueprintVisualScripting.debug.stepOut",
         "title": "Step Out",
         "category": "Blueprint Visual Scripting",
-        "enablement": "blueprintVisualScripting.simulatePaused"
+        "enablement": "blueprintVisualScripting.debugPaused"
       },
       {
         "command": "blueprintVisualScripting.debug.stop",
-        "title": "Stop Simulate",
+        "title": "Stop Debugging",
         "category": "Blueprint Visual Scripting",
-        "enablement": "blueprintVisualScripting.simulateDebugging"
+        "enablement": "blueprintVisualScripting.debugging"
       }
     ],
     "customEditors": [
@@ -199,34 +205,39 @@
         "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
       },
       {
+        "command": "blueprintVisualScripting.debug",
+        "key": "f5",
+        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && !inDebugMode && !blueprintVisualScripting.debugging"
+      },
+      {
         "command": "blueprintVisualScripting.debug.resume",
         "key": "f5",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.simulatePaused"
+        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugPaused"
       },
       {
         "command": "blueprintVisualScripting.debug.stepOver",
         "key": "f10",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.simulatePaused"
+        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugPaused"
       },
       {
         "command": "blueprintVisualScripting.debug.stepInto",
         "key": "f11",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.simulatePaused"
+        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugPaused"
       },
       {
         "command": "blueprintVisualScripting.debug.stepOut",
         "key": "shift+f11",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.simulatePaused"
+        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugPaused"
       },
       {
         "command": "blueprintVisualScripting.debug.stepOut",
         "key": "alt+shift+f11",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.simulatePaused"
+        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugPaused"
       },
       {
         "command": "blueprintVisualScripting.debug.stop",
         "key": "shift+f5",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.simulateDebugging"
+        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugging"
       }
     ]
   },

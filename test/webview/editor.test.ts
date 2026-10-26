@@ -195,21 +195,23 @@ describe('webview editor', () => {
     assert.equal(await e.count('.node.executing[data-node="start_1"]'), 0);
   });
 
-  test('disables Run and Simulate in an untrusted workspace until trust is granted', async (t) => {
+  test('disables Run, Simulate and Debug in an untrusted workspace until trust is granted', async (t) => {
     const e = await openSample(t);
     if (!e) return;
+    const running = (type: string): boolean => type === 'run' || type === 'simulate' || type === 'debug';
     await e.send({ type: 'settings', trusted: false });
-    for (const button of ['#run', '#simulate']) {
+    for (const button of ['#run', '#simulate', '#debug']) {
       assert.equal(await e.page.isDisabled(button), true, `${button} is disabled`);
       await e.page.locator(button).click({ force: true });
     }
-    assert.ok(!(await e.posted()).some((m) => m.type === 'run' || m.type === 'simulate'), 'disabled buttons send nothing');
+    assert.ok(!(await e.posted()).some((m) => running(m.type)), 'disabled buttons send nothing');
     assert.equal(await e.page.isDisabled('#compile'), false, 'compiling only writes text, so it stays available');
 
     await e.send({ type: 'settings', trusted: true });
     await e.page.click('#run');
     await e.page.click('#simulate');
-    assert.deepEqual((await e.posted()).map((m) => m.type).filter((type) => type === 'run' || type === 'simulate'), ['run', 'simulate']);
+    await e.page.click('#debug');
+    assert.deepEqual((await e.posted()).map((m) => m.type).filter(running), ['run', 'simulate', 'debug']);
   });
 });
 

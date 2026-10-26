@@ -43,6 +43,14 @@ Shortcut sources are in [unreal-conventions.md](unreal-conventions.md). Unreal s
 - **Values**: each generator reports, per stored pin (an impure node's output slot, a variable, a function input), the expression that reads it in a paused frame (`GeneratedCode.pinExpressions`). Hovering a pin sends DAP `evaluate` with that expression in the top frame of the node's method; a pure node's value isn't stored, and the bubble says so rather than running it.
 - **Pulses** come from Simulate's events; generated code doesn't report each node as it runs (that would slow it down), so pulses show only in Simulate.
 
+As built (TypeScript and JavaScript; src/extension/code-debug.ts):
+
+- Each compile records the generated file's `nodeLines`, `codeBreaks` (where a method opens, so a helper's lines don't count as the last node's) and `pinExpressions`. The lowering lists every pin read straight from storage (an impure node's slot, a variable, a parameter, a literal); each generator writes the expression for it.
+- Graph breakpoints are mirrored as VS Code breakpoints after each compile, and Debug compiles first. Removing a mirrored breakpoint in VS Code (the Breakpoints view, the margin) removes the graph breakpoint. A breakpoint on a node whose code V8 compiles away (a Branch on the constant true) stops at the next statement, as a line breakpoint there would.
+- The editors show a DAP session through the same Blueprint Debugger panel as Simulate. Frames outside generated code are listed dimmed by their function, file and line.
+- When the debugger stops, VS Code opens the generated file there; the graph editor is brought back to the front, and the preview tab VS Code opened is closed (a generated file the user had open stays).
+- F5 starts Debug from a graph editor when nothing is being debugged; while a graph session is paused, F5, F10, F11, Shift+F11 and Shift+F5 act on it by node, while VS Code's toolbar and keys elsewhere still step by line.
+
 ## Exec wire pulses
 
 - During a Simulate run, each exec wire a node leaves through gets a short animated pulse, as Unreal animates them; the run trail (nodes that ran) stays as it is today. The runtime names the wire each node was entered through (`connectionId` on `node.enter`), and the editor draws a bright dash running along it for 0.7 s (an SVG path over the wire, redrawn with its elapsed time when the wires are redrawn). A normal Simulate runs in one burst, so its wires pulse together; under the debugger they pulse as execution reaches them. With reduced motion requested, there are no pulses.

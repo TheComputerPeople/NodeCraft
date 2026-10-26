@@ -12,9 +12,16 @@ import { watchWorkspaceNodeLibraries } from './node-libraries';
 import { isGeneratedFrom } from './placement';
 import { GraphLibraries } from './graph-libraries';
 import { DebugMarks } from './breakpoints';
+import { CodeDebugService } from './code-debug';
 import { ProjectFunctions } from './project-functions';
 
-export function activate(context: vscode.ExtensionContext): void {
+// What activation returns: the integration tests drive debugging through it.
+export interface ExtensionApi {
+  marks: DebugMarks;
+  provider: GraphEditorProvider;
+}
+
+export function activate(context: vscode.ExtensionContext): ExtensionApi {
   // Libraries load in the background; open editors receive the updated definitions when ready.
   const registry = new NodeRegistry();
   const languages = builtinLanguagePacks();
@@ -42,8 +49,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const marks = new DebugMarks(context.workspaceState);
   context.subscriptions.push(marks);
   const provider = new GraphEditorProvider(context, registry, languages, compiler, output, () => projectFunctions.loaded, marks);
+  // Debugging generated code with the language's debugger (docs/debugging.md).
+  const codeDebug = new CodeDebugService(provider, compiler, marks, registry, languages);
   context.subscriptions.push(
     compiler,
+    codeDebug,
     vscode.window.registerCustomEditorProvider(GRAPH_VIEW_TYPE, provider, { supportsMultipleEditorsPerDocument: true })
   );
 
@@ -71,7 +81,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('blueprintVisualScripting.refreshAllNodes', () => {
       if (!provider.postToActive({ type: 'refreshAll' })) void vscode.window.showInformationMessage('Open a graph to refresh its nodes.');
     }),
-    // Simulate's debugger (docs/debugging.md); the keys apply while a graph editor has focus.
+    vscode.commands.registerCommand('blueprintVisualScripting.debug', async (uri?: vscode.Uri) => {
+      const document = await graphDocumentFor(uri);
+      if (document) await codeDebug.start(document.uri);
+    }),
+    // The debugger's buttons (docs/debugging.md); the keys apply while a graph editor has focus.
     ...(['resume', 'stepOver', 'stepInto', 'stepOut', 'stop'] as const).map((action) =>
       vscode.commands.registerCommand(`blueprintVisualScripting.debug.${action}`, () => provider.debugAction(action))),
     vscode.commands.registerCommand('blueprintVisualScripting.findInAll', () => {
@@ -114,6 +128,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await vscode.commands.executeCommand('vscode.open', target);
     })
   );
+  return { marks, provider };
 }
 
 export function deactivate(): void {}

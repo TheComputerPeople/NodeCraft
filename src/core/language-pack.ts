@@ -47,8 +47,10 @@ export interface GeneratedCode {
   text: string;
   // The generated class's name, as the runner needs it.
   className: string;
-  // Where each node's code starts, for jumping between graph and code (and debugging later).
+  // Where each node's code starts, for jumping between graph and code and for debugging; and where
+  // code that belongs to no node starts (CodeWriter.breaks).
   nodeLines: NodeLine[];
+  codeBreaks?: number[];
   // Folders (relative to the workspace folder) the runtime must search for the project modules the
   // code imports, for languages that import by module name (Python's sys.path).
   importRoots?: string[];
@@ -57,6 +59,16 @@ export interface GeneratedCode {
   importedFiles?: string[];
   // The method the class's Main event became, which Run calls after start with the arguments.
   mainMethod?: string;
+  // Expressions that read pins' values in a paused frame of the node's method (docs/debugging.md,
+  // "Values"), evaluated through the debugger.
+  pinExpressions?: PinExpression[];
+}
+
+export interface PinExpression {
+  graphId: string;
+  nodeId: string;
+  pinId: string;
+  expression: string;
 }
 
 // How to run generated code with the project's own toolchain.
@@ -104,6 +116,17 @@ export interface CodeGenerator {
   // holding them in languages without free functions (C#). Callers import these names.
   libraryExports(libraryName: string, functions: { id: string; name: string }[]): { names: Map<string, string>; container?: string };
   runner?: CodeRunner;
+  // Debugging the generated code with the language's VS Code debugger (docs/debugging.md).
+  debugger?: CodeDebugger;
+}
+
+export interface CodeDebugger {
+  // The debug type, and the extension that provides it when VS Code doesn't.
+  type: string;
+  extension?: { id: string; name: string };
+  // A launch configuration running the generated file as Run does: Start, then Main. `command`
+  // replaces the runner's executable (and leading arguments), as the runCommands setting does.
+  configuration(file: { path: string; url: string }, className: string, context: RunContext & { cwd: string; command?: string[] }): Record<string, unknown>;
 }
 
 // Reads the functions in the language's source files, for exposing them as nodes

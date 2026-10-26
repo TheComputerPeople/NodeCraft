@@ -22,6 +22,7 @@ export const dom = {
   compileButton: element<HTMLButtonElement>('compile'),
   runButton: element<HTMLButtonElement>('run'),
   simulateButton: element<HTMLButtonElement>('simulate'),
+  debugButton: element<HTMLButtonElement>('debug'),
   languageSelect: element<HTMLSelectElement>('language'),
   results: element<HTMLElement>('compiler-results'),
   resultsTitle: element<HTMLSpanElement>('results-title'),

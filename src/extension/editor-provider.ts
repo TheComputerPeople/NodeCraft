@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { SimulateBreakpoint } from '../core/debugger';
 import { LanguagePackRegistry } from '../core/language-pack';
-import { CompileReport, DebugAction, DebugFrame, DebugState, DebugValue, FileSearchHit, PinRef, GraphDocument, HostMessage, LanguageOption, RevealTarget, RuntimeLogEvent, UIMessage } from '../core/model';
+import { CompileReport, DebugAction, DebugState, DebugValue, FileSearchHit, PinRef, GraphDocument, HostMessage, LanguageOption, RevealTarget, RuntimeLogEvent, UIMessage } from '../core/model';
 import { createResolver } from '../core/resolve';
 import { searchDocument } from '../core/search';
 import { NodeRegistry } from '../core/registry';
@@ -11,6 +11,7 @@ import { parseDocument, serializeDocument } from '../core/serializer';
 import { CompileService } from './compile-service';
 import { loadGraphDocument } from './graph-libraries';
 import { DebugMarks } from './breakpoints';
+import { GraphDebug, SimulateDebug } from './graph-debug';
 import { SimulateSession } from './simulate-session';
 import { createNonce, renderEditorHtml } from './webview-html';
 
@@ -22,8 +23,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly panelsByDocument = new Map<string, PanelSet>();
   // Find in All Blueprints hits to show once their file's editor has loaded.
   private readonly pendingReveals = new Map<string, RevealTarget>();
-  // A debug Simulate run (docs/debugging.md): the file simulated, and the stack while paused.
-  private debugSession: DebugSession | undefined;
+  // The debugging session the editors show (docs/debugging.md): Simulate's, or generated code's.
+  private debug: GraphDebug | undefined;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -39,9 +40,9 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     context.subscriptions.push(marks.watches.onDidChange((uri) => this.broadcast(uri.toString(), { type: 'watches', watches: marks.watches.get(uri) })));
     context.subscriptions.push(marks.breakpoints.onDidChange((uri) => {
       this.broadcast(uri.toString(), { type: 'breakpoints', breakpoints: marks.breakpoints.get(uri) });
-      if (this.debugSession) this.debugSession.session.setBreakpoints(this.simulateBreakpoints(this.debugSession.uri));
+      this.debug?.breakpointsChanged();
     }));
-    context.subscriptions.push({ dispose: () => this.debugSession?.session.stop() });
+    context.subscriptions.push({ dispose: () => this.debug?.act('stop') });
     context.subscriptions.push(
       registry.onDidChange(() => {
         const message: HostMessage = { type: 'definitions', definitions: registry.all(), functionsLoaded: this.functionsLoaded() };
@@ -113,7 +114,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
               this.post(webviewPanel, { type: 'reveal', target: reveal });
             }
             // A file opened while debugging (the debugger opens the one it stopped in).
-            if (this.debugSession) this.post(webviewPanel, { type: 'debugState', debug: this.debugStateFor(key) });
+            if (this.debug) this.post(webviewPanel, { type: 'debugState', debug: this.debugStateFor(key) });
             break;
           }
           case 'debugAction':
@@ -130,6 +131,9 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
             break;
           case 'readValues':
             this.post(webviewPanel, { type: 'debugValues', requestId: message.requestId, values: await this.readValues(document.uri, message.pins ?? []) });
+            break;
+          case 'debug':
+            if (this.ensureTrusted(webviewPanel)) await vscode.commands.executeCommand('blueprintVisualScripting.debug', document.uri);
             break;
           case 'reveal':
             if (message.target?.uri) await this.reveal(message.target);
@@ -287,7 +291,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       if (event.kind === 'log') output.appendLine(event.message ?? '');
       else if (event.kind === 'error') output.appendLine(`[error] ${event.document ? `${event.document}: ` : ''}${event.message ?? ''}`);
     };
-    this.debugSession?.session.stop();
+    if (this.debug instanceof SimulateDebug) this.debug.act('stop');
     const breakpoints = this.simulateBreakpoints(document.uri);
     if (breakpoints.length) {
       output.appendLine('Simulating in the editor, with breakpoints');
@@ -305,45 +309,66 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     for (const d of vscode.workspace.textDocuments) {
       if (root && d.uri.scheme === 'file' && d.uri.fsPath.toLowerCase().endsWith('.vgraph')) openDocuments[relativePath(root, d.uri.fsPath)] = d.getText();
     }
-    const setContext = (key: string, value: boolean): void => void vscode.commands.executeCommand('setContext', `blueprintVisualScripting.${key}`, value);
-    const debugSession: DebugSession = {
-      uri,
-      session: new SimulateSession({ definitions: this.registry.all(), document: graphDocument, root, openDocuments, args, breakpoints }, {
-        event: emit,
-        paused: (stack) => {
-          debugSession.stack = stack;
-          setContext('simulatePaused', true);
-          this.broadcastDebugState();
-          // Shows the file the debugger stopped in.
-          const top = this.fileUri(uri, stack[0].document);
-          if (!this.panelsByDocument.get(top.toString())?.size) void vscode.commands.executeCommand('vscode.openWith', top, VIEW_TYPE);
-        },
-        resumed: () => {
-          debugSession.stack = undefined;
-          setContext('simulatePaused', false);
-          this.broadcastDebugState();
-        },
-        ended: () => {
-          debugSession.stack = undefined;
-          if (this.debugSession !== debugSession) return;
-          this.debugSession = undefined;
-          setContext('simulatePaused', false);
-          setContext('simulateDebugging', false);
-          this.broadcastDebugState();
-        }
-      })
-    };
-    this.debugSession = debugSession;
-    setContext('simulateDebugging', true);
-    this.broadcastDebugState();
+    let debug: SimulateDebug | undefined = undefined;
+    const session = new SimulateSession({ definitions: this.registry.all(), document: graphDocument, root, openDocuments, args, breakpoints }, {
+      event: emit,
+      paused: (stack) => {
+        debug?.paused(stack);
+        if (debug) this.debugChanged(debug);
+      },
+      resumed: () => {
+        debug?.resumed();
+        if (debug) this.debugChanged(debug);
+      },
+      ended: () => {
+        if (debug) this.debugEnded(debug);
+      }
+    });
+    debug = new SimulateDebug(session, (document) => this.fileUri(uri, document), () => this.simulateBreakpoints(uri));
+    this.debugStarted(debug);
+  }
+
+  // The debugging session the editors show, if any.
+  currentDebug(): GraphDebug | undefined {
+    return this.debug;
   }
 
   // Resume, Step Over/Into/Out and Stop (the editor's buttons, and the keys while it has focus).
   debugAction(action: DebugAction): void {
-    const session = this.debugSession?.session;
-    if (!session) return;
-    if (action === 'stop') session.stop();
-    else session.resume(action === 'resume' ? 'continue' : action);
+    this.debug?.act(action);
+  }
+
+  // A debugging session the editors show starts (replacing the one shown), pauses or resumes, or
+  // ends.
+  debugStarted(debug: GraphDebug): void {
+    if (this.debug && this.debug !== debug) this.debug.act('stop');
+    this.debug = debug;
+    setContext('debugging', true);
+    this.debugChanged(debug);
+  }
+
+  debugChanged(debug: GraphDebug): void {
+    if (debug !== this.debug) return;
+    setContext('debugPaused', !!debug.stack);
+    this.broadcastDebugState();
+    // Shows the graph the debugger stopped in, over the generated code a debugger shows.
+    const top = debug.stack?.[0];
+    if (top && !top.external) void this.revealGraphEditor(top.uri);
+  }
+
+  debugEnded(debug: GraphDebug): void {
+    if (debug !== this.debug) return;
+    this.debug = undefined;
+    setContext('debugPaused', false);
+    setContext('debugging', false);
+    this.broadcastDebugState();
+  }
+
+  // Brings a graph file's editor to the front, where it is open, or opens it.
+  async revealGraphEditor(uri: vscode.Uri): Promise<void> {
+    const tab = vscode.window.tabGroups.all.flatMap((g) => g.tabs).find((t) => t.input instanceof vscode.TabInputCustom && t.input.viewType === VIEW_TYPE && t.input.uri.toString() === uri.toString());
+    if (tab?.isActive && tab.group.isActive) return;
+    await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE, tab ? { viewColumn: tab.group.viewColumn, preserveFocus: false } : undefined);
   }
 
   // The workspace's enabled breakpoints, with their files named as a Simulate of `uri` names them.
@@ -364,28 +389,19 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     return document && root ? vscode.Uri.joinPath(root, ...document.split('/')) : simulated;
   }
 
-  // Pins' values while paused, each read in the innermost frame running its graph (pins of `file`).
   private async readValues(file: vscode.Uri, pins: PinRef[]): Promise<DebugValue[]> {
-    const session = this.debugSession;
-    const stack = session?.stack;
-    if (!session || !stack) return pins.map(() => ({ unavailable: 'Values are read while paused.' }));
-    const frames = pins.map((pin) => stack.findIndex((f) => f.graphId === pin.graphId && this.fileUri(session.uri, f.document).toString() === file.toString()));
-    const reads = pins.flatMap((pin, i) => (frames[i] >= 0 ? [{ frame: frames[i], nodeId: pin.nodeId, pinId: pin.pinId }] : []));
-    const values = reads.length ? await session.session.read(reads) : [];
-    let next = 0;
-    return frames.map((frame) => (frame >= 0 ? values[next++] ?? { unavailable: 'Values are read while paused.' } : { unavailable: "No value: this graph isn't running." }));
+    return this.debug ? this.debug.read(file, pins) : pins.map(() => ({ unavailable: 'Values are read while paused.' }));
   }
 
   private debugStateFor(panelKey: string): DebugState {
-    const session = this.debugSession;
-    if (!session) return { state: 'ended' };
-    if (!session.stack) return { state: 'running' };
+    const debug = this.debug;
+    if (!debug) return { state: 'ended' };
+    if (!debug.stack) return { state: 'running' };
     return {
       state: 'paused',
-      stack: session.stack.map((frame) => {
-        const uri = this.fileUri(session.uri, frame.document);
-        return { ...frame, uri: uri.toString(), fileName: path.basename(uri.path, '.vgraph'), here: uri.toString() === panelKey };
-      })
+      stack: debug.stack.map(({ uri, ...frame }) => ({
+        ...frame, uri: uri.toString(), fileName: path.basename(uri.path).replace(/\.vgraph$/i, ''), here: !frame.external && uri.toString() === panelKey
+      }))
     };
   }
 
@@ -417,10 +433,8 @@ const RESTRICTED_MODE_MESSAGE = 'Running graphs is disabled in Restricted Mode. 
 const SAVE_DELAY_SETTING = 'blueprintVisualScripting.autoSaveDelay';
 const DEFAULT_SAVE_DELAY_MS = 150;
 
-interface DebugSession {
-  session: SimulateSession;
-  uri: vscode.Uri;
-  stack?: DebugFrame[];
+function setContext(key: string, value: boolean): void {
+  void vscode.commands.executeCommand('setContext', `blueprintVisualScripting.${key}`, value);
 }
 
 function relativePath(root: string, file: string): string {

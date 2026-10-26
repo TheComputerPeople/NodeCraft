@@ -8,7 +8,7 @@ import { hasWildcard } from '../containers';
 import { NodeResolver, REROUTE, createResolver, createUnsplitResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
-import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType } from './ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrPinValue, IrProgram, IrSlot, IrStatement, ProgramTypes, SourceRef, exprType, readsStorageOnly } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
 import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest } from '../objects';
@@ -62,6 +62,8 @@ class Lowerer {
   private readonly diagnostics: CompileDiagnostic[] = [];
   private readonly members = new Map<string, IrMember>();
   private readonly slots = new Map<string, IrSlot>();
+  // Pins the debugger can read, by graph, node and pin.
+  private readonly pinValues = new Map<string, IrPinValue>();
   private readonly helpers = new Map<string, IrCodeHelper>();
   private readonly imports = new Map<string, IrImport>();
   private readonly blocks = new Map<string, IrBlock>();
@@ -170,6 +172,7 @@ class Lowerer {
       blocks: [...this.blocks.values()],
       functions: this.functions,
       start,
+      pinValues: this.debugPins(),
       ...(this.ownClass ? { classInfo: this.ownClass } : {}),
       ...(this.ancestors.length ? { ancestors: this.ancestors } : {}),
       ...this.interfacePlan(),
@@ -864,7 +867,35 @@ class Lowerer {
 
   // ---- Expressions ---------------------------------------------------------------------------
 
+  // An input's value. The debugger can read the input, and the output feeding it, where the value
+  // is only read from storage.
   private inputExpr(info: GraphInfo, node: GraphNode, def: NodeDefinition, pinId: string): IrExpr {
+    const value = this.readInput(info, node, def, pinId);
+    if (readsStorageOnly(value)) {
+      this.debugPin(info.graph.id, node.id, pinId, value);
+      const source = info.dataSources.get(inputKey(node.id, pinId));
+      if (source) this.debugPin(info.graph.id, source.node, source.pin, value);
+    }
+    return value;
+  }
+
+  private debugPin(graphId: string, nodeId: string, pinId: string, value: IrExpr): void {
+    // Nodes copied from a macro, or standing in for a split pin, aren't on screen.
+    if (visibleNodeId(nodeId) !== nodeId) return;
+    const key = JSON.stringify([graphId, nodeId, pinId]);
+    if (!this.pinValues.has(key)) this.pinValues.set(key, { graphId, nodeId, pinId, value });
+  }
+
+  // Every impure node's stored outputs, and the pins read from storage.
+  private debugPins(): IrPinValue[] {
+    for (const slot of this.slots.values()) {
+      const [graphId, nodeId, pinId] = JSON.parse(slot.id) as string[];
+      if (!pinId.startsWith('state:')) this.debugPin(graphId, nodeId, pinId, { kind: 'output', slot: slot.id });
+    }
+    return [...this.pinValues.values()];
+  }
+
+  private readInput(info: GraphInfo, node: GraphNode, def: NodeDefinition, pinId: string): IrExpr {
     const pin = def.inputs.find((p) => p.id === pinId);
     const source = info.dataSources.get(inputKey(node.id, pinId));
     if (!source) return this.unconnectedExpr(node, pin, pinId);

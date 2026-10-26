@@ -40,14 +40,19 @@ export function showDebugState(debug: DebugState): void {
     button.disabled = !paused && ACTIONS.find((a) => a.action === button.dataset.debugAction)!.whilePaused;
   });
   const top = debug.stack?.[0];
-  dom.debugTitle.textContent = paused && top ? `Paused at ${frameNodeName(top)}` : 'Running';
+  dom.debugTitle.textContent = paused && top ? `Paused at ${top.external ? top.graphName : frameNodeName(top)}` : 'Running';
   dom.callStack.innerHTML = '';
   (debug.stack ?? []).forEach((frame, i) => {
     const item = document.createElement('li');
-    item.className = (i === 0 ? 'current' : '') + (frame.here ? '' : ' elsewhere');
-    item.innerHTML = `<span class="frame-node">${escapeHtml(frameNodeName(frame))}</span> <span class="frame-graph">${escapeHtml(frame.graphName)}</span>${frame.here ? '' : ` <span class="frame-file">${escapeHtml(frame.fileName)}</span>`}`;
-    item.title = 'Show this node';
-    item.addEventListener('click', () => showFrame(frame));
+    item.className = (i === 0 ? 'current' : '') + (frame.external ? ' external' : frame.here ? '' : ' elsewhere');
+    if (frame.external) {
+      // Code outside the graphs: its function, file and line.
+      item.innerHTML = `<span class="frame-node">${escapeHtml(frame.graphName)}</span> <span class="frame-graph">${escapeHtml(frame.nodeName)}</span>`;
+    } else {
+      item.innerHTML = `<span class="frame-node">${escapeHtml(frameNodeName(frame))}</span> <span class="frame-graph">${escapeHtml(frame.graphName)}</span>${frame.here ? '' : ` <span class="frame-file">${escapeHtml(frame.fileName)}</span>`}`;
+      item.title = 'Show this node';
+      item.addEventListener('click', () => showFrame(frame));
+    }
     dom.callStack.appendChild(item);
   });
   if (paused && top?.here) showFrame(top, true);

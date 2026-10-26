@@ -14,6 +14,9 @@ export class CodeWriter {
   // The node whose comment was written last, so its following statements don't repeat it.
   private currentNode: string | undefined;
   readonly nodeLines: NodeLine[] = [];
+  // Lines (1-based) where code that belongs to no node starts: a method's opening, after the last
+  // node of the one before.
+  readonly breaks: number[] = [];
 
   constructor(private readonly indentUnit: string) {}
 
@@ -34,6 +37,7 @@ export class CodeWriter {
   // Code that follows doesn't continue the last node's (a new method, a call to a shared block).
   endNode(): void {
     this.currentNode = undefined;
+    if (this.breaks.at(-1) !== this.lines.length + 1) this.breaks.push(this.lines.length + 1);
   }
 
   indent(): void {

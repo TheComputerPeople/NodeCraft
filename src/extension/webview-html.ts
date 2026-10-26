@@ -37,6 +37,7 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
       <button id="compile" class="compile-button" data-state="unknown" title="Compile the graph to its target language"><span class="compile-icon" aria-hidden="true"></span>Compile</button>
       <button id="run" title="Compile, then run the generated code">▶ Run</button>
       <button id="simulate" title="Run the graph in the editor without compiling">Simulate</button>
+      <button id="debug" title="Compile, then run the generated code under the debugger, stopping at breakpoints (F5)">Debug</button>
       <label class="language-picker" title="Target language for generated code"><span>Language</span><select id="language" aria-label="Target language"></select></label>
       <button id="fit" title="Fit graph">Fit</button>
       <span id="graph-name">Untitled</span>

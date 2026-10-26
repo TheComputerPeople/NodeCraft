@@ -185,6 +185,8 @@ export function applySettings(message: HostMessage): void {
     dom.runButton.title = message.trusted ? 'Compile, then run the generated code' : restricted;
     dom.simulateButton.disabled = !message.trusted;
     dom.simulateButton.title = message.trusted ? 'Run the graph in the editor without compiling' : restricted;
+    dom.debugButton.disabled = !message.trusted;
+    dom.debugButton.title = message.trusted ? 'Compile, then run the generated code under the debugger, stopping at breakpoints (F5)' : restricted;
   }
 }
 
@@ -202,7 +204,7 @@ export function loadDocument(doc: GraphDocument, preserveView = false): void {
   dom.palette.hidden = typeDocument;
   dom.help.hidden = typeDocument;
   dom.fitButton.hidden = typeDocument;
-  for (const button of [dom.runButton, dom.simulateButton]) button.hidden = typeDocument;
+  for (const button of [dom.runButton, dom.simulateButton, dom.debugButton]) button.hidden = typeDocument;
   if (typeDocument) renderTypeEditor();
   renderLanguagePicker();
   // Variables may have changed, and the palette lists one Get and Set entry per variable.

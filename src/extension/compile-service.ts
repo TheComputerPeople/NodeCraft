@@ -4,6 +4,8 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { CompileDiagnostic, compileDocument } from '../core/compiler';
 import { LanguagePackRegistry } from '../core/language-pack';
+import { NodeLine } from '../core/compiler/writer';
+import { PinExpression } from '../core/language-pack';
 import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
@@ -23,10 +25,24 @@ export interface CompileOutcome {
   mainMethod?: string;
 }
 
+// What the debugger needs to know about a graph's generated file (docs/debugging.md).
+export interface GeneratedFile {
+  graph: vscode.Uri;
+  outputPath: string;
+  language: string;
+  nodeLines: NodeLine[];
+  codeBreaks: number[];
+  pinExpressions: PinExpression[];
+}
+
 export class CompileService implements vscode.Disposable {
   private readonly problems = vscode.languages.createDiagnosticCollection('blueprintVisualScripting');
   private readonly runs = new Map<string, AbortController>();
   private readonly lastReports = new Map<string, CompileReport>();
+  private readonly generated = new Map<string, GeneratedFile>();
+  private readonly compiled = new vscode.EventEmitter<GeneratedFile>();
+  // Fires after a graph compiles, with its generated file.
+  readonly onDidGenerate = this.compiled.event;
 
   constructor(
     private readonly registry: NodeRegistry,
@@ -38,6 +54,17 @@ export class CompileService implements vscode.Disposable {
 
   lastReport(uri: vscode.Uri): CompileReport | undefined {
     return this.lastReports.get(uri.toString());
+  }
+
+  // The graph's generated file as last compiled, if it compiled in this session.
+  generatedFile(graph: vscode.Uri): GeneratedFile | undefined {
+    return this.generated.get(graph.toString());
+  }
+
+  // The graph a generated file was compiled from.
+  generatedFileAt(outputPath: string): GeneratedFile | undefined {
+    const wanted = path.resolve(outputPath).toLowerCase();
+    return [...this.generated.values()].find((g) => path.resolve(g.outputPath).toLowerCase() === wanted);
   }
 
   async compile(document: vscode.TextDocument): Promise<CompileOutcome> {
@@ -88,6 +115,9 @@ export class CompileService implements vscode.Disposable {
     const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root)];
     const importRoots = result.output.importRoots?.map((r) => path.join(root, r));
     const sources = language === 'csharp' ? csharpRunSources(graphDir, root, outputPath, result.output.importedFiles ?? []) : undefined;
+    const generated: GeneratedFile = { graph: document.uri, outputPath, language, nodeLines: result.output.nodeLines, codeBreaks: result.output.codeBreaks ?? [], pinExpressions: result.output.pinExpressions ?? [] };
+    this.generated.set(document.uri.toString(), generated);
+    this.compiled.fire(generated);
     return finish({ report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, mainMethod: result.output.mainMethod }, graph);
   }
 
@@ -157,10 +187,12 @@ export class CompileService implements vscode.Disposable {
   forget(uri: vscode.Uri): void {
     this.problems.delete(uri);
     this.lastReports.delete(uri.toString());
+    this.generated.delete(uri.toString());
   }
 
   dispose(): void {
     this.problems.dispose();
+    this.compiled.dispose();
     this.runs.forEach((c) => c.abort());
   }
 
