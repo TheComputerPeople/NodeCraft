@@ -45,7 +45,7 @@ export async function runGeneratedCode(runner: CodeRunner, filePath: string, cla
   const file = { path: filePath, url: pathToFileURL(filePath).href };
   const candidates = options.command?.length ? [options.command] : runner.commands(process.platform);
   for (const candidate of candidates) {
-    const context: RunContext = { importRoots: options.importRoots, sources: options.sources, mainMethod: options.mainMethod, args: options.args };
+    const context: RunContext = { importRoots: options.importRoots, sources: options.sources, mainMethod: options.mainMethod, args: options.args, platform: process.platform };
     if (runner.probe) {
       const probe = await runCommand([...candidate, ...runner.probe.args], { cwd: options.cwd, env: runner.env, timeoutMs: 30000 });
       if (!probe) continue;
@@ -55,10 +55,21 @@ export async function runGeneratedCode(runner: CodeRunner, filePath: string, cla
       context.scaffoldDir = scaffoldDir(filePath);
       writeScaffold(context.scaffoldDir, runner.scaffold(file, className, context));
     }
+    // A language that builds first: a failed build is the run's outcome, with the compiler's output.
+    let program = candidate;
+    if (runner.build) {
+      const built = await runCommand([...candidate, ...runner.build(file, className, context)], { cwd: options.cwd, env: runner.env, timeoutMs: options.timeoutMs, signal: options.signal });
+      if (!built) continue;
+      if (built.exitCode !== 0 || built.aborted) {
+        options.onStderr?.(built.stdout + built.stderr);
+        return { ...built, stdout: '', stderr: built.stdout + built.stderr };
+      }
+      if (runner.executable) program = [runner.executable(file, className, context)];
+    }
     const args = options.tests
       ? runner.testArgs?.(file, className, { ...context, testFile: options.tests.testFile, tests: options.tests.cases }) ?? []
       : runner.args(file, className, context);
-    const outcome = await runCommand([...candidate, ...args], { ...options, env: runner.env });
+    const outcome = await runCommand([...program, ...args], { ...options, env: runner.env });
     if (outcome) return outcome;
   }
   throw new ToolNotFoundError(runner.missingToolMessage);
@@ -75,7 +86,7 @@ export async function prepareDebugging(runner: CodeRunner, codeDebugger: CodeDeb
   if (!runner.probe && !runner.scaffold && !codeDebugger.build) return base;
   const candidates = options.command?.length ? [options.command] : runner.commands(process.platform);
   for (const candidate of candidates) {
-    const context: RunContext = { ...base };
+    const context: RunContext = { ...base, platform: process.platform };
     if (runner.probe) {
       const probe = await runCommand([...candidate, ...runner.probe.args], { cwd: options.cwd, env: runner.env, timeoutMs: 30000 });
       if (!probe) continue;

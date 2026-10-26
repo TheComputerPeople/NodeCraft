@@ -5,26 +5,13 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { FixtureSet, formatReport, programFiles, runConformance } from '../../src/conformance/conformance';
+import { formatReport, runConformance } from '../../src/conformance/conformance';
+import { repoFixtures } from './fixtures';
 import { main } from '../../src/conformance/cli';
 import { builtinLanguagePacks } from '../../src/core/languages';
+import { cppPack } from '../../src/core/languages/cpp';
 import { javascriptPack } from '../../src/core/languages/javascript';
 import { repoRoot } from '../unit/helpers';
-
-// The repository's fixtures in the published suite's shape (the SDK copies the same files).
-export function repoFixtures(): FixtureSet {
-  const graphsDir = path.join(repoRoot, 'test/fixtures/graphs');
-  const graphs = [path.join(repoRoot, 'sample/demo.vgraph'), ...fs.readdirSync(graphsDir).filter((f) => f.endsWith('.vgraph')).sort().map((f) => path.join(graphsDir, f))];
-  const testsDir = path.join(repoRoot, 'test/fixtures/tests');
-  return {
-    fixtures: [
-      ...graphs.map((file) => ({ name: `graphs/${path.basename(file)}`, kind: 'graph' as const, files: [file] })),
-      { name: 'programs/arena', kind: 'program', files: programFiles(path.join(repoRoot, 'sample/arena')) },
-      ...fs.readdirSync(testsDir).filter((f) => f.endsWith('.vgraph')).sort().map((f) => ({ name: `tests/${f}`, kind: 'tests' as const, files: [path.join(testsDir, f)] }))
-    ],
-    nodes: [path.join(repoRoot, 'sample/visual-nodes/Math/Double.node.json'), path.join(repoRoot, 'test/fixtures/nodes/Fail.node.json')]
-  };
-}
 
 describe('published conformance suite', () => {
   for (const pack of builtinLanguagePacks().all()) {
@@ -36,6 +23,14 @@ describe('published conformance suite', () => {
       assert.equal(report.passed, report.results.length, formatReport(report));
     });
   }
+
+  // Not built in yet: its standard library snippets arrive in the next steps.
+  test('C++ passes every fixture it has the nodes for', async (t) => {
+    const report = await runConformance(cppPack, { fixtures: repoFixtures() });
+    if (report.skipped === report.results.length) return t.skip(report.results[0]?.message ?? 'no C++ compiler');
+    assert.equal(report.failed, 0, formatReport(report));
+    assert.ok(report.passed >= 9, formatReport(report));
+  });
 
   test('JavaScript as CommonJS passes too', async () => {
     const report = await runConformance(javascriptPack, { fixtures: repoFixtures(), generate: { moduleFormat: 'commonjs' } });

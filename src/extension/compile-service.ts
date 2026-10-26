@@ -117,10 +117,12 @@ export class CompileService implements vscode.Disposable {
 
     const outputPath = path.join(graphDir, result.output.fileName);
     await writeIfChanged(vscode.Uri.file(outputPath), result.output.text);
+    const companions = (result.output.companionFiles ?? []).map((c) => ({ path: path.join(graphDir, c.fileName), text: c.text }));
+    for (const companion of companions) await writeIfChanged(vscode.Uri.file(companion.path), companion.text);
     const testFileName = result.output.testFile !== undefined ? this.languages.get(language)?.generator?.testFileName?.(graphFileName) : undefined;
     const testPath = testFileName ? path.join(graphDir, testFileName) : undefined;
     if (testPath) await writeIfChanged(vscode.Uri.file(testPath), result.output.testFile!);
-    await this.removeStaleOutputs(graphDir, graphFileName, [outputPath, ...(testPath ? [testPath] : [])]);
+    await this.removeStaleOutputs(graphDir, graphFileName, [outputPath, ...companions.map((c) => c.path), ...(testPath ? [testPath] : [])]);
     const pack = this.languages.get(language);
     const registration = pack && this.outputPlans ? await this.outputPlans.apply(pack, root, outputPath) : [];
     const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root), ...registration];
@@ -202,7 +204,9 @@ export class CompileService implements vscode.Disposable {
   outputPathsFor(graphPath: string): string[] {
     const dir = path.dirname(graphPath);
     const name = path.basename(graphPath);
-    return this.languages.all().flatMap((p) => (p.generator ? [p.generator.outputFileName(name), ...(p.generator.testFileName ? [p.generator.testFileName(name)] : [])].map((f) => path.join(dir, f)) : []));
+    return this.languages.all().flatMap((p) => (p.generator
+      ? [p.generator.outputFileName(name), ...(p.generator.companionFileNames?.(name) ?? []), ...(p.generator.testFileName ? [p.generator.testFileName(name)] : [])].map((f) => path.join(dir, f))
+      : []));
   }
 
   forget(uri: vscode.Uri): void {

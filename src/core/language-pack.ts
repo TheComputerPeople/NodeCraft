@@ -53,6 +53,8 @@ export interface GenerateOptions {
 
 export interface GeneratedCode {
   text: string;
+  // Files generated with it, next to it (a C++ header): names from CodeGenerator.companionFileNames.
+  companionFiles?: { fileName: string; text: string }[];
   // The generated class's name, as the runner needs it.
   className: string;
   // Where each node's code starts, for jumping between graph and code and for debugging; and where
@@ -98,6 +100,8 @@ export interface RunContext {
   // GeneratedCode.mainMethod, and the program's command-line arguments for it.
   mainMethod?: string;
   args?: string[];
+  // Node.js's process.platform where it runs ("win32", "linux", "darwin").
+  platform?: string;
 }
 
 export interface CodeRunner {
@@ -110,6 +114,10 @@ export interface CodeRunner {
   // Arguments that run a class's tests: its test file (when the language writes one), or each test
   // method by name. Run Tests uses them (docs/debugging.md, "Test Case").
   testArgs?(file: { path: string; url: string }, className: string, context: RunContext & { testFile?: string; tests: { name: string; method: string }[] }): string[];
+  // Languages that build before running (C++): arguments for the candidate command that build the
+  // program, and the program that is then run with `args` (or `testArgs`).
+  build?(file: { path: string; url: string }, className: string, context: RunContext): string[];
+  executable?(file: { path: string; url: string }, className: string, context: RunContext): string;
   // Asks the tool about itself before running (e.g. its version); the parsed values join the context.
   probe?: { args: string[]; parse(stdout: string): Partial<RunContext> | undefined };
   // Languages that run from a project: the files to write into a scratch folder before running.
@@ -128,6 +136,9 @@ export interface CodeGenerator {
   outputFileName(graphFileName: string): string;
   // Name of the generated test file, for languages that write one (GeneratedCode.testFile).
   testFileName?(graphFileName: string): string;
+  // Names of the files generated along with the main one (GeneratedCode.companionFiles), so they
+  // follow the graph when it's renamed or deleted.
+  companionFileNames?(graphFileName: string): string[];
   // The module (or namespace) other generated files import a generated file at the workspace's
   // root by, for languages that import by name. The extension works it out from the project's
   // structure; the conformance runner, which writes a program's files side by side, asks this.

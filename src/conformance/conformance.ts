@@ -150,7 +150,8 @@ async function runFixture(pack: LanguagePack, fixture: Fixture, libraryNodes: No
   for (const { fileName, doc } of translated) {
     const result = compileDocument(doc, { registry, languages, generate: generate(fileName) });
     const errors = result.diagnostics.filter((d) => d.severity === 'error');
-    if (errors.length && errors.every((d) => d.code === 'unsupported')) return { fixture: fixture.name, status: 'not-applicable', message: describe(errors[0], fileName) };
+    // What the pack can't express, or a library node it has no implementation of.
+    if (errors.length && errors.every((d) => d.code === 'unsupported' || d.code === 'missing-snippet')) return { fixture: fixture.name, status: 'not-applicable', message: describe(errors[0], fileName) };
     if (errors.length || !result.output) return { fixture: fixture.name, status: 'failed', message: `It doesn't compile: ${errors.map((d) => describe(d, fileName)).join('; ')}` };
     compiled.push(result.output);
   }
@@ -159,6 +160,7 @@ async function runFixture(pack: LanguagePack, fixture: Fixture, libraryNodes: No
   const files = compiled.map((output) => {
     const file = path.join(dir, output.fileName);
     fs.writeFileSync(file, output.text);
+    for (const companion of output.companionFiles ?? []) fs.writeFileSync(path.join(dir, companion.fileName), companion.text);
     return file;
   });
   const entry = compiled[0];
