@@ -144,7 +144,11 @@ test('renaming a graph moves its generated file, and deleting it removes the fil
   assert.ok(await vscode.workspace.applyEdit(rename));
   await waitForFile(workspaceFile('renamed.vgraph.js'), true, 'the generated file to follow the rename');
   assert.equal(await exists(workspaceFile('legacy.vgraph.js')), false);
-  assert.match(await readText(workspaceFile('renamed.vgraph.js')), /from renamed\.vgraph\./);
+  // The rename recompiles it, which rewrites its header.
+  const renamedText = async () => readText(workspaceFile('renamed.vgraph.js'));
+  const deadline = Date.now() + 10000;
+  while (!/from renamed\.vgraph\./.test(await renamedText()) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.match(await renamedText(), /from renamed\.vgraph\./);
 
   const remove = new vscode.WorkspaceEdit();
   remove.deleteFile(renamed);
@@ -406,6 +410,78 @@ async function debugSample(language: string, generatedFile: string): Promise<voi
   }
 }
 
+// Phase 5's exit check (docs/debugging.md): Start calls Twice(21) and prints the result. With
+// breakpoints on the call and on Twice's Return: stop at the call, Step Into Twice, read its input,
+// Resume to the Return, read the sum, Step Out to the caller, and run to the end.
+async function exitCheck(language: string): Promise<void> {
+  const name = `exit_${language}.vgraph`;
+  const graph = workspaceFile(name);
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const wire = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}`, fromNode, fromPin, toNode, toPin });
+  const number = { id: 'float' };
+  const document = {
+    schemaVersion: 3, name: 'ExitCheck', kind: 'class', language, variables: [], metadata: {},
+    graphs: [
+      {
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [node('start', 'core:event.start'), node('call', 'core:function.call', { graph: 'Twice', 'pin:n': 21 }), node('print', 'core:console.print')],
+        connections: [wire('start', 'execOut', 'call', 'execIn'), wire('call', 'execOut', 'print', 'execIn'), wire('call', 'result', 'print', 'value')]
+      },
+      {
+        id: 'Twice', name: 'Twice', kind: 'function', comments: [],
+        signature: { inputs: [{ id: 'n', name: 'N', kind: 'data', type: number }], outputs: [{ id: 'result', name: 'Result', kind: 'data', type: number }] },
+        nodes: [node('entry', 'core:function.entry', { graph: 'Twice' }), node('add', 'core:math.add'), node('ret', 'core:function.return', { graph: 'Twice' })],
+        connections: [wire('entry', 'execOut', 'add', 'execIn'), wire('entry', 'n', 'add', 'a'), { ...wire('entry', 'n', 'add', 'b'), id: 'entry.n.b' }, wire('add', 'execOut', 'ret', 'execIn'), wire('add', 'result', 'ret', 'result')]
+      }
+    ]
+  };
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify(document, null, 2)));
+  await openInGraphEditor(name);
+  const api = vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi;
+  await api.marks.breakpoints.set(graph, [{ graphId: 'EventGraph', nodeId: 'call', enabled: true }, { graphId: 'Twice', nodeId: 'ret', enabled: true }]);
+  const stack = () => api.provider.currentDebug()?.stack?.filter((f) => !f.external).map((f) => `${f.graphId}/${f.nodeId}`);
+  const until = (what: string, ready: (frames: string[]) => boolean) => waitFor(() => !!stack() && ready(stack()!), what, 60000)
+    .catch((error: Error) => { throw new Error(`${error.message}; the stack: ${JSON.stringify(api.provider.currentDebug()?.stack ?? 'running')}`); });
+  try {
+    await vscode.commands.executeCommand('blueprintVisualScripting.debug', graph);
+    await until('the stop at the call', (frames) => frames[0] === 'EventGraph/call');
+    const debug = api.provider.currentDebug()!;
+
+    debug.act('stepInto');
+    await until('Step Into Twice', (frames) => frames[0] !== 'EventGraph/call');
+    assert.deepEqual(stack(), ['Twice/add', 'EventGraph/call'], 'the call stack, in graph terms');
+    assert.deepEqual(await debug.read(graph, [{ graphId: 'Twice', nodeId: 'entry', pinId: 'n' }]), [{ value: '21' }]);
+
+    debug.act('resume');
+    await until('the stop at the Return', (frames) => frames[0] === 'Twice/ret');
+    assert.deepEqual(await debug.read(graph, [{ graphId: 'Twice', nodeId: 'add', pinId: 'result' }]), [{ value: '42' }]);
+
+    debug.act('stepOut');
+    await until('Step Out to the caller', (frames) => frames.length === 1);
+    assert.ok(['EventGraph/call', 'EventGraph/print'].includes(stack()![0]), stack()![0]);
+
+    debug.act('resume');
+    await waitFor(() => !api.provider.currentDebug(), 'the session to end', 60000);
+  } finally {
+    api.provider.currentDebug()?.act('stop');
+    await api.marks.breakpoints.set(graph, []);
+  }
+}
+
+test('exit check: debugging a function graph in generated TypeScript', () => exitCheck('typescript'));
+
+test('exit check: debugging a function graph in generated JavaScript', () => exitCheck('javascript'));
+
+test('exit check: debugging a function graph in generated Python', async () => {
+  if (!vscode.extensions.getExtension('ms-python.debugpy')) throw new Skip('the Python Debugger extension is not loaded');
+  await exitCheck('python');
+});
+
+test('exit check: debugging a function graph in generated C#', async () => {
+  if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
+  await exitCheck('csharp');
+});
+
 test('Debug stops at a node breakpoint in generated JavaScript, steps by node and reads pins', () => debugSample('javascript', 'debug_javascript.vgraph.js'));
 
 test('Debug does the same in generated TypeScript', () => debugSample('typescript', 'debug_typescript.vgraph.ts'));
@@ -425,7 +501,9 @@ test('Debug does the same in generated C# (coreclr)', async () => {
 export async function run(): Promise<void> {
   const failures: string[] = [];
   let skipped = 0;
-  for (const { name, run: body } of tests) {
+  const filter = process.env.BLUEPRINT_IT_FILTER ?? '';
+  const selected = tests.filter((t) => t.name.includes(filter));
+  for (const { name, run: body } of selected) {
     try {
       await body();
       console.log(`  ✔ ${name}`);
@@ -440,6 +518,6 @@ export async function run(): Promise<void> {
     }
   }
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-  console.log(`${tests.length - failures.length - skipped}/${tests.length - skipped} integration tests passed${skipped ? ` (${skipped} skipped)` : ''}`);
+  console.log(`${selected.length - failures.length - skipped}/${selected.length - skipped} integration tests passed${skipped ? ` (${skipped} skipped)` : ''}`);
   if (failures.length) throw new Error(`${failures.length} integration test(s) failed: ${failures.join(', ')}`);
 }

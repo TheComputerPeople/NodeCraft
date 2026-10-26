@@ -21,10 +21,17 @@ describe('debug lines', () => {
     assert.equal(nodeAtLine(nodeLines, 10)?.nodeId, 'a');
     assert.equal(nodeAtLine(nodeLines, 13)?.nodeId, 'b');
     assert.equal(nodeAtLine(nodeLines, 25)?.nodeId, 'a');
-    // A method opening at line 14 ends b's code, so line 15 belongs to no node.
-    assert.equal(nodeAtLine(nodeLines, 15, [14]), undefined);
+    // A method opening at line 14 ends b's code: line 15 is in that method, before its first node.
+    assert.equal(nodeAtLine(nodeLines, 15, [14])?.nodeId, 'a');
     assert.equal(nodeAtLine(nodeLines, 13, [14])?.nodeId, 'b');
     assert.equal(nodeAtLine(nodeLines, 25, [14])?.nodeId, 'a');
+    // Lines 15 to 19 are a method's prologue (it opens at 14): about to run its first node, a@20.
+    assert.equal(nodeAtLine(nodeLines, 17, [14])?.nodeId, 'a');
+    // Before any method (imports, fields) there's none; in a method opened at 3, a@10 is next.
+    assert.equal(nodeAtLine(nodeLines, 5, []), undefined);
+    assert.equal(nodeAtLine(nodeLines, 5, [3])?.nodeId, 'a');
+    // A helper method (opened at 14) before another method (opened at 18): none.
+    assert.equal(nodeAtLine(nodeLines, 16, [14, 18]), undefined);
   });
 
   test('a breakpoint is at every place its node\'s code starts; a pure node\'s at the nodes reading it', () => {

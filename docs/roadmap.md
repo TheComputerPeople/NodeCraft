@@ -194,6 +194,10 @@ Goal: Blueprint debugging, powered by each language's real debugger.
 
 Exit: the debugging loop works in TypeScript, Python and C# without the user ever opening a generated file.
 
+Status: complete (October 2026), with the deferrals below. The exit check is in the integration suite: a graph whose Start calls a function graph stops at a breakpoint on the call, steps into the function graph (the call stack in graph terms), reads the function's input, resumes to a breakpoint in the function graph, reads a computed value, steps out to the caller and runs to the end, with the graph editor in front throughout. It runs in generated TypeScript and JavaScript on every run, and in Python and C# with `npm run test:integration:debuggers` (which loads the Python Debugger and C# extensions). Simulate's debugger does the same in the unit tests, without a toolchain.
+
+- **Deferred:** stepping into a macro's graph (a macro use steps as one node); pin values in frames other than the innermost one running a graph; pure nodes' values in generated code (they aren't stored, so the bubble says so); xUnit test files for C# (C# tests run through Run's project); syncing a mirrored breakpoint's enabled state from VS Code back to the graph; Simulate calling project functions (Phase 3's deferral: Debug runs the real code instead).
+
 Design: [debugging.md](debugging.md). Steps, one commit each (large steps may take several):
 
 1. Design and plan (this list).
@@ -316,6 +320,6 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python; methods with Phase 4 classes) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
 | Library | Standard math, string, utility and file nodes | ✅ (collection nodes need Phase 4) | — |
-| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python and C#) | 5 |
-| Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python and C#) | 5 |
-| Debugging | Execution flow highlighting | ✅ (run trail and exec wire pulses, in Simulate) | 5 |
+| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python and C#) | — |
+| Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python and C#) | — |
+| Debugging | Execution flow highlighting | ✅ (run trail and exec wire pulses, in Simulate) | — |

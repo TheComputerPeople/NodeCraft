@@ -7,13 +7,19 @@ import { isPure } from './resolve';
 
 // The node whose code contains `line`: the nearest node starting at or before it, in the generated
 // file's order, unless code that belongs to no node starts in between (`breaks`: a method's
-// opening). Lines before the first node's code (imports, fields) belong to none.
+// opening). A method's own lines before its first node (its local variables) belong to that node:
+// execution there is about to run it. Other lines (imports, fields, helpers) belong to none.
 export function nodeAtLine(nodeLines: readonly NodeLine[], line: number, breaks: readonly number[] = []): NodeLine | undefined {
-  let best: NodeLine | undefined;
+  let before: NodeLine | undefined;
+  let after: NodeLine | undefined;
   for (const n of nodeLines) {
-    if (n.line <= line && (!best || n.line > best.line)) best = n;
+    if (n.line <= line && (!before || n.line > before.line)) before = n;
+    if (n.line > line && (!after || n.line < after.line)) after = n;
   }
-  return best && !breaks.some((b) => b > best!.line && b <= line) ? best : undefined;
+  if (before && !breaks.some((b) => b > before!.line && b <= line)) return before;
+  // In a method's prologue: a method opened at or before the line, and no other one before the node.
+  if (after && breaks.some((b) => b <= line) && !breaks.some((b) => b > line && b <= after!.line)) return after;
+  return undefined;
 }
 
 // The lines a breakpoint on a node becomes: where its code starts (a node may be written more than

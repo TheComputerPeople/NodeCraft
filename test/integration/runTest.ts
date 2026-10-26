@@ -33,6 +33,8 @@ async function main(): Promise<void> {
       version: minimumVsCodeVersion(),
       extensionDevelopmentPath: repoRoot,
       extensionTestsPath: path.join(__dirname, 'suite'),
+      // BLUEPRINT_IT_FILTER runs only the tests whose names contain it.
+      extensionTestsEnv: { BLUEPRINT_IT_FILTER: process.env.BLUEPRINT_IT_FILTER ?? '' },
       // With --with-debuggers, the installed extensions load (Python's and C#'s debuggers), so their
       // debugging tests run instead of being skipped.
       launchArgs: [workspace, ...(withDebuggers ? [`--extensions-dir=${path.join(os.homedir(), '.vscode', 'extensions')}`] : ['--disable-extensions']), '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes']
