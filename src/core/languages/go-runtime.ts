@@ -354,6 +354,11 @@ func NewVgMap[K comparable, V any](items ...any) *VgMap[K, V] {
 	return m
 }
 
+// Empty is a new, empty map of the same types (for code that can't name them).
+func (m *VgMap[K, V]) Empty() *VgMap[K, V] {
+	return NewVgMap[K, V]()
+}
+
 func (m *VgMap[K, V]) Put(key K, value V) {
 	if _, ok := m.values[key]; !ok {
 		m.keys = append(m.keys, key)

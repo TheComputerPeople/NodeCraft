@@ -1,0 +1,66 @@
+{
+  "$schema": "../../../schemas/node.schema.json",
+  "type": "universal-utils:map.omit",
+  "version": 1,
+  "displayName": "Omit",
+  "category": "Utilities / Maps",
+  "description": "A copy of the map without the entries whose keys are in Keys, in the map's order.",
+  "keywords": [
+    "remove",
+    "exclude",
+    "without",
+    "keys"
+  ],
+  "inputs": [
+    {
+      "id": "source",
+      "name": "Map",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "wildcard",
+        "container": "map",
+        "valueType": {
+          "id": "wildcard:value"
+        }
+      }
+    },
+    {
+      "id": "keys",
+      "name": "Keys",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "wildcard",
+        "container": "array"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "id": "returnValue",
+      "name": "Return Value",
+      "kind": "data",
+      "direction": "output",
+      "type": {
+        "id": "wildcard",
+        "container": "map",
+        "valueType": {
+          "id": "wildcard:value"
+        }
+      }
+    }
+  ],
+  "implementation": {
+    "kind": "code",
+    "languages": {
+      "javascript": "const excluded = new Set(keys);\nreturn new Map([...source].filter(([key]) => !excluded.has(key)));",
+      "python": "return {key: value for key, value in source.items() if key not in keys}",
+      "csharp": "return source.Where(entry => !keys.Contains(entry.Key)).ToDictionary(entry => entry.Key, entry => entry.Value);",
+      "cpp": "std::decay_t<decltype(source)> result;\nfor (const auto& entry : source) if (std::find(keys.begin(), keys.end(), entry.first) == keys.end()) result[entry.first] = entry.second;\nreturn result;",
+      "rust": "let mut result = vgraph::Map::new();\nfor key in source.keys() {\n    if !keys.contains(&key) {\n        if let Some(value) = source.get(&key) { result.insert(key, value); }\n    }\n}\nreturn result;",
+      "java": "var result = new java.util.LinkedHashMap<>(source);\nresult.keySet().removeAll(keys);\nreturn result;",
+      "go": "result := source.Empty()\nfor _, key := range *source.Keys() {\n\tif !slices.Contains(*keys, key) {\n\t\tvalue, _ := source.Get(key)\n\t\tresult.Put(key, value)\n\t}\n}\nreturn result"
+    }
+  }
+}

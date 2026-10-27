@@ -1,0 +1,51 @@
+{
+  "$schema": "../../../schemas/node.schema.json",
+  "type": "universal-utils:parse.boolean",
+  "version": 1,
+  "displayName": "Parse Boolean",
+  "category": "Utilities / Parsing",
+  "description": "True for true, 1, yes, y or on; false for false, 0, no, n or off (any case, spaces around ignored). Anything else stops the run with an error.",
+  "keywords": [
+    "parse",
+    "bool",
+    "yes",
+    "no",
+    "on",
+    "off"
+  ],
+  "inputs": [
+    {
+      "id": "text",
+      "name": "Text",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "string"
+      },
+      "defaultValue": ""
+    }
+  ],
+  "outputs": [
+    {
+      "id": "returnValue",
+      "name": "Return Value",
+      "kind": "data",
+      "direction": "output",
+      "type": {
+        "id": "bool"
+      }
+    }
+  ],
+  "implementation": {
+    "kind": "code",
+    "languages": {
+      "javascript": "const value = text.trim().toLowerCase();\nif (['true', '1', 'yes', 'y', 'on'].includes(value)) return true;\nif (['false', '0', 'no', 'n', 'off'].includes(value)) return false;\nthrow new Error('Not a boolean: \"' + text + '\"');",
+      "python": "value = text.strip().lower()\nif value in (\"true\", \"1\", \"yes\", \"y\", \"on\"):\n    return True\nif value in (\"false\", \"0\", \"no\", \"n\", \"off\"):\n    return False\nraise ValueError('Not a boolean: \"' + text + '\"')",
+      "csharp": "var value = text.Trim().ToLowerInvariant();\nif (value is \"true\" or \"1\" or \"yes\" or \"y\" or \"on\") return true;\nif (value is \"false\" or \"0\" or \"no\" or \"n\" or \"off\") return false;\nthrow new ArgumentException(\"Not a boolean: \\\"\" + text + \"\\\"\");",
+      "cpp": "std::string value;\nfor (unsigned char c : text) value += static_cast<char>(std::tolower(c));\nauto first = value.find_first_not_of(\" \\t\\n\\r\\f\\v\");\nvalue = first == std::string::npos ? \"\" : value.substr(first, value.find_last_not_of(\" \\t\\n\\r\\f\\v\") - first + 1);\nif (value == \"true\" || value == \"1\" || value == \"yes\" || value == \"y\" || value == \"on\") return true;\nif (value == \"false\" || value == \"0\" || value == \"no\" || value == \"n\" || value == \"off\") return false;\nthrow std::invalid_argument(\"Not a boolean: \\\"\" + text + \"\\\"\");",
+      "rust": "return match text.trim().to_lowercase().as_str() {\n    \"true\" | \"1\" | \"yes\" | \"y\" | \"on\" => true,\n    \"false\" | \"0\" | \"no\" | \"n\" | \"off\" => false,\n    _ => panic!(\"Not a boolean: \\\"{}\\\"\", text),\n};",
+      "java": "String value = text.strip().toLowerCase(java.util.Locale.ROOT);\nif (java.util.List.of(\"true\", \"1\", \"yes\", \"y\", \"on\").contains(value)) return true;\nif (java.util.List.of(\"false\", \"0\", \"no\", \"n\", \"off\").contains(value)) return false;\nthrow new IllegalArgumentException(\"Not a boolean: \\\"\" + text + \"\\\"\");",
+      "go": "switch strings.ToLower(strings.TrimSpace(text)) {\ncase \"true\", \"1\", \"yes\", \"y\", \"on\":\n\treturn true\ncase \"false\", \"0\", \"no\", \"n\", \"off\":\n\treturn false\n}\nVgFail(\"Not a boolean: \\\"\" + text + \"\\\"\")\nreturn false"
+    }
+  }
+}

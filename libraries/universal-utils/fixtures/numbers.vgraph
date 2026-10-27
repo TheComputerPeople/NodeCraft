@@ -1,0 +1,535 @@
+{
+  "schemaVersion": 3,
+  "name": "UtilsNumbers",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "metadata": {
+    "description": "universal-utils fixture: numbers and parsing.",
+    "expectedOutput": [
+      "false",
+      "true",
+      "2.68",
+      "1.01",
+      "-2",
+      "3.142",
+      "512 B",
+      "1.50 KiB",
+      "5.3 MiB",
+      "3 GiB",
+      "true",
+      "false",
+      "-42",
+      "7"
+    ]
+  },
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "print1",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 120
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "universal-utils:number.in-range",
+          "position": {
+            "x": 300,
+            "y": 120
+          },
+          "properties": {
+            "pin:value": 5,
+            "pin:start": 0,
+            "pin:end": 5
+          }
+        },
+        {
+          "id": "print2",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "universal-utils:number.in-range",
+          "position": {
+            "x": 300,
+            "y": 240
+          },
+          "properties": {
+            "pin:value": 0,
+            "pin:start": 0,
+            "pin:end": 5
+          }
+        },
+        {
+          "id": "print3",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "universal-utils:number.round-to",
+          "position": {
+            "x": 300,
+            "y": 360
+          },
+          "properties": {
+            "pin:value": 2.675,
+            "pin:digits": 2
+          }
+        },
+        {
+          "id": "print4",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 480
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "universal-utils:number.round-to",
+          "position": {
+            "x": 300,
+            "y": 480
+          },
+          "properties": {
+            "pin:value": 1.005,
+            "pin:digits": 2
+          }
+        },
+        {
+          "id": "print5",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 600
+          },
+          "properties": {}
+        },
+        {
+          "id": "n5",
+          "type": "universal-utils:number.round-to",
+          "position": {
+            "x": 300,
+            "y": 600
+          },
+          "properties": {
+            "pin:value": -1.5,
+            "pin:digits": 0
+          }
+        },
+        {
+          "id": "print6",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 720
+          },
+          "properties": {}
+        },
+        {
+          "id": "n6",
+          "type": "universal-utils:number.round-to",
+          "position": {
+            "x": 300,
+            "y": 720
+          },
+          "properties": {
+            "pin:value": 3.14159,
+            "pin:digits": 3
+          }
+        },
+        {
+          "id": "print7",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 840
+          },
+          "properties": {}
+        },
+        {
+          "id": "n7",
+          "type": "universal-utils:number.format-bytes",
+          "position": {
+            "x": 300,
+            "y": 840
+          },
+          "properties": {
+            "pin:size": 512,
+            "pin:decimals": 2
+          }
+        },
+        {
+          "id": "print8",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 960
+          },
+          "properties": {}
+        },
+        {
+          "id": "n8",
+          "type": "universal-utils:number.format-bytes",
+          "position": {
+            "x": 300,
+            "y": 960
+          },
+          "properties": {
+            "pin:size": 1536,
+            "pin:decimals": 2
+          }
+        },
+        {
+          "id": "print9",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 1080
+          },
+          "properties": {}
+        },
+        {
+          "id": "n9",
+          "type": "universal-utils:number.format-bytes",
+          "position": {
+            "x": 300,
+            "y": 1080
+          },
+          "properties": {
+            "pin:size": 5505024,
+            "pin:decimals": 1
+          }
+        },
+        {
+          "id": "print10",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 1200
+          },
+          "properties": {}
+        },
+        {
+          "id": "n10",
+          "type": "universal-utils:number.format-bytes",
+          "position": {
+            "x": 300,
+            "y": 1200
+          },
+          "properties": {
+            "pin:size": 3221225472,
+            "pin:decimals": 0
+          }
+        },
+        {
+          "id": "print11",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 1320
+          },
+          "properties": {}
+        },
+        {
+          "id": "n11",
+          "type": "universal-utils:parse.boolean",
+          "position": {
+            "x": 300,
+            "y": 1320
+          },
+          "properties": {
+            "pin:text": " Yes "
+          }
+        },
+        {
+          "id": "print12",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 1440
+          },
+          "properties": {}
+        },
+        {
+          "id": "n12",
+          "type": "universal-utils:parse.boolean",
+          "position": {
+            "x": 300,
+            "y": 1440
+          },
+          "properties": {
+            "pin:text": "off"
+          }
+        },
+        {
+          "id": "print13",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 1560
+          },
+          "properties": {}
+        },
+        {
+          "id": "n13",
+          "type": "universal-utils:parse.integer-strict",
+          "position": {
+            "x": 300,
+            "y": 1560
+          },
+          "properties": {
+            "pin:text": " -42 "
+          }
+        },
+        {
+          "id": "print14",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 1680
+          },
+          "properties": {}
+        },
+        {
+          "id": "n14",
+          "type": "universal-utils:parse.integer-strict",
+          "position": {
+            "x": 300,
+            "y": 1680
+          },
+          "properties": {
+            "pin:text": "+7"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "print1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "print1",
+          "toPin": "value"
+        },
+        {
+          "id": "w3",
+          "fromNode": "print1",
+          "fromPin": "execOut",
+          "toNode": "print2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "print2",
+          "toPin": "value"
+        },
+        {
+          "id": "w5",
+          "fromNode": "print2",
+          "fromPin": "execOut",
+          "toNode": "print3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "print3",
+          "toPin": "value"
+        },
+        {
+          "id": "w7",
+          "fromNode": "print3",
+          "fromPin": "execOut",
+          "toNode": "print4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n4",
+          "fromPin": "returnValue",
+          "toNode": "print4",
+          "toPin": "value"
+        },
+        {
+          "id": "w9",
+          "fromNode": "print4",
+          "fromPin": "execOut",
+          "toNode": "print5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n5",
+          "fromPin": "returnValue",
+          "toNode": "print5",
+          "toPin": "value"
+        },
+        {
+          "id": "w11",
+          "fromNode": "print5",
+          "fromPin": "execOut",
+          "toNode": "print6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n6",
+          "fromPin": "returnValue",
+          "toNode": "print6",
+          "toPin": "value"
+        },
+        {
+          "id": "w13",
+          "fromNode": "print6",
+          "fromPin": "execOut",
+          "toNode": "print7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n7",
+          "fromPin": "returnValue",
+          "toNode": "print7",
+          "toPin": "value"
+        },
+        {
+          "id": "w15",
+          "fromNode": "print7",
+          "fromPin": "execOut",
+          "toNode": "print8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n8",
+          "fromPin": "returnValue",
+          "toNode": "print8",
+          "toPin": "value"
+        },
+        {
+          "id": "w17",
+          "fromNode": "print8",
+          "fromPin": "execOut",
+          "toNode": "print9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w18",
+          "fromNode": "n9",
+          "fromPin": "returnValue",
+          "toNode": "print9",
+          "toPin": "value"
+        },
+        {
+          "id": "w19",
+          "fromNode": "print9",
+          "fromPin": "execOut",
+          "toNode": "print10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w20",
+          "fromNode": "n10",
+          "fromPin": "returnValue",
+          "toNode": "print10",
+          "toPin": "value"
+        },
+        {
+          "id": "w21",
+          "fromNode": "print10",
+          "fromPin": "execOut",
+          "toNode": "print11",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w22",
+          "fromNode": "n11",
+          "fromPin": "returnValue",
+          "toNode": "print11",
+          "toPin": "value"
+        },
+        {
+          "id": "w23",
+          "fromNode": "print11",
+          "fromPin": "execOut",
+          "toNode": "print12",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w24",
+          "fromNode": "n12",
+          "fromPin": "returnValue",
+          "toNode": "print12",
+          "toPin": "value"
+        },
+        {
+          "id": "w25",
+          "fromNode": "print12",
+          "fromPin": "execOut",
+          "toNode": "print13",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w26",
+          "fromNode": "n13",
+          "fromPin": "returnValue",
+          "toNode": "print13",
+          "toPin": "value"
+        },
+        {
+          "id": "w27",
+          "fromNode": "print13",
+          "fromPin": "execOut",
+          "toNode": "print14",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w28",
+          "fromNode": "n14",
+          "fromPin": "returnValue",
+          "toNode": "print14",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

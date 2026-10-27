@@ -1,0 +1,68 @@
+{
+  "$schema": "../../../schemas/node.schema.json",
+  "type": "universal-utils:text.pad-right",
+  "version": 1,
+  "displayName": "Pad Right",
+  "category": "Utilities / Text",
+  "description": "The text with Fill (one character) repeated after it, up to Width characters.",
+  "keywords": [
+    "pad",
+    "align",
+    "width"
+  ],
+  "inputs": [
+    {
+      "id": "text",
+      "name": "Text",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "string"
+      },
+      "defaultValue": ""
+    },
+    {
+      "id": "width",
+      "name": "Width",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "int"
+      },
+      "defaultValue": 8
+    },
+    {
+      "id": "fill",
+      "name": "Fill",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "string"
+      },
+      "defaultValue": " "
+    }
+  ],
+  "outputs": [
+    {
+      "id": "returnValue",
+      "name": "Return Value",
+      "kind": "data",
+      "direction": "output",
+      "type": {
+        "id": "string"
+      }
+    }
+  ],
+  "implementation": {
+    "kind": "code",
+    "languages": {
+      "javascript": "if ([...fill].length !== 1) throw new Error('Fill must be one character');\nconst missing = width - [...text].length;\nreturn text + (missing > 0 ? fill.repeat(missing) : '');",
+      "python": "if len(fill) != 1:\n    raise ValueError(\"Fill must be one character\")\nreturn text + fill * max(0, width - len(text))",
+      "csharp": "var units = 0;\nforeach (var _ in fill.EnumerateRunes()) units++;\nif (units != 1) throw new ArgumentException(\"Fill must be one character\");\nvar length = 0;\nforeach (var _ in text.EnumerateRunes()) length++;\nreturn text + string.Concat(Enumerable.Repeat(fill, Math.Max(0, width - length)));",
+      "cpp": "auto count = [](const std::string& s) { long long n = 0; for (unsigned char c : s) if ((c & 0xC0) != 0x80) n++; return n; };\nif (count(fill) != 1) throw std::invalid_argument(\"Fill must be one character\");\nstd::string padding;\nfor (long long i = count(text); i < width; i++) padding += fill;\nreturn text + padding;",
+      "rust": "if fill.chars().count() != 1 { panic!(\"Fill must be one character\"); }\nlet missing = (width - text.chars().count() as i64).max(0) as usize;\nreturn text + &fill.repeat(missing);",
+      "java": "if (fill.codePointCount(0, fill.length()) != 1) throw new IllegalArgumentException(\"Fill must be one character\");\nlong missing = width - text.codePointCount(0, text.length());\nreturn text + (missing > 0 ? fill.repeat((int) missing) : \"\");",
+      "go": "if utf8.RuneCountInString(fill) != 1 {\n\tVgFail(\"Fill must be one character\")\n}\nreturn text + strings.Repeat(fill, max(0, width-utf8.RuneCountInString(text)))"
+    }
+  }
+}

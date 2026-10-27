@@ -1,0 +1,79 @@
+{
+  "$schema": "../../../schemas/node.schema.json",
+  "type": "universal-utils:text.mask",
+  "version": 1,
+  "displayName": "Mask",
+  "category": "Utilities / Text",
+  "description": "The text with every character replaced by Mask (one character), except the first Visible Start and the last Visible End.",
+  "keywords": [
+    "hide",
+    "redact",
+    "secret",
+    "password"
+  ],
+  "inputs": [
+    {
+      "id": "text",
+      "name": "Text",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "string"
+      },
+      "defaultValue": ""
+    },
+    {
+      "id": "visibleStart",
+      "name": "Visible Start",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "int"
+      },
+      "defaultValue": 0
+    },
+    {
+      "id": "visibleEnd",
+      "name": "Visible End",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "int"
+      },
+      "defaultValue": 4
+    },
+    {
+      "id": "mask",
+      "name": "Mask",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "string"
+      },
+      "defaultValue": "*"
+    }
+  ],
+  "outputs": [
+    {
+      "id": "returnValue",
+      "name": "Return Value",
+      "kind": "data",
+      "direction": "output",
+      "type": {
+        "id": "string"
+      }
+    }
+  ],
+  "implementation": {
+    "kind": "code",
+    "languages": {
+      "javascript": "if (visibleStart < 0 || visibleEnd < 0) throw new Error(\"Visible counts can't be negative\");\nif ([...mask].length !== 1) throw new Error('Mask must be one character');\nconst chars = [...text];\nconst start = Math.min(visibleStart, chars.length);\nconst end = Math.min(visibleEnd, chars.length - start);\nreturn chars.slice(0, start).join('') + mask.repeat(chars.length - start - end) + chars.slice(chars.length - end).join('');",
+      "python": "if visibleStart < 0 or visibleEnd < 0:\n    raise ValueError(\"Visible counts can't be negative\")\nif len(mask) != 1:\n    raise ValueError(\"Mask must be one character\")\nstart = min(visibleStart, len(text))\nend = min(visibleEnd, len(text) - start)\nreturn text[:start] + mask * (len(text) - start - end) + text[len(text) - end:]",
+      "csharp": "if (visibleStart < 0 || visibleEnd < 0) throw new ArgumentException(\"Visible counts can't be negative\");\nvar units = 0;\nforeach (var _ in mask.EnumerateRunes()) units++;\nif (units != 1) throw new ArgumentException(\"Mask must be one character\");\nvar chars = new List<string>();\nforeach (var rune in text.EnumerateRunes()) chars.Add(rune.ToString());\nvar start = Math.Min(visibleStart, chars.Count);\nvar end = Math.Min(visibleEnd, chars.Count - start);\nreturn string.Concat(chars.Take(start)) + string.Concat(Enumerable.Repeat(mask, chars.Count - start - end)) + string.Concat(chars.Skip(chars.Count - end));",
+      "cpp": "auto codePoints = [](const std::string& s) {\n    std::vector<std::string> out;\n    for (std::size_t i = 0; i < s.size();) {\n        std::size_t n = 1;\n        while (i + n < s.size() && (static_cast<unsigned char>(s[i + n]) & 0xC0) == 0x80) n++;\n        out.push_back(s.substr(i, n));\n        i += n;\n    }\n    return out;\n};\nif (visibleStart < 0 || visibleEnd < 0) throw std::invalid_argument(\"Visible counts can't be negative\");\nif (codePoints(mask).size() != 1) throw std::invalid_argument(\"Mask must be one character\");\nauto chars = codePoints(text);\nlong long n = static_cast<long long>(chars.size());\nlong long start = std::min(visibleStart, n);\nlong long end = std::min(visibleEnd, n - start);\nstd::string result;\nfor (long long i = 0; i < n; i++) result += i < start || i >= n - end ? chars[i] : mask;\nreturn result;",
+      "rust": "if visibleStart < 0 || visibleEnd < 0 { panic!(\"Visible counts can't be negative\"); }\nif mask.chars().count() != 1 { panic!(\"Mask must be one character\"); }\nlet chars: Vec<char> = text.chars().collect();\nlet n = chars.len() as i64;\nlet start = visibleStart.min(n);\nlet end = visibleEnd.min(n - start);\nlet mut result = String::new();\nfor (i, c) in chars.iter().enumerate() {\n    let i = i as i64;\n    if i < start || i >= n - end { result.push(*c); } else { result.push_str(&mask); }\n}\nreturn result;",
+      "java": "if (visibleStart < 0 || visibleEnd < 0) throw new IllegalArgumentException(\"Visible counts can't be negative\");\nif (mask.codePointCount(0, mask.length()) != 1) throw new IllegalArgumentException(\"Mask must be one character\");\nint[] chars = text.codePoints().toArray();\nlong start = Math.min(visibleStart, chars.length);\nlong end = Math.min(visibleEnd, chars.length - start);\nvar result = new StringBuilder();\nfor (int i = 0; i < chars.length; i++) {\n    if (i < start || i >= chars.length - end) result.appendCodePoint(chars[i]);\n    else result.append(mask);\n}\nreturn result.toString();",
+      "go": "if visibleStart < 0 || visibleEnd < 0 {\n\tVgFail(\"Visible counts can't be negative\")\n}\nif utf8.RuneCountInString(mask) != 1 {\n\tVgFail(\"Mask must be one character\")\n}\nchars := []rune(text)\nstart := min(visibleStart, len(chars))\nend := min(visibleEnd, len(chars)-start)\nresult := \"\"\nfor i, c := range chars {\n\tif i < start || i >= len(chars)-end {\n\t\tresult += string(c)\n\t} else {\n\t\tresult += mask\n\t}\n}\nreturn result"
+    }
+  }
+}

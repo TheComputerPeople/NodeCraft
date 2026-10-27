@@ -1,0 +1,48 @@
+{
+  "$schema": "../../../schemas/node.schema.json",
+  "type": "universal-utils:array.median",
+  "version": 1,
+  "displayName": "Median",
+  "category": "Utilities / Arrays",
+  "description": "The middle value once the values are sorted, or the mean of the two middle ones. An empty array stops the run with an error.",
+  "keywords": [
+    "median",
+    "middle",
+    "statistics"
+  ],
+  "inputs": [
+    {
+      "id": "values",
+      "name": "Values",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "float",
+        "container": "array"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "id": "returnValue",
+      "name": "Return Value",
+      "kind": "data",
+      "direction": "output",
+      "type": {
+        "id": "float"
+      }
+    }
+  ],
+  "implementation": {
+    "kind": "code",
+    "languages": {
+      "javascript": "if (!values.length) throw new Error('Median needs at least one value');\nconst sorted = [...values].sort((a, b) => a - b);\nconst middle = Math.floor(sorted.length / 2);\nreturn sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;",
+      "python": "if not values:\n    raise ValueError(\"Median needs at least one value\")\nordered = sorted(values)\nmiddle = len(ordered) // 2\nreturn ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2",
+      "csharp": "if (values.Count == 0) throw new InvalidOperationException(\"Median needs at least one value\");\nvar sorted = new List<double>(values);\nsorted.Sort();\nvar middle = sorted.Count / 2;\nreturn sorted.Count % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;",
+      "cpp": "if (values.empty()) throw std::invalid_argument(\"Median needs at least one value\");\nstd::vector<double> sorted(values.begin(), values.end());\nstd::sort(sorted.begin(), sorted.end());\nstd::size_t middle = sorted.size() / 2;\nreturn sorted.size() % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;",
+      "rust": "if values.is_empty() { panic!(\"Median needs at least one value\"); }\nlet mut sorted = values.clone();\nsorted.sort_by(|a, b| a.partial_cmp(b).unwrap());\nlet middle = sorted.len() / 2;\nreturn if sorted.len() % 2 == 1 { sorted[middle] } else { (sorted[middle - 1] + sorted[middle]) / 2.0 };",
+      "java": "if (values.isEmpty()) throw new IllegalArgumentException(\"Median needs at least one value\");\nvar sorted = new java.util.ArrayList<>(values);\nsorted.sort(null);\nint middle = sorted.size() / 2;\nreturn sorted.size() % 2 == 1 ? sorted.get(middle) : (sorted.get(middle - 1) + sorted.get(middle)) / 2;",
+      "go": "if len(*values) == 0 {\n\tVgFail(\"Median needs at least one value\")\n}\nsorted := append([]float64{}, *values...)\nsort.Float64s(sorted)\nmiddle := len(sorted) / 2\nif len(sorted)%2 == 1 {\n\treturn sorted[middle]\n}\nreturn (sorted[middle-1] + sorted[middle]) / 2"
+    }
+  }
+}

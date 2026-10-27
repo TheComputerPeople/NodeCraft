@@ -1,0 +1,60 @@
+{
+  "$schema": "../../../schemas/node.schema.json",
+  "type": "universal-utils:array.difference",
+  "version": 1,
+  "displayName": "Difference",
+  "category": "Utilities / Arrays",
+  "description": "The items of Left that aren't in Right, each once, in Left's order.",
+  "keywords": [
+    "except",
+    "minus",
+    "subtract",
+    "without"
+  ],
+  "inputs": [
+    {
+      "id": "left",
+      "name": "Left",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "wildcard",
+        "container": "array"
+      }
+    },
+    {
+      "id": "right",
+      "name": "Right",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "wildcard",
+        "container": "array"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "id": "returnValue",
+      "name": "Return Value",
+      "kind": "data",
+      "direction": "output",
+      "type": {
+        "id": "wildcard",
+        "container": "array"
+      }
+    }
+  ],
+  "implementation": {
+    "kind": "code",
+    "languages": {
+      "javascript": "const other = new Set(right);\nreturn [...new Set(left.filter((item) => !other.has(item)))];",
+      "python": "return list(dict.fromkeys(item for item in left if item not in right))",
+      "csharp": "return left.Where(item => !right.Contains(item)).Distinct().ToList();",
+      "cpp": "std::decay_t<decltype(left)> result;\nfor (const auto& item : left) {\n    bool inRight = std::find(right.begin(), right.end(), item) != right.end();\n    if (inRight == false && std::find(result.begin(), result.end(), item) == result.end()) result.push_back(item);\n}\nreturn result;",
+      "rust": "let mut result = Vec::new();\nfor item in left.iter() {\n    if right.contains(item) == false && !result.contains(item) { result.push(item.clone()); }\n}\nreturn result;",
+      "java": "var result = new java.util.ArrayList<>(new java.util.LinkedHashSet<>(left));\nresult.removeAll(right);\nreturn result;",
+      "go": "result := (*left)[:0:0]\nfor _, item := range *left {\n\tif slices.Contains(*right, item) == false && !slices.Contains(result, item) {\n\t\tresult = append(result, item)\n\t}\n}\nreturn &result"
+    }
+  }
+}

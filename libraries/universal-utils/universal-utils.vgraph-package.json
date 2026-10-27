@@ -1,0 +1,8 @@
+{
+  "$schema": "../../schemas/node-package.schema.json",
+  "name": "universal-utils",
+  "version": "0.1.0",
+  "description": "Text, number, parsing, array, map and system utilities as nodes, the same in every graph language. Adapted from Common Utility Snippets v0.1.0.",
+  "nodes": ["nodes/*.node.json"],
+  "engines": { "blueprint": "^1" }
+}

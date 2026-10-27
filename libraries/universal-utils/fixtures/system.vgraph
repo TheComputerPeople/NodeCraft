@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 3,
+  "name": "UtilsSystem",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "metadata": {
+    "description": "universal-utils fixture: environment variables and paths (normalized the same on every system).",
+    "expectedOutput": [
+      "none",
+      "a/c/d/e",
+      "C:/y",
+      "/a",
+      "../../a",
+      "."
+    ]
+  },
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "print1",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 120
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "universal-utils:system.get-env",
+          "position": {
+            "x": 300,
+            "y": 120
+          },
+          "properties": {
+            "pin:name": "BLUEPRINT_UTILS_SURELY_UNSET",
+            "pin:fallback": "none"
+          }
+        },
+        {
+          "id": "print2",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "universal-utils:system.normalize-path",
+          "position": {
+            "x": 300,
+            "y": 240
+          },
+          "properties": {
+            "pin:path": "a/./b/../c//d\\e"
+          }
+        },
+        {
+          "id": "print3",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "universal-utils:system.normalize-path",
+          "position": {
+            "x": 300,
+            "y": 360
+          },
+          "properties": {
+            "pin:path": "C:\\x\\..\\y"
+          }
+        },
+        {
+          "id": "print4",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 480
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "universal-utils:system.normalize-path",
+          "position": {
+            "x": 300,
+            "y": 480
+          },
+          "properties": {
+            "pin:path": "/../a"
+          }
+        },
+        {
+          "id": "print5",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 600
+          },
+          "properties": {}
+        },
+        {
+          "id": "n5",
+          "type": "universal-utils:system.normalize-path",
+          "position": {
+            "x": 300,
+            "y": 600
+          },
+          "properties": {
+            "pin:path": "../../a/"
+          }
+        },
+        {
+          "id": "print6",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 720
+          },
+          "properties": {}
+        },
+        {
+          "id": "n6",
+          "type": "universal-utils:system.normalize-path",
+          "position": {
+            "x": 300,
+            "y": 720
+          },
+          "properties": {
+            "pin:path": ""
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "print1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "print1",
+          "toPin": "value"
+        },
+        {
+          "id": "w3",
+          "fromNode": "print1",
+          "fromPin": "execOut",
+          "toNode": "print2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "print2",
+          "toPin": "value"
+        },
+        {
+          "id": "w5",
+          "fromNode": "print2",
+          "fromPin": "execOut",
+          "toNode": "print3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "print3",
+          "toPin": "value"
+        },
+        {
+          "id": "w7",
+          "fromNode": "print3",
+          "fromPin": "execOut",
+          "toNode": "print4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n4",
+          "fromPin": "returnValue",
+          "toNode": "print4",
+          "toPin": "value"
+        },
+        {
+          "id": "w9",
+          "fromNode": "print4",
+          "fromPin": "execOut",
+          "toNode": "print5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n5",
+          "fromPin": "returnValue",
+          "toNode": "print5",
+          "toPin": "value"
+        },
+        {
+          "id": "w11",
+          "fromNode": "print5",
+          "fromPin": "execOut",
+          "toNode": "print6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n6",
+          "fromPin": "returnValue",
+          "toNode": "print6",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

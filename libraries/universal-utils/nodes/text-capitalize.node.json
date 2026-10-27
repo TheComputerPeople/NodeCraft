@@ -1,0 +1,47 @@
+{
+  "$schema": "../../../schemas/node.schema.json",
+  "type": "universal-utils:text.capitalize",
+  "version": 1,
+  "displayName": "Capitalize",
+  "category": "Utilities / Text",
+  "description": "The text with its first character in upper case; the rest is unchanged.",
+  "keywords": [
+    "uppercase",
+    "first letter"
+  ],
+  "inputs": [
+    {
+      "id": "text",
+      "name": "Text",
+      "kind": "data",
+      "direction": "input",
+      "type": {
+        "id": "string"
+      },
+      "defaultValue": ""
+    }
+  ],
+  "outputs": [
+    {
+      "id": "returnValue",
+      "name": "Return Value",
+      "kind": "data",
+      "direction": "output",
+      "type": {
+        "id": "string"
+      }
+    }
+  ],
+  "implementation": {
+    "kind": "code",
+    "languages": {
+      "javascript": "const chars = [...text];\nreturn chars.length ? chars[0].toUpperCase() + chars.slice(1).join('') : text;",
+      "python": "return text[:1].upper() + text[1:]",
+      "csharp": "if (text.Length == 0) return text;\nvar first = text.EnumerateRunes().First();\nreturn first.ToString().ToUpperInvariant() + text.Substring(first.Utf16SequenceLength);",
+      "cpp": "if (!text.empty()) text[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(text[0])));\nreturn text;",
+      "rust": "if text.is_empty() { return text; }\nlet mut chars = text.chars();\nlet first = chars.next().unwrap();\nreturn first.to_uppercase().collect::<String>() + chars.as_str();",
+      "java": "if (text.isEmpty()) return text;\nint size = Character.charCount(text.codePointAt(0));\nreturn text.substring(0, size).toUpperCase(java.util.Locale.ROOT) + text.substring(size);",
+      "go": "if text == \"\" {\n\treturn text\n}\nchars := []rune(text)\nreturn strings.ToUpper(string(chars[0])) + string(chars[1:])"
+    }
+  }
+}
