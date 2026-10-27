@@ -41,7 +41,12 @@ async function main(): Promise<void> {
       launchArgs: [workspace, ...(withDebuggers ? [`--extensions-dir=${path.join(os.homedir(), '.vscode', 'extensions')}`] : ['--disable-extensions']), '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes']
     });
   } finally {
-    fs.rmSync(workspace, { recursive: true, force: true });
+    // A language server (Java's) may still hold files in it for a moment.
+    try {
+      fs.rmSync(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
+    } catch (error) {
+      console.warn(`The test workspace ${workspace} wasn't removed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 

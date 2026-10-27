@@ -133,6 +133,16 @@ As built (`src/core/importing/language-server.ts`, and `symbolScan` in `src/exte
   - **Snippets:** the standard library and container snippets are the `JAVA` tables in `stdlib.ts` and `containers.ts`.
   - **Run:** `javac` compiles the launcher (`BlueprintRun.java`) with the generated and project files into the scaffold's `classes`, and `java` runs it with UTF-8 output.
   - **Conformance:** all 20 fixtures pass, including both object programs.
+  - **Placement:** `javaProject` finds the nearest `pom.xml`, `build.gradle.kts` or `build.gradle`, and its source roots (`<sourceDirectory>` and `<testSourceDirectory>`, else `src/main/java` and `src/test/java`).
+    - The graph's folder under a root is its package. A folder that isn't a Java identifier leaves the class in the default package.
+    - A generated file outside every root gets the `java-outside-source-root` warning. Graph libraries' functions are qualified by their package too.
+  - **Symbol import:** `src/core/importing/java-scanner.ts` reads `public static` methods marked `@blueprint` in a Javadoc comment, in top-level and nested classes, interfaces, enums and records. Generated code calls them as `package.Class.method`.
+    - Types map exactly, as Rust's do: `long`, `double`, `boolean`, `String` and `ArrayList` of their boxed types. `int` and the rest are native, because Java won't narrow the generated `long` arguments to an `int` implicitly.
+    - Instance, generic and varargs methods, and methods that declare checked exceptions, are reported with the reason.
+  - **Run with project methods:** javac gets the project's source roots as its `-sourcepath`, so the classes a project method uses compile too. A test runs this against a Maven-layout project.
+  - **Debugging:** the Debug test and the Phase 5 exit check pass with the Debugger for Java.
+    - Its `evaluate` only works inside a project the Java language server knows, which Run's launcher isn't. So reading a pin falls back, for any debugger, to finding the name among the frame's variables (or the fields of `this`) when `evaluate` fails.
+    - A debugger can now say how its values show as the graph shows them (`CodeDebugger.displayValue`): Java's `30.0` shows as `30`.
 
 ## Go (Tier 1)
 

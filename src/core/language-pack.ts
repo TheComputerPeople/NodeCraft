@@ -179,6 +179,8 @@ export interface CodeDebugger {
   // A launch configuration running the generated file as Run does: Start, then Main. `command`
   // replaces the runner's executable (and leading arguments), as the runCommands setting does.
   configuration(file: { path: string; url: string }, className: string, context: RunContext & { cwd: string; command?: string[] }): Record<string, unknown>;
+  // A value as the debugger shows it, as the graph shows it (Java's debugger writes 30.0 for 30).
+  displayValue?(text: string): string;
 }
 
 // The debug type and extension a debugger uses on the platform.

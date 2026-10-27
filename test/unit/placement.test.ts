@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { configCovers, csharpNamespace, detectImportExtension, detectModuleFormat, generatedFrom, globToRegExp, isGeneratedFrom, parseJsonc, pythonModule, rustModule, rustRunSources, verifyPlacement } from '../../src/extension/placement';
+import { configCovers, csharpNamespace, detectImportExtension, detectModuleFormat, generatedFrom, javaProject, globToRegExp, isGeneratedFrom, parseJsonc, pythonModule, rustModule, rustRunSources, verifyPlacement } from '../../src/extension/placement';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-placement-'));
 after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -100,6 +100,28 @@ describe('Rust modules', () => {
     assert.deepEqual(sources.generated, [path.join(dir, 'src/graphs/fighter_vgraph.rs'), path.join(dir, 'src/graphs/stats_vgraph.rs')]);
     assert.deepEqual(sources.crate, { src: path.join(dir, 'src'), modules: ['game', 'util'] }, 'not the generated modules');
     assert.equal(rustRunSources(path.join(dir, 'src/graphs/duel_vgraph.rs'), dir, []).crate, undefined, 'no project functions');
+  });
+});
+
+describe('Java packages', () => {
+  test('come from the folder under the Maven or Gradle source root', () => {
+    const maven = project({ 'pom.xml': '<project></project>', 'src/main/java/game/graphs/x.vgraph': '', 'src/test/java/game/x.vgraph': '', 'tools/x.vgraph': '' });
+    assert.deepEqual(javaProject(path.join(maven, 'src/main/java/game/graphs'), maven), { package: 'game.graphs', sourceRoots: [path.join(maven, 'src/main/java'), path.join(maven, 'src/test/java')], build: 'pom.xml' });
+    assert.equal(javaProject(path.join(maven, 'src/test/java/game'), maven).package, 'game');
+    assert.equal(javaProject(path.join(maven, 'src/main/java'), maven).package, undefined, 'the default package');
+    assert.equal(javaProject(path.join(maven, 'tools'), maven).outside, true);
+    const custom = project({ 'pom.xml': '<project><build><sourceDirectory>${project.basedir}/java</sourceDirectory></build></project>', 'java/app/x.vgraph': '' });
+    assert.equal(javaProject(path.join(custom, 'java/app'), custom).package, 'app');
+    const gradle = project({ 'build.gradle.kts': '', 'src/main/java/my-app/x.vgraph': '' });
+    assert.equal(javaProject(path.join(gradle, 'src/main/java/my-app'), gradle).package, undefined, 'not a Java identifier');
+    assert.deepEqual(javaProject(gradle, gradle).sourceRoots, [path.join(gradle, 'src/main/java')]);
+    assert.deepEqual(javaProject(project({ 'x.vgraph': '' }), root), { sourceRoots: [] });
+  });
+
+  test('a graph outside the source roots gets a warning', () => {
+    const dir = project({ 'pom.xml': '<project></project>', 'src/main/java/App.java': '', 'tools/Tool.java': '' });
+    assert.match(verifyPlacement('java', path.join(dir, 'tools/Tool.java'), dir)[0].message, /isn't in a source folder of pom\.xml/);
+    assert.deepEqual(verifyPlacement('java', path.join(dir, 'src/main/java/App.java'), dir), []);
   });
 });
 

@@ -67,6 +67,23 @@ describe('debug configurations', () => {
     assert.deepEqual(config.args, ['Game', 'main', '--fast']);
   });
 
+  test('java: the Debugger for Java runs the launcher Run builds, with debug information', () => {
+    const { generator, debugger: d } = debuggerFor('java');
+    const scaffold = { ...context, scaffoldDir: '/tmp/run', platform: 'linux', importRoots: ['/work/src/main/java'] };
+    assert.equal(d.extension?.id, 'vscjava.vscode-java-debug');
+    assert.deepEqual(d.build!(file, 'game.Game', scaffold), generator.runner!.build!(file, 'game.Game', scaffold));
+    assert.ok(d.build!(file, 'game.Game', scaffold).includes('-g'), 'with debug information');
+    assert.deepEqual(d.build!(file, 'game.Game', scaffold).slice(7, 9), ['-sourcepath', '/work/src/main/java']);
+    const config = d.configuration(file, 'game.Game', scaffold);
+    assert.equal(config.type, 'java');
+    assert.equal(config.mainClass, 'BlueprintRun');
+    assert.deepEqual(config.classPaths, ['/tmp/run/classes']);
+    assert.deepEqual(config.sourcePaths, ['/work/game', '/work/src/main/java'], "the generated file's folder and the source roots");
+    assert.deepEqual(config.args, ['game.Game', 'main', '--fast']);
+    assert.equal(d.displayValue!('30.0'), '30');
+    assert.equal(d.displayValue!('0.5'), '0.5');
+  });
+
   test("rust: CodeLLDB (the Visual Studio debugger on Windows) runs the program Run's Cargo project builds", () => {
     const { debugger: d } = debuggerFor('rust');
     const scaffold = { ...context, scaffoldDir: '/tmp/run', platform: 'linux' };

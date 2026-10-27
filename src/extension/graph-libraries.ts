@@ -10,7 +10,7 @@ import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { graphFileDefinitions } from '../core/graph-files';
-import { csharpNamespace, pythonModule } from './placement';
+import { csharpNamespace, javaProject, pythonModule } from './placement';
 
 const GLOB = '**/*.vgraph';
 const EXCLUDE = '**/{node_modules,.git,.venv,venv,dist,out,build,bin,obj}/**';
@@ -109,7 +109,7 @@ export class GraphLibraries implements vscode.Disposable {
     const generator = doc.language ? this.languages.get(doc.language)?.generator : undefined;
     const dir = path.dirname(uri.fsPath);
     const generated = generator ? path.join(dir, generator.outputFileName(path.basename(uri.fsPath))) : uri.fsPath;
-    const module = !generator ? undefined : doc.language === 'python' ? pythonModule(generated, root).module : doc.language === 'csharp' ? csharpNamespace(dir, root) : undefined;
+    const module = !generator ? undefined : doc.language === 'python' ? pythonModule(generated, root).module : doc.language === 'csharp' ? csharpNamespace(dir, root) : doc.language === 'java' ? javaProject(dir, root).package : undefined;
     const definitions = graphFileDefinitions(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) }, generator);
     return definitions && { path: relative(root, uri.fsPath), definitions };
   }

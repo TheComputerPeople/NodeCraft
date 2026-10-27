@@ -132,7 +132,7 @@ export class CodeDebugService implements vscode.Disposable {
       [GRAPH_KEY]: id
     };
     if (this.active) this.active.act('stop');
-    const debug = new CodeDebug(id, uri, this, this.openTextTabs());
+    const debug = new CodeDebug(id, uri, this, this.openTextTabs(), spec.displayValue);
     this.active = debug;
     this.host.debugStarted(debug);
     const started = await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), configuration);
@@ -288,7 +288,7 @@ class CodeDebug implements GraphDebug {
   // then past its prologue).
   private stepping: { request: string; from?: GraphStackFrame; depth: number; steps: number; entered?: boolean } | undefined;
 
-  constructor(readonly id: string, readonly graph: vscode.Uri, private readonly service: CodeDebugService, readonly userTabs: Set<string>) {}
+  constructor(readonly id: string, readonly graph: vscode.Uri, private readonly service: CodeDebugService, readonly userTabs: Set<string>, private readonly display?: (text: string) => string) {}
 
   owns(session: vscode.DebugSession): boolean {
     for (let s: vscode.DebugSession | undefined = session; s; s = s.parentSession) {
@@ -378,18 +378,61 @@ class CodeDebug implements GraphDebug {
       if (frame < 0) return NOT_RUNNING;
       const expression = generated?.pinExpressions.find((p) => p.graphId === pin.graphId && p.nodeId === pin.nodeId && p.pinId === pin.pinId)?.expression;
       if (!expression) return { unavailable: "No value: it isn't stored, it's computed where it's used." };
+      let text: string;
       try {
         const response = await session.customRequest('evaluate', { expression, frameId: this.frameIds[frame], context: 'watch' });
-        return { value: shortestDecimal(String(response?.result ?? '')) };
+        text = String(response?.result ?? '');
       } catch (error) {
-        return { unavailable: error instanceof Error ? error.message : String(error) };
+        // A debugger that can't evaluate here (Java's, outside a project it knows) still lists the
+        // frame's variables: a name, or a field of `this`, is found among them.
+        const found = await readVariable(session, this.frameIds[frame], expression);
+        if (found === undefined) return { unavailable: error instanceof Error ? error.message : String(error) };
+        text = found;
       }
+      const value = shortestDecimal(text);
+      return { value: this.display ? this.display(value) : value };
     }));
   }
 
   breakpointsChanged(): void {
     // The service mirrors them into the generated files, which the debugger picks up.
   }
+}
+
+// A dotted name's value from the frame's variables (scopes, then their variables, then `this`'s
+// fields), or undefined when it isn't one of them.
+async function readVariable(session: vscode.DebugSession, frameId: number, expression: string): Promise<string | undefined> {
+  if (!/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(expression)) return undefined;
+  type Variable = { name: string; value: string; variablesReference: number };
+  const children = async (reference: number): Promise<Variable[]> => {
+    try {
+      return ((await session.customRequest('variables', { variablesReference: reference }))?.variables ?? []) as Variable[];
+    } catch {
+      return [];
+    }
+  };
+  let scopes: { variablesReference: number }[] = [];
+  try {
+    scopes = (await session.customRequest('scopes', { frameId }))?.scopes ?? [];
+  } catch {
+    return undefined;
+  }
+  const [first, ...rest] = expression.replace(/^this\./, '').split('.');
+  let current: Variable | undefined;
+  for (const scope of scopes) {
+    const variables = await children(scope.variablesReference);
+    current = variables.find((v) => v.name === first);
+    if (!current) {
+      const self = variables.find((v) => v.name === 'this' || v.name === 'self');
+      if (self?.variablesReference) current = (await children(self.variablesReference)).find((v) => v.name === first);
+    }
+    if (current) break;
+  }
+  for (const name of rest) {
+    if (!current?.variablesReference) return undefined;
+    current = (await children(current.variablesReference)).find((v) => v.name === name);
+  }
+  return current?.value;
 }
 
 // A decimal a debugger pads (the Visual Studio debugger shows 30.0 as "30.000000000000000") in its

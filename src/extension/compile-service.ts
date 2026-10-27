@@ -9,7 +9,7 @@ import { PinExpression } from '../core/language-pack';
 import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
-import { cppRunSources, csharpNamespace, csharpRunSources, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
+import { cppRunSources, csharpNamespace, csharpRunSources, javaProject, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
 import { OutputPlans } from './output-plans';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
 
@@ -111,7 +111,7 @@ export class CompileService implements vscode.Disposable {
         moduleFormat: detectModuleFormat(graphDir, root),
         outputDir: path.relative(root, graphDir).split(path.sep).join('/'),
         importExtension: detectImportExtension(graphDir, root),
-        namespace: csharpNamespace(graphDir, root)
+        namespace: graph.language === 'java' ? javaProject(graphDir, root).package : csharpNamespace(graphDir, root)
       }
     });
     const language = result.output?.language ?? graph.language ?? '';
@@ -128,10 +128,13 @@ export class CompileService implements vscode.Disposable {
     const pack = this.languages.get(language);
     const registration = pack && this.outputPlans ? await this.outputPlans.apply(pack, root, outputPath) : [];
     const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root), ...registration];
-    const importRoots = result.output.importRoots?.map((r) => path.join(root, r));
+    // Java finds the project's classes in its source roots (javac's -sourcepath).
+    const javaRoots = language === 'java' ? javaProject(graphDir, root).sourceRoots : [];
+    const importRoots = javaRoots.length ? javaRoots : result.output.importRoots?.map((r) => path.join(root, r));
     const sources = language === 'csharp' ? csharpRunSources(graphDir, root, outputPath, result.output.importedFiles ?? [])
       : language === 'cpp' ? cppRunSources(outputPath)
-      : language === 'rust' ? rustRunSources(outputPath, root, result.output.importedFiles ?? []).generated : undefined;
+      : language === 'rust' ? rustRunSources(outputPath, root, result.output.importedFiles ?? []).generated
+      : language === 'java' ? (result.output.importedFiles ?? []).map((f) => path.join(root, f)) : undefined;
     const crate = language === 'rust' ? rustRunSources(outputPath, root, result.output.importedFiles ?? []).crate : undefined;
     const generated: GeneratedFile = { graph: document.uri, outputPath, language, nodeLines: result.output.nodeLines, codeBreaks: result.output.codeBreaks ?? [], pinExpressions: result.output.pinExpressions ?? [] };
     this.generated.set(document.uri.toString(), generated);

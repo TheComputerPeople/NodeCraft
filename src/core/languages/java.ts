@@ -5,6 +5,7 @@
 import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
+import { scanJava } from '../importing/java-scanner';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { TypeRef, parseTypeId } from '../types';
@@ -338,8 +339,11 @@ export const JAVA_LAUNCHER = [
 const classes = (context: RunContext | undefined) => `${context?.scaffoldDir}/classes`;
 const JAVA_ARGS = ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'];
 
+// The project's source roots are javac's source path, so the classes project methods use compile too.
 const javaBuild = (file: { path: string }, _className: string, context: RunContext) => [
-  '-d', classes(context), '-encoding', 'UTF-8', '-g', '-nowarn', '-Xlint:none', `${context.scaffoldDir}/BlueprintRun.java`, file.path, ...(context.sources ?? [])
+  '-d', classes(context), '-encoding', 'UTF-8', '-g', '-nowarn', '-Xlint:none',
+  ...(context.importRoots?.length ? ['-sourcepath', context.importRoots.join(context.platform === 'win32' ? ';' : ':')] : []),
+  `${context.scaffoldDir}/BlueprintRun.java`, file.path, ...(context.sources ?? [])
 ];
 
 // A function library's class and the names its functions are defined as (camelCase, unique in the
@@ -390,10 +394,15 @@ const javaGenerator: CodeGenerator = {
     type: 'java',
     extension: { id: 'vscjava.vscode-java-debug', name: 'Debugger for Java' },
     build: javaBuild,
-    configuration: (_file, className, context) => ({
+    // The generated file's folder and the source roots are where the debugger finds the source: the
+    // Java language server may know only the project's own folders.
+    configuration: (file, className, context) => ({
       type: 'java', request: 'launch', mainClass: 'BlueprintRun', classPaths: [classes(context)], args: [className, context.mainMethod ?? '', ...(context.args ?? [])],
+      sourcePaths: [file.path.replace(/[\\/][^\\/]*$/, ''), ...(context.importRoots ?? [])],
       vmArgs: JAVA_ARGS.join(' '), cwd: context.cwd, console: 'internalConsole', stopOnEntry: false
-    })
+    }),
+    // A whole double shows as one, as Print writes it.
+    displayValue: (text) => text.replace(/^(-?\d+)\.0$/, '$1')
   }
 };
 
@@ -404,7 +413,9 @@ export const javaPack: LanguagePack = {
   workspaceMarkers: ['**/pom.xml', '**/build.gradle', '**/build.gradle.kts'],
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
-  generator: javaGenerator
+  generator: javaGenerator,
+  // public static methods marked @blueprint in a Javadoc comment, called by their qualified class.
+  importer: { extensions: ['.java'], scan: scanJava }
 };
 
 class JavaEmitter {

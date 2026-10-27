@@ -258,8 +258,46 @@ export function cppRunSources(outputFile: string): string[] {
 }
 
 // Placement warnings for a generated file (docs/output-placement.md, "Verification").
+// A Java graph's place in its build (docs/language-breadth.md, "Java"): the nearest Maven or Gradle
+// project's source roots (pom.xml's <sourceDirectory> and <testSourceDirectory>, else Maven's and
+// Gradle's src/main/java and src/test/java), and the package of the graph's folder when it is in one.
+export function javaProject(graphDir: string, stopDir: string): { package?: string; sourceRoots: string[]; build?: string; outside?: boolean } {
+  let build: string | undefined;
+  for (const name of ['pom.xml', 'build.gradle.kts', 'build.gradle']) {
+    const found = findUp(graphDir, name, stopDir);
+    if (found && (!build || found.length > build.length)) build = found;
+  }
+  if (!build) return { sourceRoots: [] };
+  const project = path.dirname(build);
+  let main = 'src/main/java';
+  let test = 'src/test/java';
+  if (path.basename(build) === 'pom.xml') {
+    const pom = fs.readFileSync(build, 'utf8');
+    main = /<sourceDirectory>\s*([^<]+?)\s*<\/sourceDirectory>/.exec(pom)?.[1] ?? main;
+    test = /<testSourceDirectory>\s*([^<]+?)\s*<\/testSourceDirectory>/.exec(pom)?.[1] ?? test;
+  }
+  const roots = [main, test].map((r) => path.resolve(project, r.replace(/\$\{(project\.)?basedir\}\/?/, '')));
+  const sourceRoots = roots.filter((r) => fs.existsSync(r));
+  const root = roots.find((r) => isInside(path.resolve(graphDir), r));
+  if (!root) return { sourceRoots, build: path.relative(stopDir, build) || path.basename(build), outside: true };
+  const parts = path.relative(root, graphDir).split(path.sep).filter(Boolean);
+  // A folder that isn't a Java identifier can't be a package; the build will say so.
+  const valid = parts.every((p) => /^[A-Za-z_$][\w$]*$/.test(p));
+  return { ...(parts.length && valid ? { package: parts.join('.') } : {}), sourceRoots, build: path.relative(stopDir, build) || path.basename(build) };
+}
+
 export function verifyPlacement(language: string, outputFile: string, stopDir: string): CompileDiagnostic[] {
   const dir = path.dirname(outputFile);
+  if (language === 'java') {
+    const project = javaProject(dir, stopDir);
+    if (project.outside) {
+      return [{
+        severity: 'warning',
+        code: 'java-outside-source-root',
+        message: `${path.basename(outputFile)} isn't in a source folder of ${project.build}, so the project's build won't compile it. Move the graph under ${project.sourceRoots.map((r) => path.relative(stopDir, r)).join(' or ') || 'src/main/java'}.`
+      }];
+    }
+  }
   if (language === 'typescript' || language === 'javascript') {
     const configName = language === 'typescript' ? 'tsconfig.json' : 'jsconfig.json';
     const config = findUp(dir, configName, stopDir);

@@ -1,0 +1,93 @@
+// Java graphs calling the project's own methods (docs/language-breadth.md, "Java"): a public static
+// method marked @blueprint becomes a node, generated code calls it by its qualified class, and Run
+// compiles the project's classes it needs from the source roots.
+import { after, describe, test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { compileDocument } from '../../src/core/compiler';
+import { scanJava } from '../../src/core/importing/java-scanner';
+import { exposeFunctions } from '../../src/core/importing/symbols';
+import { builtinLanguagePacks } from '../../src/core/languages';
+import { NodeRegistry } from '../../src/core/registry';
+import { javaProject } from '../../src/extension/placement';
+import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
+import { doc, node, wire } from '../unit/helpers';
+
+const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-java-'));
+after(() => fs.rmSync(workDir, { recursive: true, force: true }));
+
+const RULES = [
+  'package game.combat;',
+  '',
+  'import game.util.Base;',
+  '',
+  'public final class Rules {',
+  '    /** @blueprint */',
+  '    public static double triple(double value) {',
+  '        return value * Base.three();',
+  '    }',
+  '',
+  '    /** @blueprint pure */',
+  '    public static String label(String name, long points) {',
+  '        return name + ": " + points;',
+  '    }',
+  '}',
+  ''
+].join('\n');
+const BASE = 'package game.util;\n\npublic final class Base {\n    public static double three() {\n        return 3;\n    }\n}\n';
+
+describe('Java project functions', () => {
+  test('a graph in a Maven project calls them, and Run compiles the classes they use', async (t) => {
+    const project = path.join(workDir, 'game');
+    const files: Record<string, string> = {
+      'pom.xml': '<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>game</artifactId><version>1</version></project>',
+      'src/main/java/game/combat/Rules.java': RULES,
+      'src/main/java/game/util/Base.java': BASE
+    };
+    for (const [name, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+      fs.writeFileSync(path.join(project, name), text);
+    }
+    const graphDir = path.join(project, 'src/main/java/game/graphs');
+    fs.mkdirSync(graphDir, { recursive: true });
+    const placement = javaProject(graphDir, project);
+    assert.equal(placement.package, 'game.graphs');
+
+    const registry = new NodeRegistry();
+    registry.registerMany(exposeFunctions(scanJava(RULES), { language: 'java', path: 'src/main/java/game/combat/Rules.java', exposeAll: false }).definitions);
+    const d = doc(
+      [
+        node('s', 'core:event.start'),
+        node('triple', 'fn:java:src/main/java/game/combat/Rules.java#game.combat.Rules.triple', { 'pin:value': 14 }),
+        node('p1', 'core:console.print'),
+        node('label', 'fn:java:src/main/java/game/combat/Rules.java#game.combat.Rules.label', { 'pin:name': 'Red', 'pin:points': 3 }),
+        node('p2', 'core:console.print')
+      ],
+      [wire('s', 'execOut', 'triple', 'execIn'), wire('triple', 'execOut', 'p1', 'execIn'), wire('triple', 'returnValue', 'p1', 'value'), wire('p1', 'execOut', 'p2', 'execIn'), wire('label', 'returnValue', 'p2', 'value')]
+    );
+    const result = compileDocument({ ...doc([], []), ...d, name: 'Uses', language: 'java' }, {
+      registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Uses.vgraph', outputDir: 'src/main/java/game/graphs', namespace: placement.package }
+    });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    assert.equal(output.fileName, 'Uses.java');
+    assert.equal(output.className, 'game.graphs.Uses');
+    assert.match(output.text, /^package game\.graphs;$/m);
+    assert.match(output.text, /game\.combat\.Rules\.triple\(14\.0\)/);
+    const file = path.join(graphDir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('java')!.generator!.runner!, file, output.className, {
+        cwd: project, importRoots: placement.sourceRoots, sources: [path.join(project, 'src/main/java/game/combat/Rules.java')], timeoutMs: 300000
+      });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.stderr, '');
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['42', 'Red: 3']);
+  });
+});

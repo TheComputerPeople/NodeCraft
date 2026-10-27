@@ -228,6 +228,16 @@ test('functions marked @blueprint become nodes that generated code imports', asy
   assert.match(csharp, /^namespace Studio\.Tools\.Graphs;$/m);
   assert.match(csharp, /global::Studio\.Tools\.MathTools\.Double\(4\)/);
 
+  // Java: a public static method in a Maven project; the graph's class goes in its folder's package.
+  await write('javaapp/pom.xml', '<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>app</artifactId><version>1</version></project>\n');
+  await write('javaapp/src/main/java/demo/Scores.java', 'package demo;\n\npublic final class Scores {\n    /** @blueprint pure */\n    public static double twice(double value) {\n        return value * 2;\n    }\n}\n');
+  const javaGraph = workspaceFile('javaapp/src/main/java/demo/graphs/UsesJava.vgraph');
+  await write('javaapp/src/main/java/demo/graphs/UsesJava.vgraph', projectGraph('UsesJava', 'java', 'fn:java:javaapp/src/main/java/demo/Scores.java#demo.Scores.twice'));
+  await compileOnceFound(javaGraph);
+  const java = await readText(workspaceFile('javaapp/src/main/java/demo/graphs/UsesJava.java'));
+  assert.match(java, /^package demo\.graphs;$/m);
+  assert.match(java, /demo\.Scores\.twice\(4\.0\)/);
+
   // Renaming the function in code is detected: the node's function is gone.
   await write('lib/score.ts', '/** @blueprint pure */\nexport function twice(value: number): number {\n  return value * 2;\n}\n');
   const deadline = Date.now() + 15000;
@@ -735,6 +745,11 @@ test("exit check: debugging a function graph in generated C (a separate extensio
   await exitCheck('c');
 });
 
+test('exit check: debugging a function graph in generated Java', async () => {
+  if (!vscode.extensions.getExtension('vscjava.vscode-java-debug')) throw new Skip('the Debugger for Java extension is not loaded');
+  await exitCheck('java');
+});
+
 test('exit check: debugging a function graph in generated C#', async () => {
   if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
   await exitCheck('csharp');
@@ -828,6 +843,11 @@ test('Debug does the same in generated Rust', async () => {
 test('Debug does the same in generated C (cppdbg)', async () => {
   if (!vscode.extensions.getExtension('ms-vscode.cpptools')) throw new Skip('the C/C++ extension is not loaded');
   await debugSample('c', 'debug_c_vgraph.c');
+});
+
+test('Debug does the same in generated Java', async () => {
+  if (!vscode.extensions.getExtension('vscjava.vscode-java-debug')) throw new Skip('the Debugger for Java extension is not loaded');
+  await debugSample('java', 'DebugJava.java');
 });
 
 test('Debug does the same in generated C# (coreclr)', async () => {
