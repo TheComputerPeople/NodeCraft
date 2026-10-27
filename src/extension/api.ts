@@ -3,23 +3,34 @@
 // the registries' change events.
 import * as vscode from 'vscode';
 import { API_VERSION, BlueprintVisualScriptingApi, NodeLibrary, packProblem } from '../core/api';
+import { DeclarativePackDefinition, loadDeclarativePack } from '../core/declarative';
 import { LanguagePack, LanguagePackRegistry } from '../core/language-pack';
 import { NodeRegistry } from '../core/registry';
 
 export function createApi(languages: LanguagePackRegistry, registry: NodeRegistry, output: () => vscode.OutputChannel): BlueprintVisualScriptingApi {
   const libraries = new Set<string>();
+  const registerLanguagePack = (pack: LanguagePack): vscode.Disposable => {
+    const problem = packProblem(pack, (id) => !!languages.get(id));
+    if (problem) {
+      output().appendLine(`[error] ${problem}`);
+      throw new Error(problem);
+    }
+    languages.register(pack);
+    return new vscode.Disposable(() => {
+      if (languages.get(pack.id) === pack) languages.unregister(pack.id);
+    });
+  };
   return {
     apiVersion: API_VERSION,
-    registerLanguagePack(pack: LanguagePack) {
-      const problem = packProblem(pack, (id) => !!languages.get(id));
-      if (problem) {
+    registerLanguagePack,
+    registerDeclarativePack(definition: DeclarativePackDefinition) {
+      const { pack, problems } = loadDeclarativePack(definition);
+      if (!pack) {
+        const problem = `The ${definition?.displayName ?? definition?.id ?? 'declarative'} pack can't be registered:\n${problems.map((p) => `  - ${p}`).join('\n')}`;
         output().appendLine(`[error] ${problem}`);
         throw new Error(problem);
       }
-      languages.register(pack);
-      return new vscode.Disposable(() => {
-        if (languages.get(pack.id) === pack) languages.unregister(pack.id);
-      });
+      return registerLanguagePack(pack);
     },
     registerNodeLibrary(library: NodeLibrary) {
       if (!library?.name || !Array.isArray(library.nodes)) throw new Error('A node library needs a name and a list of nodes.');

@@ -65,3 +65,70 @@ import { runConformance, formatReport } from '@blueprint-visual-scripting/pack-s
 const report = await runConformance(myPack);
 console.log(formatReport(report));
 ```
+
+## Declarative packs
+
+A pack can also be data: a JSON definition of templates for the Visual IR, a type map and capabilities. Use one for a language whose generated code is close to what the IR says (Tier 2), or for an in-house or niche language (Tier 3). The schema is `schema/language-pack.schema.json` in this package, and `examples/minijs.vgraph-language.json` is a complete pack that passes every fixture it can express.
+
+A definition is used in any of these ways:
+
+- **From an extension:** `api.registerDeclarativePack(definition)`.
+- **From a workspace:** every `*.vgraph-language.json` file is loaded as a pack and reloaded when it changes. Its problems are shown on the file.
+- **From code:** `declarativePack(definition)` returns a `LanguagePack`.
+- **To check it:** `npx blueprint-conformance my-language.vgraph-language.json`.
+
+Declarative packs can't yet express object references, inheritance, interfaces, event dispatchers or latent actions. Their capabilities must leave those out, and fixtures that need them are not applicable.
+
+### The definition
+
+| Field | What it holds |
+|---|---|
+| `id`, `displayName`, `apiVersion` | The language (`id` is a graph's `language`), and the API version (1) |
+| `fileName` | The generated file's name, a template over `name`, `snake`, `camel` and `pascal` (the graph file's name): `"{{snake}}_vgraph.c"` |
+| `workspaceMarkers` | Globs that suggest a workspace uses the language |
+| `capabilities` | `staticTyping`, `generics`, `exceptions` and `containers` |
+| `snippetLanguages` | Keys of a code node's `languages` map to take snippets from (the pack's `id` by default) |
+| `snippets` | Implementations of library nodes, by node type, for nodes that have none in the language: function bodies over the node's inputs, like a code node's snippet |
+| `types.map`, `types.defaults` | Each type's spelling and default value, by key: `int`, `float`, `bool`, `string`, `any`; `array`, `set`, `map` (with `{{T}}`, and `{{K}}`, `{{V}}` for a map); `struct`, `enum` (with `{{name}}`; an enum's default also gets `{{first}}`, its first value) |
+| `naming` | `reserved` words, and the case style (`snake`, `camel`, `pascal`, `keep`) of `type`, `function`, `variable`, `parameter` and `enumerator` names |
+| `operators` | How `<`, `<=`, `>=`, `==`, `!=`, `&&`, `\|\|`, `+` and `-` are written (as themselves by default) |
+| `templates` | The templates below |
+| `helpers` | Support code by the identifier it defines. It's included once, at `{{> support}}` in the file template, when generated code (or included support code) uses the identifier |
+| `runner`, `debugger` | How to run and debug generated code (below) |
+
+### Templates
+
+`{{field}}` inserts a value. `{{#each list ", "}}…{{/each}}` repeats, with an optional separator; inside, `{{this}}` is the item and `{{@index}}` its position. `{{#if field}}…{{else}}…{{/if}}` and `{{#unless field}}…{{/unless}}` test whether a value is there. A line holding only `{{> field}}` inserts multi-line text, such as a block of statements, indented to the placeholder's column. A line holding only a section tag leaves no blank line. Every template also sees `className`, `startName`, `library` and `sourceFileName`.
+
+The emitter decides names, which conversions are needed and where each node's code starts; templates only spell the result. A construct whose template is missing is reported as `unsupported` on its node.
+
+| Template | Fields |
+|---|---|
+| `file` | `fields` (`name`, `type`, `value`); `start`, `functions`, `testFunctions`, `blocks`, `helpers` and `all` (the functions, written with `function`); `signatures` (each function's `name`, `params`, `outputs`, `returnType`); `tests` (`name`, `method`, `quoted`); `mainMethod`, `hasMain`, `hasTests`; `imports` (`path`, `relative`, `module`); `support` |
+| `function` | `name`, `params` and `outputs` (`name`, `type`), `returnType` (one output), `void`, `single`, `multiple`, `body`, `description`, and one of `start`, `function`, `event`, `test`, `block`, `helper` (and `main` for the Main event) |
+| `comment` | `text`: the node's name and id, written before its code |
+| `print` | `value`, `text` (the value as text), `type` |
+| `assert` | `condition`, `message` |
+| `assign`, `declare` | `target` or `name`, `value` (`declare` also `type`): a local variable |
+| `statement` | `expression`: a call whose result isn't used |
+| `if`, `while` | `condition`, `then` and `else`, or `body` |
+| `for` | `counter`, `first`, `last` (read before each pass), `stop` (Break's flag, when there is one), `body` |
+| `forEach` | `array`, `index`, `element`, `stop`, `body` |
+| `return` | `value`, `values`, `count`, `multiple` |
+| `callResults`, `callOutput` | A call of something with several outputs: `call`, and each `results` item's `target` and `index`, or one `index` |
+| `literal.int`, `literal.float`, `literal.bool` | `value`, `text` (a float that is a whole number has `.0`) |
+| `literal.string`, `literal.null` | `value`, `quoted` (a JSON string), `escaped` (without the quotes) |
+| `field` | `name`: a variable or stored output of the class (locals are written by name) |
+| `add`, `binary`, `binary.<op>`, `binary.<op>.<type>`, `not` | `left`, `right`, `op`; or `value`. Operands that are themselves operations come in parentheses |
+| `toText`, `toNumber`, `toBoolean` (each also `.<type>`) | `value`. Text needs no conversion, a float no `toNumber`, a bool no `toBoolean`; an int needs `toNumber.int` only if the pack has it |
+| `concat` | `parts` (each already text), `count` |
+| `call`, `import`, `callFunction`, `callBlock` | `name`, `args`; `import` also `module` and `path` |
+| `makeContainer.array`, `.set`, `.map` | `items`, `pairs` (`key`, `value`), `count`, `T`, `K`, `V` |
+| `makeStruct`, `structField`, `enumValue` | `type`, `fields` (`name`, `value`); `value`, `field`; `value`, `text`, `index` |
+| `structFile`, `enumFile` | A structure or enumeration document: `name`, and `fields` or `enumerators` (`name`, `text`, `quoted`, `index`) |
+
+Types are keyed `int`, `float`, `bool`, `string`, `any`, `array`, `set`, `map`, `struct` and `enum` wherever a template name ends in `.<type>`. The defaults for templates left out are `{{text}}` for numbers and bools, `{{quoted}}` for strings, `{{left}} + {{right}}`, `{{left}} {{op}} {{right}}`, `!{{value}}`, `{{name}}(…args)` for calls, `{{name}}` for fields and `{{value}}.{{field}}` for struct fields.
+
+### Running and debugging
+
+`runner` has candidate `commands` (a list, or lists by platform with a `default`), `run` and `test` arguments, optional `build` arguments with the `executable` they produce, `scaffold` files written to a scratch folder first, `env` and a `missingToolMessage`. Arguments are templates over `file`, `url`, `dir`, `name`, `scaffold`, `className`, `mainMethod`, `exe` (`.exe` on Windows) and `platform`; an argument that is exactly `{{args}}` expands to the program's arguments, and `{{tests}}` to each test's name and method. `debugger` has a `type`, an `extension` (and other ones by `platforms`), optional `build` arguments, and a launch `configuration` whose strings are templates over the same facts plus `cwd`.

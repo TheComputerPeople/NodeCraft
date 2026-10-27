@@ -36,6 +36,12 @@
     }
   },
   "contributes": {
+    "jsonValidation": [
+      {
+        "fileMatch": "*.vgraph-language.json",
+        "url": "./schemas/language-pack.schema.json"
+      }
+    ],
     "commands": [
       {
         "command": "blueprintVisualScripting.createGraph",

@@ -4,9 +4,11 @@
 //                                [--timeout <ms>] [--commonjs]
 //
 // <pack> is a JavaScript module that exports a LanguagePack (as `pack`, as its default export, or
-// as its only export that looks like one), or the id of a built-in pack. Exits with 1 when a fixture
-// fails.
+// as its only export that looks like one), a declarative pack's definition (a .json file), or the
+// id of a built-in pack. Exits with 1 when a fixture fails.
+import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { declarativePack } from '../core/declarative';
 import { LanguagePack } from '../core/language-pack';
 import { builtinLanguagePacks } from '../core/languages';
 import { defaultFixtureSet, formatReport, loadFixtureSet, runConformance } from './conformance';
@@ -18,6 +20,7 @@ function isPack(value: unknown): value is LanguagePack {
 export function loadPack(spec: string): LanguagePack {
   const builtin = builtinLanguagePacks().get(spec);
   if (builtin) return builtin;
+  if (spec.endsWith('.json')) return declarativePack(JSON.parse(fs.readFileSync(path.resolve(spec), 'utf8')));
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const exported = require(path.resolve(spec)) as Record<string, unknown>;
   const candidates = [exported.pack, exported.default, ...Object.values(exported)].filter(isPack);
@@ -34,7 +37,7 @@ export async function main(argv: string[]): Promise<number> {
   const valued = ['--filter', '--fixtures', '--concurrency', '--timeout'];
   const spec = argv.find((arg, i) => !arg.startsWith('--') && !valued.includes(argv[i - 1]));
   if (!spec) {
-    console.error('Usage: blueprint-conformance <pack module or built-in id> [--filter <text>] [--fixtures <dir>] [--concurrency <n>] [--timeout <ms>] [--commonjs]');
+    console.error('Usage: blueprint-conformance <pack module, definition .json or built-in id> [--filter <text>] [--fixtures <dir>] [--concurrency <n>] [--timeout <ms>] [--commonjs]');
     return 2;
   }
   const pack = loadPack(spec);

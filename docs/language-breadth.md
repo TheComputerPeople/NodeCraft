@@ -23,7 +23,7 @@ Language and framework packs can ship as separate VS Code extensions.
 
   Each returns a disposable. A pack declares the API version it was built for; a mismatch is refused with a message naming both versions. Packs and libraries can come and go while editors are open: the language picker, the palette and compile results update.
 
-  As built: the types are in `src/core/api.ts` (and in the SDK). Another extension gets the API with `vscode.extensions.getExtension('local.blueprint-visual-scripting').activate()`. `registerLanguagePack` throws (and logs to the Output panel) when the pack's `apiVersion` differs, its id is taken or a required member is missing; `registerNodeLibrary` throws for a library name already registered. When packs change, open editors get the new language list (with capabilities), and the scans of graph libraries and project functions run again (a pack can bring a symbol importer). `registerDeclarativePack` arrives with the declarative format (step 10).
+  As built: the types are in `src/core/api.ts` (and in the SDK). Another extension gets the API with `vscode.extensions.getExtension('local.blueprint-visual-scripting').activate()`. `registerLanguagePack` throws (and logs to the Output panel) when the pack's `apiVersion` differs, its id is taken or a required member is missing; `registerNodeLibrary` throws for a library name already registered. When packs change, open editors get the new language list (with capabilities), and the scans of graph libraries and project functions run again (a pack can bring a symbol importer). `registerDeclarativePack` (step 10) throws, listing the definition's problems, when a definition can't be a pack.
 - **The pack SDK** is an npm package built from this repository (`packages/pack-sdk`, `@blueprint-visual-scripting/pack-sdk`). It holds what a pack author needs and nothing that depends on VS Code:
   - the types: `LanguagePack` and its parts, the Visual IR, the canonical types;
   - helpers the built-in packs use: `CodeWriter` (with node lines for debugging), `NameScope` and `toIdentifier`, `exprType`, the value-formatting rules as reference code;
@@ -60,6 +60,24 @@ The format:
 - **Runner and debugger:** the same fields as `CodeRunner` and `CodeDebugger`, as data: candidate commands, an optional build command and the run command with placeholders for the file, the class and the arguments.
 
 An IR construct without a template is reported as `unsupported` on the node that produced it, so a partial pack works for what it covers. The generator writes node lines, so breakpoints and stepping work for declarative packs through their debugger description.
+
+**As built** (`src/core/declarative/`, the reference is in the SDK's README):
+
+- **Loading:**
+  - `declarativePack(definition)` checks a definition and returns a `LanguagePack`. The checks cover required fields, the API version and parsing every template; problems are listed together.
+  - `registerDeclarativePack` is in the API.
+  - Workspace `*.vgraph-language.json` files are loaded and reloaded by `src/extension/workspace-packs.ts`, with their problems on the file in the Problems panel. A pack whose id is taken isn't loaded.
+  - `schemas/language-pack.schema.json` validates the files in the editor.
+  - The SDK exports the loader and template functions and ships the schema. `blueprint-conformance` accepts a definition file.
+- **Capabilities:** declarative packs can't express object references, inheritance, interfaces, event dispatchers or latent actions in this phase. A definition that claims them is refused, so fixtures needing them are not applicable. The format covers the procedural core: variables, functions with several outputs, flow control, loops, containers, structs and enums, code nodes, tests and Main.
+- **Templates:** besides `{{field}}`, `{{#each}}` and block placeholders, there are `{{#if}}`/`{{#unless}}` presence tests. The design's `{{text field}}` isn't needed: the emitter gives each value the forms templates need (a literal's `text`, `quoted` and `escaped`; `text` beside `value` for Print). Type-dependent spellings are templates keyed by type (`toText.float`, `binary.==.string`), tried from the most specific.
+- **The emitter** decides what's the same for every pack: names (styles and reserved words from the definition), which conversions are needed, coercing a literal to its target type, container literals, a function's default return, and node comments.
+  - Where each node's code starts, and each function's opening, are marked in the rendered text and collected into node lines and breaks. Breakpoints and stepping work as for Tier 1 packs.
+  - A missing template is an `unsupported` diagnostic on the node being written. Generators can now return diagnostics (`GeneratedCode.diagnostics`); errors mean no output.
+- **Support code** (`helpers`) is included when generated code uses its identifier, and then the support code it uses in turn, in the definition's order.
+- **Snippets:** a pack can implement library nodes that have no snippet in its language (`snippets`, by node type). This became `CodeGenerator.snippets`, which lowering consults when a node's own `languages` map has no entry, so Tier 1 packs can use it too.
+- **Runner and debugger as data:** arguments, the executable, scaffold files and the launch configuration are templates over the run's facts. `{{args}}` and `{{tests}}` expand to several arguments.
+- **The test pack**, Mini JS (`test/fixtures/declarative/minijs.vgraph-language.json`), uses the library nodes' JavaScript snippets and Node.js. It passes the 16 fixtures it can express, and the other 4 (dispatchers, Delay, the two object programs) are not applicable. The integration tests load it from a workspace file, and Debug a graph through its debugger description with VS Code's JavaScript debugger.
 
 **Tier 2 symbol import** asks the language server: functions marked with a `@blueprint` comment are found with VS Code's document symbols, and their parameter and return types are read from the language server's hover or signature help and mapped back through the pack's type map; types it doesn't know become native types.
 

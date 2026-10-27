@@ -2,6 +2,7 @@
 // framework dependency; VS Code reports failure when the returned promise rejects.
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { LanguagePack } from '../../../src/core/language-pack';
 import type { NodeDefinition } from '../../../src/core/model';
@@ -339,6 +340,7 @@ interface ExtensionApi {
 interface PublicApi {
   apiVersion: number;
   registerLanguagePack(pack: LanguagePack): vscode.Disposable;
+  registerDeclarativePack(definition: unknown): vscode.Disposable;
   registerNodeLibrary(library: { name: string; version: string; nodes: NodeDefinition[] }): vscode.Disposable;
 }
 
@@ -393,6 +395,43 @@ test('another extension registers a language pack and a node library, then remov
   }
   await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
   assert.match(vscode.languages.getDiagnostics(graph).map((d) => d.message).join(' '), /Unknown graph language "echo"/);
+});
+
+// Declarative packs (docs/language-breadth.md): a workspace's *.vgraph-language.json file is loaded as
+// a language pack, its problems shown on the file; the API refuses a definition with problems.
+test('a declarative pack loads from a workspace file, and its problems show on the file', async () => {
+  const api = (await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as PublicApi;
+  assert.throws(() => api.registerDeclarativePack({ id: 'Bad' }), /can't be registered:[\s\S]*"id" must be/);
+  const definition = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../test/fixtures/declarative/minijs.vgraph-language.json'), 'utf8')) as { templates: Record<string, string> };
+  const file = workspaceFile('mini.vgraph-language.json');
+  const write = (value: unknown) => vscode.workspace.fs.writeFile(file, new TextEncoder().encode(JSON.stringify(value, null, 2)));
+  const graph = workspaceFile('mini.vgraph');
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({
+    schemaVersion: 3, name: 'Mini', kind: 'class', language: 'minijs', variables: [], metadata: {},
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('p', 'core:console.print', { 'pin:value': 'hi from a workspace pack' })],
+      connections: [{ id: 'c', fromNode: 's', fromPin: 'execOut', toNode: 'p', toPin: 'execIn' }]
+    }]
+  }, null, 2)));
+  const generated = workspaceFile('mini.vgraph.mini.js');
+  try {
+    await write(definition);
+    const deadline = Date.now() + 15000;
+    while (!(await exists(generated)) && Date.now() < deadline) {
+      await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    assert.match(await readText(generated), /console\.log\("hi from a workspace pack"\);/);
+
+    await write({ ...definition, templates: { ...definition.templates, file: '{{#if library}}' } });
+    await waitFor(() => vscode.languages.getDiagnostics(file).length > 0, "the definition's problems on its file");
+    assert.match(vscode.languages.getDiagnostics(file)[0].message, /^file: \{\{#if\}\} is never closed/);
+  } finally {
+    await vscode.workspace.fs.delete(file);
+  }
+  await waitFor(() => vscode.languages.getDiagnostics(file).length === 0, 'the problems to go with the file');
 });
 
 // Output plans (docs/output-placement.md): a pack registering its generated files with a build.
@@ -619,6 +658,16 @@ test('exit check: debugging a function graph in generated C#', async () => {
 test('Debug stops at a node breakpoint in generated JavaScript, steps by node and reads pins', () => debugSample('javascript', 'debug_javascript.vgraph.js'));
 
 test('Debug does the same in generated TypeScript', () => debugSample('typescript', 'debug_typescript.vgraph.ts'));
+
+test('Debug does the same for a declarative pack, through its debugger description', async () => {
+  const api = (await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as PublicApi;
+  const pack = api.registerDeclarativePack({ ...JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../test/fixtures/declarative/minijs.vgraph-language.json'), 'utf8')), id: 'minijs-api' });
+  try {
+    await debugSample('minijs-api', 'debug_minijs-api.vgraph.mini.js');
+  } finally {
+    pack.dispose();
+  }
+});
 
 // These need the language's debugger extension: run `npm run test:integration:debuggers` to load
 // the installed extensions.

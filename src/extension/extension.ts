@@ -17,6 +17,7 @@ import { createApi } from './api';
 import { OutputPlans } from './output-plans';
 import { BlueprintVisualScriptingApi } from '../core/api';
 import { ProjectFunctions } from './project-functions';
+import { watchWorkspaceLanguagePacks } from './workspace-packs';
 
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
@@ -38,6 +39,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     }
     return outputChannel;
   };
+
+  // Declarative language packs in the workspace (docs/language-breadth.md, "Declarative packs").
+  context.subscriptions.push(watchWorkspaceLanguagePacks(languages, output));
 
   // The project's own functions, exposed as nodes (docs/code-as-nodes.md).
   const projectFunctions = new ProjectFunctions(registry, languages, output);

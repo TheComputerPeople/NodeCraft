@@ -1,6 +1,7 @@
 // The public API (docs/language-breadth.md, "The public API and the pack SDK"): what the extension's
 // activate returns to other extensions, so language packs and node libraries can ship separately.
 // Kept free of the VS Code API so the pack SDK can carry these types.
+import type { DeclarativePackDefinition } from './declarative/definition';
 import { LanguagePack } from './language-pack';
 import { NodeDefinition } from './model';
 
@@ -24,6 +25,9 @@ export interface BlueprintVisualScriptingApi {
   // A language pack written in code (Tier 1). It must say which API version it was built for
   // (`apiVersion`); its id must not be taken. Disposing removes it.
   registerLanguagePack(pack: LanguagePack): Disposable;
+  // A declarative pack (Tier 2 and 3): a definition as schemas/language-pack.schema.json describes
+  // it. Throws, listing the definition's problems, when it can't be one. Disposing removes it.
+  registerDeclarativePack(definition: DeclarativePackDefinition): Disposable;
   // Node definitions for every graph, under the library's name. Disposing removes them.
   registerNodeLibrary(library: NodeLibrary): Disposable;
 }

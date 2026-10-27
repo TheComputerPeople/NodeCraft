@@ -27,6 +27,8 @@ export interface LowerOptions {
   snippetLanguages: string[];
   // Languages of project code the target can import (docs/code-as-nodes.md, "Node identity").
   importLanguages: string[];
+  // The pack's own implementations of library nodes, by node type (CodeGenerator.snippets).
+  snippets?: Record<string, string>;
 }
 
 export interface LowerResult {
@@ -1259,7 +1261,8 @@ class Lowerer {
     if (def.implementation?.kind !== 'code') return undefined;
     const sources = def.implementation.languages;
     const language = this.options.snippetLanguages.find((key) => sources[key] !== undefined);
-    if (!language) {
+    const own = this.options.snippets?.[def.type];
+    if (!language && own === undefined) {
       const wanted = this.options.snippetLanguages.map((key) => `"${key}"`).join(' or ');
       this.error('missing-snippet', `"${def.displayName}" has no ${this.options.languageName} implementation; add a ${wanted} entry to its languages.`, info.graph.id, node.id);
       return undefined;
@@ -1270,7 +1273,7 @@ class Lowerer {
       name: def.type.replace(/^[\w-]+:/, ''),
       params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
       returns: def.outputs.find((p) => p.kind === 'data')?.type,
-      code: sources[language]
+      code: language ? sources[language] : own!
     };
     this.helpers.set(key, helper);
     return helper;

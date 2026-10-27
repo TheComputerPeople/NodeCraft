@@ -38,11 +38,16 @@ export function compileDocument(doc: GraphDocument, options: CompileOptions): Co
   // What the language can't express is reported on the nodes that use it, before lowering.
   const unsupported = checkCapabilities(doc, createResolver(options.registry, doc), pack.capabilities, pack.displayName);
   if (hasErrors(unsupported)) return { diagnostics: unsupported };
-  const lowered = lowerDocument(doc, { registry: options.registry, languageName: pack.displayName, snippetLanguages: generator.snippetLanguages, importLanguages: generator.importLanguages });
+  const lowered = lowerDocument(doc, {
+    registry: options.registry, languageName: pack.displayName, snippetLanguages: generator.snippetLanguages, importLanguages: generator.importLanguages,
+    ...(generator.snippets ? { snippets: generator.snippets } : {})
+  });
   if (!lowered.program) return { diagnostics: lowered.diagnostics };
-  const code = generator.generate(lowered.program, options.generate);
+  const { diagnostics: generated = [], ...code } = generator.generate(lowered.program, options.generate);
+  const diagnostics = [...lowered.diagnostics, ...generated];
+  if (hasErrors(generated)) return { diagnostics };
   return {
-    diagnostics: lowered.diagnostics,
+    diagnostics,
     output: { ...code, fileName: generator.outputFileName(options.generate.sourceFileName), language: pack.id }
   };
 }

@@ -30,4 +30,7 @@ for (const program of fs.readdirSync(path.join(root, 'test/fixtures/programs')))
 for (const f of vgraphs(path.join(root, 'test/fixtures/tests'))) copy(path.join(root, 'test/fixtures/tests', f), path.join(fixtures, 'tests', f));
 copy(path.join(root, 'sample/visual-nodes/Math/Double.node.json'), path.join(fixtures, 'nodes/Double.node.json'));
 copy(path.join(root, 'test/fixtures/nodes/Fail.node.json'), path.join(fixtures, 'nodes/Fail.node.json'));
+// The declarative pack schema, and the test pack as an example of one.
+copy(path.join(root, 'schemas/language-pack.schema.json'), path.join(dist, 'schema/language-pack.schema.json'));
+copy(path.join(root, 'test/fixtures/declarative/minijs.vgraph-language.json'), path.join(dist, 'examples/minijs.vgraph-language.json'));
 console.log(`Built ${path.relative(root, dist)}`);

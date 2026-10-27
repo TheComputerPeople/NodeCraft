@@ -43,3 +43,16 @@ describe('node.schema.json', () => {
   test('accepts the sample library node', () => validator('schemas/node.schema.json')(JSON.parse(readRepoFile('sample/visual-nodes/Math/Double.node.json'))));
   test('accepts the sample framework event', () => validator('schemas/node.schema.json')(JSON.parse(readRepoFile('sample/visual-nodes/CLI/OnCommand.node.json'))));
 });
+
+describe('language-pack.schema.json', () => {
+  const check = validator('schemas/language-pack.schema.json');
+
+  test('accepts the declarative test pack', () => check(JSON.parse(readRepoFile('test/fixtures/declarative/minijs.vgraph-language.json'))));
+
+  test('rejects capabilities declarative packs can\'t express', () => {
+    const ajv = new Ajv2020({ strict: false });
+    const validate = ajv.compile(JSON.parse(readRepoFile('schemas/language-pack.schema.json')));
+    const pack = JSON.parse(readRepoFile('test/fixtures/declarative/minijs.vgraph-language.json'));
+    assert.equal(validate({ ...pack, capabilities: { classes: true } }), false);
+  });
+});

@@ -30,6 +30,10 @@ export { FULL_CAPABILITIES } from '../core/capabilities';
 export { findBlock, hasBlock, withBlock } from '../core/output-plan';
 export { formatValue } from '../core/values';
 
+// Declarative packs: a definition (schema/language-pack.schema.json in this package) as a pack.
+export { declarativePack, loadDeclarativePack, checkDefinition, parseTemplate, renderTemplate, TemplateError } from '../core/declarative';
+export type { DeclarativeDebugger, DeclarativePackDefinition, DeclarativeRunner, Template, TemplateValue } from '../core/declarative';
+
 // The conformance suite.
 export { runConformance, loadFixtureSet, programFiles, defaultFixtureSet, formatReport } from '../conformance/conformance';
 export type { ConformanceOptions, ConformanceReport, Fixture, FixtureResult, FixtureSet, ResultStatus } from '../conformance/conformance';

@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { formatReport, runConformance } from '../../src/conformance/conformance';
 import { repoFixtures } from './fixtures';
 import { main } from '../../src/conformance/cli';
+import { declarativePack } from '../../src/core/declarative';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { javascriptPack } from '../../src/core/languages/javascript';
 import { repoRoot } from '../unit/helpers';
@@ -24,6 +25,15 @@ describe('published conformance suite', () => {
       assert.deepEqual(report.results.filter((r) => r.status === 'not-applicable').map((r) => r.fixture), pack.capabilities.inheritance ? [] : ['programs/arena']);
     });
   }
+
+  // A declarative pack (test/fixtures/declarative): templates, the library nodes' JavaScript
+  // snippets, and Node.js to run it. It can't express objects, dispatchers or latent actions.
+  test('a declarative pack passes every fixture it can express', async () => {
+    const pack = declarativePack(JSON.parse(fs.readFileSync(path.join(repoRoot, 'test/fixtures/declarative/minijs.vgraph-language.json'), 'utf8')));
+    const report = await runConformance(pack, { fixtures: repoFixtures() });
+    assert.equal(report.failed, 0, formatReport(report));
+    assert.deepEqual(report.results.filter((r) => r.status === 'not-applicable').map((r) => r.fixture), ['graphs/events.vgraph', 'graphs/latent.vgraph', 'programs/arena', 'programs/duel'], formatReport(report));
+  });
 
   test('JavaScript as CommonJS passes too', async () => {
     const report = await runConformance(javascriptPack, { fixtures: repoFixtures(), generate: { moduleFormat: 'commonjs' } });

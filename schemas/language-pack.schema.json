@@ -1,0 +1,350 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/blueprint-language-pack.schema.json",
+  "title": "Declarative Language Pack",
+  "description": "A language pack written as data (docs/language-breadth.md, \"Declarative packs\"): templates for the Visual IR, a type map and capabilities. A workspace file named *.vgraph-language.json is loaded as a pack.",
+  "type": "object",
+  "required": [
+    "id",
+    "displayName",
+    "apiVersion",
+    "fileName",
+    "types",
+    "naming",
+    "templates"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "The value of a graph's language field."
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "apiVersion": {
+      "const": 1,
+      "description": "The extension API version the pack is written for."
+    },
+    "fileName": {
+      "type": "string",
+      "description": "The generated file's name, a template over name, snake, camel and pascal: \"{{snake}}_vgraph.c\"."
+    },
+    "workspaceMarkers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Glob patterns whose presence suggests a workspace uses the language."
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "What generated code can express. Object references, inheritance, interfaces, event dispatchers and latent actions can't be expressed by declarative packs yet.",
+      "properties": {
+        "staticTyping": {
+          "type": "boolean"
+        },
+        "generics": {
+          "type": "boolean"
+        },
+        "exceptions": {
+          "type": "boolean"
+        },
+        "containers": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "array",
+              "set",
+              "map"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "classes": {
+          "const": false
+        },
+        "inheritance": {
+          "const": false
+        },
+        "interfaces": {
+          "const": false
+        },
+        "async": {
+          "const": false
+        },
+        "delegates": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "snippetLanguages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Keys of a code node's languages map its snippets are taken from (the pack's id by default)."
+    },
+    "snippets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Implementations of library nodes, by node type: function bodies over the node's inputs."
+    },
+    "types": {
+      "type": "object",
+      "required": [
+        "map",
+        "defaults"
+      ],
+      "properties": {
+        "map": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Spellings by key: int, float, bool, string, any; array, set, map (with {{T}}, {{K}}, {{V}}); struct, enum (with {{name}})."
+        },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Default values by the same keys."
+        }
+      },
+      "additionalProperties": false
+    },
+    "naming": {
+      "type": "object",
+      "required": [
+        "reserved"
+      ],
+      "properties": {
+        "reserved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "enum": [
+            "snake",
+            "camel",
+            "pascal",
+            "keep"
+          ]
+        },
+        "function": {
+          "enum": [
+            "snake",
+            "camel",
+            "pascal",
+            "keep"
+          ]
+        },
+        "variable": {
+          "enum": [
+            "snake",
+            "camel",
+            "pascal",
+            "keep"
+          ]
+        },
+        "parameter": {
+          "enum": [
+            "snake",
+            "camel",
+            "pascal",
+            "keep"
+          ]
+        },
+        "enumerator": {
+          "enum": [
+            "snake",
+            "camel",
+            "pascal",
+            "keep"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "operators": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "<",
+          "<=",
+          ">=",
+          "==",
+          "!=",
+          "&&",
+          "||",
+          "+",
+          "-"
+        ]
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "templates": {
+      "type": "object",
+      "required": [
+        "file",
+        "function"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Templates by name: file, function, comment; statements (print, assert, assign, declare, statement, if, while, for, forEach, return, callResults); expressions (literal.int, literal.float, literal.bool, literal.string, literal.null, field, add, binary, binary.<op>, binary.<op>.<type>, not, concat, toText[.<type>], toNumber[.<type>], toBoolean[.<type>], call, import, callFunction, callBlock, callOutput, makeContainer.<container>, makeStruct, structField, enumValue); structFile and enumFile."
+    },
+    "helpers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Support code by the identifier it defines, included when generated code uses the identifier."
+    },
+    "runner": {
+      "type": "object",
+      "required": [
+        "commands",
+        "run",
+        "missingToolMessage"
+      ],
+      "properties": {
+        "commands": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "build": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "executable": {
+          "type": "string"
+        },
+        "run": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "test": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scaffold": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "missingToolMessage": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "debugger": {
+      "type": "object",
+      "required": [
+        "type",
+        "configuration"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "extension": {
+          "$ref": "#/$defs/extension"
+        },
+        "platforms": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "extension": {
+                "$ref": "#/$defs/extension"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "build": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "configuration": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "extension": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

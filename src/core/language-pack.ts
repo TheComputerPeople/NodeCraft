@@ -1,6 +1,7 @@
 // A language pack is the unit of language support: everything the extension knows about one
 // target language lives behind this interface, so the graph model and editor stay language-neutral.
 // Debugging members arrive with Phase 5.
+import { CompileDiagnostic } from './compiler/diagnostics';
 import { IrProgram } from './compiler/ir';
 import { NodeLine } from './compiler/writer';
 import { ModuleScan } from './importing/symbols';
@@ -76,6 +77,9 @@ export interface GeneratedCode {
   // the test file that runs them with the language's test tool (CodeGenerator.testFileName).
   tests?: { name: string; method: string }[];
   testFile?: string;
+  // What the generator couldn't write (a declarative pack without a template for a construct, as
+  // `unsupported` on its node). An error means there's no output.
+  diagnostics?: CompileDiagnostic[];
 }
 
 export interface PinExpression {
@@ -134,6 +138,9 @@ export interface CodeGenerator {
   snippetLanguages: string[];
   // Languages of project code that generated code can import and call (docs/code-as-nodes.md).
   importLanguages: string[];
+  // Implementations of library nodes in the language, by node type, for nodes whose definitions
+  // have none for it (a declarative pack's `snippets`): function bodies over the node's inputs.
+  snippets?: Record<string, string>;
   // Name of the generated file for a graph file, following the language's import rules
   // (docs/output-placement.md): "Inventory.vgraph" → "Inventory.vgraph.ts" or "inventory_vgraph.py".
   outputFileName(graphFileName: string): string;
