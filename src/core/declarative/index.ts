@@ -1,7 +1,7 @@
 // Declarative language packs (docs/language-breadth.md, "Declarative packs"): a definition (JSON)
 // becomes a LanguagePack whose generator renders the Visual IR through the definition's templates
 // and whose runner and debugger are the definition's, as data.
-import { CodeDebugger, CodeRunner, LanguagePack, RunContext } from '../language-pack';
+import { CodeDebugger, CodeRunner, LanguagePack, LanguageServerImport, RunContext } from '../language-pack';
 import { TypeRef } from '../types';
 import { CheckedDefinition, DeclarativeDebugger, DeclarativePackDefinition, DeclarativeRunner, checkDefinition } from './definition';
 import { DeclarativeEmitter, declarativeFileName, declarativeLibraryExports, typeKey } from './generator';
@@ -37,6 +37,7 @@ function packFrom(checked: CheckedDefinition): LanguagePack {
     workspaceMarkers: d.workspaceMarkers ?? [],
     capabilities: checked.capabilities,
     mapType: (type) => spellType(checked, type),
+    ...(d.importer ? { importer: { extensions: d.importer.extensions.map((e) => e.toLowerCase()), languageServer: languageServerImport(d.importer) } } : {}),
     generator: {
       snippetLanguages: d.snippetLanguages ?? [d.id],
       importLanguages: [d.id],
@@ -50,7 +51,11 @@ function packFrom(checked: CheckedDefinition): LanguagePack {
   };
 }
 
-// A type's spelling, for the editor (Run uses the emitter's).
+function languageServerImport({ extensions: _extensions, ...spec }: NonNullable<DeclarativePackDefinition['importer']>): LanguageServerImport {
+  return spec;
+}
+
+// A type's spelling, for the editor and symbol import (Run uses the emitter's).
 function spellType(checked: CheckedDefinition, type: TypeRef): string {
   const map = checked.definition.types.map;
   const spell = (t: TypeRef | undefined): string => {

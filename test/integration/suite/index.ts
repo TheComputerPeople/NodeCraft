@@ -659,6 +659,60 @@ test('Debug stops at a node breakpoint in generated JavaScript, steps by node an
 
 test('Debug does the same in generated TypeScript', () => debugSample('typescript', 'debug_typescript.vgraph.ts'));
 
+// Tier 2 symbol import (docs/language-breadth.md): a declarative pack finds marked functions through
+// the language server, here VS Code's own TypeScript server for a JavaScript file.
+test('a declarative pack imports marked functions through the language server', async () => {
+  const api = (await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as PublicApi;
+  const definition = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../test/fixtures/declarative/minijs.vgraph-language.json'), 'utf8'));
+  const source = workspaceFile('jstools/score.js');
+  await vscode.workspace.fs.writeFile(source, new TextEncoder().encode([
+    '/**',
+    ' * Triples a value.',
+    ' * @blueprint',
+    ' * @param {number} value',
+    ' * @returns {number}',
+    ' */',
+    'function triple(value) {',
+    '  return value * 3;',
+    '}',
+    '',
+    'module.exports = { triple };',
+    ''
+  ].join('\n')));
+  const pack = api.registerDeclarativePack({ ...definition, id: 'minijs-lsp' });
+  const graph = workspaceFile('lsp.vgraph');
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({
+    schemaVersion: 3, name: 'Lsp', kind: 'class', language: 'minijs-lsp', variables: [], metadata: {},
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('t', 'fn:minijs-lsp:jstools/score.js#triple', { 'pin:value': 14 }), node('p', 'core:console.print')],
+      connections: [
+        { id: 'c1', fromNode: 's', fromPin: 'execOut', toNode: 't', toPin: 'execIn' },
+        { id: 'c2', fromNode: 't', fromPin: 'execOut', toNode: 'p', toPin: 'execIn' },
+        { id: 'c3', fromNode: 't', fromPin: 'returnValue', toNode: 'p', toPin: 'value' }
+      ]
+    }]
+  }, null, 2)));
+  const generated = workspaceFile('lsp.vgraph.mini.js');
+  try {
+    // The language server may take a while to start.
+    const deadline = Date.now() + 60000;
+    while (!(await exists(generated)) && Date.now() < deadline) {
+      await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    assert.ok(await exists(generated), `It doesn't compile: ${vscode.languages.getDiagnostics(graph).map((d) => d.message).join('; ')}`);
+    const text = await readText(generated);
+    assert.match(text, /const \{ triple \} = require\("\.\/jstools\/score\.js"\);/);
+    assert.match(text, /triple\(14\.0\)/, 'the hover said value is a number: a float');
+    const { execFileSync } = await import('node:child_process');
+    assert.equal(execFileSync(process.platform === 'win32' ? 'node.exe' : 'node', [generated.fsPath], { encoding: 'utf8' }).trim(), '42');
+  } finally {
+    pack.dispose();
+  }
+});
+
 test('Debug does the same for a declarative pack, through its debugger description', async () => {
   const api = (await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as PublicApi;
   const pack = api.registerDeclarativePack({ ...JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../test/fixtures/declarative/minijs.vgraph-language.json'), 'utf8')), id: 'minijs-api' });

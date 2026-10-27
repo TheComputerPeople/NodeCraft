@@ -163,12 +163,15 @@ export class DeclarativeEmitter {
     };
   }
 
+  // The files the code imports, each with the names it uses from it.
   private importsList(): TemplateValue[] {
-    const files = new Map<string, TemplateValue>();
+    const files = new Map<string, { path: string; relative: string; module: string; names: string[] }>();
     for (const i of this.program.imports) {
       const path = i.userType && i.userType.kind !== 'class' && i.userType.kind !== 'interface' ? i.userType.source?.generatedPath : i.path;
-      if (!path || files.has(path)) continue;
-      files.set(path, { path, relative: relativeSpecifier(this.options.outputDir ?? '', path), module: i.module ?? '' });
+      if (!path) continue;
+      const file = files.get(path) ?? { path, relative: relativeSpecifier(this.options.outputDir ?? '', path), module: i.module ?? '', names: [] };
+      if (!i.userType && !file.names.includes(i.name)) file.names.push(i.name);
+      files.set(path, file);
     }
     return [...files.values()];
   }

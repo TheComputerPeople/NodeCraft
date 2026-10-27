@@ -187,11 +187,30 @@ export function debuggerOn(spec: CodeDebugger, platform: string): { type: string
 }
 
 // Reads the functions in the language's source files, for exposing them as nodes
-// (docs/code-as-nodes.md).
+// (docs/code-as-nodes.md): with a scanner of its own, or (Tier 2) through the language server.
 export interface SymbolImporter {
   // Extensions of the source files it reads, with the dot.
   extensions: string[];
-  scan(source: string): ModuleScan;
+  scan?(source: string): ModuleScan;
+  languageServer?: LanguageServerImport;
+}
+
+// How to read a function from what the language server says about it
+// (src/core/importing/language-server.ts).
+export interface LanguageServerImport {
+  // Prefixes of documentation comment lines: "///", "//", "#"; for block comments "/**" and "*".
+  comments: string[];
+  // How a parameter is written in the hover's signature: "type name" (C, Java), "name: type"
+  // (TypeScript, Python, Rust) or "name type" (Go).
+  parameters: 'type name' | 'name: type' | 'name type';
+  // Where the return type is: before the name (C, Java) or after the parameters (`): T`, `-> T`, `) T`).
+  returns: 'before' | 'after';
+  // Words that are no part of a type (static, inline, export, function, pub, fn…).
+  ignore?: string[];
+  // How the language writes "returns nothing" ("void" by default).
+  void?: string[];
+  // Joins the namespaces a function is in, for calling it (".", or "::" for C++).
+  namespaceSeparator?: string;
 }
 
 export interface LanguagePack {

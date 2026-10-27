@@ -2,7 +2,7 @@
 // templates for the Visual IR, a type map and capabilities, which declarativePack turns into a
 // LanguagePack. The schema is schemas/language-pack.schema.json.
 import { API_VERSION } from '../api';
-import { LanguageCapabilities } from '../language-pack';
+import { LanguageCapabilities, LanguageServerImport } from '../language-pack';
 import { NameStyle } from '../compiler/names';
 import { Template, TemplateError, parseTemplate } from './template';
 
@@ -46,6 +46,9 @@ export interface DeclarativePackDefinition {
   // Support code by the identifier it defines: included (once, in this order) when generated code,
   // or other included support code, uses the identifier.
   helpers?: Record<string, string>;
+  // Tier 2 symbol import: functions marked @blueprint in source files with these extensions,
+  // found through the language server (docs/language-breadth.md, "Tier 2 symbol import").
+  importer?: { extensions: string[] } & LanguageServerImport;
   runner?: DeclarativeRunner;
   debugger?: DeclarativeDebugger;
 }
@@ -116,6 +119,9 @@ export function checkDefinition(value: unknown): { problems: string[]; checked?:
     if (!d.runner.commands || typeof d.runner.commands !== 'object') problems.push('"runner.commands" must list candidate commands.');
     if (!isString(d.runner.missingToolMessage)) problems.push('"runner.missingToolMessage" is missing.');
     if (d.runner.build && !isString(d.runner.executable)) problems.push('"runner.executable" is needed with "runner.build".');
+  }
+  if (d.importer && (!Array.isArray(d.importer.extensions) || !Array.isArray(d.importer.comments) || !['type name', 'name: type', 'name type'].includes(d.importer.parameters) || !['before', 'after'].includes(d.importer.returns))) {
+    problems.push('"importer" needs "extensions", "comments", "parameters" ("type name", "name: type" or "name type") and "returns" ("before" or "after").');
   }
   if (d.debugger && (!isString(d.debugger.type) || typeof d.debugger.configuration !== 'object')) problems.push('"debugger" needs "type" and "configuration".');
   const templates = new Map<string, Template>();

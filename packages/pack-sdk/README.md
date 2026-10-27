@@ -94,6 +94,7 @@ Declarative packs can't yet express object references, inheritance, interfaces, 
 | `operators` | How `<`, `<=`, `>=`, `==`, `!=`, `&&`, `\|\|`, `+` and `-` are written (as themselves by default) |
 | `templates` | The templates below |
 | `helpers` | Support code by the identifier it defines. It's included once, at `{{> support}}` in the file template, when generated code (or included support code) uses the identifier |
+| `importer` | Tier 2 symbol import: functions marked `@blueprint` in files with these `extensions`, found through the language server's document symbols and read from its hover. `comments` are the doc comment prefixes (`"///"`, `"/**"`, `"*"`), `parameters` how the hover writes one (`"type name"`, `"name: type"` or `"name type"`), `returns` where the return type is (`"before"` the name or `"after"` the parameters), `ignore` words that aren't part of a type, `void` how "returns nothing" is written, and `namespaceSeparator` how a function's namespaces are joined to call it |
 | `runner`, `debugger` | How to run and debug generated code (below) |
 
 ### Templates
@@ -104,7 +105,7 @@ The emitter decides names, which conversions are needed and where each node's co
 
 | Template | Fields |
 |---|---|
-| `file` | `fields` (`name`, `type`, `value`); `start`, `functions`, `testFunctions`, `blocks`, `helpers` and `all` (the functions, written with `function`); `signatures` (each function's `name`, `params`, `outputs`, `returnType`); `tests` (`name`, `method`, `quoted`); `mainMethod`, `hasMain`, `hasTests`; `imports` (`path`, `relative`, `module`); `support` |
+| `file` | `fields` (`name`, `type`, `value`); `start`, `functions`, `testFunctions`, `blocks`, `helpers` and `all` (the functions, written with `function`); `signatures` (each function's `name`, `params`, `outputs`, `returnType`); `tests` (`name`, `method`, `quoted`); `mainMethod`, `hasMain`, `hasTests`; `imports`, the files the code imports (`path`, `relative`, `module`, and the `names` it uses); `support` |
 | `function` | `name`, `params` and `outputs` (`name`, `type`), `returnType` (one output), `void`, `single`, `multiple`, `body`, `description`, and one of `start`, `function`, `event`, `test`, `block`, `helper` (and `main` for the Main event) |
 | `comment` | `text`: the node's name and id, written before its code |
 | `print` | `value`, `text` (the value as text), `type` |

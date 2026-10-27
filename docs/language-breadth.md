@@ -81,6 +81,20 @@ An IR construct without a template is reported as `unsupported` on the node that
 
 **Tier 2 symbol import** asks the language server: functions marked with a `@blueprint` comment are found with VS Code's document symbols, and their parameter and return types are read from the language server's hover or signature help and mapped back through the pack's type map; types it doesn't know become native types.
 
+As built (`src/core/importing/language-server.ts`, and `symbolScan` in `src/extension/project-functions.ts`):
+
+- **The pack's part:** a `SymbolImporter` can have `languageServer` instead of `scan`. A declarative definition's `importer` gives it: the extensions, the doc comment prefixes, how a parameter is written (`type name`, `name: type`, `name type`), where the return type is (`before` the name or `after` the parameters), words that aren't part of a type, how "returns nothing" is written, and the namespace separator.
+- **Finding functions:** the extension asks for the document's symbols. Functions at the top level or in namespaces and modules count; methods don't.
+  - Only functions with `@blueprint` in the lines above them are looked at, unless `exposeAllFunctions` is on. Each gets a hover request.
+  - A language server with no symbols yet for a marked file is asked again (waiting 1, 2, 4… seconds, about a minute in all), since it may still be starting.
+- **Reading the hover:**
+  - The signature is the line in the hover's code blocks (or its text) that calls the function by name, continued to its closing parenthesis. Hover formats differ by server; tests cover the TypeScript server's, clangd's and rust-analyzer's.
+  - Parameters keep literal defaults. Variadic, generic, `self` and unnamed parameters are skipped with the reason.
+  - The doc comment comes from the file: the comment lines above the declaration, past attributes and the declaration's own earlier lines.
+- **Types** map back through the pack's own spellings of the canonical types, and arrays and sets of them. A spelling two types share goes to float before int, so JavaScript's `number` is a float. Other types become native types.
+- **Several packs per extension:** project function scanning now lets every pack that reads an extension scan the file, so the C and C++ packs can both read headers. Each pack's functions are nodes of its own language.
+- **Tested** with VS Code's built-in TypeScript server: the Mini JS pack imports a JSDoc-marked function from a `.js` file. The generated code `require`s it, and it runs.
+
 ## C++ (Tier 1)
 
 - **Files:** `Name.vgraph.h` (the class) and `Name.vgraph.cpp` (its methods), next to the graph; the `.cpp` includes the header by relative path.

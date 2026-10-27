@@ -212,6 +212,66 @@
       },
       "description": "Support code by the identifier it defines, included when generated code uses the identifier."
     },
+    "importer": {
+      "type": "object",
+      "description": "Tier 2 symbol import: functions marked @blueprint in source files with these extensions, found through the language server's document symbols and read from its hover.",
+      "required": [
+        "extensions",
+        "comments",
+        "parameters",
+        "returns"
+      ],
+      "properties": {
+        "extensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Source file extensions, with the dot."
+        },
+        "comments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Prefixes of documentation comment lines: \"///\", \"//\", \"#\"; for block comments \"/**\" and \"*\"."
+        },
+        "parameters": {
+          "enum": [
+            "type name",
+            "name: type",
+            "name type"
+          ],
+          "description": "How a parameter is written in the hover's signature."
+        },
+        "returns": {
+          "enum": [
+            "before",
+            "after"
+          ],
+          "description": "Where the return type is: before the name, or after the parameters."
+        },
+        "ignore": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Words that are no part of a type (static, inline, export, function...)."
+        },
+        "void": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "How the language writes \"returns nothing\" (void by default)."
+        },
+        "namespaceSeparator": {
+          "type": "string",
+          "description": "Joins the namespaces a function is in, for calling it."
+        }
+      },
+      "additionalProperties": false
+    },
     "runner": {
       "type": "object",
       "required": [

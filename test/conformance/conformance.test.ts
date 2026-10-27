@@ -237,7 +237,7 @@ describe('project functions', () => {
   function definitions(language: string, key: string): NodeDefinition[] {
     const importer = languages.get(language)!.importer!;
     const module = language === 'python' ? 'game.score' : undefined;
-    return exposeFunctions(importer.scan(MODULES[key].text), { language, path: MODULES[key].path, module, exposeAll: false }).definitions;
+    return exposeFunctions(importer.scan!(MODULES[key].text), { language, path: MODULES[key].path, module, exposeAll: false }).definitions;
   }
 
   function project(language: string, key: string): { registry: NodeRegistry; document: GraphDocument } {
