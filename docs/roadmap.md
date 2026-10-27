@@ -232,12 +232,17 @@ Status: complete (October 2026), with the deferrals below.
 - **The rest of the phase:**
   - Capabilities are enforced by the compiler and the editor.
   - The pack SDK and the published conformance suite.
-  - The public API, output plans with consented build hooks, and C++ and Rust as Tier 1 packs.
+  - The public API, and output plans with consented build hooks.
+  - C++, Rust, Java and Go as Tier 1 packs, each with placement, symbol import and debugging. Java and Go were added after the exit check, once their toolchains were installed.
+    - Java passes all 20 fixtures; Go passes all but the arena (inheritance), as Rust does.
+    - Java debugs with the Debugger for Java, Go with Delve. Both pass the Debug test and the Phase 5 exit check.
+    - Go imports project functions through gopls.
   - The declarative format, with workspace packs and Tier 2 symbol import through the language server.
   - Versioned node packages.
 - **Deferred:**
-  - Java (no JDK here), and Go (assessed as a good declarative pack, but no toolchain here).
-  - Rust traits (Blueprint interfaces).
+  - Rust traits (Blueprint interfaces), and inheritance in Go (embedding has no virtual calls).
+  - Java project methods with `int` or other non-canonical types (they're native pins, since Java won't narrow the generated `long`s), and methods that declare checked exceptions.
+  - In Go: Run for graphs in `package main`, and latent actions shared between packages (each package has its own queue).
   - MSVC's `cl` for C++.
   - CodeLLDB (Rust's debugger outside Windows), which is untested here.
   - Probing with `cargo metadata` or CMake's File API (placement reads files).
@@ -361,11 +366,11 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Entry points: Main with command-line arguments; framework packs' events; Test Case events with Assert nodes and Run Tests | ✅ (C# tests run through Run's project, not xUnit) | — |
 | Structure | Custom events (Call), event dispatchers (Call, Bind, Unbind, Unbind all, Assign), on this object or another | ✅ | — |
 | Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
-| Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python, C#, C++ headers, Rust; other languages through their language server) | — |
+| Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python, C#, C++ headers, Rust, Java; Go and other languages through their language server) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
 | Library | Standard math, string, utility and file nodes | ✅ (collection nodes need Phase 4) | — |
 | Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace and extensions, not a registry) | 6 |
-| Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++ and Rust; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Java and Go later) | 6 |
-| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust and declarative packs' code) | — |
-| Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust and declarative packs' code) | — |
+| Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++, Rust, Java and Go; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Rust has no inheritance or interfaces, Go no inheritance) | 6 |
+| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go and declarative packs' code) | — |
+| Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go and declarative packs' code) | — |
 | Debugging | Execution flow highlighting | ✅ (run trail and exec wire pulses, in Simulate) | — |

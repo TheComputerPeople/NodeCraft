@@ -4,7 +4,7 @@ Phase 6 of the [roadmap](roadmap.md): support for most languages without a hand-
 
 Decided before starting (2026-10-26): the Tier 1 packs in this phase are **C++ and Rust**. **Java is deferred**: this machine has no JDK, and a pack that can't run its conformance and debugging tests isn't finished. C is built as the **declarative** pack, and it doubles as the exit check's separate extension.
 
-Changed after the exit check (2026-10-27): the JDK (Temurin 25, Maven, Gradle) and Go (with gopls and Delve) are now installed, so **Java and Go join this phase as Tier 1 packs** before it merges (steps 14 to 18). Go was assessed below as a declarative pack, but the declarative format can't express objects, dispatchers or Delay, all of which Go can; as a Tier 1 pack it keeps them, and it imports project functions through gopls with the Tier 2 importer.
+Changed after the exit check (2026-10-27): the JDK (Temurin 25, Maven, Gradle) and Go (with gopls and Delve) are now installed, so **Java and Go joined this phase as Tier 1 packs** before it merged (steps 14 to 18; both done, see their sections). Go was assessed below as a declarative pack, but the declarative format can't express objects, dispatchers or Delay, all of which Go can; as a Tier 1 pack it keeps them, and it imports project functions through gopls with the Tier 2 importer.
 
 ## Capabilities, enforced
 
