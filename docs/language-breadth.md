@@ -151,6 +151,13 @@ As built (`src/core/importing/language-server.ts`, and `symbolScan` in `src/exte
 - **Run:** a scratch module whose `main.go` runs Start, Main and the latent actions (or the tests). When the graph's folder is in a module and isn't `package main`, the scratch module requires the project's module through a `replace` directive and imports the package; otherwise the folder's Go files are copied into the scratch module.
 - **Symbol import:** exported functions marked `// @blueprint`, found through gopls (the Tier 2 importer); generated code calls them directly in the same package, else through an import of their package.
 - **Debugging:** Delve through the Go extension (`go` launch configurations, extension `golang.go`).
+- **As built** (`src/core/languages/go.ts`, `go-runtime.ts`):
+  - **Containers and outputs:** arrays are pointers to slices (`*[]T`), so a node changes the caller's array, as references do in the other packs. Sets and maps are the runtime's `*VgSet[T]` and `*VgMap[K, V]`. Several outputs are Go's own multiple results; one output of a pure call is an immediately called function.
+  - **Values:** untyped values (a dispatcher's arguments, `any` slots) are read back with the runtime's `VgAs[T]`, which gives the zero value for nothing. Go computes constant expressions exactly (`0.1 + 0.2` would be `0.3`), so Add's literal operands go through `VgFloat`, and the sum rounds as Blueprint's float arithmetic does.
+  - **Compile rules:** Go refuses unused imports and unread variables. Imports are added only for the packages the code names, and a blank assignment covers a function's variables.
+  - **Snippets:** the `GO` tables in `stdlib.ts` and `containers.ts`.
+  - **Run:** the scratch module maps the generated file and the package's other files into `vg/` with `go build -overlay` (core code can't read files, but it can name them). It writes the support code there for the package, and builds `run`. `GOTOOLCHAIN=local` and a local `replace` mean nothing is downloaded.
+  - **Conformance:** every fixture passes except the arena (inheritance), which is not applicable, as for Rust.
 
 ## Rust (Tier 1)
 

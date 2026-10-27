@@ -34,11 +34,12 @@ function node(type: string, displayName: string, category: string, inputs: PinDe
   const cpp = CPP[type];
   const rust = RUST[type];
   const java = JAVA[type];
+  const go = GO[type];
   return {
     type, version: 1, displayName, category, description: options.description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [result] : [])],
-    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}) } },
+    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}), ...(go ? { go } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {}),
     ...(options.compact ? { compact: true } : {})
   };
@@ -152,6 +153,50 @@ const JAVA: Record<string, string> = {
   'core:utilities.select': 'return pickA ? a : b;',
   'core:file.load-to-string': 'try {\n    return java.nio.file.Files.readString(java.nio.file.Path.of(filename));\n} catch (java.io.IOException error) {\n    throw new java.io.UncheckedIOException("Can\'t read " + filename, error);\n}',
   'core:file.save-string': 'try {\n    java.nio.file.Files.writeString(java.nio.file.Path.of(filename), text);\n} catch (java.io.IOException error) {\n    throw new java.io.UncheckedIOException("Can\'t write " + filename, error);\n}'
+};
+
+// The Go snippets, by node type: errors are panics (VgFail), which stop the run (or fail the test).
+// Text is UTF-8, so lengths and positions count runes.
+const GO_DIVIDE_BY_ZERO = 'if b == 0 {\n\tVgFail("Divide by zero")\n}';
+const GO: Record<string, string> = {
+  'core:math.subtract': 'return a - b',
+  'core:math.multiply': 'return a * b',
+  'core:math.divide': `${GO_DIVIDE_BY_ZERO}\nreturn a / b`,
+  'core:math.modulo': `${GO_DIVIDE_BY_ZERO}\nreturn math.Mod(a, b)`,
+  'core:math.less': 'return a < b',
+  'core:math.less-equal': 'return a <= b',
+  'core:math.greater': 'return a > b',
+  'core:math.greater-equal': 'return a >= b',
+  'core:math.equal': 'return a == b',
+  'core:math.not-equal': 'return a != b',
+  'core:math.and': 'return a && b',
+  'core:math.or': 'return a || b',
+  'core:math.not': 'return !a',
+  'core:math.min': 'return math.Min(a, b)',
+  'core:math.max': 'return math.Max(a, b)',
+  'core:math.clamp': 'return math.Min(math.Max(value, minimum), maximum)',
+  'core:math.abs': 'return math.Abs(value)',
+  'core:math.round': 'return int(math.Floor(value + 0.5))',
+  'core:math.floor': 'return int(math.Floor(value))',
+  'core:math.ceil': 'return int(math.Ceil(value))',
+  'core:math.sqrt': 'return math.Sqrt(value)',
+  'core:math.power': 'return math.Pow(base, exponent)',
+  'core:math.random-float-in-range': 'return minimum + rand.Float64()*(maximum-minimum)',
+  'core:math.random-integer-in-range': 'return minimum + rand.Intn(maximum-minimum+1)',
+  'core:string.append': 'return a + b',
+  'core:string.len': 'return utf8.RuneCountInString(text)',
+  'core:string.contains': 'return strings.Contains(text, part)',
+  'core:string.to-upper': 'return strings.ToUpper(text)',
+  'core:string.to-lower': 'return strings.ToLower(text)',
+  'core:string.trim': 'return strings.TrimSpace(text)',
+  'core:string.replace': 'if find == "" {\n\treturn text\n}\nreturn strings.ReplaceAll(text, find, replacement)',
+  'core:string.substring': 'characters := []rune(text)\nbegin := max(0, start)\nif begin >= len(characters) {\n\treturn ""\n}\nend := min(len(characters), begin+max(0, count))\nreturn string(characters[begin:end])',
+  'core:string.to-float': `if !regexp.MustCompile(${JSON.stringify(`${DECIMAL}$`)}).MatchString(text) {\n\treturn 0\n}\nvalue, _ := strconv.ParseFloat(strings.TrimSpace(text), 64)\nreturn value`,
+  'core:string.to-int': `if !regexp.MustCompile(${JSON.stringify(`${INTEGER}$`)}).MatchString(text) {\n\treturn 0\n}\nvalue, _ := strconv.Atoi(strings.TrimSpace(text))\nreturn value`,
+  'core:utilities.is-valid': 'return value != nil',
+  'core:utilities.select': 'if pickA {\n\treturn a\n}\nreturn b',
+  'core:file.load-to-string': 'data, err := os.ReadFile(filename)\nif err != nil {\n\tVgFail("Can\'t read " + filename + ": " + err.Error())\n}\nreturn string(data)',
+  'core:file.save-string': 'if err := os.WriteFile(filename, []byte(text), 0o644); err != nil {\n\tVgFail("Can\'t write " + filename + ": " + err.Error())\n}'
 };
 
 // The Rust snippets, by node type: errors are panics, which stop the run (or fail the test).

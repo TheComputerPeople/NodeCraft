@@ -19,7 +19,8 @@
       "cpp": "throw std::runtime_error(\"boom\");",
       "rust": "panic!(\"boom\");",
       "c": "vg_fail(\"boom\");",
-      "java": "throw new RuntimeException(\"boom\");"
+      "java": "throw new RuntimeException(\"boom\");",
+      "go": "VgFail(\"boom\")"
     }
   }
 }

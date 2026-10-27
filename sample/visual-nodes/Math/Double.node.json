@@ -47,7 +47,8 @@
       "cpp": "return ${value} * 2;",
       "rust": "return ${value} * 2.0;",
       "c": "return ${value} * 2;",
-      "java": "return ${value} * 2;"
+      "java": "return ${value} * 2;",
+      "go": "return ${value} * 2"
     }
   }
 }

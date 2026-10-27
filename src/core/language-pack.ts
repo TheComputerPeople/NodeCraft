@@ -48,8 +48,11 @@ export interface GenerateOptions {
   // TypeScript only: how relative imports of TypeScript modules end (docs/code-as-nodes.md,
   // "Generated imports"). Defaults to "ts".
   importExtension?: 'ts' | 'js' | 'none';
-  // C# only: the namespace of the generated class (from the project's root namespace and folders).
+  // C#: the namespace of the generated class (from the project's root namespace and folders). Java:
+  // its package. Go: its package's name.
   namespace?: string;
+  // Go: the import path of the generated file's package, so calls within it aren't qualified.
+  packagePath?: string;
 }
 
 export interface GeneratedCode {
@@ -100,6 +103,9 @@ export interface RunContext {
   // Rust: the crate the code calls into, as its src folder and the top-level modules its root
   // declares, for the scaffold to declare the same way (`crate::game::combat` resolves as in the crate).
   crate?: { src: string; modules: string[] };
+  // Go: the project's module (its path and folder), which Run's scratch module requires so the code
+  // can import the project's packages.
+  goModule?: { path: string; dir: string };
   // Where `scaffold`'s files were written.
   scaffoldDir?: string;
   // From `probe`, e.g. the .NET target framework.

@@ -138,13 +138,47 @@ const JAVA: Record<string, string> = {
   'core:map.values': 'return new java.util.ArrayList<>(target.values());'
 };
 
+// The Go snippets: arrays are pointers to slices, sets and maps the runtime's ordered types, so a
+// node changes the container it was given.
+const GO_RANGE = 'if index < 0 || index >= len(*target) {\n\tVgFail("Index out of range")\n}';
+const GO: Record<string, string> = {
+  'core:array.add': '*target = append(*target, item)\nreturn len(*target) - 1',
+  'core:array.add-unique': 'if slices.Contains(*target, item) {\n\treturn -1\n}\n*target = append(*target, item)\nreturn len(*target) - 1',
+  'core:array.insert': 'if index < 0 || index > len(*target) {\n\tVgFail("Index out of range")\n}\n*target = slices.Insert(*target, index, item)',
+  'core:array.remove-index': `${GO_RANGE}\n*target = slices.Delete(*target, index, index+1)`,
+  'core:array.remove-item': 'kept := (*target)[:0]\nfor _, x := range *target {\n\tif x != item {\n\t\tkept = append(kept, x)\n\t}\n}\nremoved := len(kept) != len(*target)\n*target = kept\nreturn removed',
+  'core:array.set': `${GO_RANGE}\n(*target)[index] = item`,
+  'core:array.clear': '*target = (*target)[:0]',
+  'core:array.get': `${GO_RANGE}\nreturn (*target)[index]`,
+  'core:array.length': 'return len(*target)',
+  'core:array.last-index': 'return len(*target) - 1',
+  'core:array.find': 'return slices.Index(*target, item)',
+  'core:array.contains': 'return slices.Contains(*target, item)',
+  'core:array.is-valid-index': 'return index >= 0 && index < len(*target)',
+  'core:array.is-empty': 'return len(*target) == 0',
+  'core:set.add': 'target.Add(item)',
+  'core:set.remove': 'return target.Remove(item)',
+  'core:set.clear': 'target.Clear()',
+  'core:set.contains': 'return target.Contains(item)',
+  'core:set.length': 'return target.Len()',
+  'core:set.to-array': 'return target.Sorted()',
+  'core:map.add': 'target.Put(key, value)',
+  'core:map.remove': 'return target.Remove(key)',
+  'core:map.clear': 'target.Clear()',
+  'core:map.find': 'value, ok := target.Get(key)\nif !ok {\n\tVgFail("Key not found")\n}\nreturn value',
+  'core:map.contains': '_, ok := target.Get(key)\nreturn ok',
+  'core:map.length': 'return target.Len()',
+  'core:map.keys': 'return target.Keys()',
+  'core:map.values': 'return target.Values()'
+};
+
 // An Unreal container function as a code node: impure ones have exec pins.
 function fn(type: string, displayName: string, category: string, inputs: PinDefinition[], result: TypeRef | undefined, code: Snippets, description: string, options: { impure?: boolean; keywords?: string[] } = {}): NodeDefinition {
   return {
     type, version: 1, displayName, category, description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [pin('returnValue', 'Return Value', 'output', result)] : [])],
-    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}) } },
+    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}), ...(GO[type] ? { go: GO[type] } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {})
   };
 }

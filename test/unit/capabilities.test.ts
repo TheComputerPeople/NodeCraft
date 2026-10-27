@@ -44,12 +44,12 @@ describe('capabilities', () => {
     assert.ok(errors.some(([, , m]) => /no inheritance, so a Parent Class/.test(m)));
   });
 
-  test("the built-in languages express everything the editor offers, except Rust's inheritance and interfaces", () => {
+  test("the built-in languages express everything the editor offers, except Rust's and Go's inheritance and Rust's interfaces", () => {
     for (const pack of builtinLanguagePacks().all()) {
       const caps = pack.capabilities;
       const rust = pack.id === 'rust';
       assert.ok(caps.classes && caps.async && caps.delegates !== false, pack.id);
-      assert.equal(caps.inheritance, !rust, pack.id);
+      assert.equal(caps.inheritance, !rust && pack.id !== 'go', pack.id);
       assert.equal(caps.interfaces, !rust, pack.id);
       assert.deepEqual(caps.containers, ['array', 'set', 'map'], pack.id);
     }

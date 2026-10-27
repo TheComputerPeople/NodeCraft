@@ -118,6 +118,7 @@ export function writeScaffold(dir: string, files: Record<string, string>): void 
   fs.mkdirSync(dir, { recursive: true });
   for (const [name, text] of Object.entries(files)) {
     const file = path.join(dir, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
     if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== text) fs.writeFileSync(file, text);
   }
 }
