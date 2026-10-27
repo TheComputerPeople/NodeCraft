@@ -12,11 +12,12 @@ import { EnumInfo, StructInfo, UserType } from '../user-types';
 import { CheckedDefinition } from './definition';
 import { Template, TemplateValue, parseTemplate, renderTemplate } from './template';
 
-// Marks where a node's code starts, and where code that belongs to no node starts, until the
-// finished text is scanned for them.
+// Marks where a node's code starts, and where code that belongs to no node starts (a function's
+// opening, and the line after its end), until the finished text is scanned for them.
 const NODE_MARK = (index: number) => `\u0001N${index}\u0001`;
 const BREAK_MARK = '\u0001B\u0001';
-const MARKS = /\u0001N(\d+)\u0001|\u0001B\u0001/g;
+const END_MARK = '\u0001E\u0001';
+const MARKS = /\u0001N(\d+)\u0001|\u0001([BE])\u0001/g;
 
 // Defaults for templates a pack may leave out.
 const DEFAULTS: Record<string, string> = {
@@ -67,6 +68,8 @@ export class DeclarativeEmitter {
   private currentSource: SourceRef | undefined;
   // The function graph being written, whose outputs Return Nodes give.
   private currentFunction: IrFunction | undefined;
+  // Each function graph's outputs' names (languages that return several through parameters).
+  private readonly outputNames = new Map<string, string[]>();
   // Reading pins for the debugger: what can't be written is left out rather than reported.
   private quiet: { failed: boolean } | undefined;
 
@@ -145,8 +148,9 @@ export class DeclarativeEmitter {
     text = text.replace(/\u0001S\u0001/, () => support);
     const nodeLines: GeneratedCode['nodeLines'] = [];
     const breaks: number[] = [];
-    const lines = text.split('\n').map((line, i) => line.replace(MARKS, (_m, index: string | undefined) => {
-      if (index === undefined) breaks.push(i + 1);
+    const lines = text.split('\n').map((line, i) => line.replace(MARKS, (_m, index: string | undefined, kind: string | undefined) => {
+      if (kind === 'B') breaks.push(i + 1);
+      else if (kind === 'E') breaks.push(i + 2);
       else nodeLines.push({ graphId: this.sources[Number(index)].graphId, nodeId: this.sources[Number(index)].nodeId, line: i + 1 });
       return '';
     }));
@@ -213,7 +217,7 @@ export class DeclarativeEmitter {
     };
     this.signatures.push(signature);
     const text = this.render('function', { ...signature, body: spec.body, description: spec.description?.replace(/\s+/g, ' ') ?? '' }) ?? '';
-    return BREAK_MARK + text.replace(/\n+$/, '');
+    return BREAK_MARK + text.replace(/\n+$/, '') + END_MARK;
   }
 
   private functionGraph(fn: IrFunction): string {
@@ -228,6 +232,7 @@ export class DeclarativeEmitter {
     const slots = this.program.slots.filter((x) => x.function === fn.id);
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name, this.style('variable')));
     const outputs = fn.outputs.map((o) => ({ name: scope.claim(o.name, this.style('variable')), type: o.type }));
+    this.outputNames.set(fn.id, outputs.map((o) => o.name));
     if (outputs.length > 1 && !this.has('callResults')) {
       this.currentSource = fn.body.find((s) => s.kind !== 'callBlock')?.source as SourceRef | undefined;
       this.unsupported('functions with several outputs', 'callResults');
@@ -243,8 +248,7 @@ export class DeclarativeEmitter {
     if (statements) body.push(statements);
     // Reaching the end without a Return Node returns the outputs' defaults.
     if (fn.outputs.length && fn.body[fn.body.length - 1]?.kind !== 'return') {
-      const values = fn.outputs.map((o) => this.defaultFor(o.type));
-      body.push(this.use(['return'], { value: values[0], values, count: values.length, multiple: values.length > 1 }));
+      body.push(this.use(['return'], this.returnContext(fn, fn.outputs.map((o) => this.defaultFor(o.type)))));
     }
     return this.func({
       name: this.functionNames.get(fn.id)!, params, outputs, body: body.filter(Boolean).join('\n'), description: fn.description,
@@ -321,7 +325,7 @@ export class DeclarativeEmitter {
         const call = this.call(s.callee, s.args);
         if (s.results) {
           const imported = this.program.imports.find((i) => i.id === s.callee.id);
-          return this.use(['callResults'], { call, results: s.results.map((r) => ({ target: this.storage('slot', r.slot), index: imported?.outputs?.findIndex((o) => o.id === r.output) ?? 0 })) });
+          return this.use(['callResults'], this.resultsContext(call, imported?.name ?? '', s.args, imported?.params.map((p) => p.type) ?? [], imported?.outputs ?? [], s.results));
         }
         return s.resultSlot ? this.assign(this.storage('slot', s.resultSlot), call) : this.use(['statement'], { expression: call });
       }
@@ -330,11 +334,11 @@ export class DeclarativeEmitter {
         const call = this.functionCall(fn, s.args);
         if (!s.results.length) return this.use(['statement'], { expression: call });
         if (fn.outputs.length === 1) return this.assign(this.storage('slot', s.results[0].slot), call);
-        return this.use(['callResults'], { call, results: s.results.map((r) => ({ target: this.storage('slot', r.slot), index: fn.outputs.findIndex((o) => o.id === r.output) })) });
+        return this.use(['callResults'], this.resultsContext(call, this.functionNames.get(fn.id)!, s.args, fn.params.map((p) => p.type), fn.outputs, s.results));
       }
       case 'return': {
         const values = s.values.map((v, i) => this.value(v, this.currentFunction?.outputs[i]?.type));
-        return this.use(['return'], { value: values[0] ?? '', values, count: values.length, multiple: values.length > 1 });
+        return this.use(['return'], this.returnContext(this.currentFunction, values));
       }
       case 'callBlock':
         return this.use(['statement'], { expression: this.use(['callBlock'], { name: this.blockNames.get(s.block)! }) });
@@ -395,7 +399,7 @@ export class DeclarativeEmitter {
         const call = this.call(e.callee, e.args);
         if (!e.output) return call;
         const imported = this.program.imports.find((i) => i.id === e.callee.id);
-        return this.use(['callOutput'], { call, index: imported?.outputs?.findIndex((o) => o.id === e.output) ?? 0 });
+        return this.use(['callOutput'], this.outputContext(call, imported?.name ?? '', e.args, imported?.params.map((p) => p.type) ?? [], imported?.outputs ?? [], e.output));
       }
       case 'binary': {
         const key = typeKey(this.typeOf(e.left));
@@ -407,7 +411,7 @@ export class DeclarativeEmitter {
       case 'callFunction': {
         const fn = this.program.functions.find((f) => f.id === e.function)!;
         const call = this.functionCall(fn, e.args);
-        return fn.outputs.length === 1 ? call : this.use(['callOutput'], { call, index: fn.outputs.findIndex((o) => o.id === e.output) });
+        return fn.outputs.length === 1 ? call : this.use(['callOutput'], this.outputContext(call, this.functionNames.get(fn.id)!, e.args, fn.params.map((p) => p.type), fn.outputs, e.output));
       }
       case 'makeContainer': {
         const container = e.type.container ?? 'array';
@@ -452,6 +456,37 @@ export class DeclarativeEmitter {
     return this.use(['import'], { name: imported.name, module: imported.module ?? '', path: imported.path, args: args.map((a, i) => this.value(a, imported.params[i]?.type)) });
   }
 
+  // A Return Node: its values, and (with the outputs' names) `results`, for languages that return
+  // several values through parameters.
+  private returnContext(fn: IrFunction | undefined, values: string[]): Record<string, TemplateValue> {
+    const names = fn ? this.outputNames.get(fn.id) ?? [] : [];
+    return { value: values[0] ?? '', values, count: values.length, multiple: values.length > 1, results: values.map((value, i) => ({ value, name: names[i] ?? '' })) };
+  }
+
+  // A call of something with several outputs, each into a slot: the call, its name and arguments
+  // (for languages that pass where each output goes), `results` (the slots and the outputs' places)
+  // and `outputs` (every output, with its slot when it has one).
+  private resultsContext(call: string, name: string, args: IrExpr[], params: (TypeRef | undefined)[], outputs: { id: string; type?: TypeRef }[], results: { output: string; slot: string }[]): Record<string, TemplateValue> {
+    return {
+      call, name, args: args.map((a, i) => this.value(a, params[i])),
+      results: results.map((r) => ({ target: this.storage('slot', r.slot), index: outputs.findIndex((o) => o.id === r.output) })),
+      outputs: outputs.map((o, index) => {
+        const result = results.find((r) => r.output === o.id);
+        return { index, type: this.typeName(o.type), target: result ? this.storage('slot', result.slot) : '' };
+      })
+    };
+  }
+
+  // One output of a pure call of something with several: as `resultsContext`, with `index` and
+  // `type` for the output read, and each of `outputs` saying whether it's `selected`.
+  private outputContext(call: string, name: string, args: IrExpr[], params: (TypeRef | undefined)[], outputs: { id: string; type?: TypeRef }[], output: string | undefined): Record<string, TemplateValue> {
+    const index = Math.max(0, outputs.findIndex((o) => o.id === output));
+    return {
+      call, name, args: args.map((a, i) => this.value(a, params[i])), index, type: this.typeName(outputs[index]?.type),
+      outputs: outputs.map((o, i) => ({ index: i, type: this.typeName(o.type), selected: i === index }))
+    };
+  }
+
   private functionCall(fn: IrFunction, args: IrExpr[]): string {
     return this.use(['callFunction'], { name: this.functionNames.get(fn.id)!, args: args.map((a, i) => this.value(a, fn.params[i]?.type)) });
   }
@@ -468,6 +503,15 @@ export class DeclarativeEmitter {
   // container default (JSON: an array, or a map's [key, value] pairs) becomes the container.
   private value(e: IrExpr | undefined, type: TypeRef | undefined): string {
     if (!e) return this.defaultFor(type);
+    // An untyped value from a typed one (`box.<type>`) and back (`unbox.<type>`), for languages
+    // that wrap untyped values (C's tagged union); others need no templates for it.
+    const from = exprType(e, this.program);
+    if (type && typeKey(type) === 'any' && from && typeKey(from) !== 'any' && this.has(`box.${typeKey(from)}`)) {
+      return this.use([`box.${typeKey(from)}`], { value: this.value(e, from) });
+    }
+    if (type && typeKey(type) !== 'any' && from?.id === 'any' && this.has(`unbox.${typeKey(type)}`)) {
+      return this.use([`unbox.${typeKey(type)}`], { value: this.expr(e) });
+    }
     if (e.kind !== 'literal') return this.expr(e);
     if (typeof e.value === 'number' && type?.id === 'float' && !type.container) return this.literal(e.value, true);
     if (type?.container && Array.isArray(e.value)) {

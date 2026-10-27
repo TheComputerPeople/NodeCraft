@@ -179,3 +179,15 @@ Go was named for assessment. **Fit:** good for most Blueprint concepts: structs 
 ## Exit check
 
 A C language pack, written as a separate extension in `examples/c-language-pack` that uses only the public API and the SDK (a declarative definition registered through `registerDeclarativePack`), passes the published conformance suite with `gcc`: every applicable fixture prints the same output as Simulate, and every other fixture is reported not applicable because of a capability it lacks. The C++ and Rust packs pass the full suite in the repository's own tests, with their debugging checked like the Phase 5 exit check.
+
+**Passed** (October 2026):
+
+- **The C pack** is `c.vgraph-language.json` plus a short `extension.js` that registers it.
+  - A graph becomes a struct of its variables and functions taking a pointer to it. Strings are immutable UTF-8 `const char*`. Untyped values are a tagged union, which led to optional `box.<type>` and `unbox.<type>` templates in the format.
+  - Several outputs come back through pointer parameters. That led to `results` in the `return` context, and the call's name, arguments and every output in `callResults` and `callOutput`; one output of a pure call is a GNU statement expression.
+  - Errors and failed tests use `setjmp`/`longjmp`. Its 36 standard library nodes are the definition's `snippets`.
+  - Run's scaffold `main.c` includes the generated file and runs Start or the tests. Debug uses `cppdbg` with gdb.
+- **Conformance:** the C pack passes all 15 fixtures it can express, from the SDK's `blueprint-conformance` and in the repository's tests. The containers, dispatcher, Delay and two object-program fixtures are not applicable, each for a capability C lacks. The C++ and Rust packs pass every fixture except Rust's arena (inheritance).
+- **Debugging:** the integration suite loads the C extension next to this one. It compiles and runs a C graph on every run, and with the C/C++ extension loaded it passes the Debug test and the Phase 5 exit check in C.
+  - The exit check showed that code a file template writes after the functions (C's entry points) was taken for the last function's last node. The emitter now marks where each function ends too.
+- **The fixture node libraries** (`Double`, `Fail`) gained C snippets, as user node libraries carry one per language.

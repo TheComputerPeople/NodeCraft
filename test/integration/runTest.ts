@@ -31,7 +31,8 @@ async function main(): Promise<void> {
   try {
     await runTests({
       version: minimumVsCodeVersion(),
-      extensionDevelopmentPath: repoRoot,
+      // The C pack loads too: a separate extension using only the public API (docs/language-breadth.md, "Exit check").
+      extensionDevelopmentPath: [repoRoot, path.join(repoRoot, 'examples/c-language-pack')],
       extensionTestsPath: path.join(__dirname, 'suite'),
       // BLUEPRINT_IT_FILTER runs only the tests whose names contain it.
       extensionTestsEnv: { BLUEPRINT_IT_FILTER: process.env.BLUEPRINT_IT_FILTER ?? '' },

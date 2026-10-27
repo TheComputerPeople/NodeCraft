@@ -35,6 +35,19 @@ describe('published conformance suite', () => {
     assert.deepEqual(report.results.filter((r) => r.status === 'not-applicable').map((r) => r.fixture), ['graphs/events.vgraph', 'graphs/latent.vgraph', 'programs/arena', 'programs/duel'], formatReport(report));
   });
 
+  // Phase 6's exit check (docs/language-breadth.md): the C pack, a separate extension's declarative
+  // definition, with gcc or clang. What it can't express is not applicable because of a capability.
+  test('the C example pack passes every fixture it can express', async (t) => {
+    const pack = declarativePack(JSON.parse(fs.readFileSync(path.join(repoRoot, 'examples/c-language-pack/c.vgraph-language.json'), 'utf8')));
+    const report = await runConformance(pack, { fixtures: repoFixtures() });
+    if (report.skipped === report.results.length) return t.skip(report.results[0]?.message ?? 'no C compiler');
+    assert.equal(report.failed, 0, formatReport(report));
+    assert.equal(report.skipped, 0, formatReport(report));
+    const notApplicable = report.results.filter((r) => r.status === 'not-applicable');
+    assert.deepEqual(notApplicable.map((r) => r.fixture), ['graphs/containers.vgraph', 'graphs/events.vgraph', 'graphs/latent.vgraph', 'programs/arena', 'programs/duel'], formatReport(report));
+    for (const result of notApplicable) assert.match(result.message ?? '', /C has no (arrays|event dispatchers|latent actions|object references)/);
+  });
+
   test('JavaScript as CommonJS passes too', async () => {
     const report = await runConformance(javascriptPack, { fixtures: repoFixtures(), generate: { moduleFormat: 'commonjs' } });
     assert.equal(report.failed, 0, formatReport(report));

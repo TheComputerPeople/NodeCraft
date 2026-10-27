@@ -38,10 +38,11 @@ function activeCustomEditor(): vscode.TabInputCustom | undefined {
   return input instanceof vscode.TabInputCustom ? input : undefined;
 }
 
+// The first file opened waits for VS Code's start and the extension's activation, which can be slow.
 async function openInGraphEditor(name: string): Promise<vscode.Uri> {
   const uri = workspaceFile(name);
   await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
-  await waitFor(() => activeCustomEditor()?.uri.toString() === uri.toString(), `${name} to open in the graph editor`);
+  await waitFor(() => activeCustomEditor()?.uri.toString() === uri.toString(), `${name} to open in the graph editor`, 30000);
   return uri;
 }
 
@@ -434,6 +435,47 @@ test('a declarative pack loads from a workspace file, and its problems show on t
   await waitFor(() => vscode.languages.getDiagnostics(file).length === 0, 'the problems to go with the file');
 });
 
+// Phase 6's exit check (docs/language-breadth.md): the C pack is a separate extension
+// (examples/c-language-pack) that registers a declarative definition through the public API alone.
+test('exit check: a separate extension adds C, and its graphs compile and run', async () => {
+  assert.ok(vscode.extensions.getExtension('local.blueprint-c-language-pack'), 'the C pack extension is loaded');
+  const graph = workspaceFile('hello_c.vgraph');
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({
+    schemaVersion: 3, name: 'HelloC', kind: 'class', language: 'c', variables: [], metadata: {},
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('sq', 'core:math.sqrt', { 'pin:value': 2.25 }), node('p', 'core:console.print')],
+      connections: [
+        { id: 'c1', fromNode: 's', fromPin: 'execOut', toNode: 'p', toPin: 'execIn' },
+        { id: 'c2', fromNode: 'sq', fromPin: 'returnValue', toNode: 'p', toPin: 'value' }
+      ]
+    }]
+  }, null, 2)));
+  const generated = workspaceFile('hello_c_vgraph.c');
+  // The C extension activates once startup finishes.
+  const deadline = Date.now() + 30000;
+  while (!(await exists(generated)) && Date.now() < deadline) {
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  assert.ok(await exists(generated), `It doesn't compile: ${vscode.languages.getDiagnostics(graph).map((d) => d.message).join('; ')}`);
+  const text = await readText(generated);
+  assert.match(text, /static double HelloC_core_math_sqrt|static double HelloC_math_sqrt/);
+  const { execFileSync } = await import('node:child_process');
+  const main = path.join(path.dirname(generated.fsPath), 'hello_c_main.c');
+  fs.writeFileSync(main, `#include "hello_c_vgraph.c"
+int main(void) { vg_program_start(); return 0; }
+`);
+  const program = path.join(path.dirname(generated.fsPath), process.platform === 'win32' ? 'hello_c.exe' : 'hello_c');
+  try {
+    execFileSync('gcc', ['-std=gnu11', '-w', '-o', program, main, '-lm']);
+  } catch {
+    throw new Skip('gcc is not available');
+  }
+  assert.equal(execFileSync(program, { encoding: 'utf8' }).trim(), '1.5');
+});
+
 // Node library packages (docs/language-breadth.md, "Node library versioning"): a workspace package's
 // problems show on its manifest and clear when an extension registers its dependency; a graph made
 // with an older major version of a package compiles with a warning on its nodes.
@@ -688,6 +730,11 @@ test('exit check: debugging a function graph in generated Rust', async () => {
   await exitCheck('rust');
 });
 
+test("exit check: debugging a function graph in generated C (a separate extension's declarative pack)", async () => {
+  if (!vscode.extensions.getExtension('ms-vscode.cpptools')) throw new Skip('the C/C++ extension is not loaded');
+  await exitCheck('c');
+});
+
 test('exit check: debugging a function graph in generated C#', async () => {
   if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
   await exitCheck('csharp');
@@ -776,6 +823,11 @@ test('Debug does the same in generated C++ (cppdbg)', async () => {
 test('Debug does the same in generated Rust', async () => {
   requireRustDebugger();
   await debugSample('rust', 'debug_rust_vgraph.rs');
+});
+
+test('Debug does the same in generated C (cppdbg)', async () => {
+  if (!vscode.extensions.getExtension('ms-vscode.cpptools')) throw new Skip('the C/C++ extension is not loaded');
+  await debugSample('c', 'debug_c_vgraph.c');
 });
 
 test('Debug does the same in generated C# (coreclr)', async () => {

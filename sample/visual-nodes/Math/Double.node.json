@@ -45,7 +45,8 @@
       "python": "return ${value} * 2",
       "csharp": "return ${value} * 2;",
       "cpp": "return ${value} * 2;",
-      "rust": "return ${value} * 2.0;"
+      "rust": "return ${value} * 2.0;",
+      "c": "return ${value} * 2;"
     }
   }
 }

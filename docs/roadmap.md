@@ -223,6 +223,28 @@ Goal: support for most languages without a hand-written adapter for each.
 
 Exit: a new language pack, written as a separate extension using only the public API, passes the conformance suite.
 
+Status: complete (October 2026), with the deferrals below.
+
+- **The exit check:**
+  - The C pack (`examples/c-language-pack`) is its own VS Code extension: a declarative definition that `extension.js` registers with `registerDeclarativePack`, and nothing else.
+  - With gcc, it passes the 15 fixtures it can express in the published suite, both from the SDK's `blueprint-conformance` and in the repository's tests. The other 5 are not applicable because of capabilities C lacks: containers, dispatchers, Delay, and the two object programs.
+  - The integration suite loads it as a second extension, compiles and runs a C graph, and with the C/C++ extension loaded it passes the Debug test and the Phase 5 debugging exit check.
+- **The rest of the phase:**
+  - Capabilities are enforced by the compiler and the editor.
+  - The pack SDK and the published conformance suite.
+  - The public API, output plans with consented build hooks, and C++ and Rust as Tier 1 packs.
+  - The declarative format, with workspace packs and Tier 2 symbol import through the language server.
+  - Versioned node packages.
+- **Deferred:**
+  - Java (no JDK here), and Go (assessed as a good declarative pack, but no toolchain here).
+  - Rust traits (Blueprint interfaces).
+  - MSVC's `cl` for C++.
+  - CodeLLDB (Rust's debugger outside Windows), which is untested here.
+  - Probing with `cargo metadata` or CMake's File API (placement reads files).
+  - Under Run, Rust project modules that need the crate's dependencies.
+  - In the declarative format: object references, inheritance, interfaces, dispatchers and latent actions. In the C pack: containers, structs and enums.
+  - Node packages from a registry: they come from the workspace and from extensions.
+
 Design: [language-breadth.md](language-breadth.md). Java is deferred (no JDK here to test it with); C is the declarative pack and the exit check's separate extension. Steps, one commit each (large steps may take several):
 
 1. Design and plan (this list).
@@ -334,9 +356,11 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Entry points: Main with command-line arguments; framework packs' events; Test Case events with Assert nodes and Run Tests | ✅ (C# tests run through Run's project, not xUnit) | — |
 | Structure | Custom events (Call), event dispatchers (Call, Bind, Unbind, Unbind all, Assign), on this object or another | ✅ | — |
 | Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
-| Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python; methods with Phase 4 classes) | — |
+| Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python, C#, C++ headers, Rust; other languages through their language server) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
 | Library | Standard math, string, utility and file nodes | ✅ (collection nodes need Phase 4) | — |
-| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python and C#) | — |
-| Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python and C#) | — |
+| Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace and extensions, not a registry) | 6 |
+| Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++ and Rust; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Java and Go later) | 6 |
+| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust and declarative packs' code) | — |
+| Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust and declarative packs' code) | — |
 | Debugging | Execution flow highlighting | ✅ (run trail and exec wire pulses, in Simulate) | — |

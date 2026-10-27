@@ -17,7 +17,8 @@
       "python": "raise ValueError(\"boom\")",
       "csharp": "throw new InvalidOperationException(\"boom\");",
       "cpp": "throw std::runtime_error(\"boom\");",
-      "rust": "panic!(\"boom\");"
+      "rust": "panic!(\"boom\");",
+      "c": "vg_fail(\"boom\");"
     }
   }
 }
