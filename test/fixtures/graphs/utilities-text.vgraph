@@ -5,7 +5,7 @@
   "language": "javascript",
   "variables": [],
   "metadata": {
-    "description": "universal-utils fixture: every text node, counted in code points.",
+    "description": "Utility nodes: every text node, counted in code points.",
     "expectedOutput": [
       "true",
       "false",
@@ -53,7 +53,7 @@
         },
         {
           "id": "n1",
-          "type": "universal-utils:text.is-empty",
+          "type": "core:string.is-empty",
           "position": {
             "x": 300,
             "y": 120
@@ -73,7 +73,7 @@
         },
         {
           "id": "n2",
-          "type": "universal-utils:text.is-empty",
+          "type": "core:string.is-empty",
           "position": {
             "x": 300,
             "y": 240
@@ -93,7 +93,7 @@
         },
         {
           "id": "n3",
-          "type": "universal-utils:text.is-blank",
+          "type": "core:string.is-blank",
           "position": {
             "x": 300,
             "y": 360
@@ -113,7 +113,7 @@
         },
         {
           "id": "n4",
-          "type": "universal-utils:text.normalize-whitespace",
+          "type": "core:string.normalize-whitespace",
           "position": {
             "x": 300,
             "y": 480
@@ -133,7 +133,7 @@
         },
         {
           "id": "n5",
-          "type": "universal-utils:text.truncate",
+          "type": "core:string.truncate",
           "position": {
             "x": 300,
             "y": 600
@@ -155,7 +155,7 @@
         },
         {
           "id": "n6",
-          "type": "universal-utils:text.truncate",
+          "type": "core:string.truncate",
           "position": {
             "x": 300,
             "y": 720
@@ -177,7 +177,7 @@
         },
         {
           "id": "n7",
-          "type": "universal-utils:text.truncate",
+          "type": "core:string.truncate",
           "position": {
             "x": 300,
             "y": 840
@@ -199,7 +199,7 @@
         },
         {
           "id": "n8",
-          "type": "universal-utils:text.capitalize",
+          "type": "core:string.capitalize",
           "position": {
             "x": 300,
             "y": 960
@@ -219,7 +219,7 @@
         },
         {
           "id": "n9",
-          "type": "universal-utils:text.to-camel-case",
+          "type": "core:string.to-camel-case",
           "position": {
             "x": 300,
             "y": 1080
@@ -239,7 +239,7 @@
         },
         {
           "id": "n10",
-          "type": "universal-utils:text.to-snake-case",
+          "type": "core:string.to-snake-case",
           "position": {
             "x": 300,
             "y": 1200
@@ -259,7 +259,7 @@
         },
         {
           "id": "n11",
-          "type": "universal-utils:text.to-kebab-case",
+          "type": "core:string.to-kebab-case",
           "position": {
             "x": 300,
             "y": 1320
@@ -279,7 +279,7 @@
         },
         {
           "id": "n12",
-          "type": "universal-utils:text.slugify",
+          "type": "core:string.slugify",
           "position": {
             "x": 300,
             "y": 1440
@@ -299,7 +299,7 @@
         },
         {
           "id": "n13",
-          "type": "universal-utils:text.pad-left",
+          "type": "core:string.pad-left",
           "position": {
             "x": 300,
             "y": 1560
@@ -321,7 +321,7 @@
         },
         {
           "id": "n14",
-          "type": "universal-utils:text.pad-right",
+          "type": "core:string.pad-right",
           "position": {
             "x": 300,
             "y": 1680
@@ -343,7 +343,7 @@
         },
         {
           "id": "n15",
-          "type": "universal-utils:text.pad-left",
+          "type": "core:string.pad-left",
           "position": {
             "x": 300,
             "y": 1800
@@ -365,7 +365,7 @@
         },
         {
           "id": "n16",
-          "type": "universal-utils:text.word-count",
+          "type": "core:string.word-count",
           "position": {
             "x": 300,
             "y": 1920
@@ -385,7 +385,7 @@
         },
         {
           "id": "n17",
-          "type": "universal-utils:text.mask",
+          "type": "core:string.mask",
           "position": {
             "x": 300,
             "y": 2040
@@ -408,7 +408,7 @@
         },
         {
           "id": "n18",
-          "type": "universal-utils:text.mask",
+          "type": "core:string.mask",
           "position": {
             "x": 300,
             "y": 2160

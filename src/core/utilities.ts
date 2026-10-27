@@ -1,27 +1,35 @@
-// Writes the package's node definitions (nodes/*.node.json) from the table below: each node's pins
-// and its implementation in every graph language. Run it after changing the table:
-//   node libraries/universal-utils/generate.js
-// The implementations follow the contracts in README.md, adapted from Common Utility Snippets
-// v0.1.0 (see LICENSE). Text is counted in code points, as the standard library counts it, and a
-// rule broken (a negative length, an unknown word) stops the run with the message, as Divide by
-// zero does.
-'use strict';
-const fs = require('node:fs');
-const path = require('node:path');
+// More utility nodes for the standard library (docs/code-as-nodes.md, "Standard library nodes"):
+// text, numbers, parsing, arrays, maps and the system. Each is implemented in every graph language,
+// with one contract, so a graph prints the same wherever it runs: text is counted in code points, as
+// the standard library counts it, and a rule broken (a negative length, an unknown word) stops the
+// run with the message, as Divide by zero does. Adapted from Common Utility Snippets v0.1.0 (MIT;
+// its notice is in THIRD_PARTY_NOTICES.md).
+import { NodeDefinition, PinDefinition, TypeRef } from './model';
 
-const PREFIX = 'universal-utils';
+type Snippets = Record<string, string>;
+
+interface UtilityNode {
+  type: string;
+  displayName: string;
+  category: string;
+  description: string;
+  keywords: string[];
+  inputs: PinDefinition[];
+  result: TypeRef;
+  code: Snippets;
+}
 
 // ---- Pins ----------------------------------------------------------------------------------------
 
-const input = (id, name, type, defaultValue) => ({ id, name, kind: 'data', direction: 'input', type, ...(defaultValue !== undefined ? { defaultValue } : {}) });
-const output = (type) => ({ id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', type });
-const STRING = { id: 'string' };
-const INT = { id: 'int' };
-const FLOAT = { id: 'float' };
-const BOOL = { id: 'bool' };
-const ARRAY = { id: 'wildcard', container: 'array' };
-const FLOATS = { id: 'float', container: 'array' };
-const MAP = { id: 'wildcard', container: 'map', valueType: { id: 'wildcard:value' } };
+const input = (id: string, name: string, type: TypeRef, defaultValue?: unknown): PinDefinition => ({ id, name, kind: 'data', direction: 'input', type, ...(defaultValue !== undefined ? { defaultValue } : {}) });
+const output = (type: TypeRef): PinDefinition => ({ id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', type });
+const STRING: TypeRef = { id: 'string' };
+const INT: TypeRef = { id: 'int' };
+const FLOAT: TypeRef = { id: 'float' };
+const BOOL: TypeRef = { id: 'bool' };
+const ARRAY: TypeRef = { id: 'wildcard', container: 'array' };
+const FLOATS: TypeRef = { id: 'float', container: 'array' };
+const MAP: TypeRef = { id: 'wildcard', container: 'map', valueType: { id: 'wildcard:value' } };
 const text = (id = 'text', name = 'Text') => input(id, name, STRING, '');
 
 // ---- Shared code -------------------------------------------------------------------------------
@@ -41,11 +49,11 @@ const CPP_CODE_POINTS = String.raw`auto codePoints = [](const std::string& s) {
 // The words of an identifier or phrase, lower case: runs of ASCII letters and digits, split where a
 // lower-case letter or digit meets an upper-case one ("userID" → user, id) and before the last
 // capital of a run that starts a word ("HTTPServer" → http, server).
-const WORDS = {
+const WORDS: Snippets = {
   javascript: String.raw`const chars = [...text];
-const isUpper = (c) => c >= 'A' && c <= 'Z';
-const isLower = (c) => c >= 'a' && c <= 'z';
-const isDigit = (c) => c >= '0' && c <= '9';
+const isUpper = (/** @type {string} */ c) => c >= 'A' && c <= 'Z';
+const isLower = (/** @type {string} */ c) => c >= 'a' && c <= 'z';
+const isDigit = (/** @type {string} */ c) => c >= '0' && c <= '9';
 const words = [];
 let word = '';
 for (let i = 0; i < chars.length; i++) {
@@ -233,7 +241,7 @@ if len(word) > 0 {
 };
 
 // The words joined: snake_case, kebab-case (and slugs), camelCase.
-function joined(separator) {
+function joined(separator: string): Snippets {
   return {
     javascript: `${WORDS.javascript}\nreturn words.join('${separator}');`,
     typescript: `${WORDS.typescript}\nreturn words.join('${separator}');`,
@@ -246,7 +254,7 @@ function joined(separator) {
   };
 }
 
-const CAMEL = {
+const CAMEL: Snippets = {
   javascript: `${WORDS.javascript}\nreturn words.map((w, i) => (i ? w[0].toUpperCase() + w.slice(1) : w)).join('');`,
   typescript: `${WORDS.typescript}\nreturn words.map((w, i) => (i ? w[0].toUpperCase() + w.slice(1) : w)).join('');`,
   python: `${WORDS.python}\nreturn "".join(w if i == 0 else w[:1].upper() + w[1:] for i, w in enumerate(words))`,
@@ -258,8 +266,8 @@ const CAMEL = {
 };
 
 // Pad Left and Pad Right: the fill repeated before or after the text, up to the width.
-function pad(left) {
-  const join = (fill, textValue) => (left ? `${fill} + ${textValue}` : `${textValue} + ${fill}`);
+function pad(left: boolean): Snippets {
+  const join = (fill: string, textValue: string) => (left ? `${fill} + ${textValue}` : `${textValue} + ${fill}`);
   return {
     javascript: `if ([...fill].length !== 1) throw new Error('Fill must be one character');\nconst missing = width - [...text].length;\nreturn ${join("(missing > 0 ? fill.repeat(missing) : '')", 'text')};`,
     python: `if len(fill) != 1:\n    raise ValueError("Fill must be one character")\nreturn ${join('fill * max(0, width - len(text))', 'text')}`,
@@ -272,7 +280,7 @@ function pad(left) {
 }
 
 // Difference and Intersection: the left array's items that are (or aren't) in the right one, each once.
-function compare(keep) {
+function compare(keep: boolean): Snippets {
   const not = keep ? '' : '!';
   return {
     javascript: `const other = new Set(right);\nreturn [...new Set(left.filter((item) => ${not}other.has(item)))];`,
@@ -287,10 +295,10 @@ function compare(keep) {
 
 // ---- The nodes -----------------------------------------------------------------------------------
 
-const NODES = [
+const NODES: UtilityNode[] = [
   // ---- Text ----
   {
-    name: 'text.is-empty', displayName: 'Is Empty', category: 'Text', inputs: [text()], result: BOOL, keywords: ['empty', 'length'],
+    type: 'core:string.is-empty', displayName: 'Is Empty', category: 'String', inputs: [text()], result: BOOL, keywords: ['empty', 'length'],
     description: 'True if the text has no characters. Whitespace counts as characters.',
     code: {
       javascript: 'return text.length === 0;', python: 'return len(text) == 0', csharp: 'return text.Length == 0;', cpp: 'return text.empty();',
@@ -298,7 +306,7 @@ const NODES = [
     }
   },
   {
-    name: 'text.is-blank', displayName: 'Is Blank', category: 'Text', inputs: [text()], result: BOOL, keywords: ['empty', 'whitespace', 'blank'],
+    type: 'core:string.is-blank', displayName: 'Is Blank', category: 'String', inputs: [text()], result: BOOL, keywords: ['empty', 'whitespace', 'blank'],
     description: 'True if the text is empty or only whitespace.',
     code: {
       javascript: "return text.trim() === '';", python: 'return text.strip() == ""', csharp: 'return string.IsNullOrWhiteSpace(text);',
@@ -307,7 +315,7 @@ const NODES = [
     }
   },
   {
-    name: 'text.normalize-whitespace', displayName: 'Normalize Whitespace', category: 'Text', inputs: [text()], result: STRING, keywords: ['whitespace', 'spaces', 'collapse', 'trim'],
+    type: 'core:string.normalize-whitespace', displayName: 'Normalize Whitespace', category: 'String', inputs: [text()], result: STRING, keywords: ['whitespace', 'spaces', 'collapse', 'trim'],
     description: 'The text trimmed, with each run of whitespace inside it replaced by one space.',
     code: {
       javascript: String.raw`const trimmed = text.trim();
@@ -333,7 +341,7 @@ return trimmed.isEmpty() ? "" : String.join(" ", trimmed.split("(?U)\\s+"));`,
     }
   },
   {
-    name: 'text.truncate', displayName: 'Truncate', category: 'Text', result: STRING, keywords: ['shorten', 'ellipsis', 'limit'],
+    type: 'core:string.truncate', displayName: 'Truncate', category: 'String', result: STRING, keywords: ['shorten', 'ellipsis', 'limit'],
     inputs: [text(), input('maxLength', 'Max Length', INT, 10), input('suffix', 'Suffix', STRING, '…')],
     description: 'The text cut to at most Max Length characters, the suffix included: text that is too long ends with the suffix.',
     code: {
@@ -387,7 +395,7 @@ return string(chars[:max(0, maxLength-len(end))]) + string(end[:min(maxLength, l
     }
   },
   {
-    name: 'text.capitalize', displayName: 'Capitalize', category: 'Text', inputs: [text()], result: STRING, keywords: ['uppercase', 'first letter'],
+    type: 'core:string.capitalize', displayName: 'Capitalize', category: 'String', inputs: [text()], result: STRING, keywords: ['uppercase', 'first letter'],
     description: 'The text with its first character in upper case; the rest is unchanged.',
     code: {
       javascript: "const chars = [...text];\nreturn chars.length ? chars[0].toUpperCase() + chars.slice(1).join('') : text;",
@@ -400,33 +408,33 @@ return string(chars[:max(0, maxLength-len(end))]) + string(end[:min(maxLength, l
     }
   },
   {
-    name: 'text.to-camel-case', displayName: 'To Camel Case', category: 'Text', inputs: [text()], result: STRING, keywords: ['case', 'identifier', 'camelCase'],
+    type: 'core:string.to-camel-case', displayName: 'To Camel Case', category: 'String', inputs: [text()], result: STRING, keywords: ['case', 'identifier', 'camelCase'],
     description: 'The words of the text as camelCase: "HTTP server name" becomes httpServerName.', code: CAMEL
   },
   {
-    name: 'text.to-snake-case', displayName: 'To Snake Case', category: 'Text', inputs: [text()], result: STRING, keywords: ['case', 'identifier', 'snake_case', 'underscore'],
+    type: 'core:string.to-snake-case', displayName: 'To Snake Case', category: 'String', inputs: [text()], result: STRING, keywords: ['case', 'identifier', 'snake_case', 'underscore'],
     description: 'The words of the text as snake_case: "HTTPServerName" becomes http_server_name.', code: joined('_')
   },
   {
-    name: 'text.to-kebab-case', displayName: 'To Kebab Case', category: 'Text', inputs: [text()], result: STRING, keywords: ['case', 'identifier', 'kebab-case', 'dash'],
+    type: 'core:string.to-kebab-case', displayName: 'To Kebab Case', category: 'String', inputs: [text()], result: STRING, keywords: ['case', 'identifier', 'kebab-case', 'dash'],
     description: 'The words of the text as kebab-case: "HTTPServerName" becomes http-server-name.', code: joined('-')
   },
   {
-    name: 'text.slugify', displayName: 'Slugify', category: 'Text', inputs: [text()], result: STRING, keywords: ['slug', 'url', 'permalink'],
+    type: 'core:string.slugify', displayName: 'Slugify', category: 'String', inputs: [text()], result: STRING, keywords: ['slug', 'url', 'permalink'],
     description: 'A URL slug of the text: its ASCII words in lower case, joined with dashes. Other characters are dropped.', code: joined('-')
   },
   {
-    name: 'text.pad-left', displayName: 'Pad Left', category: 'Text', result: STRING, keywords: ['pad', 'align', 'width'],
+    type: 'core:string.pad-left', displayName: 'Pad Left', category: 'String', result: STRING, keywords: ['pad', 'align', 'width'],
     inputs: [text(), input('width', 'Width', INT, 8), input('fill', 'Fill', STRING, ' ')],
     description: 'The text with Fill (one character) repeated before it, up to Width characters.', code: pad(true)
   },
   {
-    name: 'text.pad-right', displayName: 'Pad Right', category: 'Text', result: STRING, keywords: ['pad', 'align', 'width'],
+    type: 'core:string.pad-right', displayName: 'Pad Right', category: 'String', result: STRING, keywords: ['pad', 'align', 'width'],
     inputs: [text(), input('width', 'Width', INT, 8), input('fill', 'Fill', STRING, ' ')],
     description: 'The text with Fill (one character) repeated after it, up to Width characters.', code: pad(false)
   },
   {
-    name: 'text.word-count', displayName: 'Word Count', category: 'Text', inputs: [text()], result: INT, keywords: ['words', 'count'],
+    type: 'core:string.word-count', displayName: 'Word Count', category: 'String', inputs: [text()], result: INT, keywords: ['words', 'count'],
     description: 'How many whitespace-separated words the text has.',
     code: {
       javascript: String.raw`const trimmed = text.trim();
@@ -441,7 +449,7 @@ return trimmed.isEmpty() ? 0 : trimmed.split("(?U)\\s+").length;`,
     }
   },
   {
-    name: 'text.mask', displayName: 'Mask', category: 'Text', result: STRING, keywords: ['hide', 'redact', 'secret', 'password'],
+    type: 'core:string.mask', displayName: 'Mask', category: 'String', result: STRING, keywords: ['hide', 'redact', 'secret', 'password'],
     inputs: [text(), input('visibleStart', 'Visible Start', INT, 0), input('visibleEnd', 'Visible End', INT, 4), input('mask', 'Mask', STRING, '*')],
     description: 'The text with every character replaced by Mask (one character), except the first Visible Start and the last Visible End.',
     code: {
@@ -523,7 +531,7 @@ return result`
 
   // ---- Numbers ----
   {
-    name: 'number.in-range', displayName: 'In Range', category: 'Numbers', result: BOOL, keywords: ['range', 'between', 'interval'],
+    type: 'core:math.in-range', displayName: 'In Range', category: 'Math', result: BOOL, keywords: ['range', 'between', 'interval'],
     inputs: [input('value', 'Value', FLOAT, 0), input('start', 'Start', FLOAT, 0), input('end', 'End', FLOAT, 1)],
     description: 'True if Value is at least Start and less than End (End itself is outside the range).',
     code: {
@@ -537,7 +545,7 @@ return result`
     }
   },
   {
-    name: 'number.round-to', displayName: 'Round To', category: 'Numbers', result: FLOAT, keywords: ['round', 'decimal', 'precision', 'places'],
+    type: 'core:math.round-to', displayName: 'Round To', category: 'Math', result: FLOAT, keywords: ['round', 'decimal', 'precision', 'places'],
     inputs: [input('value', 'Value', FLOAT, 0), input('digits', 'Digits', INT, 2)],
     description: 'Value rounded to Digits decimal places (0 to 15); halves round away from zero.',
     code: {
@@ -591,7 +599,7 @@ return sign * math.Floor((math.Abs(value)+2.220446049250313e-16)*factor+0.5) / f
     }
   },
   {
-    name: 'number.format-bytes', displayName: 'Format Bytes', category: 'Numbers', result: STRING, keywords: ['bytes', 'size', 'KiB', 'MiB', 'file size'],
+    type: 'core:string.format-bytes', displayName: 'Format Bytes', category: 'String', result: STRING, keywords: ['bytes', 'size', 'KiB', 'MiB', 'file size'],
     inputs: [input('size', 'Size', FLOAT, 0), input('decimals', 'Decimals', INT, 2)],
     description: 'A size in bytes as text, scaled by 1024 with KiB, MiB, GiB, TiB or PiB and Decimals decimal places (0 to 10): 1536 becomes 1.50 KiB. Below 1024 it is whole bytes: 512 B.',
     code: {
@@ -730,7 +738,7 @@ return strconv.FormatInt(whole, 10) + " " + units[index]`
 
   // ---- Parsing ----
   {
-    name: 'parse.boolean', displayName: 'Parse Boolean', category: 'Parsing', inputs: [text()], result: BOOL, keywords: ['parse', 'bool', 'yes', 'no', 'on', 'off'],
+    type: 'core:string.parse-boolean', displayName: 'Parse Boolean', category: 'String', inputs: [text()], result: BOOL, keywords: ['parse', 'bool', 'yes', 'no', 'on', 'off'],
     description: 'True for true, 1, yes, y or on; false for false, 0, no, n or off (any case, spaces around ignored). Anything else stops the run with an error.',
     code: {
       javascript: `const value = text.trim().toLowerCase();
@@ -774,7 +782,7 @@ return false`
     }
   },
   {
-    name: 'parse.integer-strict', displayName: 'Parse Integer Strict', category: 'Parsing', inputs: [text()], result: INT, keywords: ['parse', 'int', 'number', 'strict'],
+    type: 'core:string.parse-integer-strict', displayName: 'Parse Integer Strict', category: 'String', inputs: [text()], result: INT, keywords: ['parse', 'int', 'number', 'strict'],
     description: 'The whole number the text spells: an optional sign and digits, with spaces around ignored. Anything else, such as 12.0 or 12abc, stops the run with an error, as does a number beyond 2^53.',
     code: {
       javascript: `const value = text.trim();
@@ -833,7 +841,7 @@ return int(result)`
 
   // ---- Arrays ----
   {
-    name: 'array.unique', displayName: 'Unique', category: 'Arrays', result: ARRAY, keywords: ['distinct', 'deduplicate', 'unique'],
+    type: 'core:array.unique', displayName: 'Unique', category: 'Utilities / Array', result: ARRAY, keywords: ['distinct', 'deduplicate', 'unique'],
     inputs: [input('items', 'Items', ARRAY)],
     description: 'The array\'s items, each once, in the order they first appear.',
     code: {
@@ -847,17 +855,17 @@ return int(result)`
     }
   },
   {
-    name: 'array.difference', displayName: 'Difference', category: 'Arrays', result: ARRAY, keywords: ['except', 'minus', 'subtract', 'without'],
+    type: 'core:array.difference', displayName: 'Difference', category: 'Utilities / Array', result: ARRAY, keywords: ['except', 'minus', 'subtract', 'without'],
     inputs: [input('left', 'Left', ARRAY), input('right', 'Right', ARRAY)],
     description: 'The items of Left that aren\'t in Right, each once, in Left\'s order.', code: compare(false)
   },
   {
-    name: 'array.intersection', displayName: 'Intersection', category: 'Arrays', result: ARRAY, keywords: ['common', 'both', 'intersect'],
+    type: 'core:array.intersection', displayName: 'Intersection', category: 'Utilities / Array', result: ARRAY, keywords: ['common', 'both', 'intersect'],
     inputs: [input('left', 'Left', ARRAY), input('right', 'Right', ARRAY)],
     description: 'The items of Left that are also in Right, each once, in Left\'s order.', code: compare(true)
   },
   {
-    name: 'array.average', displayName: 'Average', category: 'Arrays', result: FLOAT, keywords: ['mean', 'average', 'statistics'],
+    type: 'core:array.average', displayName: 'Average', category: 'Utilities / Array', result: FLOAT, keywords: ['mean', 'average', 'statistics'],
     inputs: [input('values', 'Values', FLOATS)],
     description: 'The mean of the values. An empty array stops the run with an error.',
     code: {
@@ -871,7 +879,7 @@ return int(result)`
     }
   },
   {
-    name: 'array.median', displayName: 'Median', category: 'Arrays', result: FLOAT, keywords: ['median', 'middle', 'statistics'],
+    type: 'core:array.median', displayName: 'Median', category: 'Utilities / Array', result: FLOAT, keywords: ['median', 'middle', 'statistics'],
     inputs: [input('values', 'Values', FLOATS)],
     description: 'The middle value once the values are sorted, or the mean of the two middle ones. An empty array stops the run with an error.',
     code: {
@@ -887,7 +895,7 @@ return int(result)`
 
   // ---- Maps ----
   {
-    name: 'map.pick', displayName: 'Pick', category: 'Maps', result: MAP, keywords: ['select', 'keys', 'subset'],
+    type: 'core:map.pick', displayName: 'Pick', category: 'Utilities / Map', result: MAP, keywords: ['select', 'keys', 'subset'],
     inputs: [input('source', 'Map', MAP), input('keys', 'Keys', ARRAY)],
     description: 'A map of the entries whose keys are in Keys, in Keys\' order. Keys the map doesn\'t have are left out.',
     code: {
@@ -901,7 +909,7 @@ return int(result)`
     }
   },
   {
-    name: 'map.omit', displayName: 'Omit', category: 'Maps', result: MAP, keywords: ['remove', 'exclude', 'without', 'keys'],
+    type: 'core:map.omit', displayName: 'Omit', category: 'Utilities / Map', result: MAP, keywords: ['remove', 'exclude', 'without', 'keys'],
     inputs: [input('source', 'Map', MAP), input('keys', 'Keys', ARRAY)],
     description: 'A copy of the map without the entries whose keys are in Keys, in the map\'s order.',
     code: {
@@ -917,7 +925,7 @@ return int(result)`
 
   // ---- System ----
   {
-    name: 'system.get-env', displayName: 'Get Environment Variable', category: 'System', result: STRING, keywords: ['env', 'environment', 'variable', 'config'],
+    type: 'core:utilities.get-env', displayName: 'Get Environment Variable', category: 'Utilities', result: STRING, keywords: ['env', 'environment', 'variable', 'config'],
     inputs: [input('name', 'Name', STRING, ''), input('fallback', 'Fallback', STRING, '')],
     description: 'The value of the environment variable called Name, or Fallback when it isn\'t set.',
     code: {
@@ -932,7 +940,7 @@ return int(result)`
     }
   },
   {
-    name: 'system.normalize-path', displayName: 'Normalize Path', category: 'System', result: STRING, keywords: ['path', 'normalize', 'clean', 'file'],
+    type: 'core:file.normalize-path', displayName: 'Normalize Path', category: 'File', result: STRING, keywords: ['path', 'normalize', 'clean', 'file'],
     inputs: [input('path', 'Path', STRING, '')],
     description: 'The path tidied without looking at the disk, the same on every system: / and \\ both separate folders, "." and empty parts are dropped, ".." removes the folder before it, and the result uses /. A drive letter (C:) is kept.',
     code: {
@@ -1108,30 +1116,16 @@ return drive + joined`
   }
 ];
 
-// ---- Writing ---------------------------------------------------------------------------------------
-
-function definition(node) {
-  return {
-    $schema: '../../../schemas/node.schema.json',
-    type: `${PREFIX}:${node.name}`,
+export function utilityDefinitions(): NodeDefinition[] {
+  return NODES.map((node) => ({
+    type: node.type,
     version: 1,
     displayName: node.displayName,
-    category: `Utilities / ${node.category}`,
+    category: node.category,
     description: node.description,
     keywords: node.keywords,
     inputs: node.inputs,
     outputs: [output(node.result)],
     implementation: { kind: 'code', languages: node.code }
-  };
+  }));
 }
-
-function main() {
-  const dir = path.join(__dirname, 'nodes');
-  fs.rmSync(dir, { recursive: true, force: true });
-  fs.mkdirSync(dir, { recursive: true });
-  for (const node of NODES) fs.writeFileSync(path.join(dir, `${node.name.replace('.', '-')}.node.json`), JSON.stringify(definition(node), null, 2) + '\n');
-  console.log(`Wrote ${NODES.length} node definitions to ${path.relative(process.cwd(), dir) || dir}`);
-}
-
-module.exports = { NODES, definition };
-if (require.main === module) main();

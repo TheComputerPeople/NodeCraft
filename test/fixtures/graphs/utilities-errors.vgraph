@@ -5,11 +5,11 @@
   "language": "javascript",
   "variables": [],
   "metadata": {
-    "description": "universal-utils fixture: a rule broken stops the run with the message.",
+    "description": "Utility nodes: a rule broken stops the run with the message.",
     "expectedOutput": [
       "before"
     ],
-    "expectedError": "Not a boolean: \"maybe\""
+    "expectedError": true
   },
   "graphs": [
     {
@@ -48,7 +48,7 @@
         },
         {
           "id": "n2",
-          "type": "universal-utils:parse.boolean",
+          "type": "core:string.parse-boolean",
           "position": {
             "x": 300,
             "y": 240

@@ -5,7 +5,7 @@
   "language": "javascript",
   "variables": [],
   "metadata": {
-    "description": "universal-utils fixture: arrays and maps.",
+    "description": "Utility nodes: arrays and maps.",
     "expectedOutput": [
       "[3,1,2]",
       "[1,3]",
@@ -43,7 +43,7 @@
         },
         {
           "id": "n1",
-          "type": "universal-utils:array.unique",
+          "type": "core:array.unique",
           "position": {
             "x": 300,
             "y": 120
@@ -84,7 +84,7 @@
         },
         {
           "id": "n2",
-          "type": "universal-utils:array.difference",
+          "type": "core:array.difference",
           "position": {
             "x": 300,
             "y": 240
@@ -141,7 +141,7 @@
         },
         {
           "id": "n3",
-          "type": "universal-utils:array.intersection",
+          "type": "core:array.intersection",
           "position": {
             "x": 300,
             "y": 360
@@ -198,7 +198,7 @@
         },
         {
           "id": "n4",
-          "type": "universal-utils:array.average",
+          "type": "core:array.average",
           "position": {
             "x": 300,
             "y": 480
@@ -233,7 +233,7 @@
         },
         {
           "id": "n5",
-          "type": "universal-utils:array.median",
+          "type": "core:array.median",
           "position": {
             "x": 300,
             "y": 600
@@ -269,7 +269,7 @@
         },
         {
           "id": "n6",
-          "type": "universal-utils:array.median",
+          "type": "core:array.median",
           "position": {
             "x": 300,
             "y": 720
@@ -304,7 +304,7 @@
         },
         {
           "id": "n7",
-          "type": "universal-utils:map.pick",
+          "type": "core:map.pick",
           "position": {
             "x": 300,
             "y": 840
@@ -365,7 +365,7 @@
         },
         {
           "id": "n8",
-          "type": "universal-utils:map.omit",
+          "type": "core:map.omit",
           "position": {
             "x": 300,
             "y": 960

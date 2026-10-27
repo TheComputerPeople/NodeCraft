@@ -1,3 +1,8 @@
+# Third-party notices
+
+The utility nodes in `src/core/utilities.ts` (Is Blank, Truncate, To Snake Case, Format Bytes, Pick and the rest; see [docs/code-as-nodes.md](docs/code-as-nodes.md)) are adapted from Common Utility Snippets v0.1.0, under this license:
+
+```
 MIT License
 
 Copyright (c) 2026 Common Utility Snippets contributors
@@ -19,3 +24,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```

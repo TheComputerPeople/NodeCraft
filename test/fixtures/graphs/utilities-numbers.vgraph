@@ -5,7 +5,7 @@
   "language": "javascript",
   "variables": [],
   "metadata": {
-    "description": "universal-utils fixture: numbers and parsing.",
+    "description": "Utility nodes: numbers and parsing.",
     "expectedOutput": [
       "false",
       "true",
@@ -49,7 +49,7 @@
         },
         {
           "id": "n1",
-          "type": "universal-utils:number.in-range",
+          "type": "core:math.in-range",
           "position": {
             "x": 300,
             "y": 120
@@ -71,7 +71,7 @@
         },
         {
           "id": "n2",
-          "type": "universal-utils:number.in-range",
+          "type": "core:math.in-range",
           "position": {
             "x": 300,
             "y": 240
@@ -93,7 +93,7 @@
         },
         {
           "id": "n3",
-          "type": "universal-utils:number.round-to",
+          "type": "core:math.round-to",
           "position": {
             "x": 300,
             "y": 360
@@ -114,7 +114,7 @@
         },
         {
           "id": "n4",
-          "type": "universal-utils:number.round-to",
+          "type": "core:math.round-to",
           "position": {
             "x": 300,
             "y": 480
@@ -135,7 +135,7 @@
         },
         {
           "id": "n5",
-          "type": "universal-utils:number.round-to",
+          "type": "core:math.round-to",
           "position": {
             "x": 300,
             "y": 600
@@ -156,7 +156,7 @@
         },
         {
           "id": "n6",
-          "type": "universal-utils:number.round-to",
+          "type": "core:math.round-to",
           "position": {
             "x": 300,
             "y": 720
@@ -177,7 +177,7 @@
         },
         {
           "id": "n7",
-          "type": "universal-utils:number.format-bytes",
+          "type": "core:string.format-bytes",
           "position": {
             "x": 300,
             "y": 840
@@ -198,7 +198,7 @@
         },
         {
           "id": "n8",
-          "type": "universal-utils:number.format-bytes",
+          "type": "core:string.format-bytes",
           "position": {
             "x": 300,
             "y": 960
@@ -219,7 +219,7 @@
         },
         {
           "id": "n9",
-          "type": "universal-utils:number.format-bytes",
+          "type": "core:string.format-bytes",
           "position": {
             "x": 300,
             "y": 1080
@@ -240,7 +240,7 @@
         },
         {
           "id": "n10",
-          "type": "universal-utils:number.format-bytes",
+          "type": "core:string.format-bytes",
           "position": {
             "x": 300,
             "y": 1200
@@ -261,7 +261,7 @@
         },
         {
           "id": "n11",
-          "type": "universal-utils:parse.boolean",
+          "type": "core:string.parse-boolean",
           "position": {
             "x": 300,
             "y": 1320
@@ -281,7 +281,7 @@
         },
         {
           "id": "n12",
-          "type": "universal-utils:parse.boolean",
+          "type": "core:string.parse-boolean",
           "position": {
             "x": 300,
             "y": 1440
@@ -301,7 +301,7 @@
         },
         {
           "id": "n13",
-          "type": "universal-utils:parse.integer-strict",
+          "type": "core:string.parse-integer-strict",
           "position": {
             "x": 300,
             "y": 1560
@@ -321,7 +321,7 @@
         },
         {
           "id": "n14",
-          "type": "universal-utils:parse.integer-strict",
+          "type": "core:string.parse-integer-strict",
           "position": {
             "x": 300,
             "y": 1680

@@ -5,7 +5,7 @@
   "language": "javascript",
   "variables": [],
   "metadata": {
-    "description": "universal-utils fixture: environment variables and paths (normalized the same on every system).",
+    "description": "Utility nodes: environment variables and paths (normalized the same on every system).",
     "expectedOutput": [
       "none",
       "a/c/d/e",
@@ -41,7 +41,7 @@
         },
         {
           "id": "n1",
-          "type": "universal-utils:system.get-env",
+          "type": "core:utilities.get-env",
           "position": {
             "x": 300,
             "y": 120
@@ -62,7 +62,7 @@
         },
         {
           "id": "n2",
-          "type": "universal-utils:system.normalize-path",
+          "type": "core:file.normalize-path",
           "position": {
             "x": 300,
             "y": 240
@@ -82,7 +82,7 @@
         },
         {
           "id": "n3",
-          "type": "universal-utils:system.normalize-path",
+          "type": "core:file.normalize-path",
           "position": {
             "x": 300,
             "y": 360
@@ -102,7 +102,7 @@
         },
         {
           "id": "n4",
-          "type": "universal-utils:system.normalize-path",
+          "type": "core:file.normalize-path",
           "position": {
             "x": 300,
             "y": 480
@@ -122,7 +122,7 @@
         },
         {
           "id": "n5",
-          "type": "universal-utils:system.normalize-path",
+          "type": "core:file.normalize-path",
           "position": {
             "x": 300,
             "y": 600
@@ -142,7 +142,7 @@
         },
         {
           "id": "n6",
-          "type": "universal-utils:system.normalize-path",
+          "type": "core:file.normalize-path",
           "position": {
             "x": 300,
             "y": 720

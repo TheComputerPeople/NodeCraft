@@ -8,6 +8,7 @@ import { testDefinitions } from './tests';
 import { objectDefinitions } from './objects';
 import { latentDefinitions } from './latent';
 import { standardLibraryDefinitions } from './stdlib';
+import { utilityDefinitions } from './utilities';
 
 const t = (id: string): TypeRef => ({ id });
 const dataInput = (id: string, name: string, type: string, defaultValue?: unknown): PinDefinition => ({
@@ -102,6 +103,7 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
     ...objectDefinitions(),
     ...latentDefinitions(),
     ...testDefinitions(),
-    ...standardLibraryDefinitions()
+    ...standardLibraryDefinitions(),
+    ...utilityDefinitions()
   ];
 }
