@@ -245,7 +245,7 @@ Status: complete (October 2026), with the deferrals below.
   - In the declarative format: object references, inheritance, interfaces, dispatchers and latent actions. In the C pack: containers, structs and enums.
   - Node packages from a registry: they come from the workspace and from extensions.
 
-Design: [language-breadth.md](language-breadth.md). Java is deferred (no JDK here to test it with); C is the declarative pack and the exit check's separate extension. Steps, one commit each (large steps may take several):
+Design: [language-breadth.md](language-breadth.md). Java was deferred at first (no JDK here), then added with Go once their toolchains were installed (steps 14 to 18); C is the declarative pack and the exit check's separate extension. Steps, one commit each (large steps may take several):
 
 1. Design and plan (this list).
 2. Capabilities enforced: finer flags, nodes' `requires`, `unsupported` diagnostics, and the editor hiding what a language can't express.
@@ -260,6 +260,11 @@ Design: [language-breadth.md](language-breadth.md). Java is deferred (no JDK her
 11. Tier 2 symbol import through the language server.
 12. Node library packages: manifests, versions, dependencies, and graphs remembering versions.
 13. The exit check: the C pack as a separate extension in `examples/`, passing the published suite; documentation and the parity checklist.
+14. Java: the generator and runner, passing the conformance suite.
+15. Java: package placement, symbol import, debugging and tests.
+16. Go: the generator and runner, passing the conformance suite.
+17. Go: package placement and the runtime file, symbol import through gopls, debugging and tests.
+18. The phase's checks again with Java and Go, documentation and the parity checklist.
 
 ### Phase 7: Multi-language projects
 

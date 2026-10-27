@@ -4,6 +4,8 @@ Phase 6 of the [roadmap](roadmap.md): support for most languages without a hand-
 
 Decided before starting (2026-10-26): the Tier 1 packs in this phase are **C++ and Rust**. **Java is deferred**: this machine has no JDK, and a pack that can't run its conformance and debugging tests isn't finished. C is built as the **declarative** pack, and it doubles as the exit check's separate extension.
 
+Changed after the exit check (2026-10-27): the JDK (Temurin 25, Maven, Gradle) and Go (with gopls and Delve) are now installed, so **Java and Go join this phase as Tier 1 packs** before it merges (steps 14 to 18). Go was assessed below as a declarative pack, but the declarative format can't express objects, dispatchers or Delay, all of which Go can; as a Tier 1 pack it keeps them, and it imports project functions through gopls with the Tier 2 importer.
+
 ## Capabilities, enforced
 
 `LanguageCapabilities` exists but nothing reads it yet. Rust (no inheritance) and C (no classes, containers, async or closures) make it necessary.
@@ -114,6 +116,22 @@ As built (`src/core/importing/language-server.ts`, and `symbolScan` in `src/exte
 - **Placement:** CMake projects get an extension-owned `vgraph.cmake` listing the generated sources and a one-time, consented `include()` plus `target_sources` in `CMakeLists.txt`, through the output plan machinery below; other build systems get a Compiler Results note listing the files to add.
 - **Symbol import:** a scanner for free functions marked `// @blueprint` in headers and sources, with the same marker options as the other languages (category, display name, pure).
 - **Debugging:** the C/C++ extension (`cppdbg` with gdb or lldb; `cppvsdbg` for MSVC builds), launching the scaffold built with debug information.
+
+## Java (Tier 1)
+
+- **Files:** `ClassName.java` (the class's name, as Java requires) next to the graph. Its `package` is the graph's folder relative to the source root that holds it: `pom.xml`'s `<sourceDirectory>`, else `src/main/java` (Maven's and Gradle's default). A graph outside every source root gets no package and a warning when the workspace has a Maven or Gradle build, since the build won't compile the file there. Build tools compile everything under their source roots, so nothing needs registering. (This simplifies output-placement.md's plan of moving such files into the source tree: the file stays next to its graph, as everywhere else.)
+- **Representation:** `int` is `long`, `float` `double`, `bool` `boolean`, `string` `String`, untyped values `Object`; containers `ArrayList`, `LinkedHashSet` (printed in ascending order) and `LinkedHashMap` of boxed types. Classes, inheritance (`extends`), interfaces, Cast To (`instanceof`) and exceptions map directly. Structs are records (immutable, so Set Members makes a new one, which is Unreal's value semantics); enums are Java enums. A function with several outputs returns a record of them. Dispatchers hold handlers keyed by object and function, so Unbind finds the handler Bind added. Delay uses the latent queue the other packs use, shared between classes through the system properties (as C# shares it through the AppDomain).
+- **Run:** `javac` compiles the generated file, the project files it uses and a small launcher into a scratch folder; `java` runs the launcher, which calls Start, then Main, then the latent actions; with `--test`, each test on a new object.
+- **Symbol import:** `public static` methods marked `@blueprint` in a Javadoc comment, read by a scanner like C#'s; generated code calls them by their qualified class name, and Run compiles their files.
+- **Debugging:** Microsoft's Debugger for Java (`java` launch configurations, extension `vscjava.vscode-java-debug`), launching the launcher after a debug build.
+
+## Go (Tier 1)
+
+- **Files:** `name_vgraph.go` next to the graph. Its `package` clause is the package of the other `.go` files in the folder, else the folder's name. A Go package's files share one namespace, so the support code (formatting, the latent queue, dispatchers) is one extension-owned `vgraph_runtime.go` per package folder, kept by the output plan, and generated code calls other graphs in the same folder directly.
+- **Representation:** `int` is `int`, `float` `float64`, `bool`, `string` and `any`; arrays are slices, and sets and maps are the runtime's insertion-ordered types (Go's maps have no order). A class is a struct with a constructor and pointer-receiver methods; an object reference is a pointer. Public members are exported (capitalized) so other packages can use them. Interfaces are Go interfaces and Cast To a type assertion. There is no inheritance (embedding has no virtual dispatch), as in Rust. Errors are panics, recovered by Run and the tests.
+- **Run:** a scratch module whose `main.go` runs Start, Main and the latent actions (or the tests). When the graph's folder is in a module and isn't `package main`, the scratch module requires the project's module through a `replace` directive and imports the package; otherwise the folder's Go files are copied into the scratch module.
+- **Symbol import:** exported functions marked `// @blueprint`, found through gopls (the Tier 2 importer); generated code calls them directly in the same package, else through an import of their package.
+- **Debugging:** Delve through the Go extension (`go` launch configurations, extension `golang.go`).
 
 ## Rust (Tier 1)
 
