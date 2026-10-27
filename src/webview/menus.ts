@@ -5,7 +5,7 @@ import { PinKind } from '../core/model';
 import { addNode, collapseToFunction, collapseToMacro, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected, refreshFunctionNodes, replaceFunctionNode } from './actions';
 import { alignSelection, distributeSelection, straightenConnections } from './align';
 import { addBreakpoints, breakpointOn, enableBreakpoints, removeBreakpoints } from './breakpoints';
-import { PaletteEntry, functionProblem, lookupDefinition, paletteEntries, searchText } from './document';
+import { PaletteEntry, functionProblem, libraryProblem, lookupDefinition, paletteEntries, searchText } from './document';
 import { dom, escapeHtml } from './dom';
 import { headerColor } from './style';
 import { deleteSelectedComments, selectedCommentIds, startCommentRename } from './comments';
@@ -94,7 +94,8 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
   // A project function whose code changed or is gone: Refresh Node, or Replace with a function it
   // was probably renamed or moved to.
   const status = functionProblem(node)?.status;
-  const functionItems: MenuItem[] = status?.state === 'changed'
+  // A node of a package that changed major version: Refresh Node, too.
+  const functionItems: MenuItem[] = status?.state === 'changed' || libraryProblem(node)
     ? [{ label: 'Refresh Node', action: () => refreshFunctionNodes(new Set([nodeId])) }]
     : status?.state === 'missing'
       ? status.candidates.slice(0, 5).map((c) => ({ label: `Replace with ${c.displayName}${c.implementation?.kind === 'function' ? ` (${c.implementation.path})` : ''}`, action: () => replaceFunctionNode(nodeId, c) }))

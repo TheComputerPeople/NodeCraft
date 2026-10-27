@@ -3,6 +3,7 @@
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from '../model';
 import { NodeRegistry } from '../registry';
 import { describeFunction, functionStatus, isFunctionType } from '../imported-functions';
+import { libraryChange, libraryChangeMessage } from '../node-packages';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from '../flow-control';
 import { hasWildcard } from '../containers';
 import { NodeResolver, REROUTE, createResolver, createUnsplitResolver, isPure } from '../resolve';
@@ -603,6 +604,7 @@ class Lowerer {
       }
       info.nodes.set(node.id, node);
       if (isFunctionType(node.type)) this.checkFunction(graph, node);
+      this.checkLibrary(graph, node);
       if (typeof node.properties.class === 'string' && isObjectNode(node.type)) this.memberClass({ graph } as GraphInfo, node);
       if (typeof node.properties.interface === 'string' && isObjectNode(node.type)) this.callInterface({ graph } as GraphInfo, node);
       if ((node.type === MACRO_INPUTS || node.type === MACRO_OUTPUTS) && graph.kind !== 'macro') {
@@ -657,6 +659,13 @@ class Lowerer {
       info.dataSources.set(key, { node: c.fromNode, pin: c.fromPin });
     }
     return info;
+  }
+
+  // A node of a package that changed major version since the graph recorded it: it still compiles,
+  // with a warning until it is refreshed (docs/language-breadth.md, "Node library versioning").
+  private checkLibrary(graph: Graph, node: GraphNode): void {
+    const change = libraryChange(this.doc, this.options.registry.get(node.type));
+    if (change) this.warning('library-changed', libraryChangeMessage(change), graph.id, node.id);
   }
 
   // A project function node whose code changed or disappeared can't compile until it is

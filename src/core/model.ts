@@ -39,6 +39,8 @@ export interface NodeDefinition {
   // What the node needs from a graph's language beyond what its kind and pin types already say
   // (src/core/capabilities.ts), e.g. "async" for a latent node of a library.
   requires?: Capability[];
+  // The package it comes from (src/core/node-packages.ts), set when packages are resolved.
+  library?: { name: string; version: string };
 }
 
 // A language feature a graph can need (docs/language-breadth.md, "Capabilities, enforced").

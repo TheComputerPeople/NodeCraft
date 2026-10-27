@@ -40,6 +40,10 @@
       {
         "fileMatch": "*.vgraph-language.json",
         "url": "./schemas/language-pack.schema.json"
+      },
+      {
+        "fileMatch": "*.vgraph-package.json",
+        "url": "./schemas/node-package.schema.json"
       }
     ],
     "commands": [

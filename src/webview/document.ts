@@ -5,6 +5,7 @@ import type { LanguageCapabilities } from '../core/language-pack';
 import { pinDefinition, releaseWildcards } from '../core/editing';
 import { Access, GraphDocument, GraphNode, GraphPin, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
 import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions } from '../core/imported-functions';
+import { libraryChange, libraryChangeMessage, syncLibraryVersions } from '../core/node-packages';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, UNBIND_ALL, UNBIND_EVENT, customEvents, documentDispatchers, eventName } from '../core/events';
@@ -156,6 +157,14 @@ export function functionProblem(node: GraphNode): { severity: 'error' | 'warning
   return undefined;
 }
 
+// A node whose package changed major version since the graph recorded it (a warning until it is
+// refreshed; docs/language-breadth.md, "Node library versioning").
+export function libraryProblem(node: GraphNode): { severity: 'warning'; message: string; library: string } | undefined {
+  if (!state.document) return undefined;
+  const change = libraryChange(state.document, state.defByType.get(node.type));
+  return change && { severity: 'warning', message: libraryChangeMessage(change), library: change.name };
+}
+
 export function pinDef(nodeId: string, pinId: string): PinDefinition | undefined {
   return state.graph ? pinDefinition(state.graph, lookupDefinition, nodeId, pinId) : undefined;
 }
@@ -261,6 +270,8 @@ export function flushSave(): void {
   pruneBreakpoints();
   // Store the signature of each project function the graph calls, with the graph.
   syncImportedFunctions(state.document, (type) => state.defByType.get(type));
+  // And the version of each node package it uses.
+  syncLibraryVersions(state.document, (type) => state.defByType.get(type));
   postToHost({ type: 'applyDocument', document: state.document });
   // Don't hide a message an action just showed (e.g. "Deleted Health and 2 nodes").
   if (dom.status.textContent === 'Unsaved changes') setStatus('Saved');

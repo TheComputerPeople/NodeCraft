@@ -160,6 +160,18 @@ A node library becomes a package with a manifest, building on `node-package.sche
 - **Resolution:** packages from the workspace and from `registerNodeLibrary` are resolved together. A missing dependency or one outside its range is a warning on the package (Problems panel), and its nodes still load. Two packages defining the same node type: the newer version wins, with a warning.
 - **Graphs remember versions:** a graph records the version of each package whose nodes it uses (`metadata.libraries`), as it already records imported functions' signatures. Opening a graph whose packages changed major version marks those nodes as changed, with Refresh Node, as code functions do.
 
+As built (`src/core/node-packages.ts`, `src/extension/node-libraries.ts`):
+
+- **Manifests** are checked: the name, a semantic version, the node files and valid ranges. `schemas/node-package.schema.json` validates them in the editor. A manifest's `nodes` are paths or globs relative to it. Node files no package holds load on their own, as before.
+- **Ranges** follow npm's syntax as far as packages use it: exact versions, `^`, `~`, `1.x`, `*`, comparisons and `||`. Prereleases come before their release and don't match ranges of releases.
+- **Resolution:** workspace packages and the libraries other extensions register (`registerNodeLibrary`, which now takes optional `dependencies` and `engines`) are resolved together. A package's nodes carry it (`NodeDefinition.library`).
+  - These are warnings on the manifest in the Problems panel, and the nodes still load: a missing dependency or one out of range, `engines.blueprint` not matching the API version, two packages with one name (the newer is used), and two packages defining one node type (the newer is used).
+  - A package's node wins over a loose file's.
+- **Graphs remember versions:** saving a graph records each package's version the first time the graph uses it, and drops packages it no longer uses.
+  - A recorded version of an older major version is a warning on the package's nodes, in the editor and when compiling (`library-changed`). The graph still compiles, since its nodes' pins come from the current definitions.
+  - **Refresh Node** (or Refresh All Nodes) rebinds that package's nodes in the file, keeping the wires that still fit, and records the new version. It covers all of the package's nodes at once, because the graph records one version per package.
+  - A new minor or patch version changes nothing.
+
 ## Go and others
 
 Go was named for assessment. **Fit:** good for most Blueprint concepts: structs with methods stand in for classes, interfaces are structural, and goroutines with a sleep cover Delay; there is no inheritance (like Rust) and no exceptions (errors are values, like Rust's `Result`). **Placement:** a generated file must be in its package's folder with a matching `package` clause; next to the graph works when the graph sits in a package folder. **Verdict:** a good declarative (Tier 2) pack once the format exists, with `gopls` for symbol import; not built in this phase (no Go toolchain here). Other languages are assessed the same way when someone asks for them.

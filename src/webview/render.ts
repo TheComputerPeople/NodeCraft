@@ -8,7 +8,7 @@ import { pausedNodeId } from './debugger';
 import { hideHoverValue, isWatched, showHoverValue, watchedValue } from './values';
 import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
-import { functionProblem, lookupDefinition, markDirty, pinDef } from './document';
+import { functionProblem, libraryProblem, lookupDefinition, markDirty, pinDef } from './document';
 import { dom } from './dom';
 import { openGraph } from './my-blueprint';
 import { FUNCTION_CALL } from '../core/functions';
@@ -67,7 +67,8 @@ function renderNode(node: GraphNode): HTMLElement {
   // Unreal-style badge for compiler errors and warnings on this node, and for a project function
   // whose code changed or is gone (shown at once, without compiling).
   const problem = functionProblem(node);
-  const diagnostics = [...nodeDiagnostics(node.id), ...(problem ? [problem] : [])];
+  const library = libraryProblem(node);
+  const diagnostics = [...nodeDiagnostics(node.id), ...(problem ? [problem] : []), ...(library ? [library] : [])];
   const severity = diagnostics.some((d) => d.severity === 'error') ? 'error' : diagnostics.length ? 'warning' : undefined;
   if (severity) {
     el.classList.add(`has-${severity}`);

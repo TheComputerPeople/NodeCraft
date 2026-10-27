@@ -5,10 +5,9 @@ import * as vscode from 'vscode';
 import { API_VERSION, BlueprintVisualScriptingApi, NodeLibrary, packProblem } from '../core/api';
 import { DeclarativePackDefinition, loadDeclarativePack } from '../core/declarative';
 import { LanguagePack, LanguagePackRegistry } from '../core/language-pack';
-import { NodeRegistry } from '../core/registry';
+import { NodeLibraries } from './node-libraries';
 
-export function createApi(languages: LanguagePackRegistry, registry: NodeRegistry, output: () => vscode.OutputChannel): BlueprintVisualScriptingApi {
-  const libraries = new Set<string>();
+export function createApi(languages: LanguagePackRegistry, libraries: NodeLibraries, output: () => vscode.OutputChannel): BlueprintVisualScriptingApi {
   const registerLanguagePack = (pack: LanguagePack): vscode.Disposable => {
     const problem = packProblem(pack, (id) => !!languages.get(id));
     if (problem) {
@@ -33,15 +32,7 @@ export function createApi(languages: LanguagePackRegistry, registry: NodeRegistr
       return registerLanguagePack(pack);
     },
     registerNodeLibrary(library: NodeLibrary) {
-      if (!library?.name || !Array.isArray(library.nodes)) throw new Error('A node library needs a name and a list of nodes.');
-      if (libraries.has(library.name)) throw new Error(`A node library named "${library.name}" is already registered.`);
-      libraries.add(library.name);
-      const source = `api:${library.name}`;
-      registry.setSource(source, library.nodes);
-      return new vscode.Disposable(() => {
-        libraries.delete(library.name);
-        registry.setSource(source, []);
-      });
+      return libraries.register(library);
     }
   };
 }

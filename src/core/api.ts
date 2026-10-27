@@ -16,8 +16,13 @@ export interface Disposable {
 // Node definitions shipped together, such as a framework pack's events and nodes.
 export interface NodeLibrary {
   name: string;
+  // A semantic version: graphs remember it, and a new major version marks their nodes for Refresh Node.
   version: string;
   nodes: NodeDefinition[];
+  // Other libraries or packages it needs, with version ranges ("^1.2.0").
+  dependencies?: Record<string, string>;
+  // The API versions it works with: { blueprint: "^1" }.
+  engines?: { blueprint?: string };
 }
 
 export interface BlueprintVisualScriptingApi {

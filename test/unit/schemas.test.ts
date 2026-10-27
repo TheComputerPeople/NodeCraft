@@ -56,3 +56,9 @@ describe('language-pack.schema.json', () => {
     assert.equal(validate({ ...pack, capabilities: { classes: true } }), false);
   });
 });
+
+describe('node-package.schema.json', () => {
+  const check = validator('schemas/node-package.schema.json');
+
+  test('accepts a package with dependencies and engines', () => check({ name: '@studio/combat-nodes', version: '1.2.0', nodes: ['nodes/*.node.json'], dependencies: { 'math-nodes': '^2.0.0' }, engines: { blueprint: '^1' } }));
+});

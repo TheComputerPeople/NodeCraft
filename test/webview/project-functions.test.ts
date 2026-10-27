@@ -132,4 +132,20 @@ describe('project function nodes', () => {
     await e.page.waitForFunction(() => (window as unknown as { __posted: { type: string }[] }).__posted.some((m) => m.type === 'applyDocument'));
     assert.deepEqual(Object.keys((await lastSave(e))?.importedFunctions ?? {}), [applyDamage.type]);
   });
+
+  // Node library packages (docs/language-breadth.md, "Node library versioning").
+  test('a node whose package changed major version is marked until Refresh Node, which records the new version', async (t) => {
+    const hit: NodeDefinition = { ...fn('hit', [['amount', 'float']], 'Hit'), type: 'combat:hit', implementation: { kind: 'code', languages: { typescript: 'return amount;' } }, library: { name: 'combat-nodes', version: '2.0.0' } };
+    const document = documentWith(undefined);
+    document.graphs[0].nodes[1].type = 'combat:hit';
+    const e = await open(t, { ...document, metadata: { libraries: { 'combat-nodes': '1.4.0' } } }, [hit]);
+    if (!e) return;
+    assert.equal(await badge(e), 'node-badge warning');
+    assert.match((await e.page.getAttribute('.node[data-node="f"] .node-badge', 'title'))!, /combat-nodes is now version 2\.0\.0/);
+    assert.equal((await menu(e))[0], 'Refresh Node');
+    await e.page.locator('#context-menu button', { hasText: 'Refresh Node' }).click();
+    assert.equal(await badge(e), null);
+    await e.page.waitForFunction(() => (window as unknown as { __posted: { type: string }[] }).__posted.some((m) => m.type === 'applyDocument'));
+    assert.deepEqual((await lastSave(e))?.metadata?.libraries, { 'combat-nodes': '2.0.0' });
+  });
 });

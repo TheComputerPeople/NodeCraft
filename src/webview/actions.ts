@@ -6,6 +6,7 @@ import { addVariable, uniqueName } from '../core/blueprint-edits';
 import { FUNCTION_ENTRY } from '../core/functions';
 import { MACRO_INPUTS, MACRO_OUTPUTS } from '../core/macros';
 import { functionStatus, isFunctionType, rebindFunctionNode } from '../core/imported-functions';
+import { libraryChange, refreshLibrary } from '../core/node-packages';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { GraphNode, NodeDefinition, PinDefinition } from '../core/model';
 import { structInfo } from '../core/user-types';
@@ -330,15 +331,29 @@ export function pinMenuItems(nodeId: string, pinId: string): MenuItem[] {
 }
 
 // Unreal's Refresh Node: updates project function nodes whose code changed to the new signature,
-// keeping the wires that still fit. Without `nodeIds`, every such node in the file (Refresh All
-// Nodes).
+// and nodes of a package that changed major version to its new version (all of that package's
+// nodes in the file: the graph records one version per package), keeping the wires that still fit.
+// Without `nodeIds`, every such node in the file (Refresh All Nodes).
 export function refreshFunctionNodes(nodeIds?: ReadonlySet<string>): void {
   const doc = state.document;
   if (!doc) return;
   let nodes = 0;
   let wires = 0;
+  const packages = new Map<string, string>();
   for (const graph of doc.graphs) {
     for (const node of graph.nodes) {
+      const change = libraryChange(doc, state.defByType.get(node.type));
+      if (change && (!nodeIds || nodeIds.has(node.id))) packages.set(change.name, change.to);
+    }
+  }
+  for (const graph of doc.graphs) {
+    for (const node of graph.nodes) {
+      const definition = state.defByType.get(node.type);
+      if (definition?.library && packages.has(definition.library.name)) {
+        wires += rebindFunctionNode(graph, node, definition, lookupDefinition).length;
+        nodes++;
+        continue;
+      }
       if (!isFunctionType(node.type) || (nodeIds && !nodeIds.has(node.id))) continue;
       const status = functionStatus(doc.importedFunctions?.[node.type], state.defByType.get(node.type), () => state.definitions);
       if (status.state !== 'changed') continue;
@@ -346,6 +361,7 @@ export function refreshFunctionNodes(nodeIds?: ReadonlySet<string>): void {
       nodes++;
     }
   }
+  for (const [name, version] of packages) refreshLibrary(doc, name, version);
   if (!nodes) {
     setStatus('No nodes needed refreshing.');
     return;

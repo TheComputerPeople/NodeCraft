@@ -341,7 +341,7 @@ interface PublicApi {
   apiVersion: number;
   registerLanguagePack(pack: LanguagePack): vscode.Disposable;
   registerDeclarativePack(definition: unknown): vscode.Disposable;
-  registerNodeLibrary(library: { name: string; version: string; nodes: NodeDefinition[] }): vscode.Disposable;
+  registerNodeLibrary(library: { name: string; version: string; nodes: NodeDefinition[]; dependencies?: Record<string, string> }): vscode.Disposable;
 }
 
 interface ExtensionInternals {
@@ -432,6 +432,44 @@ test('a declarative pack loads from a workspace file, and its problems show on t
     await vscode.workspace.fs.delete(file);
   }
   await waitFor(() => vscode.languages.getDiagnostics(file).length === 0, 'the problems to go with the file');
+});
+
+// Node library packages (docs/language-breadth.md, "Node library versioning"): a workspace package's
+// problems show on its manifest and clear when an extension registers its dependency; a graph made
+// with an older major version of a package compiles with a warning on its nodes.
+test('node packages resolve with extension libraries, and graphs remember their versions', async () => {
+  const api = (await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as PublicApi;
+  const write = (name: string, value: unknown) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(JSON.stringify(value, null, 2)));
+  const manifest = workspaceFile('packages/combat/combat.vgraph-package.json');
+  await write('packages/combat/Hit.node.json', {
+    type: 'combat:hit', version: 1, displayName: 'Hit', category: 'Combat',
+    inputs: [{ id: 'execIn', name: '', kind: 'exec', direction: 'input' }],
+    outputs: [{ id: 'execOut', name: '', kind: 'exec', direction: 'output' }],
+    implementation: { kind: 'code', languages: { javascript: 'console.log("hit");' } }
+  });
+  await write('packages/combat/combat.vgraph-package.json', { name: 'combat-nodes', version: '2.0.0', nodes: ['*.node.json'], dependencies: { 'math-nodes': '^1.0.0' } });
+  await waitFor(() => vscode.languages.getDiagnostics(manifest).length > 0, 'the missing dependency on the manifest');
+  assert.equal(vscode.languages.getDiagnostics(manifest)[0].message, "combat-nodes needs math-nodes ^1.0.0, which isn't installed.");
+  const math = api.registerNodeLibrary({ name: 'math-nodes', version: '1.4.0', nodes: [] });
+  try {
+    await waitFor(() => vscode.languages.getDiagnostics(manifest).length === 0, 'the dependency an extension registered');
+    const graph = workspaceFile('hit.vgraph');
+    const node = (id: string, type: string) => ({ id, type, position: { x: 0, y: 0 }, properties: {} });
+    await write('hit.vgraph', {
+      schemaVersion: 3, name: 'HitIt', kind: 'class', language: 'javascript', variables: [], metadata: { libraries: { 'combat-nodes': '1.3.0' } },
+      graphs: [{
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [node('s', 'core:event.start'), node('h', 'combat:hit')],
+        connections: [{ id: 'c', fromNode: 's', fromPin: 'execOut', toNode: 'h', toPin: 'execIn' }]
+      }]
+    });
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    assert.ok(await exists(workspaceFile('hit.vgraph.js')), 'it compiles');
+    assert.match(vscode.languages.getDiagnostics(graph).map((d) => d.message).join('\n'), /combat-nodes is now version 2\.0\.0, a new major version \(this graph was made with 1\.3\.0\)/);
+  } finally {
+    math.dispose();
+    await vscode.workspace.fs.delete(workspaceFile('packages'), { recursive: true });
+  }
 });
 
 // Output plans (docs/output-placement.md): a pack registering its generated files with a build.

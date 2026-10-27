@@ -8,7 +8,7 @@ import { serializeDocument } from '../core/serializer';
 import { CompileService } from './compile-service';
 import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
 import { detectWorkspaceLanguage } from './languages';
-import { watchWorkspaceNodeLibraries } from './node-libraries';
+import { NodeLibraries } from './node-libraries';
 import { isGeneratedFrom } from './placement';
 import { GraphLibraries } from './graph-libraries';
 import { DebugMarks } from './breakpoints';
@@ -29,7 +29,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   // Libraries load in the background; open editors receive the updated definitions when ready.
   const registry = new NodeRegistry();
   const languages = builtinLanguagePacks();
-  context.subscriptions.push(watchWorkspaceNodeLibraries(registry));
+  const nodeLibraries = new NodeLibraries(registry);
+  context.subscriptions.push(nodeLibraries);
 
   let outputChannel: vscode.OutputChannel | undefined;
   const output = (): vscode.OutputChannel => {
@@ -165,7 +166,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       await vscode.commands.executeCommand('vscode.open', target);
     })
   );
-  return { ...createApi(languages, registry, output), testing: { marks, provider, outputPlans } };
+  return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans } };
 }
 
 export function deactivate(): void {}

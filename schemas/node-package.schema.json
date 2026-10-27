@@ -2,12 +2,21 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.invalid/blueprint-node-package.schema.json",
   "title": "Visual Node Package",
+  "description": "A node library package (docs/language-breadth.md, \"Node library versioning\"): a workspace file named *.vgraph-package.json listing node definition files, with a version graphs remember.",
   "type": "object",
   "required": ["name", "version", "nodes"],
   "properties": {
-    "name": { "type": "string" },
-    "version": { "type": "string" },
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "pattern": "^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$" },
+    "version": { "type": "string", "pattern": "^v?[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?([+][0-9A-Za-z.-]+)?$", "description": "A semantic version. A new major version marks the package's nodes in graphs made with the old one for Refresh Node." },
     "description": { "type": "string" },
-    "nodes": { "type": "array", "items": { "type": "string" } }
-  }
+    "nodes": { "type": "array", "items": { "type": "string" }, "description": "The node definition files it holds, relative to this file (globs allowed)." },
+    "dependencies": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Package names with version ranges, such as \"^1.2.0\"." },
+    "engines": {
+      "type": "object",
+      "properties": { "blueprint": { "type": "string", "description": "The extension API versions it works with, such as \"^1\"." } },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
 }
