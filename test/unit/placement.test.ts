@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { configCovers, csharpNamespace, detectImportExtension, detectModuleFormat, generatedFrom, javaProject, globToRegExp, isGeneratedFrom, parseJsonc, pythonModule, rustModule, rustRunSources, verifyPlacement } from '../../src/extension/placement';
+import { configCovers, csharpNamespace, detectImportExtension, detectModuleFormat, generatedFrom, goPackage, javaProject, globToRegExp, isGeneratedFrom, parseJsonc, pythonModule, rustModule, rustRunSources, verifyPlacement } from '../../src/extension/placement';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-placement-'));
 after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -122,6 +122,17 @@ describe('Java packages', () => {
     const dir = project({ 'pom.xml': '<project></project>', 'src/main/java/App.java': '', 'tools/Tool.java': '' });
     assert.match(verifyPlacement('java', path.join(dir, 'tools/Tool.java'), dir)[0].message, /isn't in a source folder of pom\.xml/);
     assert.deepEqual(verifyPlacement('java', path.join(dir, 'src/main/java/App.java'), dir), []);
+  });
+});
+
+describe('Go packages', () => {
+  test("follow the folder's other files, else its name; their import path is in the module", () => {
+    const dir = project({ 'go.mod': 'module example.com/app\n', 'game/rules.go': '// Rules.\npackage rules\n', 'game/x_vgraph.go': 'package wrong\n', 'My-Tools/x.vgraph': '', 'cmd/main.go': 'package main\n' });
+    assert.deepEqual(goPackage(path.join(dir, 'game'), dir), { name: 'rules', path: 'example.com/app/game', module: { path: 'example.com/app', dir } });
+    assert.equal(goPackage(path.join(dir, 'My-Tools'), dir).name, 'mytools');
+    assert.equal(goPackage(dir, dir).path, 'example.com/app');
+    assert.deepEqual(goPackage(project({ 'x.vgraph': '' }), root).module, undefined, 'not in a module');
+    assert.match(verifyPlacement('go', path.join(dir, 'cmd/x_vgraph.go'), dir)[0].message, /package main, which nothing can import/);
   });
 });
 

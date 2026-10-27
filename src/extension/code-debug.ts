@@ -104,7 +104,7 @@ export class CodeDebugService implements vscode.Disposable {
     const command = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {})[pack!.id];
     const cwd = path.dirname(outcome.outputPath);
     const options = {
-      cwd, command, importRoots: outcome.importRoots, sources: outcome.sources, crate: outcome.crate, mainMethod: outcome.mainMethod,
+      cwd, command, importRoots: outcome.importRoots, sources: outcome.sources, crate: outcome.crate, goModule: outcome.goModule, mainMethod: outcome.mainMethod,
       args: vscode.workspace.getConfiguration('blueprintVisualScripting', uri).get<string[]>('runArguments', [])
     };
     // C# builds Run's project first.
@@ -113,7 +113,7 @@ export class CodeDebugService implements vscode.Disposable {
     try {
       context = runner
         ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `Preparing ${language} for debugging…` }, () => prepareDebugging(runner, spec, outcome.outputPath!, outcome.className!, options))
-        : { importRoots: options.importRoots, sources: options.sources, crate: options.crate, mainMethod: options.mainMethod, args: options.args };
+        : { importRoots: options.importRoots, sources: options.sources, crate: options.crate, goModule: options.goModule, mainMethod: options.mainMethod, args: options.args };
     } catch (error) {
       const message = error instanceof ToolNotFoundError ? error.message : error instanceof BuildError ? `The ${language} build failed; see the Output panel.` : String(error);
       if (error instanceof BuildError) {

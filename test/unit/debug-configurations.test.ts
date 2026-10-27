@@ -84,6 +84,18 @@ describe('debug configurations', () => {
     assert.equal(d.displayValue!('0.5'), '0.5');
   });
 
+  test('go: Delve runs the program Run builds without optimizations, mapped back to the generated file', () => {
+    const { debugger: d } = debuggerFor('go');
+    const scaffold = { ...context, scaffoldDir: '/tmp/run', platform: 'linux' };
+    assert.equal(d.extension?.id, 'golang.go');
+    assert.ok(d.build!(file, 'game.Game', scaffold).includes('-gcflags=all=-N -l'));
+    const config = d.configuration(file, 'game.Game', scaffold);
+    assert.equal(config.type, 'go');
+    assert.equal(config.mode, 'exec');
+    assert.equal(config.program, '/tmp/run/run');
+    assert.deepEqual(config.substitutePath, [{ from: '/work/game', to: '/tmp/run/vg' }]);
+  });
+
   test("rust: CodeLLDB (the Visual Studio debugger on Windows) runs the program Run's Cargo project builds", () => {
     const { debugger: d } = debuggerFor('rust');
     const scaffold = { ...context, scaffoldDir: '/tmp/run', platform: 'linux' };

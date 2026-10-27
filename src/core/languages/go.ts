@@ -5,6 +5,7 @@ import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStat
 import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
+import { OutputPlan, PlacementContext } from '../output-plan';
 import type { InterfaceInfo } from '../objects';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
@@ -152,12 +153,29 @@ function classScope(): NameScope {
   return new NameScope(RESERVED, ['Start', 'VgRunTest']);
 }
 
+// The support code each package folder with generated files needs (docs/language-breadth.md, "Go"):
+// one owned vgraph_runtime.go, in the package the generated files declare.
+export function goPlacement(context: PlacementContext): OutputPlan {
+  const folders = new Map<string, string[]>();
+  for (const file of context.generatedFiles) {
+    const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '';
+    folders.set(dir, [...(folders.get(dir) ?? []), file]);
+  }
+  const ownedFiles: NonNullable<OutputPlan['ownedFiles']> = [];
+  for (const [dir, files] of folders) {
+    const pkg = files.map((f) => /^package\s+(\w+)/m.exec(context.readFile(f) ?? '')?.[1]).find(Boolean);
+    if (pkg) ownedFiles.push({ path: dir ? `${dir}/${GO_RUNTIME_FILE}` : GO_RUNTIME_FILE, text: goRuntime(pkg) });
+  }
+  return ownedFiles.length ? { ownedFiles } : {};
+}
+
 const goGenerator: CodeGenerator = {
   libraryExports: goLibraryExports,
   snippetLanguages: ['go'],
   importLanguages: ['go'],
   outputFileName: goOutputFileName,
   moduleName: (_generatedFileName, options) => options.namespace,
+  placement: goPlacement,
   generate: (program, options) => new GoEmitter(program, options).emit(),
   runner: {
     commands: () => [['go']],
@@ -175,8 +193,11 @@ const goGenerator: CodeGenerator = {
     type: 'go',
     extension: { id: 'golang.go', name: 'Go' },
     build: goBuild(true),
-    configuration: (_file, _className, context) => ({
-      type: 'go', request: 'launch', mode: 'exec', program: executable(context), args: context.args ?? [], cwd: context.cwd
+    // The program was built from the scratch module's view of the files (`vg/`, written with "/"):
+    // Delve maps the generated file's folder, as VS Code writes it, to that and back.
+    configuration: (file, _className, context) => ({
+      type: 'go', request: 'launch', mode: 'exec', debugAdapter: 'dlv-dap', program: executable(context), args: context.args ?? [], cwd: context.cwd,
+      substitutePath: [{ from: file.path.replace(/[\\/][^\\/]*$/, ''), to: `${context.scaffoldDir}/vg`.replace(/\\/g, '/') }]
     })
   }
 };
@@ -189,7 +210,9 @@ export const goPack: LanguagePack = {
   // No inheritance: embedding has no virtual calls, as Rust has none.
   capabilities: { staticTyping: true, classes: true, inheritance: false, interfaces: true, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
-  generator: goGenerator
+  generator: goGenerator,
+  // Functions marked // @blueprint, found through gopls (Tier 2).
+  importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'] } }
 };
 
 class GoEmitter {

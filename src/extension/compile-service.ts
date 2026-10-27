@@ -9,7 +9,7 @@ import { PinExpression } from '../core/language-pack';
 import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
-import { cppRunSources, csharpNamespace, csharpRunSources, javaProject, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
+import { cppRunSources, csharpNamespace, csharpRunSources, goPackage, goRunSources, javaProject, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
 import { OutputPlans } from './output-plans';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
 
@@ -24,6 +24,8 @@ export interface CompileOutcome {
   sources?: string[];
   // Rust: the project crate the code calls into.
   crate?: { src: string; modules: string[] };
+  // Go: the project's module.
+  goModule?: { path: string; dir: string };
   // The method the class's Main event became.
   mainMethod?: string;
   // The class's tests, and their generated test file (docs/debugging.md, "Test Case").
@@ -111,7 +113,8 @@ export class CompileService implements vscode.Disposable {
         moduleFormat: detectModuleFormat(graphDir, root),
         outputDir: path.relative(root, graphDir).split(path.sep).join('/'),
         importExtension: detectImportExtension(graphDir, root),
-        namespace: graph.language === 'java' ? javaProject(graphDir, root).package : csharpNamespace(graphDir, root)
+        namespace: graph.language === 'java' ? javaProject(graphDir, root).package : graph.language === 'go' ? goPackage(graphDir, root).name : csharpNamespace(graphDir, root),
+        ...(graph.language === 'go' && goPackage(graphDir, root).path ? { packagePath: goPackage(graphDir, root).path } : {})
       }
     });
     const language = result.output?.language ?? graph.language ?? '';
@@ -134,13 +137,15 @@ export class CompileService implements vscode.Disposable {
     const sources = language === 'csharp' ? csharpRunSources(graphDir, root, outputPath, result.output.importedFiles ?? [])
       : language === 'cpp' ? cppRunSources(outputPath)
       : language === 'rust' ? rustRunSources(outputPath, root, result.output.importedFiles ?? []).generated
-      : language === 'java' ? (result.output.importedFiles ?? []).map((f) => path.join(root, f)) : undefined;
+      : language === 'java' ? (result.output.importedFiles ?? []).map((f) => path.join(root, f))
+      : language === 'go' ? goRunSources(outputPath) : undefined;
+    const goModule = language === 'go' ? goPackage(graphDir, root).module : undefined;
     const crate = language === 'rust' ? rustRunSources(outputPath, root, result.output.importedFiles ?? []).crate : undefined;
     const generated: GeneratedFile = { graph: document.uri, outputPath, language, nodeLines: result.output.nodeLines, codeBreaks: result.output.codeBreaks ?? [], pinExpressions: result.output.pinExpressions ?? [] };
     this.generated.set(document.uri.toString(), generated);
     this.compiled.fire(generated);
     return finish({
-      report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, ...(crate ? { crate } : {}), mainMethod: result.output.mainMethod,
+      report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, ...(crate ? { crate } : {}), ...(goModule ? { goModule } : {}), mainMethod: result.output.mainMethod,
       ...(result.output.tests?.length ? { tests: result.output.tests, ...(testPath ? { testPath } : {}) } : {})
     }, graph);
   }
@@ -183,6 +188,7 @@ export class CompileService implements vscode.Disposable {
         importRoots: outcome.importRoots,
         sources: outcome.sources,
         crate: outcome.crate,
+        goModule: outcome.goModule,
         mainMethod: outcome.mainMethod,
         args: vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<string[]>('runArguments', []),
         command: configured[pack.id],

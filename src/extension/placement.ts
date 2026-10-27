@@ -286,8 +286,51 @@ export function javaProject(graphDir: string, stopDir: string): { package?: stri
   return { ...(parts.length && valid ? { package: parts.join('.') } : {}), sourceRoots, build: path.relative(stopDir, build) || path.basename(build) };
 }
 
+// A Go graph's package (docs/language-breadth.md, "Go"): the package the folder's other files
+// declare, else the folder's name; its import path in the nearest module; and the module.
+export function goPackage(graphDir: string, stopDir: string): { name: string; path?: string; module?: { path: string; dir: string } } {
+  let name: string | undefined;
+  try {
+    for (const file of fs.readdirSync(graphDir)) {
+      if (!file.endsWith('.go') || file.endsWith('_test.go') || file.endsWith('_vgraph.go') || file === 'vgraph_runtime.go') continue;
+      name = /^package\s+(\w+)/m.exec(fs.readFileSync(path.join(graphDir, file), 'utf8'))?.[1];
+      if (name) break;
+    }
+  } catch {
+    // An unreadable folder: its name decides.
+  }
+  name ??= path.basename(graphDir).toLowerCase().replace(/[^a-z0-9_]/g, '') || 'graphs';
+  if (/^[0-9]/.test(name)) name = `p${name}`;
+  const modFile = findUp(graphDir, 'go.mod', stopDir);
+  if (!modFile) return { name };
+  const modulePath = /^module\s+(\S+)/m.exec(fs.readFileSync(modFile, 'utf8'))?.[1];
+  if (!modulePath) return { name };
+  const relative = path.relative(path.dirname(modFile), graphDir).split(path.sep).filter(Boolean).join('/');
+  return { name, path: relative ? `${modulePath}/${relative}` : modulePath, module: { path: modulePath, dir: path.dirname(modFile) } };
+}
+
+// The project's Go files Run builds with a generated one: the other files of its package.
+export function goRunSources(outputFile: string): string[] {
+  const dir = path.dirname(outputFile);
+  try {
+    return fs.readdirSync(dir)
+      .filter((f) => f.endsWith('.go') && !f.endsWith('_test.go') && f !== 'vgraph_runtime.go' && f.toLowerCase() !== path.basename(outputFile).toLowerCase())
+      .map((f) => path.join(dir, f))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 export function verifyPlacement(language: string, outputFile: string, stopDir: string): CompileDiagnostic[] {
   const dir = path.dirname(outputFile);
+  if (language === 'go' && goPackage(dir, stopDir).name === 'main') {
+    return [{
+      severity: 'warning',
+      code: 'go-main-package',
+      message: `${path.basename(outputFile)} is in package main, which nothing can import, so Run can't run it. Put the graph in another package's folder.`
+    }];
+  }
   if (language === 'java') {
     const project = javaProject(dir, stopDir);
     if (project.outside) {

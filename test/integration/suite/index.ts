@@ -750,6 +750,18 @@ test('exit check: debugging a function graph in generated Java', async () => {
   await exitCheck('java');
 });
 
+// The Go extension, active: its debug adapter is registered when it activates.
+async function requireGoDebugger(): Promise<void> {
+  const go = vscode.extensions.getExtension('golang.go');
+  if (!go) throw new Skip('the Go extension is not loaded');
+  await go.activate();
+}
+
+test('exit check: debugging a function graph in generated Go', async () => {
+  await requireGoDebugger();
+  await exitCheck('go');
+});
+
 test('exit check: debugging a function graph in generated C#', async () => {
   if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
   await exitCheck('csharp');
@@ -850,6 +862,11 @@ test('Debug does the same in generated Java', async () => {
   await debugSample('java', 'DebugJava.java');
 });
 
+test('Debug does the same in generated Go (Delve)', async () => {
+  await requireGoDebugger();
+  await debugSample('go', 'debug_go_vgraph.go');
+});
+
 test('Debug does the same in generated C# (coreclr)', async () => {
   if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
   await debugSample('csharp', 'debug_csharp.vgraph.cs');
@@ -878,3 +895,27 @@ export async function run(): Promise<void> {
   console.log(`${selected.length - failures.length - skipped}/${selected.length - skipped} integration tests passed${skipped ? ` (${skipped} skipped)` : ''}`);
   if (failures.length) throw new Error(`${failures.length} integration test(s) failed: ${failures.join(', ')}`);
 }
+
+// Tier 2 symbol import for a Tier 1 pack (docs/language-breadth.md, "Go"): functions marked
+// @blueprint in a module's package are found through gopls and called through the package's import.
+test('Go functions marked @blueprint become nodes through gopls', async () => {
+  await requireGoDebugger();
+  const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
+  await write('gomod/go.mod', 'module example.com/app\n\ngo 1.22\n');
+  await write('gomod/scores/scores.go', 'package scores\n\n// Twice doubles a value.\n// @blueprint pure\nfunc Twice(value float64) float64 {\n\treturn value * 2\n}\n');
+  await write('gomod/graphs/doc.go', 'package graphs\n');
+  const graph = workspaceFile('gomod/graphs/uses_go.vgraph');
+  await write('gomod/graphs/uses_go.vgraph', projectGraph('UsesGo', 'go', 'fn:go:gomod/scores/scores.go#Twice'));
+  const generated = workspaceFile('gomod/graphs/uses_go_vgraph.go');
+  const deadline = Date.now() + 90000;
+  while (!(await exists(generated)) && Date.now() < deadline) {
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  assert.ok(await exists(generated), `It doesn't compile: ${vscode.languages.getDiagnostics(graph).map((d) => d.message).join('; ')}`);
+  const text = await readText(generated);
+  assert.match(text, /^package graphs$/m);
+  assert.match(text, /scores "example\.com\/app\/scores"/);
+  assert.match(text, /scores\.Twice\(4\)/);
+  assert.ok(await exists(workspaceFile('gomod/graphs/vgraph_runtime.go')), 'the package\'s support code');
+});

@@ -117,6 +117,10 @@ export function parseSignature(signature: string, name: string, spec: LanguageSe
     if ('reason' in param) return param;
     params.push(param);
   }
+  // Go groups parameters of one type (`a, b float64`): a name without a type takes the next one's.
+  if (spec.parameters === 'name type') {
+    for (let i = params.length - 2; i >= 0; i--) if (!params[i].type && params[i + 1].type) params[i].type = params[i + 1].type;
+  }
   let returns: string | null | undefined;
   if (spec.returns === 'before') {
     const before = clean(signature.slice(0, start).replace(/([\w$]+(::|\.))+$/, ''));

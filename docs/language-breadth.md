@@ -158,6 +158,12 @@ As built (`src/core/importing/language-server.ts`, and `symbolScan` in `src/exte
   - **Snippets:** the `GO` tables in `stdlib.ts` and `containers.ts`.
   - **Run:** the scratch module maps the generated file and the package's other files into `vg/` with `go build -overlay` (core code can't read files, but it can name them). It writes the support code there for the package, and builds `run`. `GOTOOLCHAIN=local` and a local `replace` mean nothing is downloaded.
   - **Conformance:** every fixture passes except the arena (inheritance), which is not applicable, as for Rust.
+  - **Placement:** `goPackage` takes the package from the folder's other files (else the folder's name) and its import path from the nearest `go.mod`. `goPlacement` owns `vgraph_runtime.go` in each folder with generated files, in their package; a test builds a module (`go build ./...`) with it. A graph in `package main` gets a warning: nothing can import it, so Run can't build it.
+  - **Symbol import** goes through gopls with the Tier 2 importer: a Tier 1 pack can use the language server too.
+    - Generated code calls a function in its own package directly, and imports any other package by path. `GenerateOptions.packagePath` says which package is its own.
+    - The signature parser now gives grouped parameters (`a, b float64`) their shared type.
+  - **Run with project packages:** the scratch module `require`s the project's module and `replace`s it with its folder. The package's other files are added to the overlay.
+  - **Debugging:** Delve through the Go extension (`dlv-dap`, `exec` mode), with `-gcflags=all=-N -l`. The program's files are the overlay's (`vg/…`, written with "/"), so `substitutePath` maps the generated file's folder, as VS Code writes it, to them. The Debug test and the exit check pass, and so does a gopls import test.
 
 ## Rust (Tier 1)
 

@@ -52,6 +52,14 @@ describe('language server symbol import', () => {
     assert.deepEqual(parsed, { params: [{ name: 'amount', type: 'f64' }], returns: null });
   });
 
+  test('gopls: grouped parameters share their type', () => {
+    const spec: LanguageServerImport = { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'] };
+    assert.deepEqual(parseSignature('func Hit(a, b float64, name string) (float64, error)', 'Hit', spec), {
+      params: [{ name: 'a', type: 'float64' }, { name: 'b', type: 'float64' }, { name: 'name', type: 'string' }], returns: '(float64, error)'
+    });
+    assert.deepEqual(parseSignature('func Reset()', 'Reset', spec), { params: [], returns: null });
+  });
+
   test('functions that can\'t be nodes are skipped with the reason', () => {
     const text = ['// @blueprint', 'void log(const char* format, ...);', '// @blueprint', 'void tick(void);', '// @blueprint', 'void lost();'].join('\n');
     const scan = scanSymbols(text, [

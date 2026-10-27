@@ -7,7 +7,7 @@ import { ModuleScan, SkippedFunction, exposeFunctions } from '../core/importing/
 import { LanguagePack, LanguagePackRegistry, LanguageServerImport } from '../core/language-pack';
 import { NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
-import { pythonModule, rustModule } from './placement';
+import { goPackage, pythonModule, rustModule } from './placement';
 
 // Build output, dependencies and virtual environments hold no project functions.
 const EXCLUDE = '**/{node_modules,.git,.venv,venv,env,__pycache__,site-packages,dist,out,build,.tox,bin,obj}/**';
@@ -20,7 +20,7 @@ const LANGUAGE_SERVER_RETRIES = 7;
 const LANGUAGE_SERVER_RETRY_MS = 1000;
 const LANGUAGE_SERVER_RETRY_MAX_MS = 15000;
 // Generated files: classes, never project functions.
-const GENERATED = /(\.vgraph\.([cm]?[jt]s|cs)|_vgraph\.py)$/i;
+const GENERATED = /(\.vgraph\.([cm]?[jt]s|cs)|_vgraph\.(py|go)|^vgraph_runtime\.go)$/i;
 const SOURCE = 'functions';
 
 interface FileFunctions {
@@ -149,7 +149,9 @@ export class ProjectFunctions implements vscode.Disposable {
       const importer = pack.importer!;
       const scan = importer.scan ? importer.scan(text) : importer.languageServer ? await this.symbolScan(uri, text, importer.languageServer, pack, exposeAll) : undefined;
       if (!scan) continue;
-      const module = pack.id === 'python' ? pythonModule(uri.fsPath, folder.uri.fsPath).module : pack.id === 'rust' ? rustModule(uri.fsPath, folder.uri.fsPath) : undefined;
+      const module = pack.id === 'python' ? pythonModule(uri.fsPath, folder.uri.fsPath).module
+        : pack.id === 'rust' ? rustModule(uri.fsPath, folder.uri.fsPath)
+        : pack.id === 'go' ? goPackage(path.dirname(uri.fsPath), folder.uri.fsPath).path : undefined;
       const exposed = exposeFunctions(scan, { language: pack.id, path: relative, module, exposeAll });
       definitions.push(...exposed.definitions);
       skipped.push(...exposed.skipped);
