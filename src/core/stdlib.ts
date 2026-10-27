@@ -33,11 +33,12 @@ function node(type: string, displayName: string, category: string, inputs: PinDe
   const { typescript, ...rest } = code;
   const cpp = CPP[type];
   const rust = RUST[type];
+  const java = JAVA[type];
   return {
     type, version: 1, displayName, category, description: options.description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [result] : [])],
-    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}) } },
+    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {}),
     ...(options.compact ? { compact: true } : {})
   };
@@ -107,6 +108,50 @@ const CPP: Record<string, string> = {
   'core:utilities.select': 'return pickA ? a : b;',
   'core:file.load-to-string': 'std::ifstream file(filename, std::ios::binary);\nif (!file) throw std::runtime_error("Can\'t read " + filename);\nstd::stringstream contents;\ncontents << file.rdbuf();\nreturn contents.str();',
   'core:file.save-string': 'std::ofstream file(filename, std::ios::binary);\nif (!file) throw std::runtime_error("Can\'t write " + filename);\nfile << text;'
+};
+
+// The Java snippets, by node type: errors are unchecked exceptions, which stop the run (or fail the
+// test). Text is UTF-16, so lengths and positions count code points.
+const JAVA_DIVIDE_BY_ZERO = 'if (b == 0) throw new ArithmeticException("Divide by zero");';
+const JAVA: Record<string, string> = {
+  'core:math.subtract': 'return a - b;',
+  'core:math.multiply': 'return a * b;',
+  'core:math.divide': `${JAVA_DIVIDE_BY_ZERO}\nreturn a / b;`,
+  'core:math.modulo': `${JAVA_DIVIDE_BY_ZERO}\nreturn a % b;`,
+  'core:math.less': 'return a < b;',
+  'core:math.less-equal': 'return a <= b;',
+  'core:math.greater': 'return a > b;',
+  'core:math.greater-equal': 'return a >= b;',
+  'core:math.equal': 'return a == b;',
+  'core:math.not-equal': 'return a != b;',
+  'core:math.and': 'return a && b;',
+  'core:math.or': 'return a || b;',
+  'core:math.not': 'return !a;',
+  'core:math.min': 'return Math.min(a, b);',
+  'core:math.max': 'return Math.max(a, b);',
+  'core:math.clamp': 'return Math.min(Math.max(value, minimum), maximum);',
+  'core:math.abs': 'return Math.abs(value);',
+  'core:math.round': 'return (long) Math.floor(value + 0.5);',
+  'core:math.floor': 'return (long) Math.floor(value);',
+  'core:math.ceil': 'return (long) Math.ceil(value);',
+  'core:math.sqrt': 'return Math.sqrt(value);',
+  'core:math.power': 'return Math.pow(base, exponent);',
+  'core:math.random-float-in-range': 'return minimum + Math.random() * (maximum - minimum);',
+  'core:math.random-integer-in-range': 'return minimum + (long) Math.floor(Math.random() * (maximum - minimum + 1));',
+  'core:string.append': 'return a + b;',
+  'core:string.len': 'return text.codePointCount(0, text.length());',
+  'core:string.contains': 'return text.contains(part);',
+  'core:string.to-upper': 'return text.toUpperCase(java.util.Locale.ROOT);',
+  'core:string.to-lower': 'return text.toLowerCase(java.util.Locale.ROOT);',
+  'core:string.trim': 'return text.strip();',
+  'core:string.replace': 'return find.isEmpty() ? text : text.replace(find, replacement);',
+  'core:string.substring': 'int[] characters = text.codePoints().toArray();\nint begin = (int) Math.max(0, start);\nif (begin >= characters.length) return "";\nint end = (int) Math.min(characters.length, begin + Math.max(0, count));\nreturn new String(characters, begin, end - begin);',
+  'core:string.to-float': `return java.util.regex.Pattern.matches(${JSON.stringify(DECIMAL)}, text) ? Double.parseDouble(text.strip()) : 0;`,
+  'core:string.to-int': `return java.util.regex.Pattern.matches(${JSON.stringify(INTEGER)}, text) ? Long.parseLong(text.strip()) : 0;`,
+  'core:utilities.is-valid': 'return value != null;',
+  'core:utilities.select': 'return pickA ? a : b;',
+  'core:file.load-to-string': 'try {\n    return java.nio.file.Files.readString(java.nio.file.Path.of(filename));\n} catch (java.io.IOException error) {\n    throw new java.io.UncheckedIOException("Can\'t read " + filename, error);\n}',
+  'core:file.save-string': 'try {\n    java.nio.file.Files.writeString(java.nio.file.Path.of(filename), text);\n} catch (java.io.IOException error) {\n    throw new java.io.UncheckedIOException("Can\'t write " + filename, error);\n}'
 };
 
 // The Rust snippets, by node type: errors are panics, which stop the run (or fail the test).

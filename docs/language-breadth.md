@@ -124,6 +124,15 @@ As built (`src/core/importing/language-server.ts`, and `symbolScan` in `src/exte
 - **Run:** `javac` compiles the generated file, the project files it uses and a small launcher into a scratch folder; `java` runs the launcher, which calls Start, then Main, then the latent actions; with `--test`, each test on a new object.
 - **Symbol import:** `public static` methods marked `@blueprint` in a Javadoc comment, read by a scanner like C#'s; generated code calls them by their qualified class name, and Run compiles their files.
 - **Debugging:** Microsoft's Debugger for Java (`java` launch configurations, extension `vscjava.vscode-java-debug`), launching the launcher after a debug build.
+- **As built** (`src/core/languages/java.ts`):
+  - **Generator:** adapted from the C# pack.
+  - **Several outputs:** a function with several outputs returns an `Object[]` rather than a record. One record type can't serve an override, an interface implementation and a library caller alike, and callers read each element back with a cast.
+  - **Literals and comparison:** whole-number literals are longs (`5L`), so they box to `Long` in containers. `==` is kept for primitives, enums and object references; text, containers and structs compare with `Objects.equals`.
+  - **Reachability:** a default `return` is added only where the end of the body can be reached. A `while` on a constant gets a non-constant condition, because Java refuses code it can't reach.
+  - **Class and file names:** a graph whose name differs from its file's generates a package-private class, since a public class must be in a file of its name.
+  - **Snippets:** the standard library and container snippets are the `JAVA` tables in `stdlib.ts` and `containers.ts`.
+  - **Run:** `javac` compiles the launcher (`BlueprintRun.java`) with the generated and project files into the scaffold's `classes`, and `java` runs it with UTF-8 output.
+  - **Conformance:** all 20 fixtures pass, including both object programs.
 
 ## Go (Tier 1)
 

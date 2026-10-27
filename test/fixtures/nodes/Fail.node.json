@@ -18,7 +18,8 @@
       "csharp": "throw new InvalidOperationException(\"boom\");",
       "cpp": "throw std::runtime_error(\"boom\");",
       "rust": "panic!(\"boom\");",
-      "c": "vg_fail(\"boom\");"
+      "c": "vg_fail(\"boom\");",
+      "java": "throw new RuntimeException(\"boom\");"
     }
   }
 }

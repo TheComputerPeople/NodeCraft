@@ -105,13 +105,46 @@ const RUST: Record<string, string> = {
   'core:map.values': 'return target.values();'
 };
 
+// The Java snippets: indexes are longs, Java's lists take ints.
+const JAVA_RANGE = 'if (index < 0 || index >= target.size()) throw new IndexOutOfBoundsException("Index out of range");';
+const JAVA: Record<string, string> = {
+  'core:array.add': 'target.add(item);\nreturn target.size() - 1;',
+  'core:array.add-unique': 'if (target.contains(item)) return -1;\ntarget.add(item);\nreturn target.size() - 1;',
+  'core:array.insert': 'if (index < 0 || index > target.size()) throw new IndexOutOfBoundsException("Index out of range");\ntarget.add((int) index, item);',
+  'core:array.remove-index': `${JAVA_RANGE}\ntarget.remove((int) index);`,
+  'core:array.remove-item': 'return target.removeIf(x -> java.util.Objects.equals(x, item));',
+  'core:array.set': `${JAVA_RANGE}\ntarget.set((int) index, item);`,
+  'core:array.clear': 'target.clear();',
+  'core:array.get': `${JAVA_RANGE}\nreturn target.get((int) index);`,
+  'core:array.length': 'return target.size();',
+  'core:array.last-index': 'return target.size() - 1;',
+  'core:array.find': 'return target.indexOf(item);',
+  'core:array.contains': 'return target.contains(item);',
+  'core:array.is-valid-index': 'return index >= 0 && index < target.size();',
+  'core:array.is-empty': 'return target.isEmpty();',
+  'core:set.add': 'target.add(item);',
+  'core:set.remove': 'return target.remove(item);',
+  'core:set.clear': 'target.clear();',
+  'core:set.contains': 'return target.contains(item);',
+  'core:set.length': 'return target.size();',
+  'core:set.to-array': 'var result = new java.util.ArrayList<>(target);\nresult.sort(null);\nreturn result;',
+  'core:map.add': 'target.put(key, value);',
+  'core:map.remove': 'return target.remove(key) != null;',
+  'core:map.clear': 'target.clear();',
+  'core:map.find': 'if (!target.containsKey(key)) throw new java.util.NoSuchElementException("Key not found");\nreturn target.get(key);',
+  'core:map.contains': 'return target.containsKey(key);',
+  'core:map.length': 'return target.size();',
+  'core:map.keys': 'return new java.util.ArrayList<>(target.keySet());',
+  'core:map.values': 'return new java.util.ArrayList<>(target.values());'
+};
+
 // An Unreal container function as a code node: impure ones have exec pins.
 function fn(type: string, displayName: string, category: string, inputs: PinDefinition[], result: TypeRef | undefined, code: Snippets, description: string, options: { impure?: boolean; keywords?: string[] } = {}): NodeDefinition {
   return {
     type, version: 1, displayName, category, description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [pin('returnValue', 'Return Value', 'output', result)] : [])],
-    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}) } },
+    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {})
   };
 }
