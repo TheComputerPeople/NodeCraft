@@ -739,7 +739,15 @@ class PhpEmitter {
 
   private call(callee: IrCallee, args: IrExpr[]): string {
     const list = args.map((a) => this.expr(a)).join(', ');
-    return callee.kind === 'helper' ? `self::${this.helperNames.get(callee.id)}(${list})` : `${this.importNames.get(callee.id)}(${list})`;
+    if (callee.kind === 'helper') return `self::${this.helperNames.get(callee.id)}(${list})`;
+    const member = this.program.imports.find((i) => i.id === callee.id)?.member;
+    if (!member) return `${this.importNames.get(callee.id)}(${list})`;
+    // A class's member (docs/node-authoring.md, gap 2), on the Target pin's object.
+    if (member.kind === 'construct') return `new ${this.importNames.get(callee.id)}(${list})`;
+    const [target, ...rest] = args;
+    const object = `(${this.expr(target)})`;
+    const values = rest.map((a) => this.expr(a)).join(', ');
+    return member.kind === 'get' ? `${object}->${member.name}` : member.kind === 'set' ? `${object}->${member.name} = ${values}` : `${object}->${member.name}(${values})`;
   }
 
   private value(e: IrExpr, type: TypeRef | undefined): string {

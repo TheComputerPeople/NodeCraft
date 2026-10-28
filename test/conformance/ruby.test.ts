@@ -14,6 +14,7 @@ import { rubyPack } from '../../src/core/languages/ruby';
 import { NodeRegistry } from '../../src/core/registry';
 import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
+import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-ruby-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -69,5 +70,67 @@ describe('Ruby projects', () => {
       throw error;
     }
     assert.deepEqual(run.stdout.trim().split(/\r?\n/), ['42', 'DONE!'], run.stderr);
+  });
+});
+
+// Classes (docs/node-authoring.md, gap 2): initialize, instance methods and attr_accessor, used
+// through Target pins; a subclass's object where its base is expected.
+describe('Ruby code classes', () => {
+  test('a graph constructs them and uses their members', async (t) => {
+    const dir = path.join(workDir, 'classes');
+    fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'game'), { recursive: true });
+    const counter = [
+      'class Counter',
+      '  # @blueprint',
+      '  # @return [Float]',
+      '  attr_accessor :count',
+      '',
+      '  # @blueprint',
+      '  # @param [Float] start',
+      '  def initialize(start)',
+      '    @count = start',
+      '  end',
+      '',
+      '  # @blueprint',
+      '  # @param [Float] amount',
+      '  # @return [Float]',
+      '  def add(amount)',
+      '    @count += amount',
+      '  end',
+      '',
+      '  # @blueprint pure',
+      '  # @return [Float]',
+      '  def doubled',
+      '    @count * 2',
+      '  end',
+      'end',
+      '',
+      'class BigCounter < Counter',
+      '  # @blueprint',
+      '  # @param [Float] start',
+      '  def initialize(start)',
+      '    super(start * 10)',
+      '  end',
+      'end',
+      ''
+    ].join('\n');
+    fs.writeFileSync(path.join(dir, 'lib', 'counter.rb'), counter);
+    const definitions = exposeFunctions(scanRuby(counter), { language: 'ruby', path: 'lib/counter.rb', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(codeClassGraph(definitions, 'ruby'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Counting.vgraph', outputDir: 'game' } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    for (const companion of result.output!.companionFiles ?? []) fs.writeFileSync(path.join(dir, 'game', companion.fileName), companion.text);
+    let run;
+    try {
+      run = await runGeneratedCode(rubyPack.generator!.runner!, file, result.output!.className, { cwd: dir, timeoutMs: 60000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.deepEqual(run.stdout.trim().split(/\r?\n/), CODE_CLASS_OUTPUT, run.stderr);
   });
 });

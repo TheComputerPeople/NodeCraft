@@ -10,14 +10,14 @@ export const CODE_CLASS_OUTPUT = ['8', '40', '11'];
 // Start → c = Construct Counter(5) → Print(c.Add(3)) → c.Count = 20 → Print(c.Doubled) →
 // b = Construct BigCounter(1) → Print(Add(Target b, 1)), with Add's Target a Counter.
 export function codeClassGraph(definitions: NodeDefinition[], language: string): GraphDocument {
-  // A node's type ends with "Counter:new", after "#" or a namespace's "." or "::".
+  // A node's type ends with "Counter:new", after "#" or a namespace's ".", "::" or "\".
   const find = (member: string) => {
-    const found = definitions.find((d) => new RegExp(`(#|\\.|::)${member.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i').test(d.type));
+    const found = definitions.find((d) => new RegExp(`(#|\\.|::|\\\\)${member.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i').test(d.type));
     assert.ok(found, `no ${member} in ${definitions.map((d) => d.type).join(', ')}`);
     return found;
   };
   // Construct: the constructor, or (Go) the function that makes one, New<Class>.
-  const construct = (cls: string) => (definitions.some((d) => new RegExp(`(#|\\.|::)${cls}:new$`, 'i').test(d.type)) ? find(`${cls}:new`) : find(`New${cls}`));
+  const construct = (cls: string) => (definitions.some((d) => new RegExp(`(#|\\.|::|\\\\)${cls}:new$`, 'i').test(d.type)) ? find(`${cls}:new`) : find(`New${cls}`));
   // Add of a BigCounter: the base class's method, or the subclass's own in a language without
   // inheritance.
   const bigAdd = definitions.some((d) => /BigCounter:add$/i.test(d.type)) ? find('BigCounter:add') : find('Counter:add');

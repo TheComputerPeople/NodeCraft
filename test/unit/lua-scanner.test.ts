@@ -83,3 +83,51 @@ describe('Lua scanner', () => {
     ]);
   });
 });
+
+// ---@class tables (docs/node-authoring.md, gap 2): their `:` methods, `.new` constructor and
+// @blueprint ---@fields, when the module's table reaches them.
+describe('Lua classes', () => {
+  const source = [
+    'local M = {}',
+    '',
+    '---@class Counter',
+    '---@field count number The count. @blueprint',
+    '---@field label string',
+    'local Counter = {}',
+    '',
+    '---@blueprint',
+    '---@param start number',
+    'function Counter.new(start) end',
+    '',
+    '---@blueprint',
+    '---@param amount number',
+    '---@return number',
+    'function Counter:add(amount) end',
+    '',
+    '---@class Hidden',
+    'local Hidden = {}',
+    '',
+    '---@blueprint',
+    'function Hidden:go() end',
+    '',
+    'M.Counter = Counter',
+    'return M',
+    ''
+  ].join('\n');
+
+  test('reads a class the module reaches; reports one it does not', () => {
+    const scan = scanLua(source);
+    const [cls] = scan.classes!;
+    assert.deepEqual([cls.name, cls.title, cls.type], ['Counter', 'Counter', { id: 'native:Counter' }]);
+    assert.deepEqual(cls.init!.params, [{ name: 'start', type: { id: 'float' } }]);
+    assert.deepEqual(cls.methods.map((m) => [m.name, m.returns]), [['add', { id: 'float' }]]);
+    assert.deepEqual(cls.properties.map((p) => [p.name, p.doc.tags.map((t) => t.name)]), [['count', ['blueprint']], ['label', []]]);
+    assert.match(scan.skipped.find((s) => s.name === 'Hidden.go')!.reason, /isn't in the table the module returns/);
+  });
+
+  test('a module that returns the class itself names it by the module', () => {
+    const scan = scanLua(['---@class Counter', 'local Counter = {}', '---@blueprint', 'function Counter:add() end', 'return Counter', ''].join('\n'));
+    const { definitions } = exposeFunctions(scan, { language: 'lua', path: 'lib/counter.lua', exposeAll: false });
+    assert.deepEqual(definitions.map((d) => [d.type, d.category]), [['fn:lua:lib/counter.lua#:add', 'Project / Counter']]);
+  });
+});

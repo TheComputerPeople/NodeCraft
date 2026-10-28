@@ -44,8 +44,11 @@ export interface SkippedFunction {
 // BlueprintCallable member functions and BlueprintReadWrite properties are (docs/node-authoring.md,
 // gap 2).
 export interface ScannedClass {
-  // The name other modules import it by (C#: with its namespace).
+  // The name other modules import it by (C#: with its namespace; Lua: its path in the module's
+  // table, empty when the module returns the class itself).
   name: string;
+  // Its name in the palette, when that isn't the last part of `name`.
+  title?: string;
   line: number;
   doc: DocComment;
   // The type its objects have on pins ("native:Player"), and the type of the class it extends.
@@ -147,7 +150,7 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
 // Target pin, and Get and Set for each property.
 function classDefinitions(cls: ScannedClass, options: ExposeOptions): NodeDefinition[] {
   // Without its namespace or module ("Game.Player", "game::Player").
-  const simple = cls.name.split(/::|\./).pop()!;
+  const simple = cls.title ?? cls.name.split(/::|\.|\\/).pop()!;
   const member = (kind: CodeMember['kind'], name?: string): CodeMember => ({ kind, ...(name ? { name } : {}), type: cls.type.id, ...(cls.base ? { base: cls.base.id } : {}) });
   const target: PinDefinition = { id: 'target', name: 'Target', kind: 'data', direction: 'input', type: cls.type };
   const implementation = (kind: CodeMember['kind'], name?: string): FunctionImplementation => ({

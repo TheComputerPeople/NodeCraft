@@ -55,7 +55,6 @@ describe('PHP scanner', () => {
 
   test("says why marked functions can't be nodes", () => {
     assert.deepEqual(scanPhp(SOURCE).skipped.filter((s) => s.marked).map((s) => [s.name, s.reason]), [
-      ['heal', "It isn't public static: generated code calls static methods and functions, without an object."],
       ['many', 'It takes any number of arguments, or an argument by reference.']
     ]);
   });
@@ -64,7 +63,9 @@ describe('PHP scanner', () => {
     const { definitions } = exposeFunctions(scanPhp(SOURCE), { language: 'php', path: 'src/Util/Scores.php', exposeAll: false });
     assert.deepEqual(definitions.map((d) => [d.displayName, d.category, d.implementation?.kind === 'function' ? d.implementation.module : undefined]), [
       ['Triple', 'Scores', 'App\\Util\\Scores'],
-      ['Label', 'Project / Scores', 'App\\Util\\']
+      ['Label', 'Project / Scores', 'App\\Util\\'],
+      // A class's instance method is a member node (docs/node-authoring.md, gap 2).
+      ['Heal', 'Project / Scores', undefined]
     ]);
   });
 
@@ -73,5 +74,37 @@ describe('PHP scanner', () => {
       { id: 'int' }, { id: 'float' }, { id: 'string' }, { id: 'bool' }, { id: 'any' }, null, { id: 'string', nullable: true },
       { id: 'int', nullable: true }, { id: 'native:array' }, { id: 'native:App\\Player' }
     ]);
+  });
+});
+
+// Classes (docs/node-authoring.md, gap 2): the constructor, public instance methods and properties.
+describe('PHP classes', () => {
+  const source = [
+    '<?php',
+    'namespace App;',
+    'class Counter extends Base',
+    '{',
+    '    /** @blueprint */',
+    '    public float $count = 0;',
+    '    /** @blueprint */',
+    '    public readonly string $label;',
+    '    /** @blueprint */',
+    '    private int $secret = 1;',
+    '    /** @blueprint */',
+    '    public function __construct(float $start) {}',
+    '    /** @blueprint */',
+    '    public function add(float $amount): float { return 0; }',
+    '}',
+    ''
+  ].join('\n');
+
+  test('reads the constructor, methods and properties (readonly ones read-only)', () => {
+    const scan = scanPhp(source);
+    const [cls] = scan.classes!;
+    assert.deepEqual([cls.name, cls.base], ['App\\Counter', { id: 'native:Base' }]);
+    assert.deepEqual(cls.init!.params, [{ name: 'start', type: { id: 'float' } }]);
+    assert.deepEqual(cls.methods.map((m) => m.name), ['add']);
+    assert.deepEqual(cls.properties.map((p) => [p.name, p.readonly]), [['count', false], ['label', true]]);
+    assert.deepEqual(scan.skipped.filter((s) => s.marked).map((s) => s.name), ['secret']);
   });
 });

@@ -14,6 +14,7 @@ import { NodeRegistry } from '../../src/core/registry';
 import { phpNamespace } from '../../src/extension/placement';
 import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
+import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-php-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -81,5 +82,72 @@ describe('PHP projects', () => {
       throw error;
     }
     assert.deepEqual(run.stdout.trim().split(/\r?\n/), ['42', 'DONE!'], run.stderr);
+  });
+});
+
+// Classes (docs/node-authoring.md, gap 2): a constructor, instance methods and public properties,
+// used through Target pins; a subclass's object where its base is expected.
+describe('PHP code classes', () => {
+  test('a graph constructs them and uses their members', async (t) => {
+    const dir = path.join(workDir, 'classes');
+    fs.mkdirSync(path.join(dir, 'src', 'Count'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'src', 'Game'), { recursive: true });
+    const counter = [
+      '<?php',
+      'namespace App\\Count;',
+      '',
+      'class Counter',
+      '{',
+      '    /** @blueprint */',
+      '    public float $count = 0;',
+      '',
+      '    /** @blueprint */',
+      '    public function __construct(float $start)',
+      '    {',
+      '        $this->count = $start;',
+      '    }',
+      '',
+      '    /** @blueprint */',
+      '    public function add(float $amount): float',
+      '    {',
+      '        $this->count += $amount;',
+      '        return $this->count;',
+      '    }',
+      '',
+      '    /** @blueprint pure */',
+      '    public function doubled(): float',
+      '    {',
+      '        return $this->count * 2;',
+      '    }',
+      '}',
+      '',
+      'class BigCounter extends Counter',
+      '{',
+      '    /** @blueprint */',
+      '    public function __construct(float $start)',
+      '    {',
+      '        parent::__construct($start * 10);',
+      '    }',
+      '}',
+      ''
+    ].join('\n');
+    fs.writeFileSync(path.join(dir, 'src', 'Count', 'Counter.php'), counter);
+    const definitions = exposeFunctions(scanPhp(counter), { language: 'php', path: 'src/Count/Counter.php', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(codeClassGraph(definitions, 'php'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Counting.vgraph', outputDir: 'src/Game' } });
+    assert.deepEqual(result.diagnostics, []);
+    assert.match(result.output!.text, /new \\App\\Count\\Counter\(5\)/);
+    const file = path.join(dir, 'src', 'Game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    for (const companion of result.output!.companionFiles ?? []) fs.writeFileSync(path.join(dir, 'src', 'Game', companion.fileName), companion.text);
+    let run;
+    try {
+      run = await runGeneratedCode(phpPack.generator!.runner!, file, result.output!.className, { cwd: dir, timeoutMs: 60000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.deepEqual(run.stdout.trim().split(/\r?\n/), CODE_CLASS_OUTPUT, run.stderr);
   });
 });

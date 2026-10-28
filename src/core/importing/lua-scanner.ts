@@ -1,9 +1,12 @@
 // Reads a Lua module's functions for exposing them as nodes (docs/code-as-nodes.md, docs/more-languages.md
 // "Lua"): the functions of the table the module returns (`function M.name(...)` or `M.name =
 // function(...)`), documented with LuaLS-style `---` comments. `---@blueprint` marks one;
-// `---@param name type` and `---@return type` give its pins' types.
+// `---@param name type` and `---@return type` give its pins' types. A table annotated `---@class` is a
+// class (docs/node-authoring.md, gap 2): its `:` functions are methods, a `.new` function (or one
+// returning the class) its constructor, and its `---@field`s whose text says @blueprint its properties.
+// The module's table reaches it (`M.Counter = Counter`), or is it (`return Counter`).
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
 
 export function scanLua(source: string): ModuleScan {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
@@ -11,6 +14,38 @@ export function scanLua(source: string): ModuleScan {
   const returned = [...source.matchAll(/^return\s+([A-Za-z_]\w*)\s*$/gm)].pop()?.[1];
   const functions: ScannedFunction[] = [];
   const skipped: SkippedFunction[] = [];
+  // Classes, by the local variable holding the table.
+  const classes = new Map<string, ScannedClass & { reachable: boolean }>();
+  lines.forEach((text, index) => {
+    const annotation = /^---@class\s+([A-Za-z_][\w.]*)\s*(?::\s*([A-Za-z_][\w.]*))?/.exec(text);
+    if (!annotation) return;
+    let next = index + 1;
+    while (next < lines.length && /^\s*---/.test(lines[next])) next++;
+    const variable = /^(?:local\s+)?([A-Za-z_]\w*)\s*=/.exec(lines[next] ?? '')?.[1];
+    if (!variable) return;
+    const [, name, base] = annotation;
+    const path = variable === returned ? '' : new RegExp(`^${returned}\\.([A-Za-z_]\\w*)\\s*=\\s*${variable}\\s*$`, 'm').exec(source)?.[1];
+    const baseType = base ? mapLuaType(base) : null;
+    const cls: ScannedClass & { reachable: boolean } = {
+      name: path ?? name, title: name, line: index + 1, doc: docAbove(lines, index), type: mapLuaType(name) ?? { id: `native:${name}` },
+      ...(baseType ? { base: baseType } : {}), methods: [], properties: [], reachable: path !== undefined
+    };
+    // Its fields: ---@field [public] name type [text]; @blueprint in the text marks one.
+    for (let i = index + 1; i < next; i++) {
+      const field = /^---@field\s+(?:(public|protected|private|package)\s+)?([A-Za-z_]\w*)\??\s+(\S+)\s*(.*)$/.exec(lines[i]);
+      if (!field) continue;
+      const [, access, fieldName, typeText, rest] = field;
+      const marked = /@blueprint\b/.test(rest);
+      const doc: DocComment = { description: rest.replace(/@blueprint\b.*$/, '').trim(), tags: marked ? [{ name: 'blueprint', text: /@blueprint\s*(.*)$/.exec(rest)![1] }] : [] };
+      if (access && access !== 'public') {
+        if (marked) skipped.push({ name: `${name}.${fieldName}`, line: i + 1, reason: "it isn't public", marked: true });
+        continue;
+      }
+      const type = mapLuaType(typeText);
+      cls.properties.push({ name: fieldName, line: i + 1, ...(type ? { type } : {}), readonly: false, doc });
+    }
+    classes.set(variable, cls);
+  });
   lines.forEach((text, index) => {
     const declaration = /^(?:function\s+([A-Za-z_]\w*)([.:])([A-Za-z_]\w*)\s*\(([^)]*)\)|([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*=\s*function\s*\(([^)]*)\))/.exec(text);
     if (!declaration) return;
@@ -20,6 +55,24 @@ export function scanLua(source: string): ModuleScan {
     const doc = docAbove(lines, index);
     const line = index + 1;
     const skip = (reason: string) => skipped.push({ name, line, reason, marked: isMarked(doc) });
+    const cls = classes.get(table);
+    if (cls && (table !== returned || declaration[2] === ':' || name === 'new')) {
+      const memberSkip = (reason: string) => skipped.push({ name: `${cls.title}.${name}`, line, reason, marked: isMarked(doc) });
+      if (!cls.reachable) return memberSkip(`Its class ${cls.title} isn't in the table the module returns (${returned ?? 'none'}), so generated code can't reach it.`);
+      if (params.includes('...')) return memberSkip('It takes any number of arguments (...).');
+      const memberReturns = doc.tags.filter((t) => t.name === 'return');
+      if (memberReturns.length > 1) return memberSkip('It returns several values.');
+      const types = new Map(doc.tags.filter((t) => t.name === 'param').map((t) => /^([A-Za-z_]\w*)\??\s+(\S+)/.exec(t.text)).filter((m): m is RegExpExecArray => !!m).map((m) => [m[1], m[2]]));
+      const memberParams: ScannedParam[] = params.map((p) => {
+        const type = types.has(p) ? mapLuaType(types.get(p)!) : null;
+        return { name: p, ...(type ? { type } : {}) };
+      });
+      const returnText = memberReturns[0] ? /^(\S+)/.exec(memberReturns[0].text)?.[1] : undefined;
+      if (declaration[2] === ':') cls.methods.push({ name, line, params: memberParams, returns: returnText ? mapLuaType(returnText) : null, doc });
+      else if (name === 'new' || returnText === cls.title) cls.init = { name, line, params: memberParams, returns: null, doc };
+      else memberSkip('Functions of a class without self have no object; make it a module function instead.');
+      return;
+    }
     if (table !== returned) return skip(returned ? `It belongs to ${table}, not the table the module returns (${returned}).` : "The module doesn't end with `return` of its table.");
     if (declaration[2] === ':') return skip('It takes self (a method): only module functions can be nodes.');
     if (params.includes('...')) return skip('It takes any number of arguments (...).');
@@ -33,7 +86,8 @@ export function scanLua(source: string): ModuleScan {
     const returnType = returns[0] ? /^(\S+)/.exec(returns[0].text)?.[1] : undefined;
     functions.push({ name, line, params: scanned, returns: returnType ? mapLuaType(returnType) : null, doc });
   });
-  return { functions, skipped };
+  const reachable = [...classes.values()].filter((c) => c.reachable).map(({ reachable: _, ...c }) => c);
+  return { functions, skipped, ...(reachable.length ? { classes: reachable } : {}) };
 }
 
 // The `---` comment lines just above a declaration, as a doc comment. LuaLS's annotations

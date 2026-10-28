@@ -51,7 +51,7 @@ describe('GDScript scanner', () => {
 
   test("says why marked functions can't be nodes", () => {
     assert.deepEqual(scanGdscript(SCRIPT).skipped.filter((s) => s.marked).map((s) => [s.name, s.reason]), [
-      ['heal', "It isn't static: generated code calls functions on the script, without an object."],
+      ['heal', "It isn't static: generated code calls functions on the script, without an object. (Give the script a class_name for its methods to be nodes.)"],
       ['_secret', 'Its name starts with _ (private).']
     ]);
   });
@@ -69,5 +69,43 @@ describe('GDScript scanner', () => {
       { id: 'int' }, { id: 'float' }, { id: 'bool' }, { id: 'string' }, { id: 'string' }, { id: 'any' }, null, { id: 'any', container: 'array' },
       { id: 'int', container: 'array' }, { id: 'string', container: 'map', valueType: { id: 'float' } }, { id: 'native:Node2D' }
     ]);
+  });
+});
+
+// A script with a class_name is a class (docs/node-authoring.md, gap 2): _init, its other functions
+// and its variables.
+describe('GDScript classes', () => {
+  const source = [
+    'class_name Counter',
+    'extends RefCounted',
+    '',
+    '## @blueprint',
+    '@export var count: float = 0',
+    '## @blueprint',
+    'var _secret := 1',
+    '',
+    '## @blueprint',
+    'func _init(start: float) -> void:',
+    '\tcount = start',
+    '',
+    '## @blueprint',
+    'func add(amount: float) -> float:',
+    '\treturn count',
+    '',
+    '## @blueprint',
+    'static func twice(x: int) -> int:',
+    '\treturn x * 2',
+    ''
+  ].join('\n');
+
+  test('reads _init, methods and variables; static functions stay functions', () => {
+    const scan = scanGdscript(source);
+    const [cls] = scan.classes!;
+    assert.deepEqual([cls.name, cls.type, cls.base], ['Counter', { id: 'native:Counter' }, { id: 'native:RefCounted' }]);
+    assert.deepEqual(cls.init!.params, [{ name: 'start', type: { id: 'float' } }]);
+    assert.deepEqual(cls.methods.map((m) => m.name), ['add']);
+    assert.deepEqual(cls.properties.map((p) => [p.name, p.type]), [['count', { id: 'float' }]]);
+    assert.deepEqual(scan.functions.map((f) => f.name), ['twice']);
+    assert.deepEqual(scan.skipped.filter((s) => s.marked).map((s) => s.name), ['_secret']);
   });
 });

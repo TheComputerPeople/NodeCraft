@@ -216,7 +216,8 @@ class LuaEmitter {
         continue;
       }
       if (!this.moduleLocals.has(module)) this.moduleLocals.set(module, this.moduleScope.claim(module.split('.').pop() ?? module, 'snake'));
-      this.importNames.set(i.id, `${this.moduleLocals.get(module)}.${i.name}`);
+      // A class's members: the module's table itself when the module returns the class (no name).
+      this.importNames.set(i.id, i.name ? `${this.moduleLocals.get(module)}.${i.name}` : this.moduleLocals.get(module)!);
     }
     const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'snake')}_` : '_';
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
@@ -784,7 +785,15 @@ class LuaEmitter {
 
   private call(callee: IrCallee, args: IrExpr[]): string {
     const list = args.map((a) => this.expr(a)).join(', ');
-    return callee.kind === 'helper' ? `${this.helperNames.get(callee.id)}(${list})` : `${this.importNames.get(callee.id)}(${list})`;
+    if (callee.kind === 'helper') return `${this.helperNames.get(callee.id)}(${list})`;
+    const member = this.program.imports.find((i) => i.id === callee.id)?.member;
+    if (!member) return `${this.importNames.get(callee.id)}(${list})`;
+    // A class's member (docs/node-authoring.md, gap 2): methods are called with `:`, passing the object.
+    if (member.kind === 'construct') return `${this.importNames.get(callee.id)}.${member.name ?? 'new'}(${list})`;
+    const [target, ...rest] = args;
+    const object = this.expr(target);
+    const values = rest.map((a) => this.expr(a)).join(', ');
+    return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}:${member.name}(${values})`;
   }
 
   // An expression for a member or slot of `type`: a container default (JSON: an array, or a map's

@@ -12,8 +12,9 @@ import { builtinLanguagePacks } from '../../src/core/languages';
 import { luaPack, luaPlacement } from '../../src/core/languages/lua';
 import { LUA_RUNTIME_FILE, luaRuntime } from '../../src/core/languages/lua-runtime';
 import { NodeRegistry } from '../../src/core/registry';
-import { runCommand, runGeneratedCode } from '../../src/extension/runner';
+import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
+import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-lua-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -78,5 +79,86 @@ describe('Lua projects', () => {
     // Without the extension: the support module placement keeps, and the modules' paths from the folder.
     const plain = await runCommand(['lua', '-e', 'package.path = "./?.lua;" .. package.path; require("game.score_vgraph").new():start()'], { cwd: root, timeoutMs: 30000 });
     assert.equal(plain?.stdout.trim(), '42', plain?.stderr);
+  });
+});
+
+// Classes (docs/node-authoring.md, gap 2): ---@class tables in the module's table, their `:` methods,
+// `.new` constructor and @blueprint ---@fields. Lua has no inheritance here, so BigCounter is a
+// class of its own with its own Add.
+describe('Lua code classes', () => {
+  test('a graph constructs them and uses their members', async (t) => {
+    const root = path.join(workDir, 'classes');
+    fs.mkdirSync(path.join(root, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'game'), { recursive: true });
+    const counter = [
+      'local M = {}',
+      '',
+      '---@class Counter',
+      '---@field count number @blueprint',
+      'local Counter = {}',
+      'Counter.__index = Counter',
+      '',
+      '---@blueprint',
+      '---@param start number',
+      '---@return Counter',
+      'function Counter.new(start)',
+      '  return setmetatable({ count = start }, Counter)',
+      'end',
+      '',
+      '---@blueprint',
+      '---@param amount number',
+      '---@return number',
+      'function Counter:add(amount)',
+      '  self.count = self.count + amount',
+      '  return self.count',
+      'end',
+      '',
+      '---@blueprint pure',
+      '---@return number',
+      'function Counter:doubled()',
+      '  return self.count * 2',
+      'end',
+      '',
+      '---@class BigCounter',
+      'local BigCounter = {}',
+      'BigCounter.__index = BigCounter',
+      '',
+      '---@blueprint',
+      '---@param start number',
+      'function BigCounter.new(start)',
+      '  return setmetatable({ count = start * 10 }, BigCounter)',
+      'end',
+      '',
+      '---@blueprint',
+      '---@param amount number',
+      '---@return number',
+      'function BigCounter:add(amount)',
+      '  self.count = self.count + amount',
+      '  return self.count',
+      'end',
+      '',
+      'M.Counter = Counter',
+      'M.BigCounter = BigCounter',
+      'return M',
+      ''
+    ].join('\n');
+    fs.writeFileSync(path.join(root, 'lib', 'counter.lua'), counter);
+    const definitions = exposeFunctions(scanLua(counter), { language: 'lua', path: 'lib/counter.lua', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(codeClassGraph(definitions, 'lua'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Counting.vgraph', outputDir: 'game' } });
+    assert.deepEqual(result.diagnostics, []);
+    assert.match(result.output!.text, /counter\.Counter\.new\(5\)/);
+    const file = path.join(root, 'game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    for (const owned of luaPlacement({ generatedFiles: [`game/${result.output!.fileName}`], readFile: () => undefined, exists: () => false }).ownedFiles ?? []) fs.writeFileSync(path.join(root, owned.path), owned.text);
+    let run;
+    try {
+      run = await runGeneratedCode(luaPack.generator!.runner!, file, result.output!.className, { cwd: root, timeoutMs: 60000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.deepEqual(run.stdout.trim().split(/\r?\n/), CODE_CLASS_OUTPUT, run.stderr);
   });
 });

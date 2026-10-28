@@ -1,15 +1,36 @@
 // Reads a GDScript file's functions for exposing them as nodes (docs/code-as-nodes.md, docs/more-languages.md
 // "GDScript"): `static func`s, documented with Godot 4's `##` comments, `## @blueprint` marking one.
 // Their typed parameters and return type give the pins' types. Generated code preloads the script by
-// its path and calls them on it, so only static functions can be nodes.
+// its path and calls them on it. A script with a class_name is also a class (docs/node-authoring.md,
+// gap 2): its other functions are methods, `_init` its constructor and its variables properties.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
 
 export function scanGdscript(source: string): ModuleScan {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
   const functions: ScannedFunction[] = [];
   const skipped: SkippedFunction[] = [];
+  // The script as a class, when it has a class_name.
+  const className = /^class_name\s+([A-Za-z_]\w*)/m.exec(lines.join('\n'))?.[1];
+  const base = /^extends\s+([A-Za-z_]\w*)\s*$/m.exec(lines.join('\n'))?.[1];
+  const baseType = base ? mapGdscriptType(base) : null;
+  const cls: ScannedClass | undefined = className
+    ? { name: className, line: 1, doc: docAbove(lines, lines.findIndex((l) => /^class_name\b/.test(l))), type: mapGdscriptType(className) ?? { id: `native:${className}` }, ...(baseType?.id.startsWith('native:') ? { base: baseType } : {}), methods: [], properties: [] }
+    : undefined;
   lines.forEach((text, index) => {
+    // A script variable (`var health: float = 100`, after any annotations such as @export).
+    const variable = cls && /^(?:@\w+(?:\([^)]*\))?\s+)*var\s+([A-Za-z_]\w*)\s*(?::\s*([^=]+?))?\s*(?::?=.*)?$/.exec(text);
+    if (variable && cls) {
+      const [, name, typeText] = variable;
+      const doc = docAbove(lines, index);
+      if (name.startsWith('_')) {
+        if (isMarked(doc)) skipped.push({ name, line: index + 1, reason: 'Its name starts with _ (private).', marked: true });
+      } else {
+        const type = typeText ? mapGdscriptType(typeText) : null;
+        cls.properties.push({ name, line: index + 1, ...(type ? { type } : {}), readonly: false, doc });
+      }
+      return;
+    }
     // Top-level functions only: inner classes' are indented.
     const declaration = /^(static\s+)?func\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*(?:->\s*([\w[\], ]+?))?\s*:/.exec(text);
     if (!declaration) return;
@@ -17,17 +38,20 @@ export function scanGdscript(source: string): ModuleScan {
     const doc = docAbove(lines, index);
     const line = index + 1;
     const skip = (reason: string) => skipped.push({ name, line, reason, marked: isMarked(doc) });
-    if (!isStatic) return skip("It isn't static: generated code calls functions on the script, without an object.");
-    if (name.startsWith('_')) return skip('Its name starts with _ (private).');
+    if (!isStatic && !cls) return skip("It isn't static: generated code calls functions on the script, without an object. (Give the script a class_name for its methods to be nodes.)");
+    if (name.startsWith('_') && !(cls && !isStatic && name === '_init')) return skip('Its name starts with _ (private).');
     const params: ScannedParam[] = splitParams(paramText).map((p) => {
       const [, paramName, typeText, defaultText] = /^([A-Za-z_]\w*)\s*(?::\s*([^=]+?))?\s*(?::?=\s*(.+))?$/.exec(p) ?? [, p, undefined, undefined];
       const type = typeText ? mapGdscriptType(typeText) : undefined;
       const defaultValue = defaultText !== undefined ? literal(defaultText) : undefined;
       return { name: paramName ?? p, ...(type ? { type } : {}), ...(defaultValue !== undefined ? { defaultValue } : {}) };
     });
-    functions.push({ name, line, params, returns: returnText ? mapGdscriptType(returnText) : undefined, doc });
+    const returns = returnText ? mapGdscriptType(returnText) : undefined;
+    if (cls && !isStatic && name === '_init') cls.init = { name, line, params, returns: null, doc };
+    else if (cls && !isStatic) cls.methods.push({ name, line, params, returns, doc });
+    else functions.push({ name, line, params, returns, doc });
   });
-  return { functions, skipped };
+  return { functions, skipped, ...(cls ? { classes: [cls] } : {}) };
 }
 
 // The `##` comment lines just above a declaration (annotations such as @warning_ignore between them

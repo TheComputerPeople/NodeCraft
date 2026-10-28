@@ -232,7 +232,8 @@ class GdscriptEmitter {
         // inherits its parent's constants and can't declare them again, so its own carry its name.
         this.scriptConsts.set(script, this.names.claim(base, 'pascal', program.classInfo?.parent ? `_${toIdentifier(program.className, 'pascal')}_` : '_'));
       }
-      this.importNames.set(i.id, i.userType ? this.scriptConsts.get(script)! : `${this.scriptConsts.get(script)}.${i.name}`);
+      // A struct, enum or class is the script itself, as is a code class whose members a graph uses.
+      this.importNames.set(i.id, i.userType || i.member ? this.scriptConsts.get(script)! : `${this.scriptConsts.get(script)}.${i.name}`);
     }
     const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'snake')}_` : '_';
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'snake', internal));
@@ -773,7 +774,15 @@ class GdscriptEmitter {
 
   private call(callee: IrCallee, args: IrExpr[]): string {
     const list = args.map((a) => this.expr(a)).join(', ');
-    return callee.kind === 'helper' ? `${this.helperNames.get(callee.id)}(${list})` : `${this.importNames.get(callee.id)}(${list})`;
+    if (callee.kind === 'helper') return `${this.helperNames.get(callee.id)}(${list})`;
+    const member = this.program.imports.find((i) => i.id === callee.id)?.member;
+    if (!member) return `${this.importNames.get(callee.id)}(${list})`;
+    // A script class's member (docs/node-authoring.md, gap 2), on the Target pin's object.
+    if (member.kind === 'construct') return `${this.importNames.get(callee.id)}.new(${list})`;
+    const [target, ...rest] = args;
+    const object = this.expr(target);
+    const values = rest.map((a) => this.expr(a)).join(', ');
+    return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
 
   private value(e: IrExpr, type: TypeRef | undefined): string {

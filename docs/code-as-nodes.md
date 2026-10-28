@@ -83,10 +83,14 @@ A class's members become nodes too, each when its own documentation comment is m
   - Java: a public class's public constructors, instance methods and fields (`final` ones read-only).
   - Rust: a `pub struct`'s `pub` fields, with its `impl` block's `pub` methods taking `&self` or `&mut self`, and its constructor (a function returning `Self`: a marked one, else `new`).
   - Go (through gopls): a struct's fields and its methods. Go has no constructors, so a struct's `New…` function, already a node, makes the objects; the Target pins take the pointer it returns (`*Counter`).
+  - Lua: a table annotated `---@class` that the module's table reaches (`M.Counter = Counter`, or `return Counter`). Its `:` functions are methods, `.new` (or a function returning the class) its constructor, and the `---@field`s whose text says `@blueprint` its properties.
+  - GDScript: a script with a `class_name`. Its non-static functions are methods, `_init` its constructor, and its `var`s properties. Its static functions stay functions.
+  - Ruby: a class's `initialize`, public instance methods, and `attr_accessor` / `attr_reader` attributes (typed by `@return [Type]` above them). Methods after `private` or `protected` aren't public.
+  - PHP: a class's `__construct`, public instance methods and public properties (`readonly` ones read-only).
   - Private members (and `_`-named ones in Python), static members and async methods are reported instead.
 - **Types.** Objects travel on pins of the class's `native:` type, as functions returning the class already make them. A subclass's object connects where its base class is expected, when the subclass has a marked member (its nodes record the base). The default category is "Project / <Class>".
 - **Generated code.** It imports the class and writes `new Player(…)` (`Player(…)` in Python), `target.heal(…)`, `target.health` and `target.health = …`. C# and Java pass such objects as `object`/`Object`, so they cast the Target to the class. C++ passes them in a `std::any`, as the object and as each class it extends (`vgraph::code_new<Player, Entity>(…)`), and `vgraph::code_object<Player>(target)` finds the object as the class it needs. Rust passes them as a `vgraph::Value` holding the object (`vgraph::code_new`), borrowed for each use (`vgraph::code_object::<Counter>(&target).borrow_mut().add(…)`). Go passes them as `any` and asserts the Target to the struct's pointer. An empty Target stops the run with the language's own null error (C++ and Rust: "Accessed None"), as Unreal stops on "Accessed None".
-- **Languages.** TypeScript, JavaScript, Python, C#, C++, Java, Rust and Go so far; the other languages follow in Phase 9.
+- **Languages.** All twelve. Lua, GDScript, Ruby and PHP are dynamic, so their objects need no help: generated code writes `Counter.new(…)`, `target:add(…)` (Lua), the preloaded script's `.new(…)` (GDScript), and `new \App\Counter(…)`, `$target->add(…)` (PHP).
 
 ## Node identity
 

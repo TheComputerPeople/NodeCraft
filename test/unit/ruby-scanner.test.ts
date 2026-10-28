@@ -67,7 +67,6 @@ describe('Ruby scanner', () => {
 
   test("says why marked functions can't be nodes", () => {
     assert.deepEqual(scanRuby(SOURCE).skipped.filter((s) => s.marked).map((s) => [s.name, s.reason]), [
-      ['heal', "It's an instance method: generated code calls module methods (def self.name, module_function) and top-level methods."],
       ['spawn', 'It takes splat, keyword or block arguments.'],
       ['ready?', "Its name ends with ? or !, which other languages' nodes can't call."]
     ]);
@@ -78,7 +77,9 @@ describe('Ruby scanner', () => {
     assert.deepEqual(definitions.map((d) => [d.type, d.displayName, d.implementation?.kind === 'function' ? d.implementation.module : undefined]), [
       ['fn:ruby:lib/game.rb#Game::Scores.triple', 'Triple', 'Game::Scores'],
       ['fn:ruby:lib/game.rb#Game::Labels.label', 'Label', 'Game::Labels'],
-      ['fn:ruby:lib/game.rb#total', 'Total', undefined]
+      ['fn:ruby:lib/game.rb#total', 'Total', undefined],
+      // A class's instance method is a member node (docs/node-authoring.md, gap 2).
+      ['fn:ruby:lib/game.rb#Game::Player:heal', 'Heal', undefined]
     ]);
   });
 
@@ -87,5 +88,42 @@ describe('Ruby scanner', () => {
       { id: 'int' }, { id: 'float' }, { id: 'float' }, { id: 'string' }, { id: 'bool' }, { id: 'any' }, null, { id: 'any', container: 'array' },
       { id: 'string', container: 'array' }, { id: 'int', container: 'set' }, { id: 'string', container: 'map', valueType: { id: 'float' } }, { id: 'native:Player' }
     ]);
+  });
+});
+
+// Classes (docs/node-authoring.md, gap 2): initialize, public instance methods and attributes.
+describe('Ruby classes', () => {
+  const source = [
+    'class Counter < Base',
+    '  # @blueprint',
+    '  attr_reader :count',
+    '  # @blueprint',
+    '  attr_accessor :label',
+    '',
+    '  # @blueprint',
+    '  def initialize(start)',
+    '  end',
+    '',
+    '  # @blueprint',
+    '  def add(amount)',
+    '  end',
+    '',
+    '  private',
+    '',
+    '  # @blueprint',
+    '  def secret',
+    '  end',
+    'end',
+    ''
+  ].join('\n');
+
+  test('reads initialize, public methods and attributes (attr_reader read-only)', () => {
+    const scan = scanRuby(source);
+    const [cls] = scan.classes!;
+    assert.deepEqual([cls.name, cls.base], ['Counter', { id: 'native:Base' }]);
+    assert.deepEqual(cls.init!.params.map((p) => p.name), ['start']);
+    assert.deepEqual(cls.methods.map((m) => m.name), ['add']);
+    assert.deepEqual(cls.properties.map((p) => [p.name, p.readonly]), [['count', true], ['label', false]]);
+    assert.deepEqual(scan.skipped.filter((s) => s.marked).map((s) => [s.name, s.reason]), [['secret', "it isn't public"]]);
   });
 });

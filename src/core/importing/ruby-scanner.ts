@@ -3,9 +3,10 @@
 // one. Those are a module's or class's `def self.name`, a module's methods after `module_function`
 // (or `extend self`), and top-level methods; `@param [Integer] points` and `@return [Float]` give the
 // pins' types. Modules and classes are found by Ruby's usual indentation: each `end` lines up with
-// the line it closes.
+// the line it closes. A class's public instance methods, `initialize` and attributes (attr_accessor,
+// attr_reader) are its members (docs/node-authoring.md, gap 2).
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
 
 interface Scope {
   name: string;
@@ -13,6 +14,9 @@ interface Scope {
   // A module whose methods are module functions (module_function, extend self).
   moduleFunctions: boolean;
   kind: 'module' | 'class';
+  // A class's members, and whether its methods are private or protected from here on.
+  cls?: ScannedClass;
+  hidden?: boolean;
 }
 
 export function scanRuby(source: string): ModuleScan {
@@ -20,11 +24,20 @@ export function scanRuby(source: string): ModuleScan {
   const functions: ScannedFunction[] = [];
   const skipped: SkippedFunction[] = [];
   const scopes: Scope[] = [];
+  const classes: ScannedClass[] = [];
   lines.forEach((text, index) => {
     const indent = /^\s*/.exec(text)![0].length;
-    const opened = /^\s*(module|class)\s+([A-Z]\w*(?:::[A-Z]\w*)*)\s*(?:<.*)?$/.exec(text);
-    if (opened) {
-      scopes.push({ name: opened[2], indent, moduleFunctions: false, kind: opened[1] as Scope['kind'] });
+    const opened = /^\s*(module|class)\s+([A-Z]\w*(?:::[A-Z]\w*)*)\s*(?:<\s*([A-Z]\w*(?:::[A-Z]\w*)*))?.*$/.exec(text);
+    if (opened && !/^\s*class\s*<</.test(text)) {
+      const kind = opened[1] as Scope['kind'];
+      const name = [...scopes.map((s) => s.name), opened[2]].join('::');
+      const simple = opened[2].split('::').pop()!;
+      const cls: ScannedClass | undefined = kind === 'class'
+        ? { name, line: index + 1, doc: docAbove(lines, index), type: mapRubyType(simple) ?? { id: `native:${simple}` }, ...(opened[3] ? { base: mapRubyType(opened[3].split('::').pop()!) ?? undefined } : {}), methods: [], properties: [] }
+        : undefined;
+      if (cls && !cls.base) delete cls.base;
+      if (cls) classes.push(cls);
+      scopes.push({ name: opened[2], indent, moduleFunctions: false, kind, ...(cls ? { cls } : {}) });
       return;
     }
     if (/^\s*end\b/.test(text) && scopes.length && scopes[scopes.length - 1].indent === indent) {
@@ -32,7 +45,28 @@ export function scanRuby(source: string): ModuleScan {
       return;
     }
     if (/^\s*(module_function|extend\s+self)\s*$/.test(text) && scopes.length) scopes[scopes.length - 1].moduleFunctions = true;
-    const declaration = /^\s*def\s+(self\.)?([a-z_]\w*[?!]?)\s*(?:\(([^)]*)\)|\s+([^#;]*?))?\s*(?:=.*)?$/.exec(text);
+    const current = scopes[scopes.length - 1];
+    // `private` or `protected` alone: the class's later methods aren't public; `public` again: they are.
+    if (current && /^\s*(private|protected|public)\s*$/.test(text)) {
+      current.hidden = !/public/.test(text);
+      return;
+    }
+    // Attributes: attr_accessor :count, :name (attr_reader: read-only; attr_writer: no Get, so left out).
+    const attributes = /^\s*attr_(accessor|reader)\s+(.+)$/.exec(text);
+    if (attributes && current?.cls) {
+      const doc = docAbove(lines, index);
+      const returns = doc.tags.find((t) => t.name === 'return');
+      const typeText = returns ? /^\[([^\]]+)\]/.exec(returns.text)?.[1] : undefined;
+      const type = typeText ? mapRubyType(typeText) : null;
+      for (const symbol of attributes[2].split(',').map((a) => a.trim().replace(/^:/, ''))) {
+        if (!/^[a-z_]\w*$/.test(symbol)) continue;
+        if (current.hidden) {
+          if (isMarked(doc)) skipped.push({ name: `${current.cls.name}#${symbol}`, line: index + 1, reason: "it isn't public", marked: true });
+        } else current.cls.properties.push({ name: symbol, line: index + 1, ...(type ? { type } : {}), readonly: attributes[1] === 'reader', doc });
+      }
+      return;
+    }
+    const declaration = /^\s*(?:(?:private|protected|public)\s+)?def\s+(self\.)?([a-z_]\w*[?!]?)\s*(?:\(([^)]*)\)|\s+([^#;]*?))?\s*(?:=.*)?$/.exec(text);
     if (!declaration) return;
     const [, onSelf, name, parenthesized, bare] = declaration;
     const doc = docAbove(lines, index);
@@ -40,7 +74,10 @@ export function scanRuby(source: string): ModuleScan {
     const skip = (reason: string) => skipped.push({ name, line, reason, marked: isMarked(doc) });
     const scope = scopes[scopes.length - 1];
     const container = scopes.map((s) => s.name).join('::');
-    if (scope && !onSelf && !(scope.kind === 'module' && scope.moduleFunctions)) return skip("It's an instance method: generated code calls module methods (def self.name, module_function) and top-level methods.");
+    // A class's instance method (or initialize, its constructor) is a member.
+    const member = scope?.cls && !onSelf;
+    if (member && (scope.hidden || /^\s*(private|protected)\s+def\b/.test(text))) return skip("it isn't public");
+    if (scope && !onSelf && !member && !(scope.kind === 'module' && scope.moduleFunctions)) return skip("It's an instance method: generated code calls module methods (def self.name, module_function) and top-level methods.");
     if (/[?!]$/.test(name)) return skip('Its name ends with ? or !, which other languages\' nodes can\'t call.');
     const paramText = (parenthesized ?? bare ?? '').trim();
     const params = paramText ? paramText.split(',').map((p) => p.trim()) : [];
@@ -55,9 +92,12 @@ export function scanRuby(source: string): ModuleScan {
     });
     const returns = doc.tags.find((t) => t.name === 'return');
     const returnType = returns ? /^\[([^\]]+)\]/.exec(returns.text)?.[1] : undefined;
-    functions.push({ name, line, params: scanned, returns: returnType ? mapRubyType(returnType) : returns ? undefined : null, doc, ...(container ? { container } : {}) });
+    const scannedFunction: ScannedFunction = { name, line, params: scanned, returns: returnType ? mapRubyType(returnType) : returns ? undefined : null, doc, ...(container ? { container } : {}) };
+    if (member && name === 'initialize') scope.cls!.init = { ...scannedFunction, returns: null };
+    else if (member) scope.cls!.methods.push({ name, line, params: scanned, returns: scannedFunction.returns, doc });
+    else functions.push(scannedFunction);
   });
-  return { functions, skipped };
+  return { functions, skipped, ...(classes.length ? { classes } : {}) };
 }
 
 // The `#` comment lines just above a declaration.

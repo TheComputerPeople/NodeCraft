@@ -84,6 +84,18 @@ Reviewed 2026-10-28, after the built-in utility library grew to 94 nodes. Each g
   - The Go pack sets `objectsByPointer`, so the class's type is `*Counter`, as its `New` function returns it. Generated code asserts `any(target).(*counter.Counter)`.
 - **Tests.** Rust and Go have no inheritance, so their BigCounter is a struct of its own, and the shared graph uses its own Add.
 
+**Built (step 6): Lua, GDScript, Ruby and PHP.**
+
+- **Scanning.**
+  - Ruby: the scanner already followed class scopes. It now keeps a class's members, and tracks `private` and `protected` sections.
+  - PHP: it already tracked classes by brace depth. It now reads properties as well as methods.
+  - GDScript: a script with a `class_name` is a class.
+  - Lua: a class is a `---@class` table that the module's table reaches. When the module returns the class itself, the class's import name is empty, so `ScannedClass.title` gives the palette its name.
+- **Generated code.** Each generator writes its language's member syntax. None needs runtime support, since these languages pass objects as they are.
+- **Learned on the way.**
+  - Run doesn't import the Godot project, so `class_name` globals aren't registered and `extends Counter` doesn't resolve. In the test, GDScript's BigCounter is a script of its own. A project opened in the Godot editor has them.
+  - A Lua statement can't start with `(`, or Lua reads it as a call of the line before, so member Sets use the plain Target expression.
+
 Classes from code as **parents** of graph classes (Unreal's Blueprint subclassing a C++ class, with BlueprintImplementableEvent) stay deferred. They need generated subclasses of user code in every language, which is a phase of its own.
 
 ## Gap 3: code functions have one output
