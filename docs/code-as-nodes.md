@@ -151,7 +151,8 @@ Beyond Unreal's set, the library has everyday utilities, many adapted from Commo
 | Math | In Range, Round To |
 | Utilities / Array | Unique, Difference, Intersection (any element type), Average, Median |
 | Utilities / Map | Pick, Omit, Merge, Find or Default, Make Map From Arrays |
-| Utilities | Get Environment Variable |
+| Utilities | Get Environment Variable, New UUID |
+| Utilities / Encoding | Base64 Encode, Base64 Decode, URL Encode, URL Decode |
 | Utilities / Time | Now, Get Accurate Real Time, Format Timestamp |
 | File | Normalize Path |
 
@@ -164,6 +165,7 @@ The original leaves some behavior to each language. Here it's one contract, chec
 - **Paths.** Normalize Path works on the text alone, the same on every system: `/` and `\` both separate folders, `.` and empty parts go, `..` removes the folder before it, and the result uses `/`.
 - **Maps.** Maps keep their keys in the order they were added. Merge gives B's value where both maps have a key, at A's place in that order. Make Map From Arrays keeps a repeated key's first place and last value, and stops the run if Keys and Values differ in length.
 - **Time.** Now gives Unix milliseconds (whole milliseconds since 1970-01-01 00:00 UTC; Lua's clock counts whole seconds), as a float, so it fits every language's numbers. Format Timestamp writes one in ISO 8601 in UTC (`2026-10-28T09:30:00.000Z`) the same everywhere, years 1 to 9999; outside them, the run stops. Get Accurate Real Time is for timing: seconds on a clock that never goes back, from a moment that isn't a date. Lua has only processor time for it (`os.clock`, which its Delay waits on too), and C the time of day.
+- **Encoding.** Base64 and URL encoding work on the text's UTF-8 bytes. Base64 uses the standard alphabet with `=` padding; URL Encode leaves letters, digits and `- _ . ~` as they are and writes every other byte as `%XX` (a space is `%20`), and URL Decode leaves `+` as it is. Decoding stops the run on input that isn't Base64 or URL encoding, and on bytes that aren't UTF-8 text, where languages would otherwise each put in replacement characters their own way. New UUID gives a random version 4 UUID in lower case.
 - **Limits.** Parse Integer Strict accepts numbers up to 2^53 (in C#, its 32-bit ints). Format Bytes takes sizes up to 2^53 and up to 10 decimals. Round To takes 0 to 15 digits.
 - **Title case and trimming.** To Title Case, Trim Start and Trim End treat only ASCII whitespace as space and change only ASCII letters, so every language gives the same text (unlike Trim and Capitalize, which use each language's own rules; see below).
 - **Format String.** `{0}`, `{1}`, … are replaced by that item of Args; other braces stay as they are (`{x}`, an unclosed `{2`), so `{{0}}` gives `{` + the item + `}`. A placeholder with no item stops the run.

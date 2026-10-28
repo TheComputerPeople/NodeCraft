@@ -1,0 +1,571 @@
+{
+  "schemaVersion": 3,
+  "name": "UtilsEncoding",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "metadata": {
+    "description": "Utility nodes: Base64 and URL encoding of UTF-8 text, and UUIDs (random, so checked by their shape).",
+    "expectedOutput": [
+      "SGVsbG8sIFfDtnJsZCE=",
+      "YWI=",
+      "",
+      "😀",
+      "Hello, Wörld!",
+      "a%20b%26c%3Dd%2F%C3%A9~",
+      "%21%2A%27%28%29%2B%F0%9F%98%80",
+      "a b+c+dé",
+      "plain é",
+      "36",
+      "4",
+      "true",
+      "-"
+    ]
+  },
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "print1",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 120
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "core:encoding.base64-encode",
+          "position": {
+            "x": 600,
+            "y": 120
+          },
+          "properties": {
+            "pin:text": "Hello, Wörld!"
+          }
+        },
+        {
+          "id": "print2",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "core:encoding.base64-encode",
+          "position": {
+            "x": 600,
+            "y": 240
+          },
+          "properties": {
+            "pin:text": "ab"
+          }
+        },
+        {
+          "id": "print3",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:encoding.base64-encode",
+          "position": {
+            "x": 600,
+            "y": 360
+          },
+          "properties": {
+            "pin:text": ""
+          }
+        },
+        {
+          "id": "print4",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 480
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "core:encoding.base64-decode",
+          "position": {
+            "x": 600,
+            "y": 480
+          },
+          "properties": {
+            "pin:text": "8J+YgA=="
+          }
+        },
+        {
+          "id": "print5",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 600
+          },
+          "properties": {}
+        },
+        {
+          "id": "n5",
+          "type": "core:encoding.base64-decode",
+          "position": {
+            "x": 600,
+            "y": 600
+          },
+          "properties": {
+            "pin:text": "SGVsbG8sIFfDtnJsZCE="
+          }
+        },
+        {
+          "id": "print6",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 720
+          },
+          "properties": {}
+        },
+        {
+          "id": "n6",
+          "type": "core:encoding.url-encode",
+          "position": {
+            "x": 600,
+            "y": 720
+          },
+          "properties": {
+            "pin:text": "a b&c=d/é~"
+          }
+        },
+        {
+          "id": "print7",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 840
+          },
+          "properties": {}
+        },
+        {
+          "id": "n7",
+          "type": "core:encoding.url-encode",
+          "position": {
+            "x": 600,
+            "y": 840
+          },
+          "properties": {
+            "pin:text": "!*'()+😀"
+          }
+        },
+        {
+          "id": "print8",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 960
+          },
+          "properties": {}
+        },
+        {
+          "id": "n8",
+          "type": "core:encoding.url-decode",
+          "position": {
+            "x": 600,
+            "y": 960
+          },
+          "properties": {
+            "pin:text": "a%20b%2bc+d%C3%A9"
+          }
+        },
+        {
+          "id": "print9",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1080
+          },
+          "properties": {}
+        },
+        {
+          "id": "n9",
+          "type": "core:encoding.url-decode",
+          "position": {
+            "x": 600,
+            "y": 1080
+          },
+          "properties": {
+            "pin:text": "plain é"
+          }
+        },
+        {
+          "id": "print10",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1200
+          },
+          "properties": {}
+        },
+        {
+          "id": "n10",
+          "type": "core:string.len",
+          "position": {
+            "x": 600,
+            "y": 1200
+          },
+          "properties": {}
+        },
+        {
+          "id": "n10_text",
+          "type": "core:utilities.new-uuid",
+          "position": {
+            "x": 300,
+            "y": 1200
+          },
+          "properties": {}
+        },
+        {
+          "id": "print11",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1320
+          },
+          "properties": {}
+        },
+        {
+          "id": "n11",
+          "type": "core:string.substring",
+          "position": {
+            "x": 600,
+            "y": 1320
+          },
+          "properties": {
+            "pin:start": 14,
+            "pin:count": 1
+          }
+        },
+        {
+          "id": "n11_text",
+          "type": "core:utilities.new-uuid",
+          "position": {
+            "x": 300,
+            "y": 1320
+          },
+          "properties": {}
+        },
+        {
+          "id": "print12",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1440
+          },
+          "properties": {}
+        },
+        {
+          "id": "n12",
+          "type": "core:string.contains",
+          "position": {
+            "x": 600,
+            "y": 1440
+          },
+          "properties": {
+            "pin:text": "89ab"
+          }
+        },
+        {
+          "id": "n12_part",
+          "type": "core:string.substring",
+          "position": {
+            "x": 300,
+            "y": 1440
+          },
+          "properties": {
+            "pin:start": 19,
+            "pin:count": 1
+          }
+        },
+        {
+          "id": "n12_part_text",
+          "type": "core:utilities.new-uuid",
+          "position": {
+            "x": 0,
+            "y": 1440
+          },
+          "properties": {}
+        },
+        {
+          "id": "print13",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1560
+          },
+          "properties": {}
+        },
+        {
+          "id": "n13",
+          "type": "core:string.substring",
+          "position": {
+            "x": 600,
+            "y": 1560
+          },
+          "properties": {
+            "pin:start": 23,
+            "pin:count": 1
+          }
+        },
+        {
+          "id": "n13_text",
+          "type": "core:utilities.new-uuid",
+          "position": {
+            "x": 300,
+            "y": 1560
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "print1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "print1",
+          "toPin": "value"
+        },
+        {
+          "id": "w3",
+          "fromNode": "print1",
+          "fromPin": "execOut",
+          "toNode": "print2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "print2",
+          "toPin": "value"
+        },
+        {
+          "id": "w5",
+          "fromNode": "print2",
+          "fromPin": "execOut",
+          "toNode": "print3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "print3",
+          "toPin": "value"
+        },
+        {
+          "id": "w7",
+          "fromNode": "print3",
+          "fromPin": "execOut",
+          "toNode": "print4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n4",
+          "fromPin": "returnValue",
+          "toNode": "print4",
+          "toPin": "value"
+        },
+        {
+          "id": "w9",
+          "fromNode": "print4",
+          "fromPin": "execOut",
+          "toNode": "print5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n5",
+          "fromPin": "returnValue",
+          "toNode": "print5",
+          "toPin": "value"
+        },
+        {
+          "id": "w11",
+          "fromNode": "print5",
+          "fromPin": "execOut",
+          "toNode": "print6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n6",
+          "fromPin": "returnValue",
+          "toNode": "print6",
+          "toPin": "value"
+        },
+        {
+          "id": "w13",
+          "fromNode": "print6",
+          "fromPin": "execOut",
+          "toNode": "print7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n7",
+          "fromPin": "returnValue",
+          "toNode": "print7",
+          "toPin": "value"
+        },
+        {
+          "id": "w15",
+          "fromNode": "print7",
+          "fromPin": "execOut",
+          "toNode": "print8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n8",
+          "fromPin": "returnValue",
+          "toNode": "print8",
+          "toPin": "value"
+        },
+        {
+          "id": "w17",
+          "fromNode": "print8",
+          "fromPin": "execOut",
+          "toNode": "print9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w18",
+          "fromNode": "n9",
+          "fromPin": "returnValue",
+          "toNode": "print9",
+          "toPin": "value"
+        },
+        {
+          "id": "w19",
+          "fromNode": "print9",
+          "fromPin": "execOut",
+          "toNode": "print10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w20",
+          "fromNode": "n10_text",
+          "fromPin": "returnValue",
+          "toNode": "n10",
+          "toPin": "text"
+        },
+        {
+          "id": "w21",
+          "fromNode": "n10",
+          "fromPin": "returnValue",
+          "toNode": "print10",
+          "toPin": "value"
+        },
+        {
+          "id": "w22",
+          "fromNode": "print10",
+          "fromPin": "execOut",
+          "toNode": "print11",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w23",
+          "fromNode": "n11_text",
+          "fromPin": "returnValue",
+          "toNode": "n11",
+          "toPin": "text"
+        },
+        {
+          "id": "w24",
+          "fromNode": "n11",
+          "fromPin": "returnValue",
+          "toNode": "print11",
+          "toPin": "value"
+        },
+        {
+          "id": "w25",
+          "fromNode": "print11",
+          "fromPin": "execOut",
+          "toNode": "print12",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w26",
+          "fromNode": "n12_part_text",
+          "fromPin": "returnValue",
+          "toNode": "n12_part",
+          "toPin": "text"
+        },
+        {
+          "id": "w27",
+          "fromNode": "n12_part",
+          "fromPin": "returnValue",
+          "toNode": "n12",
+          "toPin": "part"
+        },
+        {
+          "id": "w28",
+          "fromNode": "n12",
+          "fromPin": "returnValue",
+          "toNode": "print12",
+          "toPin": "value"
+        },
+        {
+          "id": "w29",
+          "fromNode": "print12",
+          "fromPin": "execOut",
+          "toNode": "print13",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w30",
+          "fromNode": "n13_text",
+          "fromPin": "returnValue",
+          "toNode": "n13",
+          "toPin": "text"
+        },
+        {
+          "id": "w31",
+          "fromNode": "n13",
+          "fromPin": "returnValue",
+          "toNode": "print13",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

@@ -8,7 +8,7 @@ import { NodeDefinition } from './model';
 import { ARRAY_UTILITIES, MAP_UTILITIES, SET_UTILITIES } from './utilities-containers';
 import { MATH_UTILITIES } from './utilities-math';
 import { STRING_UTILITIES, TEXT_UTILITIES } from './utilities-strings';
-import { SYSTEM_UTILITIES } from './utilities-system';
+import { ENCODING_UTILITIES, SYSTEM_UTILITIES } from './utilities-system';
 import { ARRAY, BOOL, FLOAT, FLOATS, INT, input, MAP, output, Snippets, STRING, text, UtilityNode } from './utility-kit';
 
 // ---- Shared code -------------------------------------------------------------------------------
@@ -1707,7 +1707,7 @@ return $drive . ($joined === '' ? '.' : $joined);`
 };
 
 export function utilityDefinitions(): NodeDefinition[] {
-  return [...NODES, ...MATH_UTILITIES, ...STRING_UTILITIES, ...TEXT_UTILITIES, ...SET_UTILITIES, ...ARRAY_UTILITIES, ...MAP_UTILITIES, ...SYSTEM_UTILITIES].map((node) => ({
+  return [...NODES, ...MATH_UTILITIES, ...STRING_UTILITIES, ...TEXT_UTILITIES, ...SET_UTILITIES, ...ARRAY_UTILITIES, ...MAP_UTILITIES, ...SYSTEM_UTILITIES, ...ENCODING_UTILITIES].map((node) => ({
     type: node.type,
     version: 1,
     displayName: node.displayName,
