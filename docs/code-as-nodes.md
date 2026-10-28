@@ -143,14 +143,14 @@ Their rules, where languages would disagree:
 
 ### More utilities
 
-Beyond Unreal's set, the library has everyday utilities adapted from Common Utility Snippets v0.1.0 (MIT; see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)):
+Beyond Unreal's set, the library has everyday utilities, many adapted from Common Utility Snippets v0.1.0 (MIT; see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)):
 
 | Category | Nodes |
 |---|---|
 | String | Is Empty, Is Blank, Normalize Whitespace, Truncate, Capitalize, To Camel Case, To Snake Case, To Kebab Case, Slugify, Pad Left, Pad Right, Word Count, Mask, Format Bytes, Parse Boolean, Parse Integer Strict |
 | Math | In Range, Round To |
 | Utilities / Array | Unique, Difference, Intersection (any element type), Average, Median |
-| Utilities / Map | Pick, Omit |
+| Utilities / Map | Pick, Omit, Merge, Find or Default, Make Map From Arrays |
 | Utilities | Get Environment Variable |
 | File | Normalize Path |
 
@@ -161,6 +161,7 @@ The original leaves some behavior to each language. Here it's one contract, chec
 - **Errors.** A broken rule stops the run with a message, as dividing by zero does: a negative length, Parse Boolean on an unknown word, Parse Integer Strict on `12.0`, or Average of nothing.
 - **Rounding.** Round To rounds halves away from zero, with a small correction for values just below a half (2.675 rounds to 2.68). Format Bytes rounds halves up in every language, where `toFixed` and `printf` disagree on exact halves.
 - **Paths.** Normalize Path works on the text alone, the same on every system: `/` and `\` both separate folders, `.` and empty parts go, `..` removes the folder before it, and the result uses `/`.
+- **Maps.** Maps keep their keys in the order they were added. Merge gives B's value where both maps have a key, at A's place in that order. Make Map From Arrays keeps a repeated key's first place and last value, and stops the run if Keys and Values differ in length.
 - **Limits.** Parse Integer Strict accepts numbers up to 2^53 (in C#, its 32-bit ints). Format Bytes takes sizes up to 2^53 and up to 10 decimals. Round To takes 0 to 15 digits.
 - **Upper case and spaces.** Capitalize uses each language's upper-casing for the first character, so non-ASCII letters can differ: C++ and Lua change ASCII letters only. In C++ and Lua, too, only ASCII spaces count as whitespace (Is Blank, Normalize Whitespace, Word Count, Trim).
 

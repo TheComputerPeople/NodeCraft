@@ -1,0 +1,417 @@
+{
+  "schemaVersion": 3,
+  "name": "UtilsMaps",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "metadata": {
+    "description": "Utility nodes: merging maps, finding with a default, and maps made from arrays (in insertion order).",
+    "expectedOutput": [
+      "{\"a\":1,\"b\":20,\"c\":3}",
+      "1",
+      "-1",
+      "{\"x\":3,\"y\":2}",
+      "{}"
+    ]
+  },
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "print1",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 120
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "core:map.merge",
+          "position": {
+            "x": 600,
+            "y": 120
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            }
+          }
+        },
+        {
+          "id": "n1_a",
+          "type": "core:map.make",
+          "position": {
+            "x": 300,
+            "y": 120
+          },
+          "properties": {
+            "pins": 2,
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            },
+            "pin:key0": "a",
+            "pin:value0": 1,
+            "pin:key1": "b",
+            "pin:value1": 2
+          }
+        },
+        {
+          "id": "n1_b",
+          "type": "core:map.make",
+          "position": {
+            "x": 300,
+            "y": 120
+          },
+          "properties": {
+            "pins": 2,
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            },
+            "pin:key0": "b",
+            "pin:value0": 20,
+            "pin:key1": "c",
+            "pin:value1": 3
+          }
+        },
+        {
+          "id": "print2",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "core:map.find-or-default",
+          "position": {
+            "x": 600,
+            "y": 240
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            },
+            "pin:key": "a",
+            "pin:fallback": 0
+          }
+        },
+        {
+          "id": "n2_source",
+          "type": "core:map.make",
+          "position": {
+            "x": 300,
+            "y": 240
+          },
+          "properties": {
+            "pins": 1,
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            },
+            "pin:key0": "a",
+            "pin:value0": 1
+          }
+        },
+        {
+          "id": "print3",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:map.find-or-default",
+          "position": {
+            "x": 600,
+            "y": 360
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            },
+            "pin:key": "z",
+            "pin:fallback": -1
+          }
+        },
+        {
+          "id": "n3_source",
+          "type": "core:map.make",
+          "position": {
+            "x": 300,
+            "y": 360
+          },
+          "properties": {
+            "pins": 1,
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            },
+            "pin:key0": "a",
+            "pin:value0": 1
+          }
+        },
+        {
+          "id": "print4",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 480
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "core:map.from-arrays",
+          "position": {
+            "x": 600,
+            "y": 480
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            }
+          }
+        },
+        {
+          "id": "n4_keys",
+          "type": "core:array.make",
+          "position": {
+            "x": 300,
+            "y": 480
+          },
+          "properties": {
+            "pins": 3,
+            "wildcards": {
+              "wildcard": "string"
+            },
+            "pin:item0": "x",
+            "pin:item1": "y",
+            "pin:item2": "x"
+          }
+        },
+        {
+          "id": "n4_values",
+          "type": "core:array.make",
+          "position": {
+            "x": 300,
+            "y": 480
+          },
+          "properties": {
+            "pins": 3,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 1,
+            "pin:item1": 2,
+            "pin:item2": 3
+          }
+        },
+        {
+          "id": "print5",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 600
+          },
+          "properties": {}
+        },
+        {
+          "id": "n5",
+          "type": "core:map.from-arrays",
+          "position": {
+            "x": 600,
+            "y": 600
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string",
+              "wildcard:value": "int"
+            }
+          }
+        },
+        {
+          "id": "n5_keys",
+          "type": "core:array.make",
+          "position": {
+            "x": 300,
+            "y": 600
+          },
+          "properties": {
+            "pins": 0,
+            "wildcards": {
+              "wildcard": "string"
+            }
+          }
+        },
+        {
+          "id": "n5_values",
+          "type": "core:array.make",
+          "position": {
+            "x": 300,
+            "y": 600
+          },
+          "properties": {
+            "pins": 0,
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "print1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1_a",
+          "fromPin": "map",
+          "toNode": "n1",
+          "toPin": "a"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n1_b",
+          "fromPin": "map",
+          "toNode": "n1",
+          "toPin": "b"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "print1",
+          "toPin": "value"
+        },
+        {
+          "id": "w5",
+          "fromNode": "print1",
+          "fromPin": "execOut",
+          "toNode": "print2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n2_source",
+          "fromPin": "map",
+          "toNode": "n2",
+          "toPin": "source"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "print2",
+          "toPin": "value"
+        },
+        {
+          "id": "w8",
+          "fromNode": "print2",
+          "fromPin": "execOut",
+          "toNode": "print3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w9",
+          "fromNode": "n3_source",
+          "fromPin": "map",
+          "toNode": "n3",
+          "toPin": "source"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "print3",
+          "toPin": "value"
+        },
+        {
+          "id": "w11",
+          "fromNode": "print3",
+          "fromPin": "execOut",
+          "toNode": "print4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n4_keys",
+          "fromPin": "array",
+          "toNode": "n4",
+          "toPin": "keys"
+        },
+        {
+          "id": "w13",
+          "fromNode": "n4_values",
+          "fromPin": "array",
+          "toNode": "n4",
+          "toPin": "values"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n4",
+          "fromPin": "returnValue",
+          "toNode": "print4",
+          "toPin": "value"
+        },
+        {
+          "id": "w15",
+          "fromNode": "print4",
+          "fromPin": "execOut",
+          "toNode": "print5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n5_keys",
+          "fromPin": "array",
+          "toNode": "n5",
+          "toPin": "keys"
+        },
+        {
+          "id": "w17",
+          "fromNode": "n5_values",
+          "fromPin": "array",
+          "toNode": "n5",
+          "toPin": "values"
+        },
+        {
+          "id": "w18",
+          "fromNode": "n5",
+          "fromPin": "returnValue",
+          "toNode": "print5",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

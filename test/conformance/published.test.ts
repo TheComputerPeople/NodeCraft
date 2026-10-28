@@ -44,8 +44,8 @@ describe('published conformance suite', () => {
     assert.equal(report.failed, 0, formatReport(report));
     assert.equal(report.skipped, 0, formatReport(report));
     const notApplicable = report.results.filter((r) => r.status === 'not-applicable');
-    assert.deepEqual(notApplicable.map((r) => r.fixture), ['graphs/containers.vgraph', 'graphs/events.vgraph', 'graphs/latent.vgraph', 'graphs/utilities-arrays.vgraph', 'graphs/utilities-collections.vgraph', 'graphs/utilities-sets.vgraph', 'programs/arena', 'programs/duel'], formatReport(report));
-    for (const result of notApplicable) assert.match(result.message ?? '', /C has no (arrays|sets|event dispatchers|latent actions|object references)/);
+    assert.deepEqual(notApplicable.map((r) => r.fixture), ['graphs/containers.vgraph', 'graphs/events.vgraph', 'graphs/latent.vgraph', 'graphs/utilities-arrays.vgraph', 'graphs/utilities-collections.vgraph', 'graphs/utilities-maps.vgraph', 'graphs/utilities-sets.vgraph', 'programs/arena', 'programs/duel'], formatReport(report));
+    for (const result of notApplicable) assert.match(result.message ?? '', /C has no (arrays|sets|maps|event dispatchers|latent actions|object references)/);
   });
 
   test('JavaScript as CommonJS passes too', async () => {

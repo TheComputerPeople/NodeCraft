@@ -359,6 +359,12 @@ func (m *VgMap[K, V]) Empty() *VgMap[K, V] {
 	return NewVgMap[K, V]()
 }
 
+// NewVgMapFor is a new, empty map for keys and values of these slices' types (for code that can't
+// name them).
+func NewVgMapFor[K comparable, V any](_ []K, _ []V) *VgMap[K, V] {
+	return NewVgMap[K, V]()
+}
+
 func (m *VgMap[K, V]) Put(key K, value V) {
 	if _, ok := m.values[key]; !ok {
 		m.keys = append(m.keys, key)

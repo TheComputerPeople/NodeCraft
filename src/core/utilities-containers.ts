@@ -1,7 +1,12 @@
 // Unreal's set and array functions beyond the container nodes' (docs/code-as-nodes.md, "More of
-// Unreal's library"). They make new containers and leave their inputs as they are; sets print, as
-// To Array lists them, in ascending order, so every language shows the same set.
-import { ARRAY, FLOAT, FLOATS, INT, INTS, ITEM, SET, Snippets, UtilityNode, input } from './utility-kit';
+// Unreal's library"), and map functions for everyday use. They make new containers and leave their
+// inputs as they are; sets print, as To Array lists them, in ascending order, so every language
+// shows the same set.
+import { TypeRef } from './model';
+import { ARRAY, FLOAT, FLOATS, INT, INTS, ITEM, MAP, SET, Snippets, UtilityNode, input } from './utility-kit';
+
+// A snippet in each language, after a check in that language.
+const after = (first: Snippets, then: Snippets): Snippets => Object.fromEntries(Object.entries(then).map(([language, code]) => [language, `${first[language]}\n${code}`]));
 
 const sets = () => [input('a', 'A', SET), input('b', 'B', SET)];
 
@@ -48,6 +53,91 @@ export const SET_UTILITIES: UtilityNode[] = [
   {
     type: 'core:set.difference', displayName: 'Difference', category: 'Utilities / Set', result: SET, keywords: ['difference', 'except', 'minus', 'subtract', 'without'],
     inputs: sets(), description: 'A new set of the items in A that aren\'t in B.', code: filtered(false)
+  }
+];
+
+// ---- Maps ---------------------------------------------------------------------------------------
+
+const VALUE: TypeRef = { id: 'wildcard:value' };
+const VALUES: TypeRef = { id: 'wildcard:value', container: 'array' };
+
+const SAME_LENGTH: Snippets = {
+  javascript: "if (keys.length !== values.length) throw new Error('Keys and Values must be the same length');",
+  python: 'if len(keys) != len(values):\n    raise ValueError("Keys and Values must be the same length")',
+  csharp: 'if (keys.Count != values.Count) throw new ArgumentException("Keys and Values must be the same length");',
+  cpp: 'if (keys.size() != values.size()) throw std::invalid_argument("Keys and Values must be the same length");',
+  rust: 'if keys.len() != values.len() { panic!("Keys and Values must be the same length"); }',
+  java: 'if (keys.size() != values.size()) throw new IllegalArgumentException("Keys and Values must be the same length");',
+  go: 'if len(*keys) != len(*values) {\n\tVgFail("Keys and Values must be the same length")\n}',
+  lua: 'if keys.n ~= values.n then error("Keys and Values must be the same length", 0) end',
+  gdscript: 'if keys.size() != values.size():\n\treturn vg.fail("Keys and Values must be the same length")',
+  ruby: 'raise ArgumentError, "Keys and Values must be the same length" unless keys.length == values.length',
+  php: "if (count($keys->items) !== count($values->items)) {\n    throw new \\InvalidArgumentException('Keys and Values must be the same length');\n}"
+};
+
+export const MAP_UTILITIES: UtilityNode[] = [
+  {
+    type: 'core:map.merge', displayName: 'Merge', category: 'Utilities / Map', result: MAP, keywords: ['merge', 'combine', 'union', 'assign', 'extend'],
+    inputs: [input('a', 'A', MAP), input('b', 'B', MAP)],
+    description: 'A new map of A\'s entries and B\'s. Where both have a key, B\'s value wins, at A\'s place in the order; B\'s other keys follow.',
+    code: {
+      javascript: 'return new Map([...a, ...b]);',
+      python: 'return {**a, **b}',
+      csharp: 'var result = a.ToDictionary((entry) => entry.Key, (entry) => entry.Value);\nforeach (var entry in b) result[entry.Key] = entry.Value;\nreturn result;',
+      cpp: 'std::decay_t<decltype(a)> result = a;\nfor (const auto& entry : b) result[entry.first] = entry.second;\nreturn result;',
+      rust: 'let mut result = a.clone();\nfor (key, value) in b.entries.iter() { result.insert(key.clone(), value.clone()); }\nreturn result;',
+      java: 'var result = new java.util.LinkedHashMap<>(a);\nresult.putAll(b);\nreturn result;',
+      go: 'result := a.Empty()\nfor _, key := range a.keys {\n\tresult.Put(key, a.values[key])\n}\nfor _, key := range b.keys {\n\tresult.Put(key, b.values[key])\n}\nreturn result',
+      lua: 'local result = vg.map()\nfor i = 1, a.n do result:put(a.keys[i], a.values[a.keys[i]]) end\nfor i = 1, b.n do result:put(b.keys[i], b.values[b.keys[i]]) end\nreturn result',
+      gdscript: 'return a.merged(b, true)',
+      ruby: 'return a.merge(b)',
+      php: '$result = new VgMap();\nforeach ([$a, $b] as $map) {\n    foreach ($map->keys as $i => $key) {\n        $result->put($key, $map->values[$i]);\n    }\n}\nreturn $result;'
+    }
+  },
+  {
+    type: 'core:map.find-or-default', displayName: 'Find or Default', category: 'Utilities / Map', result: VALUE, keywords: ['get', 'lookup', 'default', 'fallback', 'value'],
+    inputs: [input('source', 'Target Map', MAP), input('key', 'Key', ITEM), input('fallback', 'Default', VALUE)],
+    description: 'The value for the key, or Default if the map doesn\'t have it (where Find would stop the run).',
+    code: {
+      javascript: 'return source.has(key) ? /** @type {any} */ (source.get(key)) : fallback;',
+      typescript: 'return source.has(key) ? source.get(key)! : fallback;',
+      python: 'return source[key] if key in source else fallback',
+      csharp: 'return source.TryGetValue(key, out var value) ? value : fallback;',
+      cpp: 'return source.contains(key) ? source.at(key) : fallback;',
+      rust: 'return source.get(&key).unwrap_or(fallback);',
+      java: 'return source.containsKey(key) ? source.get(key) : fallback;',
+      go: 'if value, ok := source.Get(key); ok {\n\treturn value\n}\nreturn fallback',
+      lua: 'if source:contains(key) then return source:get(key) end\nreturn fallback',
+      gdscript: 'return source.get(key, fallback)',
+      ruby: 'return source.fetch(key, fallback)',
+      php: 'return $source->has($key) ? $source->get($key) : $fallback;'
+    }
+  },
+  {
+    type: 'core:map.from-arrays', displayName: 'Make Map From Arrays', category: 'Utilities / Map', result: MAP, keywords: ['zip', 'from arrays', 'pairs', 'keys values', 'combine'],
+    inputs: [input('keys', 'Keys', ARRAY), input('values', 'Values', VALUES)],
+    description: 'A map of each key to the value at the same place in Values. A key given twice keeps its first place and its last value. Arrays of different lengths stop the run with an error.',
+    code: after(SAME_LENGTH, {
+      javascript: 'const result = new Map();\nkeys.forEach((key, i) => result.set(key, values[i]));\nreturn result;',
+      python: 'return dict(zip(keys, values))',
+      csharp: [
+        'static Dictionary<TKey, TValue> Zip<TKey, TValue>(List<TKey> keys, List<TValue> values) where TKey : notnull',
+        '{',
+        '    var result = new Dictionary<TKey, TValue>();',
+        '    for (var i = 0; i < keys.Count; i++) result[keys[i]] = values[i];',
+        '    return result;',
+        '}',
+        'return Zip(keys, values);'
+      ].join('\n'),
+      cpp: 'vgraph::Map<typename std::decay_t<decltype(keys)>::value_type, typename std::decay_t<decltype(values)>::value_type> result;\nfor (std::size_t i = 0; i < keys.size(); i++) result[keys[i]] = values[i];\nreturn result;',
+      rust: 'let mut result = vgraph::Map::new();\nfor (key, value) in keys.iter().zip(values.iter()) { result.insert(key.clone(), value.clone()); }\nreturn result;',
+      java: 'return java.util.stream.IntStream.range(0, keys.size()).boxed().collect(java.util.stream.Collectors.toMap(keys::get, values::get, (first, later) -> later, java.util.LinkedHashMap::new));',
+      go: 'result := NewVgMapFor(*keys, *values)\nfor i, key := range *keys {\n\tresult.Put(key, (*values)[i])\n}\nreturn result',
+      lua: 'local result = vg.map()\nfor i = 1, keys.n do result:put(keys[i], values[i]) end\nreturn result',
+      gdscript: 'var result := {}\nfor i in keys.size():\n\tresult[keys[i]] = values[i]\nreturn result',
+      ruby: 'return keys.zip(values).to_h',
+      php: '$result = new VgMap();\nforeach ($keys->items as $i => $key) {\n    $result->put($key, $values->items[$i]);\n}\nreturn $result;'
+    })
   }
 ];
 
@@ -102,8 +192,6 @@ const STEP_NOT_ZERO: Snippets = {
   ruby: 'raise ArgumentError, "Step can\'t be 0" if step.zero?',
   php: "if ($step === 0) {\n    throw new \\InvalidArgumentException(\"Step can't be 0\");\n}"
 };
-
-const after = (first: Snippets, then: Snippets): Snippets => Object.fromEntries(Object.entries(then).map(([language, code]) => [language, `${first[language]}\n${code}`]));
 
 // The smallest or largest value (Unreal's Min Of Float Array and Max Of Float Array).
 function extreme(smallest: boolean): Snippets {
