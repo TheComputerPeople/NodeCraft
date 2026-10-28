@@ -855,7 +855,16 @@ class CppEmitter {
     const list = args.map((a, i) => (signature?.params[i]?.type?.container ? this.expr(a) : this.coerce(a, signature?.params[i]?.type))).join(', ');
     if (callee.kind === 'helper') return `${this.helperNames.get(callee.id)}(${list})`;
     const imported = this.program.imports.find((i) => i.id === callee.id)!;
-    return `${imported.module ? `${imported.module}::` : ''}${imported.name}(${list})`;
+    const qualified = (i: { name: string; module?: string }) => `${i.module ? `${i.module}::` : ''}${i.name}`;
+    const member = imported.member;
+    if (!member) return `${qualified(imported)}(${list})`;
+    // A code class's member (docs/node-authoring.md, gap 2): its objects travel in a std::any, as
+    // their class and each class it extends (vgraph::code_new, vgraph::code_object).
+    if (member.kind === 'construct') return `vgraph::code_new<${[imported, ...(imported.bases ?? [])].map(qualified).join(', ')}>(${list})`;
+    const [target, ...rest] = args;
+    const object = `vgraph::code_object<${qualified(imported)}>(${this.expr(target)})`;
+    const values = rest.map((a, i) => this.coerce(a, signature?.params[i + 1]?.type)).join(', ');
+    return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
 
   // The value as text, per docs/semantics.md ("Values").

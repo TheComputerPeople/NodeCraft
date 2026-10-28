@@ -17,6 +17,7 @@ import { cppPlacement } from '../../src/core/languages/cpp';
 import { withBlock } from '../../src/core/output-plan';
 import { parseDocument } from '../../src/core/serializer';
 import { doc, node, repoRoot, wire } from '../unit/helpers';
+import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-cpp-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -121,5 +122,67 @@ describe('C++ project functions', () => {
     }
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['42', 'Red: 3']);
+  });
+});
+
+// Classes from a header (docs/node-authoring.md, gap 2): their objects travel in a std::any as each
+// class they can be used as, so a BigCounter reaches Counter's members.
+const COUNTER = [
+  '#pragma once',
+  'namespace game {',
+  '',
+  'class Counter {',
+  'public:',
+  '    /// @blueprint',
+  '    double count = 0;',
+  '',
+  '    /// @blueprint',
+  '    explicit Counter(double start) : count(start) {}',
+  '    virtual ~Counter() = default;',
+  '',
+  '    /// @blueprint',
+  '    double add(double amount) {',
+  '        count += amount;',
+  '        return count;',
+  '    }',
+  '',
+  '    /// @blueprint pure',
+  '    double doubled() const { return count * 2; }',
+  '};',
+  '',
+  'class BigCounter : public Counter {',
+  'public:',
+  '    /// @blueprint',
+  '    explicit BigCounter(double start) : Counter(start * 10) {}',
+  '};',
+  '',
+  '}',
+  ''
+].join('\n');
+
+describe('C++ code classes', () => {
+  test('a graph constructs them and uses their members, a subclass where its base is expected', async (t) => {
+    const dir = path.join(workDir, 'classes');
+    fs.mkdirSync(path.join(dir, 'native'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'native/counter.h'), COUNTER);
+    const registry = new NodeRegistry();
+    const definitions = exposeFunctions(scanCpp(COUNTER), { language: 'cpp', path: 'native/counter.h', exposeAll: false }).definitions;
+    registry.registerMany(definitions);
+    const result = compileDocument(codeClassGraph(definitions, 'cpp'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Counting.vgraph', outputDir: '' } });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    assert.match(output.text, /vgraph::code_new<game::BigCounter, game::Counter>\(1\.0\)/);
+    const file = path.join(dir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    for (const companion of output.companionFiles ?? []) fs.writeFileSync(path.join(dir, companion.fileName), companion.text);
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('cpp')!.generator!.runner!, file, output.className, { cwd: dir, timeoutMs: 120000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.stderr, '');
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), CODE_CLASS_OUTPUT);
   });
 });

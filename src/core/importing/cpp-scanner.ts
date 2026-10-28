@@ -3,7 +3,7 @@
 // with the @blueprint marker as in the other languages). Like the other scanners it parses only
 // declarations and skips bodies by matching brackets; classes, templates and macros aren't read.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedParam, isMarked, parseDocText } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -201,6 +201,10 @@ export function scanCpp(source: string): ModuleScan {
         i = skipDeclaration(after);
         continue;
       }
+      if ((at(i, 'class') || at(i, 'struct')) && tokens[i].kind === 'name') {
+        i = classDeclaration(i, end, namespace, doc);
+        continue;
+      }
       if (TYPE_KEYWORDS.has(tokens[i].text) && tokens[i].kind === 'name') {
         i = skipDeclaration(i);
         continue;
@@ -229,6 +233,138 @@ export function scanCpp(source: string): ModuleScan {
         if ('reason' in params) skip(params.reason);
         else if ('reason' in returns) skip(returns.reason);
         else result.functions.push({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, ...(namespace ? { container: namespace } : {}) });
+      }
+      i = declEnd;
+    }
+  };
+
+  // A class or struct with a body (docs/node-authoring.md, gap 2): its public constructors, methods
+  // and data members, for their markers to make nodes of. Returns where the declaration ends.
+  const classDeclaration = (i: number, end: number, namespace: string, doc: string[] | undefined): number => {
+    const struct = at(i, 'struct');
+    let j = i + 1;
+    while (at(j, '[') && at(j + 1, '[')) j = skipGroup(j);
+    const nameToken = tokens[j];
+    if (nameToken?.kind !== 'name') return skipDeclaration(i);
+    j++;
+    if (at(j, 'final')) j++;
+    let base: TypeRef | undefined;
+    if (at(j, ':')) {
+      let k = j + 1;
+      while (k < end && !at(k, '{') && !at(k, ';')) k = at(k, '<') ? skipAngles(k) : k + 1;
+      const first = text(j + 1, k).split(',')[0].trim();
+      const access = /^(public|protected|private)\b/.exec(first.replace(/^virtual\s+/, ''))?.[1] ?? (struct ? 'public' : 'private');
+      const type = first.replace(/\b(public|protected|private|virtual)\b/g, '').trim();
+      if (access === 'public' && type) base = mapCppType(type);
+      j = k;
+    }
+    if (!at(j, '{')) return skipDeclaration(i);
+    const close = skipGroup(j);
+    const name = nameToken.text;
+    const cls: ScannedClass = {
+      name: namespace ? `${namespace}::${name}` : name, line: tokens[i].line, doc: parseDoc(doc), type: mapCppType(name) ?? { id: `native:${name}` },
+      ...(base?.id.startsWith('native:') ? { base } : {}), methods: [], properties: []
+    };
+    classMembers(j + 1, close - 1, cls, name, struct ? 'public' : 'private');
+    (result.classes ??= []).push(cls);
+    return at(close, ';') ? close + 1 : close;
+  };
+
+  // A class's members: public ones go into `cls`, marked others are reported.
+  const classMembers = (i: number, end: number, cls: ScannedClass, className: string, initialAccess: string): void => {
+    let access = initialAccess;
+    let attributeDoc: string[] | undefined;
+    while (i < end) {
+      if (at(i, ';')) {
+        i++;
+        continue;
+      }
+      if ((at(i, 'public') || at(i, 'private') || at(i, 'protected')) && at(i + 1, ':')) {
+        access = tokens[i].text;
+        i += 2;
+        continue;
+      }
+      if (at(i, '[') && at(i + 1, '[')) {
+        attributeDoc = tokens[i].doc ?? attributeDoc;
+        i = skipGroup(i);
+        continue;
+      }
+      const first = i;
+      const docComment = parseDoc(tokens[first].doc ?? attributeDoc);
+      attributeDoc = undefined;
+      if (TYPE_KEYWORDS.has(tokens[i].text) || at(i, 'friend') || at(i, 'template') || at(i, 'static_assert') || at(i, '~')) {
+        i = skipDeclaration(i);
+        continue;
+      }
+      const specifiers: string[] = [];
+      while (i < end && tokens[i].kind === 'name' && SPECIFIERS.has(tokens[i].text)) specifiers.push(tokens[i++].text);
+      // A destructor (after `virtual`).
+      if (at(i, '~')) {
+        i = skipDeclaration(i);
+        continue;
+      }
+      const skip = (memberName: string, reason: string): void => {
+        if (isMarked(docComment)) result.skipped.push({ name: `${cls.name}::${memberName}`, line: tokens[first].line, reason, marked: true });
+      };
+      // A constructor: the class's name, then (parameters), maybe an initializer list, then a body.
+      if (at(i, className) && at(i + 1, '(')) {
+        const close = skipGroup(i + 1);
+        let k = close;
+        while (k < end && !at(k, '{') && !at(k, ';') && !at(k, ':') && !at(k, '=')) k++;
+        if (at(k, ':')) {
+          // Initializers: name(…) or name{…}, separated by commas.
+          k++;
+          while (k < end) {
+            while (k < end && !at(k, '(') && !at(k, '{')) k = at(k, '<') ? skipAngles(k) : k + 1;
+            k = skipGroup(k);
+            if (at(k, ',')) k++;
+            else break;
+          }
+        }
+        const declEnd = at(k, '{') ? skipGroup(k) : skipDeclaration(k);
+        const params = parseParams(i + 2, close - 1);
+        if (access !== 'public') skip(className, "it isn't public");
+        else if ('reason' in params) skip(className, params.reason);
+        else if (!cls.init || isMarked(docComment)) cls.init = { name: className, line: tokens[first].line, params, returns: null, doc: docComment };
+        i = declEnd;
+        continue;
+      }
+      const nameIndex = functionName(i, end);
+      if (nameIndex !== undefined) {
+        const name = tokens[nameIndex].text;
+        const open = nameIndex + 1;
+        const close = skipGroup(open);
+        const declEnd = skipDeclaration(close);
+        const returnText = text(i, nameIndex).trim();
+        if (/\boperator\b/.test(text(i, open))) skip(name, "operators can't be nodes");
+        else if (access !== 'public') skip(name, "it isn't public");
+        else if (specifiers.includes('static')) skip(name, 'static member functions have no object; make it a free function instead');
+        else if (returnText === '' || returnText === 'auto') skip(name, 'its return type has to be written out');
+        else {
+          const params = parseParams(open + 1, close - 1);
+          const returns = mapReturn(returnText);
+          if ('reason' in params) skip(name, params.reason);
+          else if ('reason' in returns) skip(name, returns.reason);
+          else cls.methods.push({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment });
+        }
+        i = declEnd;
+        continue;
+      }
+      // A data member: Type name [= value | {value}];
+      let k = i;
+      while (k < end && !at(k, ';') && !at(k, '=') && !at(k, '{') && !at(k, '[') && !at(k, ',') && !at(k, ':')) k = at(k, '<') ? skipAngles(k) : k + 1;
+      const declEnd = skipDeclaration(i);
+      const nameToken = tokens[k - 1];
+      if (k - i >= 2 && nameToken?.kind === 'name' && !at(k, ',') && !at(k, '[') && !at(k, ':')) {
+        const typeText = text(i, k - 1);
+        const constant = /^const\b|\bconst$/.test(typeText.trim());
+        if (access !== 'public') skip(nameToken.text, "it isn't public");
+        else if (specifiers.includes('static')) skip(nameToken.text, "static data members have no object; they can't be nodes yet");
+        else if (/[&*]$/.test(typeText.trim())) skip(nameToken.text, "references and pointers can't be pins yet");
+        else {
+          const type = mapCppType(typeText.replace(/^const\s+/, '').replace(/\s+const$/, ''));
+          cls.properties.push({ name: nameToken.text, line: tokens[first].line, ...(type ? { type } : {}), readonly: constant || specifiers.includes('constexpr'), doc: docComment });
+        }
       }
       i = declEnd;
     }

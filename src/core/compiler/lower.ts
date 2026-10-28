@@ -12,7 +12,7 @@ import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrPinValue, IrProgram, IrSlot, IrStatement, IrTest, ProgramTypes, SourceRef, exprType, readsStorageOnly } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
-import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest, codeClassBases } from '../objects';
+import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest, codeClassBases, codeClasses } from '../objects';
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup, userTypeProblems } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
@@ -1275,6 +1275,7 @@ class Lowerer {
       path: target.path,
       ...(target.module ? { module: target.module } : {}),
       ...(implementation.member ? { member: implementation.member } : {}),
+      ...(implementation.member?.kind === 'construct' ? { bases: this.codeBases(implementation.member.type) } : {}),
       params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
       returns: def.outputs.find((p) => p.kind === 'data')?.type
     };
@@ -1282,6 +1283,20 @@ class Lowerer {
     if (outputs.length > 1) imported.outputs = outputs.map((p) => ({ id: p.id, name: p.name, type: p.type }));
     this.imports.set(def.type, imported);
     return imported;
+  }
+
+  // The classes a class from the project's code extends, nearest first.
+  private codeBases(type: string): { name: string; module?: string }[] {
+    const classes = codeClasses(this.options.registry.all());
+    const bases: { name: string; module?: string }[] = [];
+    const seen = new Set([type]);
+    for (let base = classes.get(type)?.base; base && !seen.has(base); base = classes.get(base)?.base) {
+      seen.add(base);
+      const known = classes.get(base);
+      if (!known) break;
+      bases.push({ name: known.name, ...(known.module ? { module: known.module } : {}) });
+    }
+    return bases;
   }
 
   private codeHelper(info: GraphInfo, node: GraphNode, def: NodeDefinition): IrCodeHelper | undefined {

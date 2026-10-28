@@ -316,15 +316,31 @@ export function subclassTest(definition: (type: string) => NodeDefinition | unde
   };
 }
 
-// The class each class from the project's code extends, by type id, as its member nodes record it
-// (docs/node-authoring.md, gap 2).
-export function codeClassBases(definitions: Iterable<NodeDefinition>): Map<string, string> {
-  const bases = new Map<string, string>();
+// A class from the project's code, as its member nodes record it (docs/node-authoring.md, gap 2):
+// the name generated code uses for it, and the class it extends.
+export interface CodeClass {
+  type: string;
+  base?: string;
+  name: string;
+  module?: string;
+  language: string;
+}
+
+// The project's classes that have member nodes, by type id.
+export function codeClasses(definitions: Iterable<NodeDefinition>): Map<string, CodeClass> {
+  const classes = new Map<string, CodeClass>();
   for (const d of definitions) {
-    const member = d.implementation?.kind === 'function' ? d.implementation.member : undefined;
-    if (member?.base) bases.set(member.type, member.base);
+    const implementation = d.implementation?.kind === 'function' ? d.implementation : undefined;
+    const member = implementation?.member;
+    if (!implementation || !member || classes.has(member.type)) continue;
+    classes.set(member.type, { type: member.type, ...(member.base ? { base: member.base } : {}), name: implementation.name, ...(implementation.module ? { module: implementation.module } : {}), language: implementation.language });
   }
-  return bases;
+  return classes;
+}
+
+// The class each class from the project's code extends, by type id.
+export function codeClassBases(definitions: Iterable<NodeDefinition>): Map<string, string> {
+  return new Map([...codeClasses(definitions).values()].flatMap((c) => (c.base ? [[c.type, c.base] as [string, string]] : [])));
 }
 
 // ---- Values (Simulate) --------------------------------------------------------------------------

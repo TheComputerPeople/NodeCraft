@@ -195,6 +195,9 @@ export interface IrImport {
   // A member of a class in the project's code: `name` is the class, and the first param the Target
   // (but not for construct).
   member?: CodeMember;
+  // Construct: the classes the class extends, nearest first, as far as the workspace knows them
+  // (C++ keeps the object as each, so members of any of them reach it).
+  bases?: { name: string; module?: string }[];
 }
 
 // Imports of one name from one module share one local name (a class's member nodes all import

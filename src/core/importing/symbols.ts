@@ -146,7 +146,8 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
 // The nodes of a class's marked members: Construct from its constructor, a node per method with a
 // Target pin, and Get and Set for each property.
 function classDefinitions(cls: ScannedClass, options: ExposeOptions): NodeDefinition[] {
-  const simple = cls.name.slice(cls.name.lastIndexOf('.') + 1);
+  // Without its namespace or module ("Game.Player", "game::Player").
+  const simple = cls.name.split(/::|\./).pop()!;
   const member = (kind: CodeMember['kind'], name?: string): CodeMember => ({ kind, ...(name ? { name } : {}), type: cls.type.id, ...(cls.base ? { base: cls.base.id } : {}) });
   const target: PinDefinition = { id: 'target', name: 'Target', kind: 'data', direction: 'input', type: cls.type };
   const implementation = (kind: CodeMember['kind'], name?: string): FunctionImplementation => ({

@@ -6,7 +6,7 @@ export const CPP_RUNTIME_GUARD = 'VGRAPH_RUNTIME_1';
 
 export const CPP_RUNTIME_INCLUDES = [
   '<algorithm>', '<any>', '<cctype>', '<charconv>', '<chrono>', '<cmath>', '<cstdint>', '<cstdio>', '<fstream>', '<functional>', '<iostream>',
-  '<memory>', '<random>', '<regex>', '<set>', '<sstream>', '<stdexcept>', '<string>', '<thread>', '<tuple>', '<typeinfo>', '<utility>', '<vector>'
+  '<memory>', '<random>', '<regex>', '<set>', '<sstream>', '<stdexcept>', '<string>', '<thread>', '<tuple>', '<typeindex>', '<typeinfo>', '<utility>', '<vector>'
 ];
 
 export const CPP_RUNTIME = String.raw`namespace vgraph {
@@ -22,6 +22,30 @@ public:
 template <class T> T& deref(const std::shared_ptr<T>& object) {
     if (!object) throw std::runtime_error("Accessed None");
     return *object;
+}
+
+// An object of a class from the project's code (docs/node-authoring.md, gap 2), in a std::any: the
+// object as its own class and as each class it extends, so a member of any of them finds it.
+struct CodeObject {
+    std::vector<std::pair<std::type_index, std::shared_ptr<void>>> as;
+};
+
+template <class T, class... Bases, class... Args> std::any code_new(Args&&... args) {
+    auto object = std::make_shared<T>(std::forward<Args>(args)...);
+    CodeObject held;
+    held.as.emplace_back(typeid(T), object);
+    (held.as.emplace_back(typeid(Bases), std::static_pointer_cast<Bases>(object)), ...);
+    return held;
+}
+
+// The object as class T (else the run stops, as Unreal stops on "Accessed None").
+template <class T> T& code_object(const std::any& value) {
+    if (auto held = std::any_cast<CodeObject>(&value)) {
+        for (const auto& [type, object] : held->as) {
+            if (type == typeid(T)) return *std::static_pointer_cast<T>(object);
+        }
+    }
+    throw std::runtime_error("Accessed None");
 }
 
 inline bool is_valid(const std::any& value) {

@@ -3,7 +3,7 @@
 // (nested ones too), with their parameters, types and documentation. Like the other scanners it
 // parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedParam, isMarked, parseDocText } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -150,8 +150,9 @@ export function scanJava(source: string): ModuleScan {
     i = end;
   }
 
-  // The members of a type's body (or the file), between `from` and `to`.
-  const members = (from: number, to: number, container: string): void => {
+  // The members of a type's body (or the file), between `from` and `to`. A class's (`cls`) public
+  // constructors, instance methods and fields are read too (docs/node-authoring.md, gap 2).
+  const members = (from: number, to: number, container: string, cls?: ScannedClass): void => {
     let j = from;
     while (j < to) {
       const first = j;
@@ -179,17 +180,31 @@ export function scanJava(source: string): ModuleScan {
       // A nested type: its members, qualified by its name.
       if (tokens[j].kind === 'name' && TYPE_KEYWORDS.has(tokens[j].text) && tokens[j + 1]?.kind === 'name') {
         const name = tokens[j + 1].text;
+        const keyword = tokens[j].text;
+        const generic = at(j + 2, '<');
         let k = j + 2;
         while (k < to && !at(k, '{')) k = at(k, '(') ? skipGroup(k) : at(k, '<') ? skipAngles(k) : k + 1;
         const close = skipGroup(k);
         const inner = container ? `${container}.${name}` : name;
+        // A public class (not generic, nor nested without static): its objects' members can be nodes.
+        const header = text(generic ? skipAngles(j + 2) : j + 2, k);
+        const baseText = /\bextends\s+([\w.]+)/.exec(header)?.[1];
+        const base = baseText ? mapJavaType(baseText) : undefined;
+        const nested = !!container && !modifiers.has('static');
+        const scanned: ScannedClass | undefined = keyword === 'class' && modifiers.has('public') && !generic && !nested
+          ? {
+              name: qualified(inner), line: tokens[first].line, doc: parseDoc(doc), type: mapJavaType(name) ?? { id: `native:${name}` },
+              ...(base?.id.startsWith('native:') ? { base } : {}), ...(modifiers.has('abstract') ? { abstract: true } : {}), methods: [], properties: []
+            }
+          : undefined;
         // An enum's constants come before its members, up to the first `;`.
         let body = k + 1;
         if (tokens[j].text === 'enum') {
           while (body < close - 1 && !at(body, ';')) body = at(body, '(') || at(body, '{') ? skipGroup(body) : body + 1;
           body++;
         }
-        members(body, close - 1, inner);
+        members(body, close - 1, inner, scanned);
+        if (scanned) (result.classes ??= []).push(scanned);
         j = close;
         continue;
       }
@@ -204,6 +219,50 @@ export function scanJava(source: string): ModuleScan {
       if (generic) k = skipAngles(k);
       const typeStart = k;
       while (k < to && !at(k, '(') && !at(k, '=') && !at(k, ';') && !at(k, '{')) k = at(k, '<') ? skipAngles(k) : at(k, '[') ? skipGroup(k) : k + 1;
+      if (cls) {
+        const memberDoc = parseDoc(doc);
+        const memberSkip = (memberName: string, reason: string) => {
+          if (isMarked(memberDoc)) result.skipped.push({ name: memberName, line: tokens[first].line, reason, marked: true, container: cls.name });
+        };
+        // A constructor: the class's name, then (parameters).
+        if (at(k, '(') && k - typeStart === 1 && tokens[typeStart].text === container.split('.').pop()) {
+          const close = skipGroup(k);
+          const params = parseParams(k + 1, close - 1);
+          if (!modifiers.has('public')) memberSkip(tokens[typeStart].text, "it isn't public, so generated code can't call it");
+          else if (at(close, 'throws')) memberSkip(tokens[typeStart].text, "constructors that declare checked exceptions can't be nodes yet");
+          else if ('reason' in params) memberSkip(tokens[typeStart].text, params.reason);
+          else if (!cls.init || isMarked(memberDoc)) cls.init = { name: tokens[typeStart].text, line: tokens[first].line, params, returns: null, doc: memberDoc };
+          j = skipMember(close);
+          continue;
+        }
+        // A field: type name [= value];
+        if (!at(k, '(') && k - typeStart >= 2 && tokens[k - 1].kind === 'name' && !modifiers.has('static')) {
+          const fieldName = tokens[k - 1].text;
+          if (!modifiers.has('public')) memberSkip(fieldName, "it isn't public, so generated code can't use it");
+          else {
+            const type = mapJavaType(text(typeStart, k - 1));
+            cls.properties.push({ name: fieldName, line: tokens[first].line, ...(type ? { type } : {}), readonly: modifiers.has('final'), doc: memberDoc });
+          }
+          j = skipMember(j);
+          continue;
+        }
+        // An instance method.
+        if (at(k, '(') && k - typeStart >= 2 && tokens[k - 1].kind === 'name' && !modifiers.has('static')) {
+          const name = tokens[k - 1].text;
+          const returnText = text(typeStart, k - 1);
+          const close = skipGroup(k);
+          if (!modifiers.has('public')) memberSkip(name, "it isn't public, so generated code can't call it");
+          else if (generic) memberSkip(name, "generic methods can't be nodes yet");
+          else if (at(close, 'throws')) memberSkip(name, "methods that declare checked exceptions can't be nodes yet");
+          else {
+            const params = parseParams(k + 1, close - 1);
+            if ('reason' in params) memberSkip(name, params.reason);
+            else cls.methods.push({ name, line: tokens[first].line, params, returns: returnText === 'void' ? null : mapJavaType(returnText), doc: memberDoc });
+          }
+          j = skipMember(close);
+          continue;
+        }
+      }
       if (!at(k, '(') || k - typeStart < 2 || tokens[k - 1].kind !== 'name') {
         j = skipMember(j);
         continue;

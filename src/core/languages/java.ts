@@ -1036,7 +1036,16 @@ class JavaEmitter {
     const list = args.map((a, i) => this.coerce(a, signature?.params[i]?.type)).join(', ');
     if (callee.kind === 'helper') return `${this.helperNames.get(callee.id)}(${list})`;
     const imported = this.program.imports.find((i) => i.id === callee.id)!;
-    return `${imported.module ? `${imported.module}.` : ''}${imported.name}(${list})`;
+    const qualified = `${imported.module ? `${imported.module}.` : ''}${imported.name}`;
+    const member = imported.member;
+    if (!member) return `${qualified}(${list})`;
+    // A code class's member (docs/node-authoring.md, gap 2). Its objects travel as Object, so the
+    // Target is cast to the class.
+    if (member.kind === 'construct') return `new ${qualified}(${list})`;
+    const [target, ...rest] = args;
+    const object = `((${qualified}) ${this.operand(target)})`;
+    const values = rest.map((a, i) => this.coerce(a, signature?.params[i + 1]?.type)).join(', ');
+    return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
 
   // The value as text, per docs/semantics.md ("Values").

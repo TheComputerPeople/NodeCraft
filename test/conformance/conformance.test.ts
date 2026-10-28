@@ -21,6 +21,7 @@ import { GraphRuntime } from '../../src/core/runtime';
 import { parseDocument } from '../../src/core/serializer';
 import { RUN_PROJECT_FILE, csharpRunProject } from '../../src/core/languages/csharp';
 import { ToolNotFoundError, runCommand, runGeneratedCode, writeScaffold } from '../../src/extension/runner';
+import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 const languages = builtinLanguagePacks();
@@ -440,40 +441,14 @@ describe('code classes', () => {
     }
   };
 
-  // Start → c = Construct Counter(5) → Print(c.Add(3)) → c.Count = 20 → Print(c.Doubled) →
-  // b = Construct BigCounter(1) → Print(Add(Target b, 1)), with Add's Target a Counter.
+  // The shared Counter graph (test/conformance/code-classes.ts), with the module's class nodes.
   function project(language: string, key: string): { registry: NodeRegistry; document: GraphDocument } {
     const importer = languages.get(language)!.importer!;
     const module = language === 'python' ? 'game.counter' : undefined;
     const defs = exposeFunctions(importer.scan!(MODULES[key].text), { language, path: MODULES[key].path, module, exposeAll: false }).definitions;
-    const find = (suffix: string) => {
-      // "#Counter:new", or "#Game.Counter:new" in C# (with its namespace).
-      const found = defs.find((d) => d.type.toLowerCase().endsWith(suffix.toLowerCase()) || d.type.toLowerCase().endsWith(`.${suffix.slice(1)}`.toLowerCase()));
-      assert.ok(found, `no ${suffix} in ${defs.map((d) => d.type).join(', ')}`);
-      return found;
-    };
     const r = registry();
     r.registerMany(defs);
-    const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
-    const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin });
-    const document: GraphDocument = {
-      schemaVersion: 3, name: 'Counting', kind: 'class', language, variables: [],
-      graphs: [{
-        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
-        nodes: [
-          n('s', 'core:event.start'), n('c', find('#Counter:new').type, { 'pin:start': 5 }), n('add', find('#Counter:add').type, { 'pin:amount': 3 }), n('p1', 'core:console.print'),
-          n('set', find('#Counter:set:count').type, { 'pin:value': 20 }), n('get', find('#Counter:get:doubled').type), n('p2', 'core:console.print'),
-          n('b', find('#BigCounter:new').type, { 'pin:start': 1 }), n('add2', find('#Counter:add').type, { 'pin:amount': 1 }), n('p3', 'core:console.print')
-        ],
-        connections: [
-          w('s', 'execOut', 'c', 'execIn'), w('c', 'execOut', 'add', 'execIn'), w('add', 'execOut', 'p1', 'execIn'), w('p1', 'execOut', 'set', 'execIn'),
-          w('set', 'execOut', 'p2', 'execIn'), w('p2', 'execOut', 'b', 'execIn'), w('b', 'execOut', 'add2', 'execIn'), w('add2', 'execOut', 'p3', 'execIn'),
-          w('c', 'returnValue', 'add', 'target'), w('add', 'returnValue', 'p1', 'value'), w('c', 'returnValue', 'set', 'target'),
-          w('c', 'returnValue', 'get', 'target'), w('get', 'returnValue', 'p2', 'value'), w('b', 'returnValue', 'add2', 'target'), w('add2', 'returnValue', 'p3', 'value')
-        ]
-      }]
-    };
-    return { registry: r, document };
+    return { registry: r, document: codeClassGraph(defs, language) };
   }
 
   function build(language: string, key: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; importRoots?: string[] } {
@@ -517,7 +492,7 @@ describe('code classes', () => {
         if (error instanceof ToolNotFoundError) return t.skip(error.message);
         throw error;
       }
-      assert.deepEqual(outputLines(outcome.stdout), ['8', '40', '11'], `stderr:\n${outcome.stderr}`);
+      assert.deepEqual(outputLines(outcome.stdout), CODE_CLASS_OUTPUT, `stderr:\n${outcome.stderr}`);
     });
   }
 

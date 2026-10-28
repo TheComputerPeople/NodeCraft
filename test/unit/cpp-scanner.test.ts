@@ -93,3 +93,48 @@ describe('C++ scanner', () => {
     assert.deepEqual(mapCppType('std::vector<std::vector<int>>'), { id: 'native:std::vector<std::vector<int>>' });
   });
 });
+
+// Classes (docs/node-authoring.md, gap 2): public constructors (with initializer lists), member
+// functions and data members of a class or struct become nodes with a Target pin.
+describe('C++ classes', () => {
+  const source = [
+    'namespace game {',
+    'class Counter : public Base {',
+    'public:',
+    '    /// @blueprint',
+    '    double count = 0;',
+    '    /// @blueprint',
+    '    const std::string label{"x"};',
+    '    /// @blueprint',
+    '    explicit Counter(double start) : count(start), label{"y"} {}',
+    '    virtual ~Counter() = default;',
+    '    /// @blueprint',
+    '    double add(double amount) { count += amount; return count; }',
+    '    /// @blueprint',
+    '    static int twice(int x) { return x * 2; }',
+    'private:',
+    '    /// @blueprint',
+    '    int secret = 1;',
+    '};',
+    '}',
+    ''
+  ].join('\n');
+
+  test('reads public constructors, member functions and data members', () => {
+    const scan = scanCpp(source);
+    const [cls] = scan.classes!;
+    assert.deepEqual([cls.name, cls.type, cls.base], ['game::Counter', { id: 'native:Counter' }, { id: 'native:Base' }]);
+    assert.deepEqual(cls.init!.params, [{ name: 'start', type: { id: 'float' } }]);
+    assert.deepEqual(cls.methods.map((m) => m.name), ['add']);
+    assert.deepEqual(cls.properties.map((p) => [p.name, p.readonly]), [['count', false], ['label', true]]);
+    assert.deepEqual(scan.skipped.filter((s) => s.marked).map((s) => s.name), ['game::Counter::twice', 'game::Counter::secret']);
+  });
+
+  test('marked members become nodes', () => {
+    const { definitions } = exposeFunctions(scanCpp(source), { language: 'cpp', path: 'include/counter.h', exposeAll: false });
+    assert.deepEqual(definitions.map((d) => [d.type.slice(d.type.indexOf('#') + 1), d.displayName]), [
+      ['game::Counter:new', 'Construct Counter'], ['game::Counter:add', 'Add'], ['game::Counter:get:count', 'Get Count'],
+      ['game::Counter:set:count', 'Set Count'], ['game::Counter:get:label', 'Get Label']
+    ]);
+  });
+});

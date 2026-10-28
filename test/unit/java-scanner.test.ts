@@ -86,7 +86,9 @@ describe('Java scanner', () => {
 
   test('methods that can\'t be nodes are reported with the reason', () => {
     const skipped = Object.fromEntries(scan.skipped.map((s) => [s.name, s.reason]));
-    assert.match(skipped.instance, /isn't public static/);
+    // An instance method of a public class is a member node with a Target pin (docs/node-authoring.md, gap 2).
+    assert.equal(skipped.instance, undefined);
+    assert.deepEqual(scan.classes!.find((c) => c.name === 'game.combat.Rules')?.methods.map((m) => m.name), ['instance']);
     assert.match(skipped.first, /generic/);
     assert.match(skipped.log, /varargs/);
     assert.match(skipped.read, /checked exceptions/);
@@ -105,5 +107,47 @@ describe('Java scanner', () => {
     assert.deepEqual(mapJavaType('java.lang.String'), { id: 'string' });
     assert.deepEqual(mapJavaType('java.util.ArrayList< Double >'), { id: 'float', container: 'array' });
     assert.deepEqual(mapJavaType('List<Long>'), { id: 'native:List<Long>' });
+  });
+});
+
+// Classes (docs/node-authoring.md, gap 2): a public class's public constructors, instance methods
+// and fields (final ones read-only) become nodes with a Target pin.
+describe('Java classes', () => {
+  const source = [
+    'package game;',
+    'public class Counter extends Base implements Comparable<Counter> {',
+    '    /** @blueprint */',
+    '    public double count;',
+    '    /** @blueprint */',
+    '    public final String label = "x";',
+    '    /** @blueprint */',
+    '    private int secret;',
+    '    /** @blueprint */',
+    '    public Counter(double start) { count = start; }',
+    '    /** @blueprint */',
+    '    public double add(double amount) { count += amount; return count; }',
+    '    /** @blueprint */',
+    '    public static int twice(int x) { return x * 2; }',
+    '    public int compareTo(Counter other) { return 0; }',
+    '}',
+    ''
+  ].join('\n');
+
+  test('reads public constructors, instance methods and fields', () => {
+    const scan = scanJava(source);
+    const [cls] = scan.classes!;
+    assert.deepEqual([cls.name, cls.type, cls.base], ['game.Counter', { id: 'native:Counter' }, { id: 'native:Base' }]);
+    assert.deepEqual(cls.init!.params, [{ name: 'start', type: { id: 'float' } }]);
+    assert.deepEqual(cls.methods.map((m) => m.name), ['add', 'compareTo']);
+    assert.deepEqual(cls.properties.map((p) => [p.name, p.readonly]), [['count', false], ['label', true]]);
+    assert.deepEqual(scan.functions.map((f) => f.name), ['twice']);
+    assert.deepEqual(scan.skipped.filter((s) => s.marked).map((s) => s.name), ['secret']);
+  });
+
+  test('marked members become nodes', () => {
+    const { definitions } = exposeFunctions(scanJava(source), { language: 'java', path: 'src/main/java/game/Counter.java', exposeAll: false });
+    assert.deepEqual(definitions.map((d) => d.type.slice(d.type.indexOf('#') + 1)), [
+      'game.Counter.twice', 'game.Counter:new', 'game.Counter:add', 'game.Counter:get:count', 'game.Counter:set:count', 'game.Counter:get:label'
+    ]);
   });
 });

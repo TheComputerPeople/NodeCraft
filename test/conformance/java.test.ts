@@ -14,6 +14,7 @@ import { NodeRegistry } from '../../src/core/registry';
 import { javaProject } from '../../src/extension/placement';
 import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
+import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-java-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -89,5 +90,86 @@ describe('Java project functions', () => {
     }
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['42', 'Red: 3']);
+  });
+});
+
+// Classes (docs/node-authoring.md, gap 2): constructors, instance methods and fields marked
+// @blueprint, used through Target pins; a subclass's object where its base is expected.
+const COUNTER = [
+  'package game.count;',
+  '',
+  'public class Counter {',
+  '    /** @blueprint */',
+  '    public double count;',
+  '',
+  '    /** @blueprint */',
+  '    public Counter(double start) {',
+  '        count = start;',
+  '    }',
+  '',
+  '    /** @blueprint */',
+  '    public double add(double amount) {',
+  '        count += amount;',
+  '        return count;',
+  '    }',
+  '',
+  '    /** @blueprint pure */',
+  '    public double doubled() {',
+  '        return count * 2;',
+  '    }',
+  '}',
+  ''
+].join('\n');
+const BIG_COUNTER = [
+  'package game.count;',
+  '',
+  'public class BigCounter extends Counter {',
+  '    /** @blueprint */',
+  '    public BigCounter(double start) {',
+  '        super(start * 10);',
+  '    }',
+  '}',
+  ''
+].join('\n');
+
+describe('Java code classes', () => {
+  test('a graph constructs them and uses their members, a subclass where its base is expected', async (t) => {
+    const project = path.join(workDir, 'classes');
+    const files: Record<string, string> = {
+      'pom.xml': '<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>classes</artifactId><version>1</version></project>',
+      'src/main/java/game/count/Counter.java': COUNTER,
+      'src/main/java/game/count/BigCounter.java': BIG_COUNTER
+    };
+    for (const [name, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+      fs.writeFileSync(path.join(project, name), text);
+    }
+    const graphDir = path.join(project, 'src/main/java/game/graphs');
+    fs.mkdirSync(graphDir, { recursive: true });
+    const placement = javaProject(graphDir, project);
+    const definitions = [
+      ...exposeFunctions(scanJava(COUNTER), { language: 'java', path: 'src/main/java/game/count/Counter.java', exposeAll: false }).definitions,
+      ...exposeFunctions(scanJava(BIG_COUNTER), { language: 'java', path: 'src/main/java/game/count/BigCounter.java', exposeAll: false }).definitions
+    ];
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(codeClassGraph(definitions, 'java'), {
+      registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Counting.vgraph', outputDir: 'src/main/java/game/graphs', namespace: placement.package }
+    });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    const file = path.join(graphDir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('java')!.generator!.runner!, file, output.className, {
+        cwd: project, importRoots: placement.sourceRoots, sources: Object.keys(files).filter((f) => f.endsWith('.java')).map((f) => path.join(project, f)), timeoutMs: 300000
+      });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.stderr, '');
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), CODE_CLASS_OUTPUT);
   });
 });

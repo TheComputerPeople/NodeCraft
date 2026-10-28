@@ -79,10 +79,12 @@ A class's members become nodes too, each when its own documentation comment is m
   - TypeScript and JavaScript: an exported class's constructor, instance methods, fields and get/set accessors.
   - Python: `__init__`, methods, `@property` (with its setter, writable), and attributes annotated in the class body and documented by the string after them.
   - C#: a class's or record's public constructors, instance methods, properties and fields. Structs are left out: Set would change a copy.
+  - C++: a class's or struct's public constructors (initializer lists included), member functions and data members (`const` ones read-only), in headers.
+  - Java: a public class's public constructors, instance methods and fields (`final` ones read-only).
   - Private members (and `_`-named ones in Python), static members and async methods are reported instead.
 - **Types.** Objects travel on pins of the class's `native:` type, as functions returning the class already make them. A subclass's object connects where its base class is expected, when the subclass has a marked member (its nodes record the base). The default category is "Project / <Class>".
-- **Generated code.** It imports the class and writes `new Player(…)` (`Player(…)` in Python), `target.heal(…)`, `target.health` and `target.health = …`. C# passes such objects as `object`, so it casts the Target to the class. An empty Target stops the run with the language's own null error, as Unreal stops on "Accessed None".
-- **Languages.** TypeScript, JavaScript, Python and C# so far; the other languages follow in Phase 9.
+- **Generated code.** It imports the class and writes `new Player(…)` (`Player(…)` in Python), `target.heal(…)`, `target.health` and `target.health = …`. C# and Java pass such objects as `object`/`Object`, so they cast the Target to the class. C++ passes them in a `std::any`, as the object and as each class it extends (`vgraph::code_new<Player, Entity>(…)`), and `vgraph::code_object<Player>(target)` finds the object as the class it needs. An empty Target stops the run with the language's own null error (C++: "Accessed None"), as Unreal stops on "Accessed None".
+- **Languages.** TypeScript, JavaScript, Python, C#, C++ and Java so far; the other languages follow in Phase 9.
 
 ## Node identity
 

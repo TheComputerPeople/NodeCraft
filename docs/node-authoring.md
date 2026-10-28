@@ -68,6 +68,13 @@ Reviewed 2026-10-28, after the built-in utility library grew to 94 nodes. Each g
 - **Subclasses.** A subclass's objects connect to its base class's Target pins: `codeClassBases` in src/core/objects.ts collects each class's base from its member nodes.
 - **Tests.** A conformance test builds a `Counter` and a `BigCounter` subclass in each language and checks the output. The TypeScript and JavaScript versions also type-check under `--strict`.
 
+**Built (step 5, part 1): C++ and Java.**
+
+- **Scanning.** The C++ scanner reads a class's or struct's public section in a header: constructors (past their initializer lists), member functions and data members. The Java scanner reads a public top-level or static nested class's public constructors, instance methods and fields.
+- **C++ objects.** C++ objects travel in a `std::any`, as the graph's other `native:` values do. A Target must reach the object as the class whose member it uses, which `std::any_cast` can't do for a subclass. So Construct stores a `vgraph::CodeObject`: the object as its own class and as each class it extends that the workspace knows. The lowering passes those classes on the construct's import (`bases`), and `vgraph::code_object<T>` finds the object as `T`.
+- **Java objects.** Java casts the Target to the class, as C# does.
+- **Tests.** The Counter test is shared (test/conformance/code-classes.ts). The C++ and Java versions use a pure method for Doubled, since neither language has properties.
+
 Classes from code as **parents** of graph classes (Unreal's Blueprint subclassing a C++ class, with BlueprintImplementableEvent) stay deferred. They need generated subclasses of user code in every language, which is a phase of its own.
 
 ## Gap 3: code functions have one output
