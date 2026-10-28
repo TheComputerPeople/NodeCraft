@@ -127,6 +127,7 @@ More of Unreal's own nodes, with its names and categories, implemented in every 
 | Math / Trig | Sin, Cos, Tan, Asin, Acos, Atan, Atan2 (all in radians), Degrees To Radians, Radians To Degrees, Get PI |
 | Math / Boolean | XOR, NAND, NOR |
 | Math / Random | Random Bool |
+| Utilities / Set | Union, Intersection, Difference |
 
 Their rules, where languages would disagree:
 
@@ -134,6 +135,7 @@ Their rules, where languages would disagree:
 - **Domains.** Asin and Acos take values outside -1 to 1 as the nearest end, as Unreal (and Godot) do. Loge and Log of a value that isn't positive, or Log in a base that isn't positive or is 1, stop the run with an error (languages would otherwise give -Infinity, NaN or an error of their own).
 - **Precision.** Log is `ln(A) / ln(Base)` in every language (no `log10` shortcut), so Log of 1000 in base 10 is 2.9999999999999996 everywhere. Math libraries can differ in the last digit of trigonometry and logarithms; the conformance fixture rounds those results to 10 places.
 - **Parts.** Truncate rounds toward zero and returns an integer; Fraction keeps A's sign (-1.25 gives -0.25), as Unreal's does.
+- **New containers.** The set and array functions return a new container and leave their inputs as they are. Sets print, as To Array lists them, in ascending order.
 
 ### More utilities
 

@@ -5,6 +5,7 @@
 // run with the message, as Divide by zero does. Adapted from Common Utility Snippets v0.1.0 (MIT;
 // its notice is in THIRD_PARTY_NOTICES.md).
 import { NodeDefinition } from './model';
+import { SET_UTILITIES } from './utilities-containers';
 import { MATH_UTILITIES } from './utilities-math';
 import { ARRAY, BOOL, FLOAT, FLOATS, INT, input, MAP, output, Snippets, STRING, text, UtilityNode } from './utility-kit';
 
@@ -1704,7 +1705,7 @@ return $drive . ($joined === '' ? '.' : $joined);`
 };
 
 export function utilityDefinitions(): NodeDefinition[] {
-  return [...NODES, ...MATH_UTILITIES].map((node) => ({
+  return [...NODES, ...MATH_UTILITIES, ...SET_UTILITIES].map((node) => ({
     type: node.type,
     version: 1,
     displayName: node.displayName,

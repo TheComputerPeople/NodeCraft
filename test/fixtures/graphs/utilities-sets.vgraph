@@ -1,0 +1,366 @@
+{
+  "schemaVersion": 3,
+  "name": "UtilsSets",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "metadata": {
+    "description": "Utility nodes: Unreal's set operations (sets print in ascending order).",
+    "expectedOutput": [
+      "[1,2,3,4]",
+      "[\"b\",\"c\"]",
+      "[1,3]",
+      "[]"
+    ]
+  },
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "print1",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 120
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "core:set.union",
+          "position": {
+            "x": 600,
+            "y": 120
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n1_a",
+          "type": "core:set.make",
+          "position": {
+            "x": 300,
+            "y": 120
+          },
+          "properties": {
+            "pins": 3,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 3,
+            "pin:item1": 1,
+            "pin:item2": 2
+          }
+        },
+        {
+          "id": "n1_b",
+          "type": "core:set.make",
+          "position": {
+            "x": 300,
+            "y": 120
+          },
+          "properties": {
+            "pins": 2,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 4,
+            "pin:item1": 3
+          }
+        },
+        {
+          "id": "print2",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "core:set.intersection",
+          "position": {
+            "x": 600,
+            "y": 240
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "string"
+            }
+          }
+        },
+        {
+          "id": "n2_a",
+          "type": "core:set.make",
+          "position": {
+            "x": 300,
+            "y": 240
+          },
+          "properties": {
+            "pins": 3,
+            "wildcards": {
+              "wildcard": "string"
+            },
+            "pin:item0": "c",
+            "pin:item1": "a",
+            "pin:item2": "b"
+          }
+        },
+        {
+          "id": "n2_b",
+          "type": "core:set.make",
+          "position": {
+            "x": 300,
+            "y": 240
+          },
+          "properties": {
+            "pins": 3,
+            "wildcards": {
+              "wildcard": "string"
+            },
+            "pin:item0": "d",
+            "pin:item1": "b",
+            "pin:item2": "c"
+          }
+        },
+        {
+          "id": "print3",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:set.difference",
+          "position": {
+            "x": 600,
+            "y": 360
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n3_a",
+          "type": "core:set.make",
+          "position": {
+            "x": 300,
+            "y": 360
+          },
+          "properties": {
+            "pins": 3,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 1,
+            "pin:item1": 2,
+            "pin:item2": 3
+          }
+        },
+        {
+          "id": "n3_b",
+          "type": "core:set.make",
+          "position": {
+            "x": 300,
+            "y": 360
+          },
+          "properties": {
+            "pins": 1,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 2
+          }
+        },
+        {
+          "id": "print4",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 480
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "core:set.intersection",
+          "position": {
+            "x": 600,
+            "y": 480
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n4_a",
+          "type": "core:set.make",
+          "position": {
+            "x": 300,
+            "y": 480
+          },
+          "properties": {
+            "pins": 1,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 1
+          }
+        },
+        {
+          "id": "n4_b",
+          "type": "core:set.make",
+          "position": {
+            "x": 300,
+            "y": 480
+          },
+          "properties": {
+            "pins": 1,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 2
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "print1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1_a",
+          "fromPin": "set",
+          "toNode": "n1",
+          "toPin": "a"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n1_b",
+          "fromPin": "set",
+          "toNode": "n1",
+          "toPin": "b"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "print1",
+          "toPin": "value"
+        },
+        {
+          "id": "w5",
+          "fromNode": "print1",
+          "fromPin": "execOut",
+          "toNode": "print2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n2_a",
+          "fromPin": "set",
+          "toNode": "n2",
+          "toPin": "a"
+        },
+        {
+          "id": "w7",
+          "fromNode": "n2_b",
+          "fromPin": "set",
+          "toNode": "n2",
+          "toPin": "b"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "print2",
+          "toPin": "value"
+        },
+        {
+          "id": "w9",
+          "fromNode": "print2",
+          "fromPin": "execOut",
+          "toNode": "print3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n3_a",
+          "fromPin": "set",
+          "toNode": "n3",
+          "toPin": "a"
+        },
+        {
+          "id": "w11",
+          "fromNode": "n3_b",
+          "fromPin": "set",
+          "toNode": "n3",
+          "toPin": "b"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "print3",
+          "toPin": "value"
+        },
+        {
+          "id": "w13",
+          "fromNode": "print3",
+          "fromPin": "execOut",
+          "toNode": "print4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n4_a",
+          "fromPin": "set",
+          "toNode": "n4",
+          "toPin": "a"
+        },
+        {
+          "id": "w15",
+          "fromNode": "n4_b",
+          "fromPin": "set",
+          "toNode": "n4",
+          "toPin": "b"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n4",
+          "fromPin": "returnValue",
+          "toNode": "print4",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}
