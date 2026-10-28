@@ -2,7 +2,7 @@
 // shown instead of the graph canvas, as Unreal opens struct and enum assets in their own editors:
 // a structure's fields (name, type, default value) or an enumeration's values (display name,
 // description), in order.
-import { addEnumerator, addVariable, deleteVariable, moveMember, removeEnumerator, renameEnumerator, renameVariable, setVariableType } from '../core/blueprint-edits';
+import { addEnumerator, addVariable, deleteVariable, moveMember, removeEnumerator, renameEnumerator, renameVariable, setTypeLanguages, setVariableType } from '../core/blueprint-edits';
 import { GraphDocument } from '../core/model';
 import { structTypeId } from '../core/user-types';
 import { markDirty } from './document';
@@ -43,6 +43,30 @@ export function renderTypeEditor(): void {
     markDirty();
   });
   root.appendChild(description);
+
+  // A shared type: generated for other languages too, so their graphs use it (docs/multi-language.md).
+  const others = state.languages.filter((l) => l.id !== doc.language);
+  if (others.length) {
+    const shared = document.createElement('div');
+    shared.className = 'type-languages';
+    shared.setAttribute('role', 'group');
+    shared.setAttribute('aria-label', 'Also Generate For');
+    shared.insertAdjacentHTML('beforeend', '<span class="muted">Also generate for</span>');
+    for (const language of others) {
+      const label = document.createElement('label');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = doc.languages?.includes(language.id) ?? false;
+      box.addEventListener('change', () => {
+        const chosen = (doc.languages ?? []).filter((l) => l !== language.id);
+        setTypeLanguages(doc, box.checked ? [...chosen, language.id] : chosen);
+        refresh();
+      });
+      label.append(box, document.createTextNode(` ${language.displayName}`));
+      shared.appendChild(label);
+    }
+    root.appendChild(shared);
+  }
 
   const table = document.createElement('div');
   table.className = 'type-members';

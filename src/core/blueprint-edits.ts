@@ -473,6 +473,14 @@ export function addEnumerator(doc: GraphDocument): Enumerator {
   return enumerator;
 }
 
+// A structure's or enumeration's other target languages (docs/multi-language.md, gap 2): without
+// its own language or repeats, and absent when there are none.
+export function setTypeLanguages(doc: GraphDocument, languages: string[]): void {
+  const others = [...new Set(languages)].filter((l) => l && l !== doc.language);
+  if (others.length) doc.languages = others;
+  else delete doc.languages;
+}
+
 export function renameEnumerator(doc: GraphDocument, id: string, name: string): string | undefined {
   const trimmed = name.trim();
   if (!trimmed) return 'A value needs a name.';

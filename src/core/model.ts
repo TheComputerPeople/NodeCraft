@@ -180,6 +180,9 @@ export interface GraphDocument {
   name: string;
   kind: DocumentKind;
   language?: string;
+  // A structure's or enumeration's other target languages: it's generated for each of them too, so
+  // graphs in any of them use the one type (docs/multi-language.md, gap 2).
+  languages?: string[];
   // Member variables; a structure's fields; libraries and enumerations have none.
   variables: GraphVariable[];
   graphs: Graph[];

@@ -80,6 +80,22 @@ describe('structs and enums', () => {
     assert.equal(await e.page.isVisible('.type-member[data-member="team"] select[aria-label="Default Value"]'), true, 'an enum field\'s default is picked from its values');
   });
 
+  // docs/multi-language.md, gap 2.
+  test('a structure is also generated for the languages checked under Also generate for', async (t) => {
+    if (!browser) return t.skip(skipReason);
+    const e = editor = await EditorPage.open(browser);
+    const languages = [{ id: 'javascript', displayName: 'JavaScript', callable: ['javascript'] }, { id: 'python', displayName: 'Python', callable: ['python'] }, { id: 'go', displayName: 'Go', callable: ['go'] }];
+    await e.send({ type: 'init', document: structuredClone(stats), definitions: definitions(), saveDelay: 0, languages });
+    const boxes = () => e.page.$$eval('.type-languages label', (els) => els.map((el) => `${el.textContent?.trim()}:${(el.querySelector('input') as HTMLInputElement).checked}`));
+    assert.deepEqual(await boxes(), ['Python:false', 'Go:false'], 'every language but its own');
+    await e.page.click('.type-languages label:has-text("Go") input');
+    await e.page.click('.type-languages label:has-text("Python") input');
+    assert.deepEqual((await saved(e, (d) => d.languages?.length === 2)).languages, ['go', 'python']);
+    await e.page.click('.type-languages label:has-text("Go") input');
+    await e.page.click('.type-languages label:has-text("Python") input');
+    assert.equal('languages' in (await saved(e, (d) => !d.languages)), false, 'none left: the field goes');
+  });
+
   test('an enumeration opens in its value editor; its last value can\'t be removed', async (t) => {
     const e = await open(t, structuredClone(team));
     if (!e) return;

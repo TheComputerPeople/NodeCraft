@@ -39,6 +39,10 @@ export interface StructInfo {
   language?: string;
   description?: string;
   source?: TypeSource;
+  // A shared type's languages (its own first) and where each generates it; typeLookup gives each
+  // language its own view, with `language` and `source` set to that language's.
+  languages?: string[];
+  sources?: Record<string, TypeSource>;
 }
 
 export interface EnumInfo {
@@ -49,6 +53,8 @@ export interface EnumInfo {
   language?: string;
   description?: string;
   source?: TypeSource;
+  languages?: string[];
+  sources?: Record<string, TypeSource>;
 }
 
 // Workspace types: structs, enums, and classes (src/core/objects.ts).
@@ -64,9 +70,19 @@ export function enumTypeId(name: string): string {
   return `enum:${name}`;
 }
 
-// The type a structure or enumeration document declares.
-export function declaredType(doc: GraphDocument, source?: TypeSource): StructInfo | EnumInfo | undefined {
-  const common = { name: doc.name, ...(doc.language ? { language: doc.language } : {}), ...(typeof doc.metadata?.description === 'string' ? { description: doc.metadata.description } : {}), ...(source ? { source } : {}) };
+// The languages a structure or enumeration is generated for: its own, then its other languages.
+export function typeLanguages(doc: GraphDocument): string[] {
+  const others = doc.kind === 'structure' || doc.kind === 'enumeration' ? doc.languages ?? [] : [];
+  return [...new Set([doc.language ?? '', ...others].filter(Boolean))];
+}
+
+// The type a structure or enumeration document declares. `sources` are where its other languages
+// generate it, for a shared type.
+export function declaredType(doc: GraphDocument, source?: TypeSource, sources?: Record<string, TypeSource>): StructInfo | EnumInfo | undefined {
+  const languages = typeLanguages(doc);
+  const all = { ...sources, ...(source && doc.language ? { [doc.language]: source } : {}) };
+  const shared = languages.length > 1 ? { languages, ...(Object.keys(all).length ? { sources: all } : {}) } : {};
+  const common = { name: doc.name, ...(doc.language ? { language: doc.language } : {}), ...(typeof doc.metadata?.description === 'string' ? { description: doc.metadata.description } : {}), ...(source ? { source } : {}), ...shared };
   if (doc.kind === 'structure') {
     return { kind: 'struct', id: structTypeId(doc.name), ...common, fields: doc.variables.map((v) => ({ id: v.id, name: v.name, type: v.type, ...(v.defaultValue !== undefined ? { defaultValue: v.defaultValue } : {}), ...(v.description ? { description: v.description } : {}) })) };
   }
@@ -160,11 +176,19 @@ export function typeLookup(definitions: Iterable<NodeDefinition>, language?: str
   for (const def of definitions) {
     const implementation = def.implementation;
     if (implementation?.kind !== 'struct' && implementation?.kind !== 'enum' && implementation?.kind !== 'class' && implementation?.kind !== 'interface') continue;
-    const type = implementation.type;
-    if (language && type.language && type.language !== language) continue;
-    if (!types.has(type.id)) types.set(type.id, type);
+    const type = forLanguage(implementation.type, language);
+    if (type && !types.has(type.id)) types.set(type.id, type);
   }
   return (id) => types.get(id);
+}
+
+// A type as graphs in `language` see it, or undefined when they can't use it. A shared struct or
+// enum is seen with that language's generated file.
+function forLanguage(type: UserType, language: string | undefined): UserType | undefined {
+  if (!language || !type.language || type.language === language) return type;
+  if ((type.kind !== 'struct' && type.kind !== 'enum') || !type.languages?.includes(language)) return undefined;
+  const source = type.sources?.[language];
+  return { ...type, language, ...(source ? { source } : {}) };
 }
 
 // A struct, enum, class or interface a graph mentions that its language can't use: one declared in
@@ -204,8 +228,9 @@ export function userTypeProblems(
     // A missing class or interface has its own errors where it's used (class-missing, parent-missing).
     if (!other?.language && category !== 'struct' && category !== 'enum') return;
     const word = USER_TYPE_WORDS[category];
+    const languages = other && (other.kind === 'struct' || other.kind === 'enum') && other.languages ? other.languages : other?.language ? [other.language] : [];
     const message = other?.language
-      ? `${other.name} is a ${names.of(other.language)} ${word}${other.source ? ` (${other.source.document})` : ''}; a ${names.graph} graph can't use it.`
+      ? `${other.name} is a ${languages.map(names.of).join(' and ')} ${word}${other.source ? ` (${other.source.document})` : ''}; a ${names.graph} graph can't use it.`
       : `No ${word} named ${name} is declared in the workspace.`;
     problems.push({ code: other?.language ? 'wrong-language' : 'unknown-type', message, ...(graphId ? { graphId } : {}), ...(nodeId ? { nodeId } : {}) });
   };
@@ -289,9 +314,8 @@ export function listUserTypes(definitions: Iterable<NodeDefinition>, language?: 
   for (const def of definitions) {
     const implementation = def.implementation;
     if (implementation?.kind !== 'struct' && implementation?.kind !== 'enum' && implementation?.kind !== 'class' && implementation?.kind !== 'interface') continue;
-    const type = implementation.type;
-    if (language && type.language && type.language !== language) continue;
-    if (!types.has(type.id)) types.set(type.id, type);
+    const type = forLanguage(implementation.type, language);
+    if (type && !types.has(type.id)) types.set(type.id, type);
   }
   return [...types.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }

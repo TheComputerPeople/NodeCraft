@@ -3,14 +3,15 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { recombineStructPin, splitStructPin } from '../../src/core/editing';
-import { DOCUMENT_KIND_NAMES, addEnumerator, moveMember, newDocument, removeEnumerator, renameEnumerator } from '../../src/core/blueprint-edits';
+import { DOCUMENT_KIND_NAMES, addEnumerator, moveMember, newDocument, removeEnumerator, renameEnumerator, setTypeLanguages } from '../../src/core/blueprint-edits';
+import { graphFileDefinitions } from '../../src/core/graph-files';
 import { compileDocument } from '../../src/core/compiler';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { GraphDocument } from '../../src/core/model';
 import { NodeRegistry } from '../../src/core/registry';
 import { createResolver } from '../../src/core/resolve';
 import { parseDocument, serializeDocument } from '../../src/core/serializer';
-import { StructValue, declaredType, duplicateTypes, listUserTypes, typeLookup, userTypeDefinitions } from '../../src/core/user-types';
+import { StructValue, declaredType, duplicateTypes, listUserTypes, typeLanguages, typeLookup, userTypeDefinitions } from '../../src/core/user-types';
 import { defaultValue, formatValue, fromStored, storedDefault } from '../../src/core/values';
 import { logs, node, run, wire } from './helpers';
 
@@ -178,6 +179,60 @@ describe('types from another language', () => {
     assert.deepEqual(duplicateTypes(files).map((d) => [d.file.path, d.message]), [
       ['api/Point.vgraph', 'A struct named Point is also declared in web/Point.vgraph, and graphs use that one: a name means one type in the workspace. Rename one of them.']
     ]);
+  });
+});
+
+// docs/multi-language.md, gap 2: one struct file generated for several languages.
+describe('shared structs and enums', () => {
+  const shared: GraphDocument = { ...point, language: 'typescript', languages: ['python'], variables: [{ id: 'x', name: 'X', type: { id: 'float' }, defaultValue: 1 }] };
+  const sharedRegistry = (): NodeRegistry => {
+    const r = new NodeRegistry();
+    r.registerMany(graphFileDefinitions(shared, {
+      document: 'shared/Point.vgraph', generatedPath: 'shared/Point.vgraph.ts',
+      others: { python: { generatedPath: 'shared/point_vgraph.py', module: 'shared.point_vgraph' } }
+    }, builtinLanguagePacks().get('typescript')!.generator)!);
+    return r;
+  };
+  const printPoint = (language: string): GraphDocument => ({
+    schemaVersion: 3, name: 'User', kind: 'class', language, variables: [],
+    graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [node('s', 'core:event.start'), node('p', 'core:console.print'), node('m', 'struct:Point.make', { 'pin:x': 2 })], connections: [wire('s', 'execOut', 'p', 'execIn'), wire('m', 'struct', 'p', 'value')] }]
+  });
+  const compileIn = (language: string) => compileDocument(printPoint(language), { registry: sharedRegistry(), languages: builtinLanguagePacks(), generate: { sourceFileName: 'User.vgraph' } });
+
+  test('each of its languages sees the type with its own generated file', () => {
+    const definitions = sharedRegistry().all();
+    assert.equal(typeLookup(definitions, 'typescript')('struct:Point')?.source?.generatedPath, 'shared/Point.vgraph.ts');
+    assert.equal(typeLookup(definitions, 'python')('struct:Point')?.source?.generatedPath, 'shared/point_vgraph.py');
+    assert.equal(typeLookup(definitions, 'go')('struct:Point'), undefined);
+    assert.deepEqual(listUserTypes(definitions, 'python').map((t) => t.name), ['Point']);
+  });
+
+  test('graphs in each language import it from that language\'s file', () => {
+    const python = compileIn('python');
+    assert.deepEqual(python.diagnostics, []);
+    assert.match(python.output!.text, /^from shared\.point_vgraph import Point$/m);
+    const typescript = compileIn('typescript');
+    assert.deepEqual(typescript.diagnostics, []);
+    assert.match(typescript.output!.text, /^import \{ Point \} from "\.\/shared\/Point\.vgraph\.ts";$/m);
+  });
+
+  test('a language it isn\'t generated for gets an error naming the ones it is', () => {
+    assert.deepEqual(compileIn('go').diagnostics.map((d) => d.message), ["Point is a TypeScript and Python struct (shared/Point.vgraph); a Go graph can't use it."]);
+  });
+
+  test('Simulate runs it in any of its languages', () => {
+    assert.deepEqual(logs(run(printPoint('python'), sharedRegistry())), ['{"X":2}']);
+  });
+
+  test('only structures and enumerations list other languages, and the list never repeats its own', () => {
+    assert.deepEqual(parseDocument(serializeDocument(shared)).document.languages, ['python']);
+    assert.throws(() => parseDocument(JSON.stringify({ ...shared, kind: 'class', variables: [], graphs: [{ id: 'g', name: 'EventGraph', kind: 'event', nodes: [], connections: [] }] })), /only a structure or enumeration has other languages/);
+    const doc = structuredClone(shared);
+    setTypeLanguages(doc, ['python', 'typescript', 'python', 'go']);
+    assert.deepEqual(doc.languages, ['python', 'go']);
+    assert.deepEqual(typeLanguages(doc), ['typescript', 'python', 'go']);
+    setTypeLanguages(doc, []);
+    assert.equal('languages' in doc, false);
   });
 });
 

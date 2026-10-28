@@ -1,5 +1,6 @@
 // Compile state in the toolbar, the Compiler Results panel and node badges, modeled on Unreal's
 // Compile button and Compiler Results tab.
+import { setTypeLanguages } from '../core/blueprint-edits';
 import { CompileDiagnostic } from '../core/compiler/diagnostics';
 import { definitionFor } from '../core/editing';
 import { CompileReport } from '../core/model';
@@ -111,6 +112,8 @@ export function renderLanguagePicker(): void {
 export function setLanguage(language: string): void {
   if (!state.document || state.document.language === language) return;
   state.document.language = language;
+  // A shared struct or enum doesn't list its own language among its others.
+  if (state.document.languages) setTypeLanguages(state.document, state.document.languages);
   markDirty();
   // The palette offers the project functions this language can call.
   renderPalette();

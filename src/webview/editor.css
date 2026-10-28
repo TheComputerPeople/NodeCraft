@@ -58,6 +58,8 @@ button, input { font: inherit; color: inherit; }
 #type-editor .container-row { display: flex; gap: 4px; }
 #help[hidden], #palette[hidden], #toolbar button[hidden] { display: none; }
 .type-title { display: flex; align-items: baseline; gap: 10px; }
+.type-languages { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.type-languages label { display: inline-flex; align-items: center; gap: 4px; }
 .type-members { display: grid; gap: 6px; width: min(900px, 100%); }
 .type-member { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.4fr) minmax(120px, 1fr) auto; gap: 8px; align-items: center; }
 #type-editor[data-kind="enumeration"] .type-member { grid-template-columns: minmax(140px, 1fr) minmax(160px, 2fr) auto; }

@@ -32,6 +32,14 @@
       "type": "string",
       "description": "Target language pack id, e.g. \"typescript\"."
     },
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "A structure's or enumeration's other target languages: it is generated for each of them too, so graphs in any of them use the one type."
+    },
     "parent": {
       "type": "string",
       "pattern": "^object:",

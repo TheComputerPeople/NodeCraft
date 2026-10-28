@@ -14,6 +14,8 @@ export interface GraphFileLocation {
   generatedPath: string;
   // The generated file's module or namespace, for languages that import by name.
   module?: string;
+  // A shared struct's or enum's generated file in each of its other languages.
+  others?: Record<string, { generatedPath: string; module?: string }>;
 }
 
 // The file's nodes for other graphs, or undefined when it gives none (a plain class graph still
@@ -22,7 +24,8 @@ export function graphFileDefinitions(doc: GraphDocument, location: GraphFileLoca
   if (doc.kind === 'macroLibrary') return macroLibraryDefinitions(doc, location.document);
   if (!generator) return undefined;
   const source = { document: location.document, generatedPath: location.generatedPath, ...(location.module ? { module: location.module } : {}) };
-  const type = declaredType(doc, source);
+  const others = location.others && Object.fromEntries(Object.entries(location.others).map(([language, other]) => [language, { document: location.document, ...other }]));
+  const type = declaredType(doc, source, others);
   if (type) return userTypeDefinitions(type);
   const cls = declaredClass(doc, source);
   if (cls) return classDefinitions(cls);

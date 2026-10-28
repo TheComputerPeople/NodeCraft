@@ -3,12 +3,13 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { CompileDiagnostic, compileDocument } from '../core/compiler';
-import { LanguagePackRegistry } from '../core/language-pack';
+import { GenerateOptions, LanguagePackRegistry } from '../core/language-pack';
 import { NodeLine } from '../core/compiler/writer';
 import { PinExpression } from '../core/language-pack';
 import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
+import { typeLanguages } from '../core/user-types';
 import { cppRunSources, csharpNamespace, csharpRunSources, goPackage, goRunSources, javaProject, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
 import { OutputPlans } from './output-plans';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
@@ -105,18 +106,7 @@ export class CompileService implements vscode.Disposable {
     const graphDir = path.dirname(graphPath);
     const graphFileName = path.basename(graphPath);
     const root = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ?? graphDir;
-    const result = compileDocument(graph, {
-      registry: this.registry,
-      languages: this.languages,
-      generate: {
-        sourceFileName: graphFileName,
-        moduleFormat: detectModuleFormat(graphDir, root),
-        outputDir: path.relative(root, graphDir).split(path.sep).join('/'),
-        importExtension: detectImportExtension(graphDir, root),
-        namespace: graph.language === 'java' ? javaProject(graphDir, root).package : graph.language === 'go' ? goPackage(graphDir, root).name : csharpNamespace(graphDir, root),
-        ...(graph.language === 'go' && goPackage(graphDir, root).path ? { packagePath: goPackage(graphDir, root).path } : {})
-      }
-    });
+    const result = compileDocument(graph, { registry: this.registry, languages: this.languages, generate: generateOptions(graph.language, graphFileName, graphDir, root) });
     const language = result.output?.language ?? graph.language ?? '';
     if (!result.output) return finish({ report: report(result.diagnostics, language) }, graph);
 
@@ -127,10 +117,11 @@ export class CompileService implements vscode.Disposable {
     const testFileName = result.output.testFile !== undefined ? this.languages.get(language)?.generator?.testFileName?.(graphFileName) : undefined;
     const testPath = testFileName ? path.join(graphDir, testFileName) : undefined;
     if (testPath) await writeIfChanged(vscode.Uri.file(testPath), result.output.testFile!);
-    await this.removeStaleOutputs(graphDir, graphFileName, [outputPath, ...companions.map((c) => c.path), ...(testPath ? [testPath] : [])]);
+    const shared = await this.compileOtherLanguages(graph, graphFileName, graphDir, root);
+    await this.removeStaleOutputs(graphDir, graphFileName, [outputPath, ...companions.map((c) => c.path), ...(testPath ? [testPath] : []), ...shared.paths]);
     const pack = this.languages.get(language);
     const registration = pack && this.outputPlans ? await this.outputPlans.apply(pack, root, outputPath) : [];
-    const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root), ...registration];
+    const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root), ...registration, ...shared.diagnostics];
     // Java finds the project's classes in its source roots (javac's -sourcepath).
     const javaRoots = language === 'java' ? javaProject(graphDir, root).sourceRoots : [];
     const importRoots = javaRoots.length ? javaRoots : result.output.importRoots?.map((r) => path.join(root, r));
@@ -238,6 +229,25 @@ export class CompileService implements vscode.Disposable {
 
   // After switching a graph's language, its old generated file would linger; remove it, but only
   // if it really was generated from this graph.
+  // A shared struct or enum is generated for its other languages too, next to its own output
+  // (docs/multi-language.md, gap 2). Their problems name the language.
+  private async compileOtherLanguages(graph: GraphDocument, graphFileName: string, graphDir: string, root: string): Promise<{ paths: string[]; diagnostics: CompileDiagnostic[] }> {
+    const paths: string[] = [];
+    const diagnostics: CompileDiagnostic[] = [];
+    for (const language of typeLanguages(graph).slice(1)) {
+      const pack = this.languages.get(language);
+      const named = (list: CompileDiagnostic[]) => list.map((d) => ({ ...d, message: `${pack?.displayName ?? language}: ${d.message}` }));
+      const result = compileDocument({ ...graph, language }, { registry: this.registry, languages: this.languages, generate: generateOptions(language, graphFileName, graphDir, root) });
+      diagnostics.push(...named(result.diagnostics));
+      if (!result.output || !pack) continue;
+      const outputs = [{ path: path.join(graphDir, result.output.fileName), text: result.output.text }, ...(result.output.companionFiles ?? []).map((c) => ({ path: path.join(graphDir, c.fileName), text: c.text }))];
+      for (const output of outputs) await writeIfChanged(vscode.Uri.file(output.path), output.text);
+      paths.push(...outputs.map((o) => o.path));
+      diagnostics.push(...named([...verifyPlacement(language, outputs[0].path, root), ...(this.outputPlans ? await this.outputPlans.apply(pack, root, outputs[0].path) : [])]));
+    }
+    return { paths, diagnostics };
+  }
+
   private async removeStaleOutputs(graphDir: string, graphFileName: string, current: string[]): Promise<void> {
     for (const candidate of this.outputPathsFor(path.join(graphDir, graphFileName))) {
       if (!current.includes(candidate) && isGeneratedFrom(candidate, graphFileName)) {
@@ -280,4 +290,16 @@ async function writeIfChanged(uri: vscode.Uri, text: string): Promise<void> {
     // Not there yet.
   }
   await vscode.workspace.fs.writeFile(uri, bytes);
+}
+
+// What a language's generator needs to know about where a graph file is (docs/output-placement.md).
+function generateOptions(language: string | undefined, graphFileName: string, graphDir: string, root: string): GenerateOptions {
+  return {
+    sourceFileName: graphFileName,
+    moduleFormat: detectModuleFormat(graphDir, root),
+    outputDir: path.relative(root, graphDir).split(path.sep).join('/'),
+    importExtension: detectImportExtension(graphDir, root),
+    namespace: language === 'java' ? javaProject(graphDir, root).package : language === 'go' ? goPackage(graphDir, root).name : csharpNamespace(graphDir, root),
+    ...(language === 'go' && goPackage(graphDir, root).path ? { packagePath: goPackage(graphDir, root).path } : {})
+  };
 }

@@ -101,6 +101,9 @@ function normalizeDocument(raw: Record<string, unknown>, fallbackName: string): 
   if (doc.interfaces !== undefined && (doc.kind !== 'class' || !Array.isArray(doc.interfaces) || doc.interfaces.some((i) => typeof i !== 'string' || !i.startsWith('interface:')))) {
     throw new Error('Invalid .vgraph document: only a class implements interfaces, as a list of "interface:<Name>".');
   }
+  if (doc.languages !== undefined && ((doc.kind !== 'structure' && doc.kind !== 'enumeration') || !Array.isArray(doc.languages) || doc.languages.some((l) => typeof l !== 'string' || !l))) {
+    throw new Error('Invalid .vgraph document: only a structure or enumeration has other languages, as a list of language ids.');
+  }
   if (doc.parent !== undefined && (doc.kind !== 'class' || typeof doc.parent !== 'string' || !doc.parent.startsWith('object:'))) throw new Error('Invalid .vgraph document: only a class has a parent class, as "object:<Name>".');
   const ids = new Set<string>();
   for (const graph of doc.graphs) {
@@ -124,7 +127,7 @@ function normalizeGraph(raw: unknown, index: number): Graph {
   return graph;
 }
 
-const DOCUMENT_KEY_ORDER = ['schemaVersion', 'name', 'kind', 'language', 'parent', 'interfaces', 'variables', 'enumerators', 'dispatchers', 'graphs', 'metadata'];
+const DOCUMENT_KEY_ORDER = ['schemaVersion', 'name', 'kind', 'language', 'languages', 'parent', 'interfaces', 'variables', 'enumerators', 'dispatchers', 'graphs', 'metadata'];
 const GRAPH_KEY_ORDER = ['id', 'name', 'kind', 'signature', 'localVariables', 'nodes', 'connections', 'comments'];
 
 // Known fields come first in a fixed order, so files diff cleanly whichever code produced them.

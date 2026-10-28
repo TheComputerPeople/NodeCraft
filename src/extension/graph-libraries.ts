@@ -10,7 +10,7 @@ import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { graphFileDefinitions } from '../core/graph-files';
-import { duplicateTypes } from '../core/user-types';
+import { duplicateTypes, typeLanguages } from '../core/user-types';
 import { csharpNamespace, goPackage, javaProject, pythonModule } from './placement';
 
 const GLOB = '**/*.vgraph';
@@ -109,11 +109,23 @@ export class GraphLibraries implements vscode.Disposable {
       return undefined;
     }
     const root = folder.uri.fsPath;
-    const generator = doc.language ? this.languages.get(doc.language)?.generator : undefined;
     const dir = path.dirname(uri.fsPath);
-    const generated = generator ? path.join(dir, generator.outputFileName(path.basename(uri.fsPath))) : uri.fsPath;
-    const module = !generator ? undefined : doc.language === 'python' ? pythonModule(generated, root).module : doc.language === 'csharp' ? csharpNamespace(dir, root) : doc.language === 'java' ? javaProject(dir, root).package : doc.language === 'go' ? goPackage(dir, root).path ?? goPackage(dir, root).name : undefined;
-    const definitions = graphFileDefinitions(doc, { document: relative(root, uri.fsPath), generatedPath: relative(root, generated), ...(module ? { module } : {}) }, generator);
+    // Where a language generates this file, and the module other code imports it as.
+    const output = (language: string | undefined): { generatedPath: string; module?: string } | undefined => {
+      const generator = language ? this.languages.get(language)?.generator : undefined;
+      if (!generator) return undefined;
+      const generated = path.join(dir, generator.outputFileName(path.basename(uri.fsPath)));
+      const module = language === 'python' ? pythonModule(generated, root).module : language === 'csharp' ? csharpNamespace(dir, root) : language === 'java' ? javaProject(dir, root).package : language === 'go' ? goPackage(dir, root).path ?? goPackage(dir, root).name : undefined;
+      return { generatedPath: relative(root, generated), ...(module ? { module } : {}) };
+    };
+    const generator = doc.language ? this.languages.get(doc.language)?.generator : undefined;
+    const own = output(doc.language) ?? { generatedPath: relative(root, uri.fsPath) };
+    // A shared struct or enum is generated for its other languages too (docs/multi-language.md).
+    const others = Object.fromEntries(typeLanguages(doc).slice(1).flatMap((language) => {
+      const other = output(language);
+      return other ? [[language, other]] : [];
+    }));
+    const definitions = graphFileDefinitions(doc, { document: relative(root, uri.fsPath), ...own, ...(Object.keys(others).length ? { others } : {}) }, generator);
     return definitions && { path: relative(root, uri.fsPath), definitions };
   }
 

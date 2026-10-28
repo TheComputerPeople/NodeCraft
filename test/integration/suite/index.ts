@@ -364,6 +364,38 @@ test('structs and enums in the workspace become types and nodes that graphs impo
   assert.match(text, /Side: Faction = Faction\.LightBlue;/);
 });
 
+// docs/multi-language.md, gap 2: one struct for a TypeScript front end and a Python back end.
+test('a shared struct is generated for each of its languages, and graphs in each use it', async () => {
+  const write = (name: string, doc: unknown) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(JSON.stringify(doc, null, 2)));
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const vec = { schemaVersion: 3, name: 'Vec', kind: 'structure', language: 'typescript', languages: ['python'], graphs: [], variables: [{ id: 'x', name: 'X', type: { id: 'float' }, defaultValue: 1 }] };
+  await write('shared/Vec.vgraph', vec);
+  await vscode.commands.executeCommand('blueprintVisualScripting.compile', workspaceFile('shared/Vec.vgraph'));
+  assert.match(await readText(workspaceFile('shared/Vec.vgraph.ts')), /class Vec/);
+  assert.match(await readText(workspaceFile('shared/vec_vgraph.py')), /^class Vec/m);
+
+  await write('uses_vec.vgraph', {
+    schemaVersion: 3, name: 'UsesVec', kind: 'class', language: 'python', variables: [],
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('make', 'struct:Vec.make'), node('p', 'core:console.print')],
+      connections: [{ id: 'c1', fromNode: 's', fromPin: 'execOut', toNode: 'p', toPin: 'execIn' }, { id: 'c2', fromNode: 'make', fromPin: 'struct', toNode: 'p', toPin: 'value' }]
+    }]
+  });
+  await compileOnceFound(workspaceFile('uses_vec.vgraph'));
+  assert.match(await readText(workspaceFile('uses_vec_vgraph.py')), /^from [\w.]*vec_vgraph import Vec$/m);
+
+  // Python no longer among its languages: its generated file goes. (Edited through its open
+  // document, which a write to the file would update only later.)
+  const open = await vscode.workspace.openTextDocument(workspaceFile('shared/Vec.vgraph'));
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(open.uri, new vscode.Range(0, 0, open.lineCount, 0), JSON.stringify({ ...vec, languages: undefined }, null, 2));
+  await vscode.workspace.applyEdit(edit);
+  await open.save();
+  await vscode.commands.executeCommand('blueprintVisualScripting.compile', open.uri);
+  assert.equal(fs.existsSync(workspaceFile('shared/vec_vgraph.py').fsPath), false);
+});
+
 // What activation returns (src/extension/extension.ts), as far as these tests use it.
 interface ExtensionApi {
   testing: ExtensionInternals;
