@@ -251,7 +251,12 @@ export class CompileService implements vscode.Disposable {
   private async removeStaleOutputs(graphDir: string, graphFileName: string, current: string[]): Promise<void> {
     for (const candidate of this.outputPathsFor(path.join(graphDir, graphFileName))) {
       if (!current.includes(candidate) && isGeneratedFrom(candidate, graphFileName)) {
-        await vscode.workspace.fs.delete(vscode.Uri.file(candidate), { useTrash: false });
+        try {
+          await vscode.workspace.fs.delete(vscode.Uri.file(candidate), { useTrash: false });
+        } catch (error) {
+          // Another compile of the graph (Compile while compile-on-save runs) removed it first.
+          if (!(error instanceof vscode.FileSystemError && error.code === 'FileNotFound')) throw error;
+        }
       }
     }
   }
