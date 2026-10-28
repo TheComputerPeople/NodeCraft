@@ -172,13 +172,60 @@ const GO: Record<string, string> = {
   'core:map.values': 'return target.Values()'
 };
 
+// The Lua snippets: arrays are the runtime's (items at 1..n, n kept, indexed from 0 by the nodes),
+// sets and maps its ordered types (lua-runtime.ts), so a node changes the container it was given.
+const LUA_CHECK = 'vg.check_index(target, index)';
+const LUA: Record<string, string> = {
+  'core:array.add': 'target.n = target.n + 1\ntarget[target.n] = item\nreturn target.n - 1',
+  'core:array.add-unique': 'for i = 1, target.n do\n  if target[i] == item then return -1 end\nend\ntarget.n = target.n + 1\ntarget[target.n] = item\nreturn target.n - 1',
+  'core:array.insert': 'if index < 0 or index > target.n then error("Index out of range", 0) end\ntable.move(target, index + 1, target.n, index + 2)\ntarget[index + 1] = item\ntarget.n = target.n + 1',
+  'core:array.remove-index': `${LUA_CHECK}\ntable.move(target, index + 2, target.n, index + 1)\ntarget[target.n] = nil\ntarget.n = target.n - 1`,
+  'core:array.remove-item': [
+    'local kept = 0',
+    'for i = 1, target.n do',
+    '  local x = target[i]',
+    '  if x ~= item then',
+    '    kept = kept + 1',
+    '    target[kept] = x',
+    '  end',
+    'end',
+    'local removed = kept ~= target.n',
+    'for i = kept + 1, target.n do target[i] = nil end',
+    'target.n = kept',
+    'return removed'
+  ].join('\n'),
+  'core:array.set': `${LUA_CHECK}\ntarget[index + 1] = item`,
+  'core:array.clear': 'for i = 1, target.n do target[i] = nil end\ntarget.n = 0',
+  'core:array.get': `${LUA_CHECK}\nreturn target[index + 1]`,
+  'core:array.length': 'return target.n',
+  'core:array.last-index': 'return target.n - 1',
+  'core:array.find': 'for i = 1, target.n do\n  if target[i] == item then return i - 1 end\nend\nreturn -1',
+  'core:array.contains': 'for i = 1, target.n do\n  if target[i] == item then return true end\nend\nreturn false',
+  'core:array.is-valid-index': 'return index >= 0 and index < target.n',
+  'core:array.is-empty': 'return target.n == 0',
+  'core:set.add': 'target:add(item)',
+  'core:set.remove': 'return target:remove(item)',
+  'core:set.clear': 'target:clear()',
+  'core:set.contains': 'return target:contains(item)',
+  'core:set.length': 'return target.size',
+  'core:set.to-array': 'return target:sorted()',
+  'core:map.add': 'target:put(key, value)',
+  'core:map.remove': 'return target:remove(key)',
+  'core:map.clear': 'target:clear()',
+  'core:map.find': 'if not target:contains(key) then error("Key not found", 0) end\nreturn target:get(key)',
+  'core:map.contains': 'return target:contains(key)',
+  'core:map.length': 'return target.n',
+  'core:map.keys': 'return target:key_array()',
+  'core:map.values': 'return target:value_array()'
+};
+
 // An Unreal container function as a code node: impure ones have exec pins.
 function fn(type: string, displayName: string, category: string, inputs: PinDefinition[], result: TypeRef | undefined, code: Snippets, description: string, options: { impure?: boolean; keywords?: string[] } = {}): NodeDefinition {
   return {
     type, version: 1, displayName, category, description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [pin('returnValue', 'Return Value', 'output', result)] : [])],
-    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}), ...(GO[type] ? { go: GO[type] } : {}) } },
+    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}), ...(GO[type] ? { go: GO[type] } : {}), ...(LUA[type] ? { lua: LUA[type] } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {})
   };
 }

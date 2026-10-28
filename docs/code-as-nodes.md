@@ -138,6 +138,6 @@ The original leaves some behavior to each language. Here it's one contract, chec
 - **Rounding.** Round To rounds halves away from zero, with a small correction for values just below a half (2.675 rounds to 2.68). Format Bytes rounds halves up in every language, where `toFixed` and `printf` disagree on exact halves.
 - **Paths.** Normalize Path works on the text alone, the same on every system: `/` and `\` both separate folders, `.` and empty parts go, `..` removes the folder before it, and the result uses `/`.
 - **Limits.** Parse Integer Strict accepts numbers up to 2^53 (in C#, its 32-bit ints). Format Bytes takes sizes up to 2^53 and up to 10 decimals. Round To takes 0 to 15 digits.
-- **Upper case.** Capitalize uses each language's upper-casing for the first character, so non-ASCII letters can differ (C++ changes ASCII letters only).
+- **Upper case and spaces.** Capitalize uses each language's upper-casing for the first character, so non-ASCII letters can differ: C++ and Lua change ASCII letters only. In C++ and Lua, too, only ASCII spaces count as whitespace (Is Blank, Normalize Whitespace, Word Count, Trim).
 
 Nine of the original's 36 functions aren't included. Group By, Count By and Sum By take a function, which graphs can't pass. Chunk, Flatten, Flatten One Level and Zip return nested arrays, which pin types can't express. Coalesce takes any number of arguments of any type, and Select covers two. Clamp is already in the library.

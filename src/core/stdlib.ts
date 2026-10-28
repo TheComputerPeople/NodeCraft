@@ -35,11 +35,12 @@ function node(type: string, displayName: string, category: string, inputs: PinDe
   const rust = RUST[type];
   const java = JAVA[type];
   const go = GO[type];
+  const lua = LUA[type];
   return {
     type, version: 1, displayName, category, description: options.description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [result] : [])],
-    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}), ...(go ? { go } : {}) } },
+    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}), ...(go ? { go } : {}), ...(lua ? { lua } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {}),
     ...(options.compact ? { compact: true } : {})
   };
@@ -197,6 +198,59 @@ const GO: Record<string, string> = {
   'core:utilities.select': 'if pickA {\n\treturn a\n}\nreturn b',
   'core:file.load-to-string': 'data, err := os.ReadFile(filename)\nif err != nil {\n\tVgFail("Can\'t read " + filename + ": " + err.Error())\n}\nreturn string(data)',
   'core:file.save-string': 'if err := os.WriteFile(filename, []byte(text), 0o644); err != nil {\n\tVgFail("Can\'t write " + filename + ": " + err.Error())\n}'
+};
+
+// The Lua snippets (docs/more-languages.md, "Lua"): errors are error() with the message alone (level
+// 0, no position). Text is UTF-8, so lengths and positions use the utf8 library; To Upper, To Lower
+// and Trim work on ASCII, as in C++.
+const LUA_DIVIDE_BY_ZERO = 'if b == 0 then error("Divide by zero", 0) end';
+const LUA: Record<string, string> = {
+  'core:math.subtract': 'return a - b',
+  'core:math.multiply': 'return a * b',
+  'core:math.divide': `${LUA_DIVIDE_BY_ZERO}\nreturn a / b`,
+  'core:math.modulo': `${LUA_DIVIDE_BY_ZERO}\nreturn math.fmod(a, b)`,
+  'core:math.less': 'return a < b',
+  'core:math.less-equal': 'return a <= b',
+  'core:math.greater': 'return a > b',
+  'core:math.greater-equal': 'return a >= b',
+  'core:math.equal': 'return a == b',
+  'core:math.not-equal': 'return a ~= b',
+  'core:math.and': 'return a and b',
+  'core:math.or': 'return a or b',
+  'core:math.not': 'return not a',
+  // math.min and math.max keep their first argument when the other is NaN; JavaScript gives NaN.
+  'core:math.min': 'if a ~= a or b ~= b then return 0 / 0 end\nreturn math.min(a, b)',
+  'core:math.max': 'if a ~= a or b ~= b then return 0 / 0 end\nreturn math.max(a, b)',
+  'core:math.clamp': 'return math.min(math.max(value, minimum), maximum)',
+  'core:math.abs': 'return math.abs(value)',
+  'core:math.round': 'return math.floor(value + 0.5)',
+  'core:math.floor': 'return math.floor(value)',
+  'core:math.ceil': 'return math.ceil(value)',
+  'core:math.sqrt': 'return math.sqrt(value)',
+  'core:math.power': 'return base ^ exponent',
+  'core:math.random-float-in-range': 'return minimum + math.random() * (maximum - minimum)',
+  'core:math.random-integer-in-range': 'return math.random(minimum, maximum)',
+  'core:string.append': 'return a .. b',
+  'core:string.len': 'return utf8.len(text) or #text',
+  'core:string.contains': 'return string.find(text, part, 1, true) ~= nil',
+  'core:string.to-upper': 'return string.upper(text)',
+  'core:string.to-lower': 'return string.lower(text)',
+  'core:string.trim': 'return (text:match("^%s*(.-)%s*$"))',
+  // gsub reads patterns, so From is escaped (and % in To).
+  'core:string.replace': 'if find == "" then return text end\nlocal pattern = find:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")\nlocal result = text:gsub(pattern, (replacement:gsub("%%", "%%%%")))\nreturn result',
+  'core:string.substring': 'local characters = vg.chars(text)\nlocal begin = math.max(0, start)\nreturn table.concat(characters, "", begin + 1, math.min(#characters, begin + math.max(0, count)))',
+  // Lua's patterns have no alternatives, so the plain decimal number is checked in parts.
+  'core:string.to-float': [
+    'local trimmed = text:match("^%s*(.-)%s*$")',
+    'local mantissa = trimmed:match("^[+-]?([%d%.]+)[eE][+-]?%d+$") or trimmed:match("^[+-]?([%d%.]+)$")',
+    'if not mantissa or not (mantissa:match("^%d+%.?%d*$") or mantissa:match("^%.%d+$")) then return 0.0 end',
+    'return tonumber(trimmed) + 0.0'
+  ].join('\n'),
+  'core:string.to-int': 'local digits = text:match("^%s*([+-]?%d+)%s*$")\nif not digits then return 0 end\nreturn tonumber(digits)',
+  'core:utilities.is-valid': 'return value ~= nil',
+  'core:utilities.select': 'if pickA then return a end\nreturn b',
+  'core:file.load-to-string': 'local file, problem = io.open(filename, "rb")\nif not file then error("Can\'t read " .. filename .. ": " .. problem, 0) end\nlocal text = file:read("a")\nfile:close()\nreturn text',
+  'core:file.save-string': 'local file, problem = io.open(filename, "wb")\nif not file then error("Can\'t write " .. filename .. ": " .. problem, 0) end\nfile:write(text)\nfile:close()'
 };
 
 // The Rust snippets, by node type: errors are panics, which stop the run (or fail the test).

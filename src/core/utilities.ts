@@ -1116,6 +1116,144 @@ return drive + joined`
   }
 ];
 
+// ---- Lua ----------------------------------------------------------------------------------------
+//
+// The Lua versions, by node type (docs/more-languages.md, "Lua"): text through the utf8 library,
+// containers the runtime's (lua-runtime.ts). Lua's patterns are ASCII, so whitespace and upper case
+// are ASCII here, as in C++. `end` is a Lua keyword, so In Range names that pin as ${end}.
+
+const LUA_WORDS = String.raw`local chars = vg.chars(text)
+local function kind(c)
+  if c:match("^%u$") then return "upper" end
+  if c:match("^%l$") then return "lower" end
+  if c:match("^%d$") then return "digit" end
+  return nil
+end
+local words, word = {}, ""
+for i, c in ipairs(chars) do
+  local k = kind(c)
+  if not k then
+    if word ~= "" then words[#words + 1] = word:lower() end
+    word = ""
+  else
+    local prev = kind(word:sub(-1))
+    local following = kind(chars[i + 1] or "")
+    if word ~= "" and k == "upper" and (prev == "lower" or prev == "digit" or (prev == "upper" and following == "lower")) then
+      words[#words + 1] = word:lower()
+      word = ""
+    end
+    word = word .. c
+  end
+end
+if word ~= "" then words[#words + 1] = word:lower() end`;
+
+const luaPad = (left: boolean) => String.raw`if utf8.len(fill) ~= 1 then error("Fill must be one character", 0) end
+local missing = width - (utf8.len(text) or #text)
+local padding = missing > 0 and string.rep(fill, missing) or ""
+return ${left ? 'padding .. text' : 'text .. padding'}`;
+
+// Unique items of a list, in order (nil items are skipped: they can't be table keys).
+const luaUnique = (keep: string) => String.raw`local seen, result = {}, vg.array()
+for i = 1, left.n do
+  local item = left[i]
+  if item ~= nil and ${keep} and not seen[item] then
+    seen[item] = true
+    result.n = result.n + 1
+    result[result.n] = item
+  end
+end
+return result`;
+
+const LUA: Record<string, string> = {
+  'core:string.is-empty': 'return text == ""',
+  'core:string.is-blank': 'return text:match("^%s*$") ~= nil',
+  'core:string.normalize-whitespace': 'local words = {}\nfor word in text:gmatch("%S+") do words[#words + 1] = word end\nreturn table.concat(words, " ")',
+  'core:string.truncate': String.raw`if maxLength < 0 then error("Max Length can't be negative", 0) end
+local chars = vg.chars(text)
+if #chars <= maxLength then return text end
+local ending = vg.chars(suffix)
+return table.concat(chars, "", 1, math.max(0, maxLength - #ending)) .. table.concat(ending, "", 1, math.min(#ending, maxLength))`,
+  'core:string.capitalize': 'return (text:gsub("^%l", string.upper))',
+  'core:string.to-camel-case': `${LUA_WORDS}\nfor i = 2, #words do words[i] = words[i]:sub(1, 1):upper() .. words[i]:sub(2) end\nreturn table.concat(words)`,
+  'core:string.to-snake-case': `${LUA_WORDS}\nreturn table.concat(words, "_")`,
+  'core:string.to-kebab-case': `${LUA_WORDS}\nreturn table.concat(words, "-")`,
+  'core:string.slugify': `${LUA_WORDS}\nreturn table.concat(words, "-")`,
+  'core:string.pad-left': luaPad(true),
+  'core:string.pad-right': luaPad(false),
+  'core:string.word-count': 'local count = 0\nfor _ in text:gmatch("%S+") do count = count + 1 end\nreturn count',
+  'core:string.mask': String.raw`if visibleStart < 0 or visibleEnd < 0 then error("Visible counts can't be negative", 0) end
+if utf8.len(mask) ~= 1 then error("Mask must be one character", 0) end
+local chars = vg.chars(text)
+local first = math.min(visibleStart, #chars)
+local last = math.min(visibleEnd, #chars - first)
+return table.concat(chars, "", 1, first) .. string.rep(mask, #chars - first - last) .. table.concat(chars, "", #chars - last + 1, #chars)`,
+  'core:math.in-range': 'if start > ${end} then error("Start can\'t be greater than End", 0) end\nreturn value >= start and value < ${end}',
+  'core:math.round-to': String.raw`if value ~= value or value == math.huge or value == -math.huge then error("Value must be a finite number", 0) end
+if digits < 0 or digits > 15 then error("Digits must be from 0 to 15", 0) end
+local factor = 10.0 ^ digits
+local sign = value > 0 and 1 or (value < 0 and -1 or 0)
+return sign * math.floor((math.abs(value) + 2.220446049250313e-16) * factor + 0.5) / factor`,
+  'core:string.format-bytes': String.raw`if size ~= size or size < 0 or size > 9007199254740992 then error("Size must be from 0 to 2^53", 0) end
+if decimals < 0 or decimals > 10 then error("Decimals must be from 0 to 10", 0) end
+if size < 1024 then return string.format("%d", math.floor(size)) .. " B" end
+local units = { "KiB", "MiB", "GiB", "TiB", "PiB" }
+local value, index = size, 0
+repeat
+  value = value / 1024
+  index = index + 1
+until not (value >= 1024 and index < #units)
+local scale = 10 ^ decimals
+local scaled = math.floor(value * scale + 0.5)
+local whole = math.floor(scaled / scale)
+local fraction = decimals > 0 and ("." .. string.format("%0" .. decimals .. "d", math.floor(scaled - whole * scale))) or ""
+return string.format("%d", whole) .. fraction .. " " .. units[index]`,
+  'core:string.parse-boolean': String.raw`local value = text:match("^%s*(.-)%s*$"):lower()
+if value == "true" or value == "1" or value == "yes" or value == "y" or value == "on" then return true end
+if value == "false" or value == "0" or value == "no" or value == "n" or value == "off" then return false end
+error('Not a boolean: "' .. text .. '"', 0)`,
+  'core:string.parse-integer-strict': String.raw`local value = text:match("^%s*(.-)%s*$")
+if not value:match("^[+-]?%d+$") then error('Not an integer: "' .. text .. '"', 0) end
+local digits = value:gsub("^[+-]", "")
+local result = tonumber(value)
+if #digits > 16 or math.type(result) ~= "integer" or result > 9007199254740991 or result < -9007199254740991 then error('Integer out of range: "' .. text .. '"', 0) end
+return result`,
+  'core:array.unique': luaUnique('true').replace(/left/g, 'items'),
+  'core:array.difference': `local other = {}\nfor i = 1, right.n do if right[i] ~= nil then other[right[i]] = true end end\n${luaUnique('not other[item]')}`,
+  'core:array.intersection': `local other = {}\nfor i = 1, right.n do if right[i] ~= nil then other[right[i]] = true end end\n${luaUnique('other[item]')}`,
+  'core:array.average': 'if values.n == 0 then error("Average needs at least one value", 0) end\nlocal total = 0\nfor i = 1, values.n do total = total + values[i] end\nreturn total / values.n',
+  'core:array.median': String.raw`if values.n == 0 then error("Median needs at least one value", 0) end
+local sorted = {}
+for i = 1, values.n do sorted[i] = values[i] end
+table.sort(sorted)
+local middle = values.n // 2
+if values.n % 2 == 1 then return sorted[middle + 1] end
+return (sorted[middle] + sorted[middle + 1]) / 2`,
+  'core:map.pick': 'local result = vg.map()\nfor i = 1, keys.n do\n  local key = keys[i]\n  if source:contains(key) and not result:contains(key) then result:put(key, source:get(key)) end\nend\nreturn result',
+  'core:map.omit': 'local excluded = {}\nfor i = 1, keys.n do if keys[i] ~= nil then excluded[keys[i]] = true end end\nlocal result = vg.map()\nfor i = 1, source.n do\n  local key = source.keys[i]\n  if not excluded[key] then result:put(key, source:get(key)) end\nend\nreturn result',
+  'core:utilities.get-env': 'return os.getenv(name) or fallback',
+  'core:file.normalize-path': String.raw`local rest = path:gsub("\\", "/")
+local drive = ""
+if rest:match("^%a:") then
+  drive = rest:sub(1, 2)
+  rest = rest:sub(3)
+end
+local absolute = rest:sub(1, 1) == "/"
+local parts = {}
+for part in rest:gmatch("[^/]+") do
+  if part == ".." then
+    if #parts > 0 and parts[#parts] ~= ".." then
+      parts[#parts] = nil
+    elseif not absolute then
+      parts[#parts + 1] = ".."
+    end
+  elseif part ~= "." then
+    parts[#parts + 1] = part
+  end
+end
+local joined = (absolute and "/" or "") .. table.concat(parts, "/")
+return drive .. (joined ~= "" and joined or ".")`
+};
+
 export function utilityDefinitions(): NodeDefinition[] {
   return NODES.map((node) => ({
     type: node.type,
@@ -1126,6 +1264,6 @@ export function utilityDefinitions(): NodeDefinition[] {
     keywords: node.keywords,
     inputs: node.inputs,
     outputs: [output(node.result)],
-    implementation: { kind: 'code', languages: node.code }
+    implementation: { kind: 'code', languages: { ...node.code, ...(LUA[node.type] ? { lua: LUA[node.type] } : {}) } }
   }));
 }

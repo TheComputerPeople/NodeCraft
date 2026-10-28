@@ -23,6 +23,15 @@ Decided (2026-10-28): the user asked for these four, Lua and GDScript first. Lua
 - **Debugging:** the Lua Debug extension (`actboy168.lua-debug`), which runs Lua 5.4 under the debugger.
 - **Risks to settle first:** whether Lua Debug's breakpoints bind in generated files run through the launcher, and how the runtime's 0-based arrays show in the debugger's variables.
 
+- **As built** (`src/core/languages/lua.ts`, `lua-runtime.ts`), step 2:
+  - **Generator:** adapted from Python's. A module records its table in `package.loaded` before it `require`s anything, so two classes that use each other both load; a subclass sets its parent as its metatable's `__index` after the `require`s. Lua's `return` must end a block, so a Return Node with statements after it becomes `do return ... end`.
+  - **Several outputs** are Lua's multiple return values; a pure call reading one output takes it with `select`.
+  - **Values:** literals keep their kind (`5` is an integer, `2.5` a float), and Lua 5.4 keeps the two apart, so `math.floor` and the integer pins give integers as Unreal does. Enum values are their names, as strings.
+  - **The support module** (`vgraph_runtime.lua`): arrays (`vg.array`, items at 1..n with `n` kept, indexed from 0 by the nodes), insertion-ordered sets and maps, JSON and number formatting, `to_number` and `to_boolean`, classes and interfaces (`vg.class`, `vg.is_a`), dispatchers and the latent queue. A test checks the number formatting against JavaScript's on hard cases (exponent boundaries, subnormals, the largest double).
+  - **Snippets:** the `LUA` tables in `stdlib.ts`, `containers.ts` and `utilities.ts`. Lua's patterns are ASCII, so To Upper, To Lower, Trim and the utilities' whitespace work on ASCII, as in C++.
+  - **Run:** a launcher in the scaffold folder sets `package.path` to the scaffold (where the support module is written) and the workspace folder, `require`s the generated module, and runs Start, Main and the latent actions; with `--test`, each test on a new object. Errors print as `Error: <message>` and exit with 1.
+  - **Conformance:** all 25 fixtures pass, both object programs included.
+
 ## GDScript (Tier 1)
 
 - **Toolchain:** Godot 4 (4.3 or later), its console executable on the PATH as `godot` (`Godot_v4.x_stable_win64_console.exe` on Windows, renamed or aliased), or set in `blueprintVisualScripting.runCommands`.

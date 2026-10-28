@@ -20,7 +20,8 @@
       "rust": "panic!(\"boom\");",
       "c": "vg_fail(\"boom\");",
       "java": "throw new RuntimeException(\"boom\");",
-      "go": "VgFail(\"boom\")"
+      "go": "VgFail(\"boom\")",
+      "lua": "error(\"boom\", 0)"
     }
   }
 }
