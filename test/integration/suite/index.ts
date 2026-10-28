@@ -860,6 +860,11 @@ test('exit check: debugging a function graph in generated GDScript', async () =>
   await exitCheck('gdscript', await godotProject());
 });
 
+test('exit check: debugging a function graph in generated Ruby', async () => {
+  if (!vscode.extensions.getExtension('KoichiSasada.vscode-rdbg')) throw new Skip('the VSCode rdbg Ruby Debugger extension is not loaded');
+  await exitCheck('ruby');
+});
+
 test('exit check: debugging a function graph in generated C#', async () => {
   if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
   await exitCheck('csharp');
@@ -967,6 +972,11 @@ test('Debug does the same in generated Lua (Lua Debug)', async () => {
 
 test('Debug does the same in generated GDScript (godot-tools)', async () => {
   await debugSample('gdscript', 'debug_gdscript_vgraph.gd', await godotProject());
+});
+
+test('Debug does the same in generated Ruby (rdbg)', async () => {
+  if (!vscode.extensions.getExtension('KoichiSasada.vscode-rdbg')) throw new Skip('the VSCode rdbg Ruby Debugger extension is not loaded');
+  await debugSample('ruby', 'debug_ruby_vgraph.rb');
 });
 
 test('Debug does the same in generated Go (Delve)', async () => {

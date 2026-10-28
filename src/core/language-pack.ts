@@ -190,6 +190,10 @@ export interface CodeDebugger {
   configuration(file: { path: string; url: string }, className: string, context: RunContext & { cwd: string; command?: string[] }): Record<string, unknown>;
   // A value as the debugger shows it, as the graph shows it (Java's debugger writes 30.0 for 30).
   displayValue?(text: string): string;
+  // false when the debugger's steps can't leave a function: a step from its last line runs on to the
+  // end (rdbg's DAP mode). Step Out, and a step from a function's last node, then resume to a
+  // breakpoint on the caller's next node instead.
+  stepsLeaveFunctions?: boolean;
 }
 
 // The debug type and extension a debugger uses on the platform.

@@ -6,7 +6,8 @@ import { relativeSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
-import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
+import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
+import { scanRuby } from '../importing/ruby-scanner';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
 import { RUBY_RUNTIME_FILE, rubyRuntime } from './ruby-runtime';
@@ -103,13 +104,29 @@ const rubyRunner: CodeRunner = {
   missingToolMessage: 'Ruby was not found. Install Ruby 3.3 or later and make sure `ruby` is on the PATH.'
 };
 
+// rdbg (the debug gem) through the VSCode rdbg Ruby Debugger, running Run's launcher.
+const rubyDebugger: CodeDebugger = {
+  type: 'rdbg',
+  extension: { id: 'KoichiSasada.vscode-rdbg', name: 'VSCode rdbg Ruby Debugger' },
+  configuration: (_file, _className, context) => ({
+    type: 'rdbg', request: 'launch', name: 'Debug Graph', script: `${context.scaffoldDir}/run.rb`, args: context.args ?? [], cwd: context.cwd,
+    askParameters: false, useBundler: false,
+    ...(context.command?.length ? { command: context.command.join(' ') } : {})
+  }),
+  // rdbg writes a whole Float with a point (30.0); the graph shows 30.
+  displayValue: (text) => (/^-?\d+\.0$/.test(text) ? text.slice(0, -2) : text),
+  // In rdbg's DAP mode a step from a method's last line (finish, next or step) runs on to the end.
+  stepsLeaveFunctions: false
+};
+
 const rubyGenerator: CodeGenerator = {
   libraryExports: (_name, functions) => ({ names: rubyExportNames(functions) }),
   snippetLanguages: ['ruby'],
   importLanguages: ['ruby'],
   outputFileName: rubyOutputFileName,
   generate: (program, options) => new RubyEmitter(program, options).emit(),
-  runner: rubyRunner
+  runner: rubyRunner,
+  debugger: rubyDebugger
 };
 
 export const rubyPack: LanguagePack = {
@@ -119,7 +136,9 @@ export const rubyPack: LanguagePack = {
   workspaceMarkers: ['**/Gemfile', '**/*.gemspec'],
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
-  generator: rubyGenerator
+  generator: rubyGenerator,
+  // Module methods and top-level methods marked @blueprint in YARD comments.
+  importer: { extensions: ['.rb'], scan: scanRuby }
 };
 
 class RubyEmitter {
@@ -152,8 +171,8 @@ class RubyEmitter {
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
     for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     for (const i of program.imports) {
-      // A struct, enum or class is its constant; a project function is called by its module's name
-      // (the constant its file defines, Pascal case of the file's name) or, at the top level, alone.
+      // A struct, enum or class is its constant; a project function is called on its module or
+      // class (the scanner's container), or alone when it's a top-level method.
       if (i.userType) this.importNames.set(i.id, new NameScope(RESERVED).claim(i.userType.name, 'pascal'));
       else this.importNames.set(i.id, i.module ? `${i.module}.${i.name}` : i.name);
     }

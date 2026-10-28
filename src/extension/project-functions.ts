@@ -20,7 +20,7 @@ const LANGUAGE_SERVER_RETRIES = 7;
 const LANGUAGE_SERVER_RETRY_MS = 1000;
 const LANGUAGE_SERVER_RETRY_MAX_MS = 15000;
 // Generated files: classes, never project functions.
-const GENERATED = /(\.vgraph\.([cm]?[jt]s|cs)|_vgraph\.(py|go|lua|gd)|^vgraph_runtime\.(go|lua|gd))$/i;
+const GENERATED = /(\.vgraph\.([cm]?[jt]s|cs)|_vgraph\.(py|go|lua|gd|rb)|^vgraph_runtime\.(go|lua|gd|rb))$/i;
 const SOURCE = 'functions';
 
 interface FileFunctions {

@@ -132,7 +132,7 @@ export class CodeDebugService implements vscode.Disposable {
       [GRAPH_KEY]: id
     };
     if (this.active) this.active.act('stop');
-    const debug = new CodeDebug(id, uri, this, this.openTextTabs(), spec.displayValue);
+    const debug = new CodeDebug(id, uri, this, this.openTextTabs(), spec.displayValue, spec.stepsLeaveFunctions === false);
     this.active = debug;
     this.host.debugStarted(debug);
     const started = await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), configuration);
@@ -287,8 +287,12 @@ class CodeDebug implements GraphDebug {
   // A step in progress: line steps repeat until execution reaches another node (`entered`: a method,
   // then past its prologue).
   private stepping: { request: string; from?: GraphStackFrame; depth: number; steps: number; entered?: boolean } | undefined;
+  // The stopped frames as the debugger gave them, and a source's breakpoints to put back after a step
+  // done as a breakpoint (CodeDebugger.stepsLeaveFunctions).
+  private frames: DapStackFrame[] = [];
+  private restore: { path: string; breakpoints: { line: number; condition?: string }[] } | undefined;
 
-  constructor(readonly id: string, readonly graph: vscode.Uri, private readonly service: CodeDebugService, readonly userTabs: Set<string>, private readonly display?: (text: string) => string) {}
+  constructor(readonly id: string, readonly graph: vscode.Uri, private readonly service: CodeDebugService, readonly userTabs: Set<string>, private readonly display?: (text: string) => string, private readonly stepByBreakpoint = false) {}
 
   owns(session: vscode.DebugSession): boolean {
     for (let s: vscode.DebugSession | undefined = session; s; s = s.parentSession) {
@@ -315,6 +319,11 @@ class CodeDebug implements GraphDebug {
       stack = stack.slice(0, outermost + 1);
       frames = frames.slice(0, outermost + 1);
     }
+    if (this.restore) {
+      const { path, breakpoints } = this.restore;
+      this.restore = undefined;
+      await session.customRequest('setBreakpoints', { source: { path }, breakpoints }).then(undefined, () => undefined);
+    }
     const step = this.stepping;
     if (step) {
       const top = stack[0];
@@ -339,6 +348,7 @@ class CodeDebug implements GraphDebug {
     this.session = session;
     this.threadId = threadId;
     this.stack = stack;
+    this.frames = frames;
     this.frameIds = frames.map((f) => f.id);
     this.service.host.debugChanged(this);
   }
@@ -358,6 +368,10 @@ class CodeDebug implements GraphDebug {
     }
     const { session, threadId, stack } = this;
     if (!session || threadId === undefined || !stack) return;
+    if (action !== 'resume' && this.stepByBreakpoint && this.leavesFunction(action)) {
+      void this.resumeToCaller(session, threadId);
+      return;
+    }
     const request = action === 'resume' ? 'continue' : DAP_STEPS[action];
     const top = stack[0];
     if (action !== 'resume') this.stepping = { request, from: top.external ? undefined : top, depth: graphDepth(stack), steps: 0 };
@@ -366,6 +380,36 @@ class CodeDebug implements GraphDebug {
     session.customRequest(request, { threadId }).then(undefined, () => {
       this.stepping = undefined;
     });
+  }
+
+  // Whether the step leaves the function it's in: Step Out, or a step from its last node.
+  private leavesFunction(action: DebugAction): boolean {
+    const stack = this.stack!;
+    if (graphDepth(stack) < 2 || stack[0].external) return false;
+    if (action === 'stepOut') return true;
+    const generated = this.service.compiler.generatedFile(stack[0].uri);
+    return !!generated && !generated.nodeLines.some((n) => n.graphId === stack[0].graphId && n.line > this.frames[0].line);
+  }
+
+  // Resumes to the caller's next node, through a breakpoint that is taken away when execution stops:
+  // for a debugger whose steps can't leave a function (CodeDebugger.stepsLeaveFunctions).
+  private async resumeToCaller(session: vscode.DebugSession, threadId: number): Promise<void> {
+    const caller = this.stack!.findIndex((f, i) => i > 0 && !f.external);
+    const frame = this.frames[caller];
+    const generated = frame && this.service.compiler.generatedFile(this.stack![caller].uri);
+    const next = generated?.nodeLines.filter((n) => n.graphId === this.stack![caller].graphId && n.line > frame.line).map((n) => n.line).sort((a, b) => a - b)[0];
+    const path = frame?.source?.path;
+    this.stack = undefined;
+    this.service.host.debugChanged(this);
+    if (next !== undefined && path) {
+      const same = (file: string) => file.toLowerCase() === path.toLowerCase();
+      const breakpoints = vscode.debug.breakpoints
+        .filter((b): b is vscode.SourceBreakpoint => b instanceof vscode.SourceBreakpoint && b.enabled && same(b.location.uri.fsPath))
+        .map((b) => ({ line: b.location.range.start.line + 1, ...(b.condition ? { condition: b.condition } : {}) }));
+      this.restore = { path, breakpoints };
+      await session.customRequest('setBreakpoints', { source: { path }, breakpoints: [...breakpoints, { line: next }] }).then(undefined, () => undefined);
+    }
+    session.customRequest('continue', { threadId }).then(undefined, () => undefined);
   }
 
   // Each pin is read in the innermost frame running its graph, with the generator's expression.
