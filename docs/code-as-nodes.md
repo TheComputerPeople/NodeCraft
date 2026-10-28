@@ -128,6 +128,7 @@ More of Unreal's own nodes, with its names and categories, implemented in every 
 | Math / Boolean | XOR, NAND, NOR |
 | Math / Random | Random Bool |
 | String | Starts With, Ends With, Find Substring, Parse Into Array, Join String Array, Repeat, Reverse, Left, Right, Is Numeric, Equal, Case Insensitive |
+| Utilities / Array | Reverse, Slice, Sort, Shuffle, Sum, Min Of Float Array, Max Of Float Array, Range, First, Last, Random Item, Append Array, Swap |
 | Utilities / Set | Union, Intersection, Difference |
 
 Their rules, where languages would disagree:
@@ -137,7 +138,8 @@ Their rules, where languages would disagree:
 - **Precision.** Log is `ln(A) / ln(Base)` in every language (no `log10` shortcut), so Log of 1000 in base 10 is 2.9999999999999996 everywhere. Math libraries can differ in the last digit of trigonometry and logarithms; the conformance fixture rounds those results to 10 places.
 - **Parts.** Truncate rounds toward zero and returns an integer; Fraction keeps A's sign (-1.25 gives -0.25), as Unreal's does.
 - **Text.** Positions and counts are in characters (code points). Starts With, Ends With and Find Substring are case-sensitive (Unreal's ignore case by default; use To Lower first, or Equal, Case Insensitive). Equal, Case Insensitive folds ASCII letters only, so it gives the same answer in every language; other letters must match exactly. Left and Right take what there is: a Count beyond the text gives all of it, and a negative one none. Is Numeric accepts plain decimal numbers (a sign, digits, one point), not exponents or spaces. Parse Into Array with an empty Delimiter, and Repeat with a negative Count, stop the run.
-- **New containers.** The set and array functions return a new container and leave their inputs as they are. Sets print, as To Array lists them, in ascending order.
+- **New containers.** The set and array functions return a new container and leave their inputs as they are (Unreal's Reverse, Shuffle, Append and Swap change the array they are given). Sets print, as To Array lists them, in ascending order.
+- **Arrays.** Sort orders numbers by value, text by character code (capitals before small letters, in every language) and false before true. Sum adds in order, so it rounds as a loop does (Python's `sum` and Ruby's `Array#sum` compensate, and would differ). First, Last, Random Item, Min Of Float Array and Max Of Float Array stop the run on an empty array, as Swap does on an index out of range; Slice and Range take what there is. Range leaves End out, as Python's `range` does, and a Step of 0 stops the run.
 
 ### More utilities
 

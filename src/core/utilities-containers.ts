@@ -1,7 +1,7 @@
 // Unreal's set and array functions beyond the container nodes' (docs/code-as-nodes.md, "More of
 // Unreal's library"). They make new containers and leave their inputs as they are; sets print, as
 // To Array lists them, in ascending order, so every language shows the same set.
-import { SET, Snippets, UtilityNode, input } from './utility-kit';
+import { ARRAY, FLOAT, FLOATS, INT, INTS, ITEM, SET, Snippets, UtilityNode, input } from './utility-kit';
 
 const sets = () => [input('a', 'A', SET), input('b', 'B', SET)];
 
@@ -48,5 +48,251 @@ export const SET_UTILITIES: UtilityNode[] = [
   {
     type: 'core:set.difference', displayName: 'Difference', category: 'Utilities / Set', result: SET, keywords: ['difference', 'except', 'minus', 'subtract', 'without'],
     inputs: sets(), description: 'A new set of the items in A that aren\'t in B.', code: filtered(false)
+  }
+];
+
+// ---- Arrays -------------------------------------------------------------------------------------
+//
+// `start` names the Start event's function in GDScript, so its snippets name that pin as ${start}.
+
+const items = () => input('items', 'Target Array', ARRAY);
+const index = (id: string, name: string) => input(id, name, INT, 0);
+
+// An empty array stops the run, for the nodes that need an item.
+const NOT_EMPTY: Snippets = {
+  javascript: "if (!items.length) throw new Error('Array is empty');",
+  python: 'if not items:\n    raise IndexError("Array is empty")',
+  csharp: 'if (items.Count == 0) throw new InvalidOperationException("Array is empty");',
+  cpp: 'if (items.empty()) throw std::out_of_range("Array is empty");',
+  rust: 'if items.is_empty() { panic!("Array is empty"); }',
+  java: 'if (items.isEmpty()) throw new IllegalStateException("Array is empty");',
+  go: 'if len(*items) == 0 {\n\tVgFail("Array is empty")\n}',
+  lua: 'if items.n == 0 then error("Array is empty", 0) end',
+  gdscript: 'if items.is_empty():\n\treturn vg.fail("Array is empty")',
+  ruby: 'raise IndexError, "Array is empty" if items.empty?',
+  php: "if (count($items->items) === 0) {\n    throw new \\UnderflowException('Array is empty');\n}"
+};
+const FLOATS_NOT_EMPTY: Snippets = Object.fromEntries(Object.entries(NOT_EMPTY).map(([language, code]) => [language, code.replace(/(?<!->)items/g, 'values')]));
+
+// Swap's two indexes must both be in range.
+const SWAP_RANGE: Snippets = {
+  javascript: "if (first < 0 || first >= items.length || second < 0 || second >= items.length) throw new Error('Index out of range');",
+  python: 'if not (0 <= first < len(items) and 0 <= second < len(items)):\n    raise IndexError("Index out of range")',
+  csharp: 'if (first < 0 || first >= items.Count || second < 0 || second >= items.Count) throw new ArgumentOutOfRangeException(nameof(first), "Index out of range");',
+  cpp: 'auto size = static_cast<long long>(items.size());\nif (first < 0 || first >= size || second < 0 || second >= size) throw std::out_of_range("Index out of range");',
+  rust: 'if first < 0 || first >= items.len() as i64 || second < 0 || second >= items.len() as i64 { panic!("Index out of range"); }',
+  java: 'if (first < 0 || first >= items.size() || second < 0 || second >= items.size()) throw new IndexOutOfBoundsException("Index out of range");',
+  go: 'if first < 0 || first >= len(*items) || second < 0 || second >= len(*items) {\n\tVgFail("Index out of range")\n}',
+  lua: 'if first < 0 or first >= items.n or second < 0 or second >= items.n then error("Index out of range", 0) end',
+  gdscript: 'if first < 0 or first >= items.size() or second < 0 or second >= items.size():\n\treturn vg.fail("Index out of range")',
+  ruby: 'raise IndexError, "Index out of range" unless first.between?(0, items.length - 1) && second.between?(0, items.length - 1)',
+  php: "if ($first < 0 || $first >= count($items->items) || $second < 0 || $second >= count($items->items)) {\n    throw new \\OutOfRangeException('Index out of range');\n}"
+};
+
+const STEP_NOT_ZERO: Snippets = {
+  javascript: "if (step === 0) throw new Error(\"Step can't be 0\");",
+  python: 'if step == 0:\n    raise ValueError("Step can\'t be 0")',
+  csharp: 'if (step == 0) throw new ArgumentException("Step can\'t be 0");',
+  cpp: 'if (step == 0) throw std::invalid_argument("Step can\'t be 0");',
+  rust: 'if step == 0 { panic!("Step can\'t be 0"); }',
+  java: 'if (step == 0) throw new IllegalArgumentException("Step can\'t be 0");',
+  go: 'if step == 0 {\n\tVgFail("Step can\'t be 0")\n}',
+  lua: 'if step == 0 then error("Step can\'t be 0", 0) end',
+  gdscript: 'if step == 0:\n\treturn vg.fail("Step can\'t be 0")',
+  ruby: 'raise ArgumentError, "Step can\'t be 0" if step.zero?',
+  php: "if ($step === 0) {\n    throw new \\InvalidArgumentException(\"Step can't be 0\");\n}"
+};
+
+const after = (first: Snippets, then: Snippets): Snippets => Object.fromEntries(Object.entries(then).map(([language, code]) => [language, `${first[language]}\n${code}`]));
+
+// The smallest or largest value (Unreal's Min Of Float Array and Max Of Float Array).
+function extreme(smallest: boolean): Snippets {
+  const op = smallest ? '<' : '>';
+  return after(FLOATS_NOT_EMPTY, {
+    javascript: `let result = values[0];\nfor (const value of values) if (value ${op} result) result = value;\nreturn result;`,
+    python: `result = values[0]\nfor value in values:\n    if value ${op} result:\n        result = value\nreturn result`,
+    csharp: `var result = values[0];\nforeach (var value in values) if (value ${op} result) result = value;\nreturn result;`,
+    cpp: `double result = values[0];\nfor (double value : values) if (value ${op} result) result = value;\nreturn result;`,
+    rust: `let mut result = values[0];\nfor value in values.iter() { if *value ${op} result { result = *value; } }\nreturn result;`,
+    java: `double result = values.get(0);\nfor (double value : values) if (value ${op} result) result = value;\nreturn result;`,
+    go: `result := (*values)[0]\nfor _, value := range *values {\n\tif value ${op} result {\n\t\tresult = value\n\t}\n}\nreturn result`,
+    lua: `local result = values[1]\nfor i = 2, values.n do\n  if values[i] ${op} result then result = values[i] end\nend\nreturn result`,
+    gdscript: `var result = values[0]\nfor value in values:\n\tif value ${op} result:\n\t\tresult = value\nreturn result`,
+    ruby: `return values.${smallest ? 'min' : 'max'}`,
+    php: `$result = $values->items[0];\nforeach ($values->items as $value) {\n    if ($value ${op} $result) {\n        $result = $value;\n    }\n}\nreturn $result;`
+  });
+}
+
+export const ARRAY_UTILITIES: UtilityNode[] = [
+  {
+    type: 'core:array.reverse', displayName: 'Reverse', category: 'Utilities / Array', result: ARRAY, keywords: ['reverse', 'backwards', 'flip'],
+    inputs: [items()], description: 'A new array of the items in reverse order.',
+    code: {
+      javascript: 'return [...items].reverse();', python: 'return items[::-1]', csharp: 'var result = items.ToList();\nresult.Reverse();\nreturn result;',
+      cpp: 'return std::decay_t<decltype(items)>(items.rbegin(), items.rend());', rust: 'let mut result = items.clone();\nresult.reverse();\nreturn result;',
+      java: 'var result = new java.util.ArrayList<>(items);\njava.util.Collections.reverse(result);\nreturn result;',
+      go: 'result := slices.Clone(*items)\nslices.Reverse(result)\nreturn &result',
+      lua: 'local result = vg.array()\nfor i = items.n, 1, -1 do\n  result.n = result.n + 1\n  result[result.n] = items[i]\nend\nreturn result',
+      gdscript: 'var result = items.duplicate()\nresult.reverse()\nreturn result', ruby: 'return items.reverse', php: 'return new VgList(array_reverse($items->items));'
+    }
+  },
+  {
+    type: 'core:array.slice', displayName: 'Slice', category: 'Utilities / Array', result: ARRAY, keywords: ['slice', 'subarray', 'range', 'part', 'take'],
+    inputs: [items(), index('start', 'Start Index'), input('count', 'Length', INT, 1)],
+    description: 'A new array of Length items from Start Index (0 is the first), or as many as there are.',
+    code: {
+      javascript: 'const begin = Math.max(0, start);\nreturn items.slice(begin, begin + Math.max(0, count));',
+      python: 'begin = max(0, start)\nreturn items[begin:begin + max(0, count)]',
+      csharp: 'var begin = Math.Min(Math.Max(0, start), items.Count);\nreturn items.GetRange(begin, Math.Min(Math.Max(0, count), items.Count - begin));',
+      cpp: 'auto size = static_cast<long long>(items.size());\nauto begin = std::min(std::max(0LL, start), size);\nauto end = std::min(begin + std::max(0LL, count), size);\nreturn std::decay_t<decltype(items)>(items.begin() + begin, items.begin() + end);',
+      rust: 'let begin = (start.max(0) as usize).min(items.len());\nlet end = (begin + count.max(0) as usize).min(items.len());\nreturn items[begin..end].to_vec();',
+      java: 'int begin = (int) Math.min(Math.max(0, start), items.size());\nint end = (int) Math.min(begin + Math.max(0, count), items.size());\nreturn new java.util.ArrayList<>(items.subList(begin, end));',
+      go: 'begin := min(max(start, 0), len(*items))\nend := min(begin+max(count, 0), len(*items))\nresult := slices.Clone((*items)[begin:end])\nreturn &result',
+      lua: 'local result = vg.array()\nlocal begin = math.max(0, start)\nfor i = begin + 1, math.min(items.n, begin + math.max(0, count)) do\n  result.n = result.n + 1\n  result[result.n] = items[i]\nend\nreturn result',
+      gdscript: 'var begin := clampi(${start}, 0, items.size())\nreturn items.slice(begin, mini(begin + maxi(count, 0), items.size()))',
+      ruby: 'return items[[start, 0].max, [count, 0].max] || []',
+      php: 'return new VgList(array_slice($items->items, max(0, $start), max(0, $count)));'
+    }
+  },
+  {
+    type: 'core:array.sort', displayName: 'Sort', category: 'Utilities / Array', result: ARRAY, keywords: ['sort', 'order', 'ascending', 'arrange'],
+    inputs: [items()],
+    description: 'A new array of the items in ascending order: numbers by value, text by character code (so capitals come before small letters), false before true.',
+    code: {
+      javascript: 'return [...items].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));',
+      python: 'return sorted(items)',
+      // Strings by character code, as the other languages compare them (C#'s default is by culture).
+      csharp: 'var result = items.ToList();\nif ((object)result is List<string> strings) strings.Sort(string.CompareOrdinal);\nelse result.Sort();\nreturn result;',
+      cpp: 'std::decay_t<decltype(items)> result = items;\nstd::stable_sort(result.begin(), result.end());\nreturn result;',
+      rust: 'let mut result = items.clone();\nresult.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));\nreturn result;',
+      java: 'var result = new java.util.ArrayList<>(items);\nresult.sort(null);\nreturn result;',
+      go: 'result := slices.Clone(*items)\nsort.SliceStable(result, func(i, j int) bool { return vgLess(result[i], result[j]) })\nreturn &result',
+      lua: 'local result = vg.array_of(items, items.n)\ntable.sort(result, vg.less)\nreturn result',
+      gdscript: 'var result = items.duplicate()\nresult.sort()\nreturn result',
+      // Ruby's booleans don't compare, so they sort as 0 and 1.
+      ruby: 'return items.sort_by { |item| item == true ? 1 : (item == false ? 0 : item) }',
+      php: '$result = $items->items;\nsort($result, $result !== [] && is_string($result[0]) ? SORT_STRING : SORT_REGULAR);\nreturn new VgList($result);'
+    }
+  },
+  {
+    type: 'core:array.shuffle', displayName: 'Shuffle', category: 'Utilities / Array', result: ARRAY, keywords: ['shuffle', 'random', 'mix', 'randomize'],
+    inputs: [items()], description: 'A new array of the items in a random order. A new order each time it is read.',
+    code: {
+      javascript: 'const result = [...items];\nfor (let i = result.length - 1; i > 0; i--) {\n  const j = Math.floor(Math.random() * (i + 1));\n  [result[i], result[j]] = [result[j], result[i]];\n}\nreturn result;',
+      python: 'import random\nresult = list(items)\nrandom.shuffle(result)\nreturn result',
+      csharp: 'return items.OrderBy((_) => Random.Shared.Next()).ToList();',
+      cpp: 'static std::mt19937_64 engine{std::random_device{}()};\nstd::decay_t<decltype(items)> result = items;\nstd::shuffle(result.begin(), result.end(), engine);\nreturn result;',
+      rust: 'let mut result = items.clone();\nfor i in (1..result.len()).rev() {\n    let j = (vgraph::random() * (i + 1) as f64) as usize;\n    result.swap(i, j);\n}\nreturn result;',
+      java: 'var result = new java.util.ArrayList<>(items);\njava.util.Collections.shuffle(result);\nreturn result;',
+      go: 'result := slices.Clone(*items)\nrand.Shuffle(len(result), func(i, j int) { result[i], result[j] = result[j], result[i] })\nreturn &result',
+      lua: 'local result = vg.array_of(items, items.n)\nfor i = result.n, 2, -1 do\n  local j = math.random(i)\n  result[i], result[j] = result[j], result[i]\nend\nreturn result',
+      gdscript: 'var result = items.duplicate()\nresult.shuffle()\nreturn result',
+      ruby: 'return items.shuffle',
+      php: '$result = $items->items;\nshuffle($result);\nreturn new VgList($result);'
+    }
+  },
+  {
+    type: 'core:array.sum', displayName: 'Sum', category: 'Utilities / Array', result: FLOAT, keywords: ['sum', 'total', 'add up'],
+    inputs: [input('values', 'Values', FLOATS)], description: 'The values added up, in order (0 for an empty array).',
+    code: {
+      javascript: 'let total = 0;\nfor (const value of values) total += value;\nreturn total;',
+      // Python's sum() and Ruby's Array#sum compensate for rounding; the other languages add in order.
+      python: 'total = 0.0\nfor value in values:\n    total += value\nreturn total',
+      csharp: 'var total = 0.0;\nforeach (var value in values) total += value;\nreturn total;',
+      cpp: 'double total = 0;\nfor (double value : values) total += value;\nreturn total;',
+      rust: 'let mut total = 0.0;\nfor value in values.iter() { total += *value; }\nreturn total;',
+      java: 'double total = 0;\nfor (double value : values) total += value;\nreturn total;',
+      go: 'total := 0.0\nfor _, value := range *values {\n\ttotal += value\n}\nreturn total',
+      lua: 'local total = 0\nfor i = 1, values.n do total = total + values[i] end\nreturn total',
+      gdscript: 'var total := 0.0\nfor value in values:\n\ttotal += value\nreturn total',
+      ruby: 'return values.inject(0.0) { |total, value| total + value }',
+      php: '$total = 0.0;\nforeach ($values->items as $value) {\n    $total += $value;\n}\nreturn $total;'
+    }
+  },
+  {
+    type: 'core:array.min', displayName: 'Min Of Float Array', category: 'Utilities / Array', result: FLOAT, keywords: ['minimum', 'smallest', 'lowest'],
+    inputs: [input('values', 'Values', FLOATS)], description: 'The smallest value. An empty array stops the run with an error.', code: extreme(true)
+  },
+  {
+    type: 'core:array.max', displayName: 'Max Of Float Array', category: 'Utilities / Array', result: FLOAT, keywords: ['maximum', 'largest', 'highest'],
+    inputs: [input('values', 'Values', FLOATS)], description: 'The largest value. An empty array stops the run with an error.', code: extreme(false)
+  },
+  {
+    type: 'core:array.range', displayName: 'Range', category: 'Utilities / Array', result: INTS, keywords: ['range', 'sequence', 'numbers', 'count', 'from to'],
+    inputs: [input('start', 'Start', INT, 0), input('stop', 'End', INT, 10), input('step', 'Step', INT, 1)],
+    description: 'The whole numbers from Start up to End, End left out, Step apart (0, 1, … 9 by default). A negative Step counts down; a Step of 0 stops the run with an error.',
+    code: after(STEP_NOT_ZERO, {
+      javascript: 'const result = [];\nfor (let i = start; step > 0 ? i < stop : i > stop; i += step) result.push(i);\nreturn result;',
+      python: 'return list(range(start, stop, step))',
+      csharp: 'var result = new List<int>();\nfor (var i = start; step > 0 ? i < stop : i > stop; i += step) result.Add(i);\nreturn result;',
+      cpp: 'std::vector<long long> result;\nfor (long long i = start; step > 0 ? i < stop : i > stop; i += step) result.push_back(i);\nreturn result;',
+      rust: 'let mut result = Vec::new();\nlet mut i = start;\nwhile if step > 0 { i < stop } else { i > stop } {\n    result.push(i);\n    i += step;\n}\nreturn result;',
+      java: 'var result = new java.util.ArrayList<Long>();\nfor (long i = start; step > 0 ? i < stop : i > stop; i += step) result.add(i);\nreturn result;',
+      go: 'result := []int{}\nfor i := start; (step > 0 && i < stop) || (step < 0 && i > stop); i += step {\n\tresult = append(result, i)\n}\nreturn &result',
+      lua: 'local result = vg.array()\nfor i = start, step > 0 and stop - 1 or stop + 1, step do\n  result.n = result.n + 1\n  result[result.n] = i\nend\nreturn result',
+      gdscript: 'return range(${start}, stop, step)',
+      ruby: 'result = []\ni = start\nwhile step > 0 ? i < stop : i > stop\n  result << i\n  i += step\nend\nreturn result',
+      php: '$result = [];\nfor ($i = $start; $step > 0 ? $i < $stop : $i > $stop; $i += $step) {\n    $result[] = $i;\n}\nreturn new VgList($result);'
+    })
+  },
+  {
+    type: 'core:array.first', displayName: 'First', category: 'Utilities / Array', result: ITEM, keywords: ['first', 'head', 'front'],
+    inputs: [items()], description: 'The first item. An empty array stops the run with an error.',
+    code: after(NOT_EMPTY, {
+      javascript: 'return items[0];', python: 'return items[0]', csharp: 'return items[0];', cpp: 'return items.front();', rust: 'return items[0].clone();',
+      java: 'return items.get(0);', go: 'return (*items)[0]', lua: 'return items[1]', gdscript: 'return items[0]', ruby: 'return items.first', php: 'return $items->items[0];'
+    })
+  },
+  {
+    type: 'core:array.last', displayName: 'Last', category: 'Utilities / Array', result: ITEM, keywords: ['last', 'tail', 'back', 'end'],
+    inputs: [items()], description: 'The last item. An empty array stops the run with an error.',
+    code: after(NOT_EMPTY, {
+      javascript: 'return items[items.length - 1];', python: 'return items[-1]', csharp: 'return items[items.Count - 1];', cpp: 'return items.back();',
+      rust: 'return items[items.len() - 1].clone();', java: 'return items.get(items.size() - 1);', go: 'return (*items)[len(*items)-1]', lua: 'return items[items.n]',
+      gdscript: 'return items.back()', ruby: 'return items.last', php: 'return $items->items[count($items->items) - 1];'
+    })
+  },
+  {
+    type: 'core:array.random-item', displayName: 'Random Item', category: 'Utilities / Array', result: ITEM, keywords: ['random', 'pick', 'choose', 'sample'],
+    inputs: [items()], description: 'One of the items, picked at random; a new pick each time it is read. An empty array stops the run with an error.',
+    code: after(NOT_EMPTY, {
+      javascript: 'return items[Math.floor(Math.random() * items.length)];', python: 'import random\nreturn random.choice(items)',
+      csharp: 'return items[Random.Shared.Next(items.Count)];',
+      cpp: 'static std::mt19937_64 engine{std::random_device{}()};\nreturn items[std::uniform_int_distribution<std::size_t>(0, items.size() - 1)(engine)];',
+      rust: 'return items[(vgraph::random() * items.len() as f64) as usize].clone();', java: 'return items.get((int) (Math.random() * items.size()));',
+      go: 'return (*items)[rand.Intn(len(*items))]', lua: 'return items[math.random(items.n)]', gdscript: 'return items.pick_random()', ruby: 'return items.sample',
+      php: 'return $items->items[array_rand($items->items)];'
+    })
+  },
+  {
+    type: 'core:array.append', displayName: 'Append Array', category: 'Utilities / Array', result: ARRAY, keywords: ['append', 'concat', 'concatenate', 'combine', 'join'],
+    inputs: [input('a', 'A', ARRAY), input('b', 'B', ARRAY)], description: 'A new array of A\'s items followed by B\'s.',
+    code: {
+      javascript: 'return [...a, ...b];', python: 'return a + b', csharp: 'return a.Concat(b).ToList();',
+      cpp: 'std::decay_t<decltype(a)> result = a;\nresult.insert(result.end(), b.begin(), b.end());\nreturn result;',
+      rust: 'let mut result = a.clone();\nresult.extend(b.iter().cloned());\nreturn result;',
+      java: 'var result = new java.util.ArrayList<>(a);\nresult.addAll(b);\nreturn result;',
+      go: 'result := append(slices.Clone(*a), *b...)\nreturn &result',
+      lua: 'local result = vg.array_of(a, a.n)\nfor i = 1, b.n do\n  result.n = result.n + 1\n  result[result.n] = b[i]\nend\nreturn result',
+      gdscript: 'return a + b', ruby: 'return a + b', php: 'return new VgList(array_merge($a->items, $b->items));'
+    }
+  },
+  {
+    type: 'core:array.swap', displayName: 'Swap', category: 'Utilities / Array', result: ARRAY, keywords: ['swap', 'exchange', 'switch'],
+    inputs: [items(), index('first', 'First Index'), index('second', 'Second Index')],
+    description: 'A new array with the items at First Index and Second Index changed places. An index out of range stops the run with an error.',
+    code: after(SWAP_RANGE, {
+      javascript: 'const result = [...items];\n[result[first], result[second]] = [result[second], result[first]];\nreturn result;',
+      python: 'result = list(items)\nresult[first], result[second] = result[second], result[first]\nreturn result',
+      csharp: 'var result = items.ToList();\n(result[first], result[second]) = (result[second], result[first]);\nreturn result;',
+      cpp: 'std::decay_t<decltype(items)> result = items;\nstd::iter_swap(result.begin() + first, result.begin() + second);\nreturn result;',
+      rust: 'let mut result = items.clone();\nresult.swap(first as usize, second as usize);\nreturn result;',
+      java: 'var result = new java.util.ArrayList<>(items);\njava.util.Collections.swap(result, (int) first, (int) second);\nreturn result;',
+      go: 'result := slices.Clone(*items)\nresult[first], result[second] = result[second], result[first]\nreturn &result',
+      lua: 'local result = vg.array_of(items, items.n)\nresult[first + 1], result[second + 1] = result[second + 1], result[first + 1]\nreturn result',
+      gdscript: 'var result = items.duplicate()\nvar saved = result[first]\nresult[first] = result[second]\nresult[second] = saved\nreturn result',
+      ruby: 'result = items.dup\nresult[first], result[second] = result[second], result[first]\nreturn result',
+      php: '$result = $items->items;\n[$result[$first], $result[$second]] = [$result[$second], $result[$first]];\nreturn new VgList($result);'
+    })
   }
 ];
