@@ -119,3 +119,5 @@ One commit each (large steps may take several):
 10. Documentation, the parity checklist and status.
 
 Each language's toolchain must be installed before its steps: a pack isn't finished until its conformance and debugging tests run.
+
+Status: steps 1 to 10 done (2026-10-28). All four packs pass the conformance suite and have placement and symbol import; Lua, GDScript and Ruby pass the debugging tests, and PHP's debugging tests wait on Xdebug (see the roadmap's Phase 8 status).
