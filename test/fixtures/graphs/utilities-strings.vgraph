@@ -1,0 +1,895 @@
+{
+  "schemaVersion": 3,
+  "name": "UtilsStrings",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "metadata": {
+    "description": "Utility nodes: Unreal's string nodes, counted in code points.",
+    "expectedOutput": [
+      "true",
+      "false",
+      "true",
+      "false",
+      "1",
+      "3",
+      "-1",
+      "3",
+      "ababab",
+      "",
+      "cb😀a",
+      "hé",
+      "abc",
+      "",
+      "llo",
+      "",
+      "a😀",
+      "true",
+      "true",
+      "false",
+      "false",
+      "false",
+      "true",
+      "false"
+    ]
+  },
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "print1",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 120
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "core:string.starts-with",
+          "position": {
+            "x": 600,
+            "y": 120
+          },
+          "properties": {
+            "pin:text": "Hello, World",
+            "pin:prefix": "Hello"
+          }
+        },
+        {
+          "id": "print2",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "core:string.starts-with",
+          "position": {
+            "x": 600,
+            "y": 240
+          },
+          "properties": {
+            "pin:text": "Hello",
+            "pin:prefix": "hello"
+          }
+        },
+        {
+          "id": "print3",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:string.ends-with",
+          "position": {
+            "x": 600,
+            "y": 360
+          },
+          "properties": {
+            "pin:text": "report.txt",
+            "pin:suffix": ".txt"
+          }
+        },
+        {
+          "id": "print4",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 480
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "core:string.ends-with",
+          "position": {
+            "x": 600,
+            "y": 480
+          },
+          "properties": {
+            "pin:text": "txt",
+            "pin:suffix": "report.txt"
+          }
+        },
+        {
+          "id": "print5",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 600
+          },
+          "properties": {}
+        },
+        {
+          "id": "n5",
+          "type": "core:string.find-substring",
+          "position": {
+            "x": 600,
+            "y": 600
+          },
+          "properties": {
+            "pin:text": "a😀b😀c",
+            "pin:part": "😀",
+            "pin:searchFromEnd": false
+          }
+        },
+        {
+          "id": "print6",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 720
+          },
+          "properties": {}
+        },
+        {
+          "id": "n6",
+          "type": "core:string.find-substring",
+          "position": {
+            "x": 600,
+            "y": 720
+          },
+          "properties": {
+            "pin:text": "a😀b😀c",
+            "pin:part": "😀",
+            "pin:searchFromEnd": true
+          }
+        },
+        {
+          "id": "print7",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 840
+          },
+          "properties": {}
+        },
+        {
+          "id": "n7",
+          "type": "core:string.find-substring",
+          "position": {
+            "x": 600,
+            "y": 840
+          },
+          "properties": {
+            "pin:text": "abc",
+            "pin:part": "x",
+            "pin:searchFromEnd": false
+          }
+        },
+        {
+          "id": "print8",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 960
+          },
+          "properties": {}
+        },
+        {
+          "id": "n8",
+          "type": "core:string.find-substring",
+          "position": {
+            "x": 600,
+            "y": 960
+          },
+          "properties": {
+            "pin:text": "abc",
+            "pin:part": "",
+            "pin:searchFromEnd": true
+          }
+        },
+        {
+          "id": "print9",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1080
+          },
+          "properties": {}
+        },
+        {
+          "id": "n9",
+          "type": "core:string.repeat",
+          "position": {
+            "x": 600,
+            "y": 1080
+          },
+          "properties": {
+            "pin:text": "ab",
+            "pin:count": 3
+          }
+        },
+        {
+          "id": "print10",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1200
+          },
+          "properties": {}
+        },
+        {
+          "id": "n10",
+          "type": "core:string.repeat",
+          "position": {
+            "x": 600,
+            "y": 1200
+          },
+          "properties": {
+            "pin:text": "x",
+            "pin:count": 0
+          }
+        },
+        {
+          "id": "print11",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1320
+          },
+          "properties": {}
+        },
+        {
+          "id": "n11",
+          "type": "core:string.reverse",
+          "position": {
+            "x": 600,
+            "y": 1320
+          },
+          "properties": {
+            "pin:text": "a😀bc"
+          }
+        },
+        {
+          "id": "print12",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1440
+          },
+          "properties": {}
+        },
+        {
+          "id": "n12",
+          "type": "core:string.left",
+          "position": {
+            "x": 600,
+            "y": 1440
+          },
+          "properties": {
+            "pin:text": "héllo",
+            "pin:count": 2
+          }
+        },
+        {
+          "id": "print13",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1560
+          },
+          "properties": {}
+        },
+        {
+          "id": "n13",
+          "type": "core:string.left",
+          "position": {
+            "x": 600,
+            "y": 1560
+          },
+          "properties": {
+            "pin:text": "abc",
+            "pin:count": 10
+          }
+        },
+        {
+          "id": "print14",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1680
+          },
+          "properties": {}
+        },
+        {
+          "id": "n14",
+          "type": "core:string.left",
+          "position": {
+            "x": 600,
+            "y": 1680
+          },
+          "properties": {
+            "pin:text": "abc",
+            "pin:count": -1
+          }
+        },
+        {
+          "id": "print15",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1800
+          },
+          "properties": {}
+        },
+        {
+          "id": "n15",
+          "type": "core:string.right",
+          "position": {
+            "x": 600,
+            "y": 1800
+          },
+          "properties": {
+            "pin:text": "héllo",
+            "pin:count": 3
+          }
+        },
+        {
+          "id": "print16",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1920
+          },
+          "properties": {}
+        },
+        {
+          "id": "n16",
+          "type": "core:string.right",
+          "position": {
+            "x": 600,
+            "y": 1920
+          },
+          "properties": {
+            "pin:text": "abc",
+            "pin:count": 0
+          }
+        },
+        {
+          "id": "print17",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2040
+          },
+          "properties": {}
+        },
+        {
+          "id": "n17",
+          "type": "core:string.right",
+          "position": {
+            "x": 600,
+            "y": 2040
+          },
+          "properties": {
+            "pin:text": "a😀",
+            "pin:count": 5
+          }
+        },
+        {
+          "id": "print18",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2160
+          },
+          "properties": {}
+        },
+        {
+          "id": "n18",
+          "type": "core:string.is-numeric",
+          "position": {
+            "x": 600,
+            "y": 2160
+          },
+          "properties": {
+            "pin:text": "-12.5"
+          }
+        },
+        {
+          "id": "print19",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2280
+          },
+          "properties": {}
+        },
+        {
+          "id": "n19",
+          "type": "core:string.is-numeric",
+          "position": {
+            "x": 600,
+            "y": 2280
+          },
+          "properties": {
+            "pin:text": "+.5"
+          }
+        },
+        {
+          "id": "print20",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2400
+          },
+          "properties": {}
+        },
+        {
+          "id": "n20",
+          "type": "core:string.is-numeric",
+          "position": {
+            "x": 600,
+            "y": 2400
+          },
+          "properties": {
+            "pin:text": "1e5"
+          }
+        },
+        {
+          "id": "print21",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2520
+          },
+          "properties": {}
+        },
+        {
+          "id": "n21",
+          "type": "core:string.is-numeric",
+          "position": {
+            "x": 600,
+            "y": 2520
+          },
+          "properties": {
+            "pin:text": "."
+          }
+        },
+        {
+          "id": "print22",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2640
+          },
+          "properties": {}
+        },
+        {
+          "id": "n22",
+          "type": "core:string.is-numeric",
+          "position": {
+            "x": 600,
+            "y": 2640
+          },
+          "properties": {
+            "pin:text": " 1"
+          }
+        },
+        {
+          "id": "print23",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2760
+          },
+          "properties": {}
+        },
+        {
+          "id": "n23",
+          "type": "core:string.equal-ignore-case",
+          "position": {
+            "x": 600,
+            "y": 2760
+          },
+          "properties": {
+            "pin:a": "Hello",
+            "pin:b": "hELLO"
+          }
+        },
+        {
+          "id": "print24",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2880
+          },
+          "properties": {}
+        },
+        {
+          "id": "n24",
+          "type": "core:string.equal-ignore-case",
+          "position": {
+            "x": 600,
+            "y": 2880
+          },
+          "properties": {
+            "pin:a": "É",
+            "pin:b": "é"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "print1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "print1",
+          "toPin": "value"
+        },
+        {
+          "id": "w3",
+          "fromNode": "print1",
+          "fromPin": "execOut",
+          "toNode": "print2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "print2",
+          "toPin": "value"
+        },
+        {
+          "id": "w5",
+          "fromNode": "print2",
+          "fromPin": "execOut",
+          "toNode": "print3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "print3",
+          "toPin": "value"
+        },
+        {
+          "id": "w7",
+          "fromNode": "print3",
+          "fromPin": "execOut",
+          "toNode": "print4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n4",
+          "fromPin": "returnValue",
+          "toNode": "print4",
+          "toPin": "value"
+        },
+        {
+          "id": "w9",
+          "fromNode": "print4",
+          "fromPin": "execOut",
+          "toNode": "print5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n5",
+          "fromPin": "returnValue",
+          "toNode": "print5",
+          "toPin": "value"
+        },
+        {
+          "id": "w11",
+          "fromNode": "print5",
+          "fromPin": "execOut",
+          "toNode": "print6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n6",
+          "fromPin": "returnValue",
+          "toNode": "print6",
+          "toPin": "value"
+        },
+        {
+          "id": "w13",
+          "fromNode": "print6",
+          "fromPin": "execOut",
+          "toNode": "print7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n7",
+          "fromPin": "returnValue",
+          "toNode": "print7",
+          "toPin": "value"
+        },
+        {
+          "id": "w15",
+          "fromNode": "print7",
+          "fromPin": "execOut",
+          "toNode": "print8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n8",
+          "fromPin": "returnValue",
+          "toNode": "print8",
+          "toPin": "value"
+        },
+        {
+          "id": "w17",
+          "fromNode": "print8",
+          "fromPin": "execOut",
+          "toNode": "print9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w18",
+          "fromNode": "n9",
+          "fromPin": "returnValue",
+          "toNode": "print9",
+          "toPin": "value"
+        },
+        {
+          "id": "w19",
+          "fromNode": "print9",
+          "fromPin": "execOut",
+          "toNode": "print10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w20",
+          "fromNode": "n10",
+          "fromPin": "returnValue",
+          "toNode": "print10",
+          "toPin": "value"
+        },
+        {
+          "id": "w21",
+          "fromNode": "print10",
+          "fromPin": "execOut",
+          "toNode": "print11",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w22",
+          "fromNode": "n11",
+          "fromPin": "returnValue",
+          "toNode": "print11",
+          "toPin": "value"
+        },
+        {
+          "id": "w23",
+          "fromNode": "print11",
+          "fromPin": "execOut",
+          "toNode": "print12",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w24",
+          "fromNode": "n12",
+          "fromPin": "returnValue",
+          "toNode": "print12",
+          "toPin": "value"
+        },
+        {
+          "id": "w25",
+          "fromNode": "print12",
+          "fromPin": "execOut",
+          "toNode": "print13",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w26",
+          "fromNode": "n13",
+          "fromPin": "returnValue",
+          "toNode": "print13",
+          "toPin": "value"
+        },
+        {
+          "id": "w27",
+          "fromNode": "print13",
+          "fromPin": "execOut",
+          "toNode": "print14",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w28",
+          "fromNode": "n14",
+          "fromPin": "returnValue",
+          "toNode": "print14",
+          "toPin": "value"
+        },
+        {
+          "id": "w29",
+          "fromNode": "print14",
+          "fromPin": "execOut",
+          "toNode": "print15",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w30",
+          "fromNode": "n15",
+          "fromPin": "returnValue",
+          "toNode": "print15",
+          "toPin": "value"
+        },
+        {
+          "id": "w31",
+          "fromNode": "print15",
+          "fromPin": "execOut",
+          "toNode": "print16",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w32",
+          "fromNode": "n16",
+          "fromPin": "returnValue",
+          "toNode": "print16",
+          "toPin": "value"
+        },
+        {
+          "id": "w33",
+          "fromNode": "print16",
+          "fromPin": "execOut",
+          "toNode": "print17",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w34",
+          "fromNode": "n17",
+          "fromPin": "returnValue",
+          "toNode": "print17",
+          "toPin": "value"
+        },
+        {
+          "id": "w35",
+          "fromNode": "print17",
+          "fromPin": "execOut",
+          "toNode": "print18",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w36",
+          "fromNode": "n18",
+          "fromPin": "returnValue",
+          "toNode": "print18",
+          "toPin": "value"
+        },
+        {
+          "id": "w37",
+          "fromNode": "print18",
+          "fromPin": "execOut",
+          "toNode": "print19",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w38",
+          "fromNode": "n19",
+          "fromPin": "returnValue",
+          "toNode": "print19",
+          "toPin": "value"
+        },
+        {
+          "id": "w39",
+          "fromNode": "print19",
+          "fromPin": "execOut",
+          "toNode": "print20",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w40",
+          "fromNode": "n20",
+          "fromPin": "returnValue",
+          "toNode": "print20",
+          "toPin": "value"
+        },
+        {
+          "id": "w41",
+          "fromNode": "print20",
+          "fromPin": "execOut",
+          "toNode": "print21",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w42",
+          "fromNode": "n21",
+          "fromPin": "returnValue",
+          "toNode": "print21",
+          "toPin": "value"
+        },
+        {
+          "id": "w43",
+          "fromNode": "print21",
+          "fromPin": "execOut",
+          "toNode": "print22",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w44",
+          "fromNode": "n22",
+          "fromPin": "returnValue",
+          "toNode": "print22",
+          "toPin": "value"
+        },
+        {
+          "id": "w45",
+          "fromNode": "print22",
+          "fromPin": "execOut",
+          "toNode": "print23",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w46",
+          "fromNode": "n23",
+          "fromPin": "returnValue",
+          "toNode": "print23",
+          "toPin": "value"
+        },
+        {
+          "id": "w47",
+          "fromNode": "print23",
+          "fromPin": "execOut",
+          "toNode": "print24",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w48",
+          "fromNode": "n24",
+          "fromPin": "returnValue",
+          "toNode": "print24",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

@@ -7,6 +7,7 @@
 import { NodeDefinition } from './model';
 import { SET_UTILITIES } from './utilities-containers';
 import { MATH_UTILITIES } from './utilities-math';
+import { STRING_UTILITIES } from './utilities-strings';
 import { ARRAY, BOOL, FLOAT, FLOATS, INT, input, MAP, output, Snippets, STRING, text, UtilityNode } from './utility-kit';
 
 // ---- Shared code -------------------------------------------------------------------------------
@@ -1705,7 +1706,7 @@ return $drive . ($joined === '' ? '.' : $joined);`
 };
 
 export function utilityDefinitions(): NodeDefinition[] {
-  return [...NODES, ...MATH_UTILITIES, ...SET_UTILITIES].map((node) => ({
+  return [...NODES, ...MATH_UTILITIES, ...STRING_UTILITIES, ...SET_UTILITIES].map((node) => ({
     type: node.type,
     version: 1,
     displayName: node.displayName,

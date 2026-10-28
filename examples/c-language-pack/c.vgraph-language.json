@@ -97,7 +97,16 @@
     "core:math.xor": "return a != b;",
     "core:math.nand": "return !(a && b);",
     "core:math.nor": "return !(a || b);",
-    "core:math.random-bool": "return vg_random() < 0.5;"
+    "core:math.random-bool": "return vg_random() < 0.5;",
+    "core:string.starts-with": "return strncmp(text, prefix, strlen(prefix)) == 0;",
+    "core:string.ends-with": "size_t length = strlen(text), size = strlen(suffix);\nreturn size <= length && strcmp(text + length - size, suffix) == 0;",
+    "core:string.find-substring": "const char* found = NULL;\nif (searchFromEnd) {\n    size_t size = strlen(part);\n    for (const char* at = text + strlen(text);; at--) {\n        if (strncmp(at, part, size) == 0) {\n            found = at;\n            break;\n        }\n        if (at == text) break;\n    }\n} else {\n    found = strstr(text, part);\n}\nif (!found) return -1;\nlong long index = 0;\nfor (const char* p = text; p < found; p++) if ((*p & 0xC0) != 0x80) index++;\nreturn index;",
+    "core:string.repeat": "if (count < 0) vg_fail(\"Count can't be negative\");\nreturn vg_repeat(text, count);",
+    "core:string.reverse": "size_t length = strlen(text);\nchar* result = (char*)malloc(length + 1);\nsize_t size = 0;\nfor (size_t end = length; end > 0;) {\n    size_t start = end - 1;\n    while (start > 0 && (text[start] & 0xC0) == 0x80) start--;\n    memcpy(result + size, text + start, end - start);\n    size += end - start;\n    end = start;\n}\nresult[size] = '\\0';\nreturn result;",
+    "core:string.left": "const char* end = text;\nfor (long long taken = 0; *end && taken < count; taken++) {\n    end++;\n    while ((*end & 0xC0) == 0x80) end++;\n}\nreturn vg_copy(text, (size_t)(end - text));",
+    "core:string.right": "long long skip = vg_length(text) - (count > 0 ? count : 0);\nconst char* start = text;\nfor (long long i = 0; *start && i < skip; i++) {\n    start++;\n    while ((*start & 0xC0) == 0x80) start++;\n}\nreturn start;",
+    "core:string.is-numeric": "const char* p = text;\nif (*p == '+' || *p == '-') p++;\nint digits = 0, points = 0;\nfor (; *p; p++) {\n    if (*p >= '0' && *p <= '9') digits++;\n    else if (*p == '.') points++;\n    else return false;\n}\nreturn digits > 0 && points <= 1;",
+    "core:string.equal-ignore-case": "for (;; a++, b++) {\n    char x = *a >= 'A' && *a <= 'Z' ? (char)(*a + 32) : *a;\n    char y = *b >= 'A' && *b <= 'Z' ? (char)(*b + 32) : *b;\n    if (x != y) return false;\n    if (!x) return true;\n}"
   },
   "types": {
     "map": {
