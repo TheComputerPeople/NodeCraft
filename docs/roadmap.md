@@ -288,6 +288,15 @@ Exit: a written gap analysis with a recommendation per gap, then a decision on w
 
 Analysis: [multi-language.md](multi-language.md) (2026-10-27). It found a bug as well as gaps: a type from another language disappears from a graph without a compile error.
 
+Decided (2026-10-27): all of its recommendations. Steps, one commit each:
+
+1. The gap analysis.
+2. Report a type used from another language, and a type name declared twice.
+3. A new graph's language from its folder, and a per-folder setting.
+4. The palette hides nodes with no implementation in the graph's language.
+5. Shared structs and enums: several target languages per type file, a generated file for each.
+6. Calls into another language: the project-function pattern documented with an example; the parity checklist and status.
+
 ### Phase 8: Release
 
 - A "Coming from Unreal" guide that maps every Unreal concept to its equivalent here, and lists what doesn't apply.

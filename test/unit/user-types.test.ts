@@ -10,7 +10,7 @@ import { GraphDocument } from '../../src/core/model';
 import { NodeRegistry } from '../../src/core/registry';
 import { createResolver } from '../../src/core/resolve';
 import { parseDocument, serializeDocument } from '../../src/core/serializer';
-import { StructValue, declaredType, listUserTypes, typeLookup, userTypeDefinitions } from '../../src/core/user-types';
+import { StructValue, declaredType, duplicateTypes, listUserTypes, typeLookup, userTypeDefinitions } from '../../src/core/user-types';
 import { defaultValue, formatValue, fromStored, storedDefault } from '../../src/core/values';
 import { logs, node, run, wire } from './helpers';
 
@@ -131,6 +131,53 @@ describe('compiling structs and enums', () => {
     assert.match(output!.text, /^import \{ Point \} from "\.\/types\/Point\.vgraph\.js";$/m);
     assert.match(output!.text, /^import \{ Team \} from "\.\/types\/Team\.vgraph\.js";$/m, 'the struct\'s enum field may be needed too');
     assert.match(output!.text, /P = new Point\(\);/);
+  });
+});
+
+// docs/multi-language.md, gap 2: a type another language declares, or nobody does, is an error
+// rather than a value that vanishes from the generated code.
+describe('types from another language', () => {
+  const pythonPoint = { ...point, language: 'python' };
+  const user = (language: string, nodes = [node('s', 'core:event.start'), node('p', 'core:console.print'), node('m', 'struct:Point.make')], variables: GraphDocument['variables'] = []): GraphDocument => ({
+    schemaVersion: 3, name: 'User', kind: 'class', language, variables,
+    graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes, connections: [wire('s', 'execOut', 'p', 'execIn'), wire('m', 'struct', 'p', 'value')] }]
+  });
+  const pythonTypes = (): NodeRegistry => {
+    const r = new NodeRegistry();
+    r.registerMany([...userTypeDefinitions(declaredType({ ...team, language: 'python' })!), ...userTypeDefinitions(declaredType(pythonPoint, { document: 'api/Point.vgraph', generatedPath: 'api/point_vgraph.py' })!)]);
+    return r;
+  };
+  const diagnostics = (doc: GraphDocument, r: NodeRegistry) => compileDocument(doc, { registry: r, languages: builtinLanguagePacks(), generate: { sourceFileName: 'User.vgraph' } }).diagnostics;
+
+  test("a graph using another language's struct gets an error on the node, and no code", () => {
+    const result = compileDocument(user('typescript'), { registry: pythonTypes(), languages: builtinLanguagePacks(), generate: { sourceFileName: 'User.vgraph' } });
+    assert.deepEqual(result.diagnostics.map((d) => [d.code, d.message, d.nodeId]), [['wrong-language', "Point is a Python struct (api/Point.vgraph); a TypeScript graph can't use it.", 'm']]);
+    assert.equal(result.output, undefined);
+    assert.deepEqual(diagnostics(user('python'), pythonTypes()), [], 'Python graphs use it');
+  });
+
+  test('a variable of a type no file declares gets one error, not one per node that reads it', () => {
+    const doc = user('javascript', [node('s', 'core:event.start'), node('p', 'core:console.print'), node('m', 'core:variable.get', { variable: 'v' })], [{ id: 'v', name: 'V', type: { id: 'struct:Missing' } }]);
+    doc.graphs[0].connections[1] = wire('m', 'value', 'p', 'value');
+    assert.deepEqual(diagnostics(doc, new NodeRegistry()).map((d) => [d.code, d.message]), [['unknown-type', 'No struct named Missing is declared in the workspace.']]);
+  });
+
+  test("a struct's field of another language's enum is reported on the struct", () => {
+    assert.deepEqual(diagnostics(point, pythonTypes()).map((d) => d.code), ['wrong-language']);
+  });
+
+  test('Simulate stops with the same message', () => {
+    const events = run(user('typescript'), pythonTypes());
+    assert.deepEqual(events.filter((e) => e.kind === 'error').map((e) => e.message), ["Point is a Python struct (api/Point.vgraph); a TypeScript graph can't use it."]);
+    assert.deepEqual(logs(events), []);
+  });
+
+  test("a type name declared in two files is reported on each file graphs don't use", () => {
+    const file = (path: string, doc: GraphDocument) => ({ path, definitions: userTypeDefinitions(declaredType(doc, { document: path, generatedPath: path })!) });
+    const files = [file('api/Point.vgraph', pythonPoint), file('web/Point.vgraph', point), file('web/Team.vgraph', team)];
+    assert.deepEqual(duplicateTypes(files).map((d) => [d.file.path, d.message]), [
+      ['api/Point.vgraph', 'A struct named Point is also declared in web/Point.vgraph, and graphs use that one: a name means one type in the workspace. Rename one of them.']
+    ]);
   });
 });
 

@@ -14,7 +14,7 @@ import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
 import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest } from '../objects';
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
-import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup } from '../user-types';
+import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup, userTypeProblems } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
 import { isLatentType } from '../latent';
 import { TEST_CASE, assertEqualMessage, assertTrueMessage, testName } from '../tests';
@@ -30,6 +30,8 @@ export interface LowerOptions {
   importLanguages: string[];
   // The pack's own implementations of library nodes, by node type (CodeGenerator.snippets).
   snippets?: Record<string, string>;
+  // Display names of other languages, for messages (the registered packs').
+  languageNames?: (id: string) => string | undefined;
 }
 
 export interface LowerResult {
@@ -106,6 +108,7 @@ class Lowerer {
   }
 
   run(): LowerResult {
+    this.checkUserTypes();
     if (this.doc.kind === 'structure' || this.doc.kind === 'enumeration' || this.doc.kind === 'interface') return this.declaration();
     const names = new Set<string>();
     for (const variable of this.doc.variables) {
@@ -227,6 +230,17 @@ class Lowerer {
     this.importTypes(program);
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
     return { diagnostics: this.diagnostics, program };
+  }
+
+  private languageName(id: string): string {
+    return this.options.languageNames?.(id) ?? LANGUAGE_NAMES[id] ?? id;
+  }
+
+  // Types from another language's graph files, or not declared at all (docs/multi-language.md).
+  private checkUserTypes(): void {
+    const own = [declaredType(this.doc)?.id, this.ownClass?.id, declaredInterface(this.doc)?.id];
+    const names = { graph: this.options.languageName, of: (id: string) => this.languageName(id) };
+    for (const p of userTypeProblems(this.doc, own, this.resolve, this.options.registry.all(), names)) this.error(p.code, p.message, p.graphId, p.nodeId);
   }
 
   // Imports for every struct and enum the program mentions, from their generated files. Sets and
@@ -1244,7 +1258,7 @@ class Lowerer {
     const implementation = def.implementation;
     if (implementation?.kind !== 'function') return undefined;
     if (!this.options.importLanguages.includes(implementation.language)) {
-      this.error('wrong-language', `"${def.displayName}" is ${languageName(implementation.language)} code (${implementation.path}); a ${this.options.languageName} graph can't call it.`, info.graph.id, node.id);
+      this.error('wrong-language', `"${def.displayName}" is ${this.languageName(implementation.language)} code (${implementation.path}); a ${this.options.languageName} graph can't call it.`, info.graph.id, node.id);
       return undefined;
     }
     const imported: IrImport = {
@@ -1343,9 +1357,5 @@ function dataInputs(def: NodeDefinition): PinDefinition[] {
   return def.inputs.filter((p) => p.kind === 'data');
 }
 
+// When no pack registry names them (lowerDocument called directly).
 const LANGUAGE_NAMES: Record<string, string> = { typescript: 'TypeScript', javascript: 'JavaScript', python: 'Python' };
-
-function languageName(id: string): string {
-  return LANGUAGE_NAMES[id] ?? id;
-}
-

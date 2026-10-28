@@ -4,6 +4,8 @@ Phase 7 of the [roadmap](roadmap.md) is analysis first: find where a workspace w
 
 Written 2026-10-27, after Phase 6 (nine languages: TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, and C as a separate extension).
 
+**Decided (2026-10-27): every recommendation below is accepted.** Phase 7 builds gaps 1 to 3 and documents gap 4, in the steps listed at the end. Each gap's section records what was built.
+
 ## What already works
 
 - **Each graph has its own language.** The `language` field of a `.vgraph` file decides its generator, runner, debugger and palette, so TypeScript graphs in `web/` and Python graphs in `api/` live side by side.
@@ -37,6 +39,8 @@ So a type that both sides of a project need, such as a request that a TypeScript
 
 **Recommendation: report it now, as a bug fix, whatever else is decided (small). Build shared structs and enums (medium).** A struct's value is already defined as a JSON object keyed by field name (that's how Print shows it), so shared types are also the format values would cross a process boundary in, if gap 4 is built later.
 
+**Built (step 2).** The compiler reports a type the graph's language can't use, on the node or variable that uses it (`userTypeProblems` in src/core/user-types.ts): `Point is a Python struct (api/Point.vgraph); a TypeScript graph can't use it.`, or `No struct named Point is declared in the workspace.` A type's own nodes (Make, Break, Switch on) name only their type, and a variable's type is reported once, not again on each node that reads it. Simulate stops with the same message. A second file declaring a type name gets a problem naming the file graphs use (`duplicate-type`). Messages name languages by their packs' display names, so the error for calling another language's function now says "C#" rather than `csharp`.
+
 ## Gap 3: nodes a language doesn't implement
 
 **Today.** The palette hides project and library functions of other languages, but it offers every code node, including ones with no snippet for the graph's language. A node library written with JavaScript snippets only shows its nodes in a Python graph, and each one fails when the graph compiles: `"Double" has no Python implementation; add a "python" entry to its languages.` Declarative packs bring their own snippets for the standard library, so the same applies to an extension's node library in C.
@@ -68,7 +72,7 @@ So a type that both sides of a project need, such as a request that a TypeScript
 | 3. Nodes a language doesn't implement | Hide them in the palette | Small |
 | 4. Calls into another language | Document the project-function pattern; defer bindings | Small |
 
-If all are accepted, the steps (one commit each) would be:
+The steps, one commit each:
 
 1. This analysis.
 2. Report a type used from another language, and a type name declared twice.

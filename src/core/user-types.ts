@@ -167,6 +167,84 @@ export function typeLookup(definitions: Iterable<NodeDefinition>, language?: str
   return (id) => types.get(id);
 }
 
+// A struct, enum, class or interface a graph mentions that its language can't use: one declared in
+// another language's graph file, or not declared at all. Generated code would otherwise lose it
+// (docs/multi-language.md, gap 2). `own` are the types the graph file itself declares.
+export interface TypeProblem {
+  code: 'wrong-language' | 'unknown-type';
+  message: string;
+  graphId?: string;
+  nodeId?: string;
+}
+
+export function userTypeProblems(
+  doc: GraphDocument,
+  own: (string | undefined)[],
+  resolve: (node: GraphNode) => NodeDefinition | undefined,
+  definitions: Iterable<NodeDefinition>,
+  // The display names of the graph's language and of others.
+  names: { graph: string; of: (language: string) => string }
+): TypeProblem[] {
+  const all = [...definitions];
+  const types = typeLookup(all, doc.language);
+  const anywhere = typeLookup(all);
+  const known = new Set(own);
+  const problems: TypeProblem[] = [];
+  const reported = new Set<string>();
+  const check = (value: unknown, graphId?: string, nodeId?: string): void => {
+    if (Array.isArray(value)) value.forEach((item) => check(item, graphId, nodeId));
+    else if (typeof value === 'object' && value !== null) Object.values(value).forEach((item) => check(item, graphId, nodeId));
+    if (typeof value !== 'string' || !isUserTypeId(value) || known.has(value) || types(value)) return;
+    // Once per place, and nodes that read a variable don't repeat the variable's problem.
+    const key = `${value} ${graphId ?? ''} ${nodeId ?? ''}`;
+    if (reported.has(key) || reported.has(`${value}  `)) return;
+    reported.add(key);
+    const other = anywhere(value);
+    const { category, name } = parseTypeId(value);
+    // A missing class or interface has its own errors where it's used (class-missing, parent-missing).
+    if (!other?.language && category !== 'struct' && category !== 'enum') return;
+    const word = USER_TYPE_WORDS[category];
+    const message = other?.language
+      ? `${other.name} is a ${names.of(other.language)} ${word}${other.source ? ` (${other.source.document})` : ''}; a ${names.graph} graph can't use it.`
+      : `No ${word} named ${name} is declared in the workspace.`;
+    problems.push({ code: other?.language ? 'wrong-language' : 'unknown-type', message, ...(graphId ? { graphId } : {}), ...(nodeId ? { nodeId } : {}) });
+  };
+  check([doc.variables, doc.dispatchers, doc.parent, doc.interfaces]);
+  for (const graph of doc.graphs) {
+    check([graph.signature, graph.localVariables], graph.id);
+    for (const node of graph.nodes) {
+      const definition = resolve(node);
+      const implementation = definition?.implementation;
+      // A type's own nodes (Make, Break, Switch on, ...) name the type; its fields are its file's concern.
+      const owner = implementation?.kind === 'struct' || implementation?.kind === 'enum' || implementation?.kind === 'class' || implementation?.kind === 'interface' ? implementation.type.id : undefined;
+      check([node.properties, owner ?? [definition?.inputs.map((p) => p.type), definition?.outputs.map((p) => p.type)]], graph.id, node.id);
+    }
+  }
+  return problems;
+}
+
+const USER_TYPE_WORDS: Record<string, string> = { struct: 'struct', enum: 'enum', object: 'class', interface: 'interface' };
+
+// Graph files declaring a type name another file declares too. A name means one type in a
+// workspace, so the registry keeps the last file's (in `files` order) and graphs use that one; each
+// other file gets a problem saying so.
+export function duplicateTypes<T extends { path: string; definitions: NodeDefinition[] }>(files: T[]): { file: T; message: string }[] {
+  const declared = new Map<string, { file: T; type: UserType }[]>();
+  for (const file of files) {
+    const types = new Map<string, UserType>();
+    for (const def of file.definitions) {
+      const implementation = def.implementation;
+      if (implementation?.kind === 'struct' || implementation?.kind === 'enum' || implementation?.kind === 'class' || implementation?.kind === 'interface') types.set(implementation.type.id, implementation.type);
+    }
+    for (const [id, type] of types) declared.set(id, [...(declared.get(id) ?? []), { file, type }]);
+  }
+  return [...declared.values()].filter((all) => all.length > 1).flatMap((all) => {
+    const used = all[all.length - 1];
+    const word = USER_TYPE_WORDS[parseTypeId(used.type.id).category];
+    return all.slice(0, -1).map(({ file }) => ({ file, message: `A ${word} named ${used.type.name} is also declared in ${used.file.path}, and graphs use that one: a name means one type in the workspace. Rename one of them.` }));
+  });
+}
+
 export function isUserTypeId(id: string): boolean {
   const category = parseTypeId(id).category;
   return category === 'struct' || category === 'enum' || category === 'object' || category === 'interface';

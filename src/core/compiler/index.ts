@@ -40,6 +40,7 @@ export function compileDocument(doc: GraphDocument, options: CompileOptions): Co
   if (hasErrors(unsupported)) return { diagnostics: unsupported };
   const lowered = lowerDocument(doc, {
     registry: options.registry, languageName: pack.displayName, snippetLanguages: generator.snippetLanguages, importLanguages: generator.importLanguages,
+    languageNames: (id) => options.languages.get(id)?.displayName,
     ...(generator.snippets ? { snippets: generator.snippets } : {})
   });
   if (!lowered.program) return { diagnostics: lowered.diagnostics };

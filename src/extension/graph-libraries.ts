@@ -10,6 +10,7 @@ import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { graphFileDefinitions } from '../core/graph-files';
+import { duplicateTypes } from '../core/user-types';
 import { csharpNamespace, goPackage, javaProject, pythonModule } from './placement';
 
 const GLOB = '**/*.vgraph';
@@ -25,6 +26,7 @@ interface LibraryFile {
 
 export class GraphLibraries implements vscode.Disposable {
   private readonly files = new Map<string, LibraryFile>();
+  private readonly problems = vscode.languages.createDiagnosticCollection('blueprint-types');
   private readonly subscriptions: vscode.Disposable[] = [];
   private readonly changed = new Set<string>();
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -37,6 +39,7 @@ export class GraphLibraries implements vscode.Disposable {
     const watcher = vscode.workspace.createFileSystemWatcher(GLOB);
     this.subscriptions.push(
       watcher,
+      this.problems,
       watcher.onDidCreate((uri) => this.queue(uri)),
       watcher.onDidChange((uri) => this.queue(uri)),
       watcher.onDidDelete((uri) => this.queue(uri)),
@@ -115,8 +118,18 @@ export class GraphLibraries implements vscode.Disposable {
   }
 
   private publish(): void {
-    const files = [...this.files.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    const files = [...this.files].map(([key, file]) => ({ key, ...file })).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     this.registry.setSource(SOURCE, files.flatMap((f) => f.definitions));
+    // A type name declared twice: the registry keeps one, and the other files say so.
+    const byFile = new Map<string, vscode.Diagnostic[]>();
+    for (const { file, message } of duplicateTypes(files)) {
+      const problem = new vscode.Diagnostic(new vscode.Range(0, 0, 0, 0), message, vscode.DiagnosticSeverity.Error);
+      problem.source = 'Blueprint';
+      problem.code = 'duplicate-type';
+      byFile.set(file.key, [...(byFile.get(file.key) ?? []), problem]);
+    }
+    this.problems.clear();
+    for (const [key, problems] of byFile) this.problems.set(vscode.Uri.parse(key), problems);
   }
 }
 

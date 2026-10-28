@@ -7,9 +7,9 @@ import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs } from './events';
-import { ClassInfo, InterfaceInfo, ObjectValue, PARENT_START, classById, declaredClass, dispatcherAction, implementedInterfaces, interfaceById, nodeClass } from './objects';
+import { ClassInfo, InterfaceInfo, ObjectValue, PARENT_START, classById, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, nodeClass } from './objects';
 import { expandDocument, isExpandedNode, macroProblemKey, visibleNodeId } from './macros';
-import { StructValue, TypeLookup, expandSplitPins, typeLookup } from './user-types';
+import { StructValue, TypeLookup, declaredType, expandSplitPins, typeLookup, userTypeProblems } from './user-types';
 import { NodeResolver, createResolver, createUnsplitResolver, isPure } from './resolve';
 import { defaultValue, formatValue, fromStored, toBoolean, toNumber } from './values';
 import { assertEqualMessage, assertTrueMessage, testCases } from './tests';
@@ -757,6 +757,12 @@ export class GraphRuntime {
   // An object of `doc`'s class: a run per class in its chain, most derived first, or why it can't be
   // made (a parent class Simulate can't read).
   private instantiate(doc: GraphDocument, document?: string): RunState[] | string {
+    // A type compiling would reject (another language's, or undeclared) stops Simulate too.
+    const language = doc.language || DEFAULT_LANGUAGE;
+    const names = { graph: this.languageName(language), of: (id: string) => this.languageName(id) };
+    const own = [declaredType(doc)?.id, declaredClass(doc)?.id, declaredInterface(doc)?.id];
+    const problem = userTypeProblems({ ...doc, language }, own, createResolver(this.registry, doc), this.registry.all(), names)[0];
+    if (problem) return problem.message;
     const docs: { doc: GraphDocument; document?: string }[] = [{ doc, document }];
     const seen = new Set([doc.name]);
     for (let parent = doc.parent; parent;) {
@@ -772,6 +778,10 @@ export class GraphRuntime {
     const self = new ObjectValue(doc.name, layers[0]);
     for (const layer of layers) Object.assign(layer, { self, layers });
     return layers;
+  }
+
+  private languageName(id: string): string {
+    return this.languages.get(id)?.displayName ?? id;
   }
 
   // A function of the object by name, as virtual calls find it: the most derived class's at or
