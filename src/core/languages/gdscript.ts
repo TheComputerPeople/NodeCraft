@@ -8,7 +8,9 @@ import { relativeSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
-import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
+import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
+import { scanGdscript } from '../importing/gdscript-scanner';
+import { OutputPlan, PlacementContext } from '../output-plan';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
 import { GDSCRIPT_RUNTIME_FILE, gdscriptRuntime } from './gdscript-runtime';
@@ -118,17 +120,50 @@ function launcher(file: { path: string }, context: RunContext | undefined): stri
 // The Godot executable: `godot` or `godot4` on the PATH, else the GODOT environment variable (Godot's
 // downloads are named by version, e.g. Godot_v4.7.2-stable_win64_console.exe), or the runCommands setting.
 function godotCommands(): string[][] {
-  const fromEnvironment = typeof process !== 'undefined' ? process.env.GODOT : undefined;
+  const fromEnvironment = godotFromEnvironment();
   return [['godot'], ['godot4'], ...(fromEnvironment ? [[fromEnvironment]] : [])];
 }
 
+function godotFromEnvironment(): string | undefined {
+  return typeof process !== 'undefined' ? process.env.GODOT : undefined;
+}
+
+// The project Godot runs in: the graph's own (so its res:// paths and autoloads work), else the
+// scaffold's scratch project. The launcher stays in the scaffold folder either way.
+const project = (context: RunContext | undefined) => context?.projectDir ?? context?.scaffoldDir ?? '.';
+
 const gdscriptRunner: CodeRunner = {
   commands: godotCommands,
-  // A scratch Godot project holds the launcher, which loads the generated script by its path.
+  // The scaffold holds the launcher, which loads the generated script by its path, and a scratch project.
   scaffold: (file, _className, context) => ({ 'project.godot': 'config_version=5\n', [GDSCRIPT_RUNTIME_FILE]: gdscriptRuntime(), 'run.gd': launcher(file, context) }),
-  args: (_file, _className, context) => ['--headless', '--no-header', '--path', context?.scaffoldDir ?? '.', '--script', `${context?.scaffoldDir}/run.gd`, '--', ...(context?.args ?? [])],
-  testArgs: (_file, _className, context) => ['--headless', '--no-header', '--path', context.scaffoldDir ?? '.', '--script', `${context.scaffoldDir}/run.gd`, '--', '--test', ...context.tests.flatMap((t) => [t.name, t.method])],
+  args: (_file, _className, context) => ['--headless', '--no-header', '--path', project(context), '--script', `${context?.scaffoldDir}/run.gd`, '--', ...(context?.args ?? [])],
+  testArgs: (_file, _className, context) => ['--headless', '--no-header', '--path', project(context), '--script', `${context.scaffoldDir}/run.gd`, '--', '--test', ...context.tests.flatMap((t) => [t.name, t.method])],
   missingToolMessage: 'Godot 4 was not found. Put its console executable on the PATH as `godot`, set the GODOT environment variable to it, or set it in the blueprintVisualScripting.runCommands setting.'
+};
+
+// A graph outside a Godot project runs in a scratch one, but the debugger maps breakpoints to the
+// project's res:// paths, so it needs the graph in a project.
+export function gdscriptPlacement(context: PlacementContext): OutputPlan {
+  if (!context.outputFile) return {};
+  const parts = context.outputFile.split('/').slice(0, -1);
+  for (let depth = parts.length; depth >= 0; depth--) {
+    if (context.exists([...parts.slice(0, depth), 'project.godot'].join('/'))) return {};
+  }
+  return { diagnostics: [{ severity: 'warning', code: 'godot-outside-project', message: `${context.outputFile} isn't in a Godot project (no project.godot in its folder or above it). Run uses a scratch project, and Debug needs the graph in a Godot project.` }] };
+}
+
+// godot-tools launches Godot with its debugger (`--remote-debug`) in the graph's project, running
+// Run's launcher.
+const gdscriptDebugger: CodeDebugger = {
+  type: 'godot',
+  extension: { id: 'geequlim.godot-tools', name: 'godot-tools' },
+  configuration: (_file, _className, context) => ({
+    type: 'godot', request: 'launch', name: 'Debug Graph', project: project(context),
+    editor_path: context.command?.[0] ?? godotFromEnvironment() ?? 'godot',
+    additional_options: ['--headless', '--no-header', '--script', JSON.stringify(`${context.scaffoldDir}/run.gd`), '--', ...(context.args ?? []).map((a) => JSON.stringify(a))].join(' ')
+  }),
+  // Godot writes a whole float with a point (30.0); the graph shows 30.
+  displayValue: (text) => (/^-?\d+\.0$/.test(text) ? text.slice(0, -2) : text)
 };
 
 const gdscriptGenerator: CodeGenerator = {
@@ -136,8 +171,10 @@ const gdscriptGenerator: CodeGenerator = {
   snippetLanguages: ['gdscript'],
   importLanguages: ['gdscript'],
   outputFileName: gdscriptOutputFileName,
+  placement: gdscriptPlacement,
   generate: (program, options) => new GdscriptEmitter(program, options).emit(),
-  runner: gdscriptRunner
+  runner: gdscriptRunner,
+  debugger: gdscriptDebugger
 };
 
 export const gdscriptPack: LanguagePack = {
@@ -148,7 +185,9 @@ export const gdscriptPack: LanguagePack = {
   // No exceptions: failures are recorded and checked (vg.fail).
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
-  generator: gdscriptGenerator
+  generator: gdscriptGenerator,
+  // Static functions marked ## @blueprint.
+  importer: { extensions: ['.gd'], scan: scanGdscript }
 };
 
 class GdscriptEmitter {

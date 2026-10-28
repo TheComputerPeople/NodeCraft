@@ -106,6 +106,9 @@ export interface RunContext {
   // Go: the project's module (its path and folder), which Run's scratch module requires so the code
   // can import the project's packages.
   goModule?: { path: string; dir: string };
+  // GDScript: the graph's Godot project (the nearest folder with project.godot), which Run uses so
+  // the project's res:// paths and autoloads work.
+  projectDir?: string;
   // Where `scaffold`'s files were written.
   scaffoldDir?: string;
   // From `probe`, e.g. the .NET target framework.

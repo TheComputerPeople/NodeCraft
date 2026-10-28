@@ -10,7 +10,7 @@ import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { typeLanguages } from '../core/user-types';
-import { cppRunSources, csharpNamespace, csharpRunSources, goPackage, goRunSources, javaProject, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
+import { cppRunSources, csharpNamespace, csharpRunSources, godotProject, goPackage, goRunSources, javaProject, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
 import { OutputPlans } from './output-plans';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
 
@@ -27,6 +27,8 @@ export interface CompileOutcome {
   crate?: { src: string; modules: string[] };
   // Go: the project's module.
   goModule?: { path: string; dir: string };
+  // GDScript: the graph's Godot project.
+  projectDir?: string;
   // The method the class's Main event became.
   mainMethod?: string;
   // The class's tests, and their generated test file (docs/debugging.md, "Test Case").
@@ -132,11 +134,12 @@ export class CompileService implements vscode.Disposable {
       : language === 'go' ? goRunSources(outputPath) : undefined;
     const goModule = language === 'go' ? goPackage(graphDir, root).module : undefined;
     const crate = language === 'rust' ? rustRunSources(outputPath, root, result.output.importedFiles ?? []).crate : undefined;
+    const projectDir = language === 'gdscript' ? godotProject(graphDir, root) : undefined;
     const generated: GeneratedFile = { graph: document.uri, outputPath, language, nodeLines: result.output.nodeLines, codeBreaks: result.output.codeBreaks ?? [], pinExpressions: result.output.pinExpressions ?? [] };
     this.generated.set(document.uri.toString(), generated);
     this.compiled.fire(generated);
     return finish({
-      report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, ...(crate ? { crate } : {}), ...(goModule ? { goModule } : {}), mainMethod: result.output.mainMethod,
+      report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, ...(crate ? { crate } : {}), ...(goModule ? { goModule } : {}), ...(projectDir ? { projectDir } : {}), mainMethod: result.output.mainMethod,
       ...(result.output.tests?.length ? { tests: result.output.tests, ...(testPath ? { testPath } : {}) } : {})
     }, graph);
   }
@@ -180,6 +183,7 @@ export class CompileService implements vscode.Disposable {
         sources: outcome.sources,
         crate: outcome.crate,
         goModule: outcome.goModule,
+        projectDir: outcome.projectDir,
         mainMethod: outcome.mainMethod,
         args: vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<string[]>('runArguments', []),
         command: configured[pack.id],

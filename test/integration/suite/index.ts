@@ -1,6 +1,7 @@
 // Runs inside the VS Code extension host. A tiny sequential runner keeps the suite free of a test
 // framework dependency; VS Code reports failure when the returned promise rejects.
 import * as assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
@@ -692,8 +693,8 @@ test("Compile writes a graph's tests to their own file; Run Tests and Simulate T
 
 // Debugs the sample in `language`: stops at a breakpoint on Add, reads its result before and after
 // it runs, steps node by node to the Print, and runs to the end.
-async function debugSample(language: string, generatedFile: string): Promise<void> {
-  const name = `debug_${language}.vgraph`;
+async function debugSample(language: string, generatedFile: string, folder = ''): Promise<void> {
+  const name = `${folder ? `${folder}/` : ''}debug_${language}.vgraph`;
   const graph = workspaceFile(name);
   // An earlier test switched demo.vgraph to Python; each language gets its own copy.
   const sample = JSON.parse(await readText(workspaceFile('demo.vgraph'))) as { name: string; language: string };
@@ -737,8 +738,8 @@ async function debugSample(language: string, generatedFile: string): Promise<voi
 // Phase 5's exit check (docs/debugging.md): Start calls Twice(21) and prints the result. With
 // breakpoints on the call and on Twice's Return: stop at the call, Step Into Twice, read its input,
 // Resume to the Return, read the sum, Step Out to the caller, and run to the end.
-async function exitCheck(language: string): Promise<void> {
-  const name = `exit_${language}.vgraph`;
+async function exitCheck(language: string, folder = ''): Promise<void> {
+  const name = `${folder ? `${folder}/` : ''}exit_${language}.vgraph`;
   const graph = workspaceFile(name);
   const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
   const wire = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}`, fromNode, fromPin, toNode, toPin });
@@ -845,6 +846,20 @@ test('exit check: debugging a function graph in generated Lua', async () => {
   await exitCheck('lua');
 });
 
+// GDScript is debugged in a Godot project: godot-tools maps breakpoints to its res:// paths. It checks
+// the project's Godot version against the executable's (the GODOT environment variable's).
+async function godotProject(): Promise<string> {
+  if (!vscode.extensions.getExtension('geequlim.godot-tools')) throw new Skip('the godot-tools extension is not loaded');
+  if (!process.env.GODOT) throw new Skip('the GODOT environment variable is not set');
+  const version = /^(\d+\.\d+)/.exec(spawnSync(process.env.GODOT, ['--version'], { encoding: 'utf8' }).stdout ?? '')?.[1] ?? '4.0';
+  await vscode.workspace.fs.writeFile(workspaceFile('godot/project.godot'), new TextEncoder().encode(`config_version=5\n\n[application]\nconfig/features=PackedStringArray("${version}")\n`));
+  return 'godot';
+}
+
+test('exit check: debugging a function graph in generated GDScript', async () => {
+  await exitCheck('gdscript', await godotProject());
+});
+
 test('exit check: debugging a function graph in generated C#', async () => {
   if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
   await exitCheck('csharp');
@@ -948,6 +963,10 @@ test('Debug does the same in generated Java', async () => {
 test('Debug does the same in generated Lua (Lua Debug)', async () => {
   if (!vscode.extensions.getExtension('actboy168.lua-debug')) throw new Skip('the Lua Debug extension is not loaded');
   await debugSample('lua', 'debug_lua_vgraph.lua');
+});
+
+test('Debug does the same in generated GDScript (godot-tools)', async () => {
+  await debugSample('gdscript', 'debug_gdscript_vgraph.gd', await godotProject());
 });
 
 test('Debug does the same in generated Go (Delve)', async () => {

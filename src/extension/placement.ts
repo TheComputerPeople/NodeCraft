@@ -309,6 +309,13 @@ export function goPackage(graphDir: string, stopDir: string): { name: string; pa
   return { name, path: relative ? `${modulePath}/${relative}` : modulePath, module: { path: modulePath, dir: path.dirname(modFile) } };
 }
 
+// A GDScript graph's Godot project (docs/more-languages.md, "GDScript"): the nearest folder with a
+// project.godot, up to the workspace folder.
+export function godotProject(graphDir: string, stopDir: string): string | undefined {
+  const file = findUp(graphDir, 'project.godot', stopDir);
+  return file && path.dirname(file);
+}
+
 // The project's Go files Run builds with a generated one: the other files of its package.
 export function goRunSources(outputFile: string): string[] {
   const dir = path.dirname(outputFile);
