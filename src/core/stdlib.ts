@@ -36,11 +36,12 @@ function node(type: string, displayName: string, category: string, inputs: PinDe
   const java = JAVA[type];
   const go = GO[type];
   const lua = LUA[type];
+  const gdscript = GDSCRIPT[type];
   return {
     type, version: 1, displayName, category, description: options.description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [result] : [])],
-    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}), ...(go ? { go } : {}), ...(lua ? { lua } : {}) } },
+    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}), ...(go ? { go } : {}), ...(lua ? { lua } : {}), ...(gdscript ? { gdscript } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {}),
     ...(options.compact ? { compact: true } : {})
   };
@@ -251,6 +252,52 @@ const LUA: Record<string, string> = {
   'core:utilities.select': 'if pickA then return a end\nreturn b',
   'core:file.load-to-string': 'local file, problem = io.open(filename, "rb")\nif not file then error("Can\'t read " .. filename .. ": " .. problem, 0) end\nlocal text = file:read("a")\nfile:close()\nreturn text',
   'core:file.save-string': 'local file, problem = io.open(filename, "wb")\nif not file then error("Can\'t write " .. filename .. ": " .. problem, 0) end\nfile:write(text)\nfile:close()'
+};
+
+// The GDScript snippets (docs/more-languages.md, "GDScript"): GDScript has no exceptions, so a
+// failure is vg.fail (which returns null for a snippet to return), and generated code returns after
+// it. Inputs are typed, so an int given for a float input becomes a float, as in Unreal.
+const GD_DIVIDE_BY_ZERO = 'if b == 0:\n\treturn vg.fail("Divide by zero")';
+const GDSCRIPT: Record<string, string> = {
+  'core:math.subtract': 'return a - b',
+  'core:math.multiply': 'return a * b',
+  'core:math.divide': `${GD_DIVIDE_BY_ZERO}\nreturn a / b`,
+  'core:math.modulo': `${GD_DIVIDE_BY_ZERO}\nreturn fmod(a, b)`,
+  'core:math.less': 'return a < b',
+  'core:math.less-equal': 'return a <= b',
+  'core:math.greater': 'return a > b',
+  'core:math.greater-equal': 'return a >= b',
+  'core:math.equal': 'return a == b',
+  'core:math.not-equal': 'return a != b',
+  'core:math.and': 'return a and b',
+  'core:math.or': 'return a or b',
+  'core:math.not': 'return not a',
+  'core:math.min': 'if is_nan(a) or is_nan(b):\n\treturn NAN\nreturn minf(a, b)',
+  'core:math.max': 'if is_nan(a) or is_nan(b):\n\treturn NAN\nreturn maxf(a, b)',
+  'core:math.clamp': 'if is_nan(value):\n\treturn NAN\nreturn minf(maxf(value, minimum), maximum)',
+  'core:math.abs': 'return absf(value)',
+  'core:math.round': 'return floori(value + 0.5)',
+  'core:math.floor': 'return floori(value)',
+  'core:math.ceil': 'return ceili(value)',
+  'core:math.sqrt': 'return sqrt(value)',
+  'core:math.power': 'return pow(base, exponent)',
+  'core:math.random-float-in-range': 'return minimum + randf() * (maximum - minimum)',
+  'core:math.random-integer-in-range': 'return randi_range(minimum, maximum)',
+  'core:string.append': 'return a + b',
+  'core:string.len': 'return text.length()',
+  'core:string.contains': 'return text.contains(part)',
+  'core:string.to-upper': 'return text.to_upper()',
+  'core:string.to-lower': 'return text.to_lower()',
+  'core:string.trim': 'return text.strip_edges()',
+  'core:string.replace': 'if find.is_empty():\n\treturn text\nreturn text.replace(find, replacement)',
+  // `start` is the class's Start method in GDScript, so the pin is named through ${start}.
+  'core:string.substring': 'var begin := maxi(0, ${start})\nif begin >= text.length():\n\treturn ""\nreturn text.substr(begin, maxi(0, count))',
+  'core:string.to-float': `if RegEx.create_from_string(r${JSON.stringify(`${DECIMAL}$`).replace(/\\\\/g, '\\')}).search(text) == null:\n\treturn 0.0\nreturn text.strip_edges().to_float()`,
+  'core:string.to-int': `if RegEx.create_from_string(r${JSON.stringify(`${INTEGER}$`).replace(/\\\\/g, '\\')}).search(text) == null:\n\treturn 0\nvar trimmed := text.strip_edges()\nvar digits := trimmed.trim_prefix("+").trim_prefix("-").to_int()\nreturn -digits if trimmed.begins_with("-") else digits`,
+  'core:utilities.is-valid': 'return value != null',
+  'core:utilities.select': 'return a if pickA else b',
+  'core:file.load-to-string': 'var file := FileAccess.open(filename, FileAccess.READ)\nif file == null:\n\treturn vg.fail("Can\'t read " + filename + ": " + error_string(FileAccess.get_open_error()))\nreturn file.get_as_text()',
+  'core:file.save-string': 'var file := FileAccess.open(filename, FileAccess.WRITE)\nif file == null:\n\tvg.fail("Can\'t write " + filename + ": " + error_string(FileAccess.get_open_error()))\n\treturn\nfile.store_string(text)'
 };
 
 // The Rust snippets, by node type: errors are panics, which stop the run (or fail the test).

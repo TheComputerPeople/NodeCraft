@@ -219,13 +219,47 @@ const LUA: Record<string, string> = {
   'core:map.values': 'return target:value_array()'
 };
 
+// The GDScript snippets: arrays and maps are Godot's Array and Dictionary (insertion-ordered), sets
+// the support script's VgSet. A failure is vg.fail, and a node without a result returns after it.
+const GD_RANGE = 'if index < 0 or index >= target.size():';
+const GDSCRIPT: Record<string, string> = {
+  'core:array.add': 'target.append(item)\nreturn target.size() - 1',
+  'core:array.add-unique': 'if target.has(item):\n\treturn -1\ntarget.append(item)\nreturn target.size() - 1',
+  'core:array.insert': 'if index < 0 or index > target.size():\n\tvg.fail("Index out of range")\n\treturn\ntarget.insert(index, item)',
+  'core:array.remove-index': `${GD_RANGE}\n\tvg.fail("Index out of range")\n\treturn\ntarget.remove_at(index)`,
+  'core:array.remove-item': 'var count = target.size()\nwhile target.has(item):\n\ttarget.erase(item)\nreturn target.size() != count',
+  'core:array.set': `${GD_RANGE}\n\tvg.fail("Index out of range")\n\treturn\ntarget[index] = item`,
+  'core:array.clear': 'target.clear()',
+  'core:array.get': `${GD_RANGE}\n\treturn vg.fail("Index out of range")\nreturn target[index]`,
+  'core:array.length': 'return target.size()',
+  'core:array.last-index': 'return target.size() - 1',
+  'core:array.find': 'return target.find(item)',
+  'core:array.contains': 'return target.has(item)',
+  'core:array.is-valid-index': 'return index >= 0 and index < target.size()',
+  'core:array.is-empty': 'return target.is_empty()',
+  'core:set.add': 'target.add(item)',
+  'core:set.remove': 'return target.remove(item)',
+  'core:set.clear': 'target.clear()',
+  'core:set.contains': 'return target.contains(item)',
+  'core:set.length': 'return target.size()',
+  'core:set.to-array': 'return target.sorted()',
+  'core:map.add': 'target[key] = value',
+  'core:map.remove': 'return target.erase(key)',
+  'core:map.clear': 'target.clear()',
+  'core:map.find': 'if not target.has(key):\n\treturn vg.fail("Key not found")\nreturn target[key]',
+  'core:map.contains': 'return target.has(key)',
+  'core:map.length': 'return target.size()',
+  'core:map.keys': 'return target.keys()',
+  'core:map.values': 'return target.values()'
+};
+
 // An Unreal container function as a code node: impure ones have exec pins.
 function fn(type: string, displayName: string, category: string, inputs: PinDefinition[], result: TypeRef | undefined, code: Snippets, description: string, options: { impure?: boolean; keywords?: string[] } = {}): NodeDefinition {
   return {
     type, version: 1, displayName, category, description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [pin('returnValue', 'Return Value', 'output', result)] : [])],
-    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}), ...(GO[type] ? { go: GO[type] } : {}), ...(LUA[type] ? { lua: LUA[type] } : {}) } },
+    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}), ...(GO[type] ? { go: GO[type] } : {}), ...(LUA[type] ? { lua: LUA[type] } : {}), ...(GDSCRIPT[type] ? { gdscript: GDSCRIPT[type] } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {})
   };
 }

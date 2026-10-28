@@ -21,7 +21,8 @@
       "c": "vg_fail(\"boom\");",
       "java": "throw new RuntimeException(\"boom\");",
       "go": "VgFail(\"boom\")",
-      "lua": "error(\"boom\", 0)"
+      "lua": "error(\"boom\", 0)",
+      "gdscript": "vg.fail(\"boom\")"
     }
   }
 }

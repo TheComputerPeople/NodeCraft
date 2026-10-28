@@ -1254,6 +1254,145 @@ local joined = (absolute and "/" or "") .. table.concat(parts, "/")
 return drive .. (joined ~= "" and joined or ".")`
 };
 
+// ---- GDScript -----------------------------------------------------------------------------------
+//
+// The GDScript versions, by node type (docs/more-languages.md, "GDScript"): Godot's strings are
+// code points already; a broken rule is vg.fail, which returns null for the snippet to return.
+
+const GD_WORDS = [
+  'var words := PackedStringArray()',
+  'var word := ""',
+  'for i in text.length():',
+  '\tvar c := text[i]',
+  '\tvar upper := c >= "A" and c <= "Z"',
+  '\tif not (upper or (c >= "a" and c <= "z") or (c >= "0" and c <= "9")):',
+  '\t\tif word != "":',
+  '\t\t\twords.append(word.to_lower())',
+  '\t\tword = ""',
+  '\t\tcontinue',
+  '\tvar prev := word[word.length() - 1] if word != "" else ""',
+  '\tvar following := text[i + 1] if i + 1 < text.length() else ""',
+  '\tvar split := (prev >= "a" and prev <= "z") or (prev >= "0" and prev <= "9") or (prev >= "A" and prev <= "Z" and following >= "a" and following <= "z")',
+  '\tif word != "" and upper and split:',
+  '\t\twords.append(word.to_lower())',
+  '\t\tword = ""',
+  '\tword += c',
+  'if word != "":',
+  '\twords.append(word.to_lower())'
+].join('\n');
+
+const gdPad = (left: boolean) => `if fill.length() != 1:\n\treturn vg.fail("Fill must be one character")\nvar missing := width - text.length()\nvar padding := fill.repeat(missing) if missing > 0 else ""\nreturn ${left ? 'padding + text' : 'text + padding'}`;
+
+// Unique items of `left` that pass `keep`, in order.
+const gdUnique = (keep: string) => `var seen := {}\nvar result := []\nfor item in left:\n\tif ${keep} and not seen.has(item):\n\t\tseen[item] = true\n\t\tresult.append(item)\nreturn result`;
+const GD_OTHER = 'var other := {}\nfor item in right:\n\tother[item] = true';
+
+const GDSCRIPT: Record<string, string> = {
+  'core:string.is-empty': 'return text.is_empty()',
+  'core:string.is-blank': 'return text.strip_edges().is_empty()',
+  'core:string.normalize-whitespace': 'var words := PackedStringArray()\nfor found in RegEx.create_from_string(r"\\S+").search_all(text):\n\twords.append(found.get_string())\nreturn " ".join(words)',
+  'core:string.truncate': 'if maxLength < 0:\n\treturn vg.fail("Max Length can\'t be negative")\nif text.length() <= maxLength:\n\treturn text\nreturn text.substr(0, maxi(0, maxLength - suffix.length())) + suffix.substr(0, maxLength)',
+  'core:string.capitalize': 'if text.is_empty():\n\treturn text\nreturn text.substr(0, 1).to_upper() + text.substr(1)',
+  'core:string.to-camel-case': `${GD_WORDS}\nfor i in range(1, words.size()):\n\twords[i] = words[i].substr(0, 1).to_upper() + words[i].substr(1)\nreturn "".join(words)`,
+  'core:string.to-snake-case': `${GD_WORDS}\nreturn "_".join(words)`,
+  'core:string.to-kebab-case': `${GD_WORDS}\nreturn "-".join(words)`,
+  'core:string.slugify': `${GD_WORDS}\nreturn "-".join(words)`,
+  'core:string.pad-left': gdPad(true),
+  'core:string.pad-right': gdPad(false),
+  'core:string.word-count': 'return RegEx.create_from_string(r"\\S+").search_all(text).size()',
+  'core:string.mask': [
+    'if visibleStart < 0 or visibleEnd < 0:',
+    '\treturn vg.fail("Visible counts can\'t be negative")',
+    'if mask.length() != 1:',
+    '\treturn vg.fail("Mask must be one character")',
+    'var length := text.length()',
+    'var first := mini(visibleStart, length)',
+    'var last := mini(visibleEnd, length - first)',
+    'return text.substr(0, first) + mask.repeat(length - first - last) + text.substr(length - last)'
+  ].join('\n'),
+  // `start` is the class's Start method in GDScript, so the pins are named through ${...}.
+  'core:math.in-range': 'if ${start} > ${end}:\n\treturn vg.fail("Start can\'t be greater than End")\nreturn value >= ${start} and value < ${end}',
+  'core:math.round-to': [
+    'if is_nan(value) or is_inf(value):',
+    '\treturn vg.fail("Value must be a finite number")',
+    'if digits < 0 or digits > 15:',
+    '\treturn vg.fail("Digits must be from 0 to 15")',
+    'var factor := pow(10.0, digits)',
+    'var direction := 1.0 if value > 0 else (-1.0 if value < 0 else 0.0)',
+    'return direction * floorf((absf(value) + 2.220446049250313e-16) * factor + 0.5) / factor'
+  ].join('\n'),
+  'core:string.format-bytes': [
+    'if is_nan(size) or size < 0 or size > 9007199254740992.0:',
+    '\treturn vg.fail("Size must be from 0 to 2^53")',
+    'if decimals < 0 or decimals > 10:',
+    '\treturn vg.fail("Decimals must be from 0 to 10")',
+    'if size < 1024:',
+    '\treturn str(int(size)) + " B"',
+    'var units := ["KiB", "MiB", "GiB", "TiB", "PiB"]',
+    'var value := size',
+    'var index := -1',
+    'while true:',
+    '\tvalue /= 1024.0',
+    '\tindex += 1',
+    '\tif not (value >= 1024 and index < units.size() - 1):',
+    '\t\tbreak',
+    'var scale := pow(10.0, decimals)',
+    'var scaled := floorf(value * scale + 0.5)',
+    'var whole := floorf(scaled / scale)',
+    'var fraction := str(int(scaled - whole * scale)).pad_zeros(decimals)',
+    'return str(int(whole)) + ("." + fraction if decimals > 0 else "") + " " + units[index]'
+  ].join('\n'),
+  'core:string.parse-boolean': [
+    'var value := text.strip_edges().to_lower()',
+    'if value in ["true", "1", "yes", "y", "on"]:',
+    '\treturn true',
+    'if value in ["false", "0", "no", "n", "off"]:',
+    '\treturn false',
+    'return vg.fail(\'Not a boolean: "\' + text + \'"\')'
+  ].join('\n'),
+  'core:string.parse-integer-strict': [
+    'var value := text.strip_edges()',
+    'if RegEx.create_from_string(r"^[+-]?[0-9]+$").search(value) == null:',
+    '\treturn vg.fail(\'Not an integer: "\' + text + \'"\')',
+    'var digits := value.trim_prefix("+").trim_prefix("-")',
+    'if digits.length() > 16:',
+    '\treturn vg.fail(\'Integer out of range: "\' + text + \'"\')',
+    'var result := digits.to_int()',
+    'if result > 9007199254740991:',
+    '\treturn vg.fail(\'Integer out of range: "\' + text + \'"\')',
+    'return -result if value.begins_with("-") else result'
+  ].join('\n'),
+  'core:array.unique': gdUnique('true').replace(/left/g, 'items'),
+  'core:array.difference': `${GD_OTHER}\n${gdUnique('not other.has(item)')}`,
+  'core:array.intersection': `${GD_OTHER}\n${gdUnique('other.has(item)')}`,
+  'core:array.average': 'if values.is_empty():\n\treturn vg.fail("Average needs at least one value")\nvar total := 0.0\nfor value in values:\n\ttotal += value\nreturn total / values.size()',
+  'core:array.median': 'if values.is_empty():\n\treturn vg.fail("Median needs at least one value")\nvar sorted = values.duplicate()\nsorted.sort()\nvar middle = sorted.size() / 2\nreturn sorted[middle] if sorted.size() % 2 == 1 else (sorted[middle - 1] + sorted[middle]) / 2.0',
+  'core:map.pick': 'var result := {}\nfor key in keys:\n\tif source.has(key) and not result.has(key):\n\t\tresult[key] = source[key]\nreturn result',
+  'core:map.omit': 'var excluded := {}\nfor key in keys:\n\texcluded[key] = true\nvar result := {}\nfor key in source:\n\tif not excluded.has(key):\n\t\tresult[key] = source[key]\nreturn result',
+  'core:utilities.get-env': 'return OS.get_environment(name) if OS.has_environment(name) else fallback',
+  'core:file.normalize-path': [
+    'var rest := path.replace("\\\\", "/")',
+    'var drive := ""',
+    'if rest.length() >= 2 and rest[1] == ":" and ((rest[0] >= "A" and rest[0] <= "Z") or (rest[0] >= "a" and rest[0] <= "z")):',
+    '\tdrive = rest.substr(0, 2)',
+    '\trest = rest.substr(2)',
+    'var absolute := rest.begins_with("/")',
+    'var parts := PackedStringArray()',
+    'for part in rest.split("/"):',
+    '\tif part == "" or part == ".":',
+    '\t\tcontinue',
+    '\tif part == "..":',
+    '\t\tif parts.size() > 0 and parts[parts.size() - 1] != "..":',
+    '\t\t\tparts.remove_at(parts.size() - 1)',
+    '\t\telif not absolute:',
+    '\t\t\tparts.append("..")',
+    '\telse:',
+    '\t\tparts.append(part)',
+    'var joined := ("/" if absolute else "") + "/".join(parts)',
+    'return drive + (joined if joined != "" else ".")'
+  ].join('\n')
+};
+
 export function utilityDefinitions(): NodeDefinition[] {
   return NODES.map((node) => ({
     type: node.type,
@@ -1264,6 +1403,6 @@ export function utilityDefinitions(): NodeDefinition[] {
     keywords: node.keywords,
     inputs: node.inputs,
     outputs: [output(node.result)],
-    implementation: { kind: 'code', languages: { ...node.code, ...(LUA[node.type] ? { lua: LUA[node.type] } : {}) } }
+    implementation: { kind: 'code', languages: { ...node.code, ...(LUA[node.type] ? { lua: LUA[node.type] } : {}), ...(GDSCRIPT[node.type] ? { gdscript: GDSCRIPT[node.type] } : {}) } }
   }));
 }

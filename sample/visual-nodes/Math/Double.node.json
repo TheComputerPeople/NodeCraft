@@ -49,7 +49,8 @@
       "c": "return ${value} * 2;",
       "java": "return ${value} * 2;",
       "go": "return ${value} * 2",
-      "lua": "return ${value} * 2"
+      "lua": "return ${value} * 2",
+      "gdscript": "return ${value} * 2"
     }
   }
 }
