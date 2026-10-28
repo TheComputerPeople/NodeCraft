@@ -31,6 +31,10 @@ Decided (2026-10-28): the user asked for these four, Lua and GDScript first. Lua
   - **Snippets:** the `LUA` tables in `stdlib.ts`, `containers.ts` and `utilities.ts`. Lua's patterns are ASCII, so To Upper, To Lower, Trim and the utilities' whitespace work on ASCII, as in C++.
   - **Run:** a launcher in the scaffold folder sets `package.path` to the scaffold (where the support module is written) and the workspace folder, `require`s the generated module, and runs Start, Main and the latent actions; with `--test`, each test on a new object. Errors print as `Error: <message>` and exit with 1.
   - **Conformance:** all 25 fixtures pass, both object programs included.
+- **As built**, step 3:
+  - **Placement:** `luaPlacement` keeps one `vgraph_runtime.lua` at the workspace folder while it has Lua graphs, since generated modules `require` the support module and each other by their path from there; it removes the file when the last Lua graph goes, if the file is the extension's. A test runs a generated module with a plain `lua` from the folder, without the extension.
+  - **Symbol import:** `src/core/importing/lua-scanner.ts` reads the functions of the table a module returns (`function M.name(...)` and `M.name = function(...)`) marked `---@blueprint`, with their types from `---@param` and `---@return` (`integer`, `number`, `string`, `boolean`, `T[]`, `table<K, V>`; other names are native). Methods (`M:name`), varargs, several `@return`s and functions of other tables are reported with the reason. A function without `@return` returns nothing. Generated code `require`s the module by its path (`lib.scores`).
+  - **Debugging:** Lua Debug's `lua` launch configuration runs Run's launcher under its own Lua 5.4 (`luaVersion: "lua54"`), or the `runCommands` setting's executable. The Debug test and the Phase 5 exit check pass.
 
 ## GDScript (Tier 1)
 

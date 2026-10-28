@@ -840,6 +840,11 @@ test('exit check: debugging a function graph in generated Go', async () => {
   await exitCheck('go');
 });
 
+test('exit check: debugging a function graph in generated Lua', async () => {
+  if (!vscode.extensions.getExtension('actboy168.lua-debug')) throw new Skip('the Lua Debug extension is not loaded');
+  await exitCheck('lua');
+});
+
 test('exit check: debugging a function graph in generated C#', async () => {
   if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
   await exitCheck('csharp');
@@ -938,6 +943,11 @@ test('Debug does the same in generated C (cppdbg)', async () => {
 test('Debug does the same in generated Java', async () => {
   if (!vscode.extensions.getExtension('vscjava.vscode-java-debug')) throw new Skip('the Debugger for Java extension is not loaded');
   await debugSample('java', 'DebugJava.java');
+});
+
+test('Debug does the same in generated Lua (Lua Debug)', async () => {
+  if (!vscode.extensions.getExtension('actboy168.lua-debug')) throw new Skip('the Lua Debug extension is not loaded');
+  await debugSample('lua', 'debug_lua_vgraph.lua');
 });
 
 test('Debug does the same in generated Go (Delve)', async () => {
