@@ -317,14 +317,14 @@ Exit: each passes the conformance suite and the Phase 5 debugging exit check, wi
 
 Design and steps: [more-languages.md](more-languages.md).
 
-Status: built (October 2026); PHP's debugging waits on Xdebug.
+Status: complete (October 2026).
 
 - **Built:** Lua, GDScript (Godot 4), Ruby and PHP as Tier 1 packs. Each passes all 25 conformance fixtures, both object programs included, and has placement and symbol import, each tested against its toolchain.
-- **Debugging:** Lua (Lua Debug), GDScript (godot-tools, in a Godot project) and Ruby (rdbg) pass the Debug test and the Phase 5 exit check. PHP's debugger (Xdebug through PHP Debug) is configured, and its tests skip until Xdebug is installed here.
+- **Debugging:** Lua (Lua Debug), GDScript (godot-tools, in a Godot project), Ruby (rdbg) and PHP (Xdebug through PHP Debug) pass the Debug test and the Phase 5 exit check.
 - **Learned on the way:**
   - GDScript has no exceptions, and none of Godot's ways to end a process report a failure cleanly, so a failure is recorded and generated code returns after any statement that may fail.
   - rdbg's VS Code mode can't step out of a method, so a pack can now say its steps can't leave a function (`CodeDebugger.stepsLeaveFunctions`), and leaving one resumes to a breakpoint on the caller's next node.
-  - PHP copies arrays on assignment, so its containers are the support file's objects.
+  - PHP copies arrays on assignment, so its containers are the support file's objects. PHP Debug turns Xdebug's debug mode on only for its own launch of the current file, so the pack's configuration does the same.
 - **Deferred:** Composer's autoloader for generated PHP classes (generated files load each other with `require_once`), GDScript's signals and other Godot events as a framework pack, and subnormal numbers in GDScript's number formatting (Godot prints them as 0).
 
 ### Phase 9: Release
@@ -415,6 +415,6 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace and extensions, not a registry) | 6 |
 | Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Rust has no inheritance or interfaces, Go no inheritance) | 6, 8 |
 | Languages | (Beyond Unreal) Workspaces with graphs in several languages: a new graph takes its folder's language, structs and enums can be shared between languages, and another language's code is reached through project functions | ✅ (generated cross-language bindings deferred) | 7 |
-| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and declarative packs' code; PHP once Xdebug is installed) | — |
-| Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and declarative packs' code; PHP once Xdebug is installed) | — |
+| Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |
+| Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |
 | Debugging | Execution flow highlighting | ✅ (run trail and exec wire pulses, in Simulate) | — |

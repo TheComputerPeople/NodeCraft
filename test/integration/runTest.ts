@@ -7,6 +7,19 @@ import { runTests } from '@vscode/test-electron';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
+// The test VS Code's user settings (@vscode/test-electron's default user-data folder), with extension
+// updates turned off.
+function keepExtensionsAsInstalled(settingsFile: string): void {
+  let settings: Record<string, unknown> = {};
+  try {
+    settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')) as Record<string, unknown>;
+  } catch {
+    // No settings yet.
+  }
+  fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
+  fs.writeFileSync(settingsFile, JSON.stringify({ ...settings, 'extensions.autoUpdate': false, 'extensions.autoCheckUpdates': false }, null, 4));
+}
+
 // Tests run in a scratch copy of the sample workspace so they can change files freely.
 function createWorkspace(): string {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'blueprint-vscode-it-'));
@@ -28,6 +41,9 @@ async function main(): Promise<void> {
   delete process.env.ELECTRON_RUN_AS_NODE;
   const workspace = createWorkspace();
   const withDebuggers = process.argv.includes('--with-debuggers');
+  // With the installed extensions loaded, the test VS Code must leave them as they are: it is an
+  // older VS Code, and it would otherwise update them in the user's own extensions folder.
+  if (withDebuggers) keepExtensionsAsInstalled(path.join(repoRoot, '.vscode-test', 'user-data', 'User', 'settings.json'));
   try {
     await runTests({
       version: minimumVsCodeVersion(),

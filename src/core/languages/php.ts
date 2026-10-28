@@ -110,13 +110,16 @@ const phpRunner: CodeRunner = {
 };
 
 // Xdebug through the PHP Debug extension, running Run's launcher; PHP needs Xdebug loaded (php.ini's
-// zend_extension=xdebug).
+// zend_extension=xdebug). Xdebug is switched to debug mode for the run, on a free port, as PHP Debug's
+// own launch of the current file does (it doesn't for a configured launch).
 const phpDebugger: CodeDebugger = {
   type: 'php',
   extension: { id: 'xdebug.php-debug', name: 'PHP Debug' },
   configuration: (_file, _className, context) => ({
     type: 'php', request: 'launch', name: 'Debug Graph', program: `${context.scaffoldDir}/run.php`, args: context.args ?? [], cwd: context.cwd, stopOnEntry: false,
-    ...(context.command?.length ? { runtimeExecutable: context.command[0], runtimeArgs: context.command.slice(1) } : {})
+    port: 0, env: { XDEBUG_MODE: 'debug,develop', XDEBUG_CONFIG: 'client_port=${port}' },
+    runtimeArgs: [...(context.command?.slice(1) ?? []), '-dxdebug.start_with_request=yes'],
+    ...(context.command?.length ? { runtimeExecutable: context.command[0] } : {})
   }),
   // Xdebug writes a whole float with a point (30.0); the graph shows 30.
   displayValue: (text) => (/^-?\d+\.0$/.test(text) ? text.slice(0, -2) : text)

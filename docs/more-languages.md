@@ -101,7 +101,7 @@ Decided (2026-10-28): the user asked for these four, Lua and GDScript first. Lua
 - **As built**, step 9:
   - **Placement:** `phpNamespace` reads the nearest `composer.json`'s PSR-4 roots (`autoload` and `autoload-dev`): a graph under one takes its namespace and the folders below it (`"App\\": "src/"` with a graph in `src/Game` gives `App\Game`); elsewhere, the global namespace. Generated classes name each other by that fully qualified name. Generated files load each other with `require_once`, so they don't need Composer's autoloader (whose PSR-4 rule, a file named after its class, they don't follow).
   - **Symbol import:** `src/core/importing/php-scanner.ts` reads functions and `public static` methods marked `@blueprint` in a docblock, typed by their declared types (`int`, `float`, `string`, `bool`, `?T` and `T|null`, `mixed`; a PHP `array` isn't a graph array, since graphs pass `VgList` objects, so it's native, as classes are), with literal defaults. Instance methods, magic methods, variadic and by-reference parameters are reported with the reason. Generated code calls `\App\Util\Scores::triple(...)`, or a namespaced function as `\App\Util\shout(...)`; a test runs both from a Composer project.
-  - **Debugging:** Xdebug through the PHP Debug extension (`php` launch configuration on Run's launcher). Not yet run here: this machine's PHP has no Xdebug, so the Debug test and the Phase 5 exit check skip, with the reason, until `php -m` lists it.
+  - **Debugging:** Xdebug through the PHP Debug extension (`php` launch configuration on Run's launcher). PHP Debug switches Xdebug to debug mode only for its own launch of the current file, so the configuration does what that one does: `XDEBUG_MODE=debug,develop`, the client port in `XDEBUG_CONFIG` (on a free port, `port: 0`), and `-dxdebug.start_with_request=yes`. A `php.ini` needs only `zend_extension=xdebug`. The Debug test and the Phase 5 exit check pass (they skip, with the reason, where `php -m` doesn't list Xdebug).
 
 ## Steps
 
@@ -120,4 +120,4 @@ One commit each (large steps may take several):
 
 Each language's toolchain must be installed before its steps: a pack isn't finished until its conformance and debugging tests run.
 
-Status: steps 1 to 10 done (2026-10-28). All four packs pass the conformance suite and have placement and symbol import; Lua, GDScript and Ruby pass the debugging tests, and PHP's debugging tests wait on Xdebug (see the roadmap's Phase 8 status).
+Status: steps 1 to 10 done (2026-10-28). All four packs pass the conformance suite, have placement and symbol import, and pass the Debug test and the Phase 5 exit check.
