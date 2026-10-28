@@ -22,7 +22,8 @@
       "java": "throw new RuntimeException(\"boom\");",
       "go": "VgFail(\"boom\")",
       "lua": "error(\"boom\", 0)",
-      "gdscript": "vg.fail(\"boom\")"
+      "gdscript": "vg.fail(\"boom\")",
+      "ruby": "raise \"boom\""
     }
   }
 }

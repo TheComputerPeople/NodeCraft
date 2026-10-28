@@ -1393,6 +1393,136 @@ const GDSCRIPT: Record<string, string> = {
   ].join('\n')
 };
 
+// ---- Ruby ---------------------------------------------------------------------------------------
+//
+// The Ruby versions, by node type (docs/more-languages.md, "Ruby"): Ruby's strings count characters
+// already; a broken rule raises. `end` is a Ruby keyword, so In Range names that pin as ${end}.
+
+const RB_WORDS = [
+  'chars = text.chars',
+  'kind = lambda do |c|',
+  '  next :upper if c&.match?(/\\A[A-Z]\\z/)',
+  '  next :lower if c&.match?(/\\A[a-z]\\z/)',
+  '  next :digit if c&.match?(/\\A[0-9]\\z/)',
+  '  nil',
+  'end',
+  'words = []',
+  'word = String.new',
+  'chars.each_with_index do |c, i|',
+  '  k = kind.call(c)',
+  '  unless k',
+  '    words << word.downcase unless word.empty?',
+  '    word = String.new',
+  '    next',
+  '  end',
+  '  prev = kind.call(word[-1])',
+  '  following = kind.call(chars[i + 1])',
+  '  if !word.empty? && k == :upper && (prev == :lower || prev == :digit || (prev == :upper && following == :lower))',
+  '    words << word.downcase',
+  '    word = String.new',
+  '  end',
+  '  word << c',
+  'end',
+  'words << word.downcase unless word.empty?'
+].join('\n');
+
+const rbPad = (left: boolean) => `raise ArgumentError, "Fill must be one character" unless fill.length == 1\nmissing = width - text.length\npadding = missing > 0 ? fill * missing : ""\nreturn ${left ? 'padding + text' : 'text + padding'}`;
+
+const RUBY: Record<string, string> = {
+  'core:string.is-empty': 'return text.empty?',
+  'core:string.is-blank': 'return text.strip.empty?',
+  'core:string.normalize-whitespace': 'return text.split.join(" ")',
+  'core:string.truncate': 'raise ArgumentError, "Max Length can\'t be negative" if maxLength < 0\nreturn text if text.length <= maxLength\nreturn text[0, [0, maxLength - suffix.length].max] + suffix[0, maxLength]',
+  'core:string.capitalize': 'return text.empty? ? text : text[0].upcase + text[1..]',
+  'core:string.to-camel-case': `${RB_WORDS}\nreturn words.each_with_index.map { |w, i| i.zero? ? w : w[0].upcase + w[1..] }.join`,
+  'core:string.to-snake-case': `${RB_WORDS}\nreturn words.join("_")`,
+  'core:string.to-kebab-case': `${RB_WORDS}\nreturn words.join("-")`,
+  'core:string.slugify': `${RB_WORDS}\nreturn words.join("-")`,
+  'core:string.pad-left': rbPad(true),
+  'core:string.pad-right': rbPad(false),
+  'core:string.word-count': 'return text.split.length',
+  'core:string.mask': [
+    'raise ArgumentError, "Visible counts can\'t be negative" if visibleStart < 0 || visibleEnd < 0',
+    'raise ArgumentError, "Mask must be one character" unless mask.length == 1',
+    'length = text.length',
+    'first = [visibleStart, length].min',
+    'last = [visibleEnd, length - first].min',
+    'return text[0, first] + mask * (length - first - last) + text[length - last, last]'
+  ].join('\n'),
+  'core:math.in-range': 'raise ArgumentError, "Start can\'t be greater than End" if start > ${end}\nreturn value >= start && value < ${end}',
+  'core:math.round-to': [
+    'raise ArgumentError, "Value must be a finite number" unless value.to_f.finite?',
+    'raise ArgumentError, "Digits must be from 0 to 15" if digits < 0 || digits > 15',
+    'factor = 10.0**digits',
+    'direction = value > 0 ? 1 : (value < 0 ? -1 : 0)',
+    'return direction * ((value.abs + 2.220446049250313e-16) * factor + 0.5).floor / factor'
+  ].join('\n'),
+  'core:string.format-bytes': [
+    'raise ArgumentError, "Size must be from 0 to 2^53" if !size.to_f.finite? || size < 0 || size > 9007199254740992',
+    'raise ArgumentError, "Decimals must be from 0 to 10" if decimals < 0 || decimals > 10',
+    'return "#{size.to_i} B" if size < 1024',
+    'units = %w[KiB MiB GiB TiB PiB]',
+    'value = size.to_f',
+    'index = -1',
+    'loop do',
+    '  value /= 1024',
+    '  index += 1',
+    '  break unless value >= 1024 && index < units.length - 1',
+    'end',
+    'scale = 10**decimals',
+    'scaled = (value * scale + 0.5).floor',
+    'whole = scaled / scale',
+    'fraction = (scaled - whole * scale).to_s.rjust(decimals, "0")',
+    'return "#{whole}#{decimals > 0 ? ".#{fraction}" : ""} #{units[index]}"'
+  ].join('\n'),
+  'core:string.parse-boolean': [
+    'value = text.strip.downcase',
+    'return true if %w[true 1 yes y on].include?(value)',
+    'return false if %w[false 0 no n off].include?(value)',
+    'raise ArgumentError, "Not a boolean: \\"#{text}\\""'
+  ].join('\n'),
+  'core:string.parse-integer-strict': [
+    'value = text.strip',
+    'raise ArgumentError, "Not an integer: \\"#{text}\\"" unless value.match?(/\\A[+-]?[0-9]+\\z/)',
+    'result = value.to_i',
+    'raise ArgumentError, "Integer out of range: \\"#{text}\\"" if result.abs > 9007199254740991',
+    'return result'
+  ].join('\n'),
+  'core:array.unique': 'return items.uniq',
+  'core:array.difference': 'return (left - right).uniq',
+  'core:array.intersection': 'return left & right',
+  // Added in order, as JavaScript adds (Array#sum compensates for rounding).
+  'core:array.average': 'raise ArgumentError, "Average needs at least one value" if values.empty?\nreturn values.inject(0.0) { |total, value| total + value } / values.length',
+  'core:array.median': 'raise ArgumentError, "Median needs at least one value" if values.empty?\nsorted = values.sort\nmiddle = sorted.length / 2\nreturn sorted.length.odd? ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2.0',
+  'core:map.pick': 'result = {}\nkeys.each { |key| result[key] = source[key] if source.key?(key) && !result.key?(key) }\nreturn result',
+  'core:map.omit': 'return source.reject { |key, _| keys.include?(key) }',
+  'core:utilities.get-env': 'return ENV.fetch(name, fallback)',
+  'core:file.normalize-path': [
+    'rest = path.tr("\\\\", "/")',
+    'drive = ""',
+    'if rest.match?(/\\A[A-Za-z]:/)',
+    '  drive = rest[0, 2]',
+    '  rest = rest[2..]',
+    'end',
+    'absolute = rest.start_with?("/")',
+    'parts = []',
+    'rest.split("/").each do |part|',
+    '  next if part.empty? || part == "."',
+    '  if part == ".."',
+    '    if !parts.empty? && parts.last != ".."',
+    '      parts.pop',
+    '    elsif !absolute',
+    '      parts << ".."',
+    '    end',
+    '  else',
+    '    parts << part',
+    '  end',
+    'end',
+    'joined = (absolute ? "/" : "") + parts.join("/")',
+    'return drive + (joined.empty? ? "." : joined)'
+  ].join('\n')
+};
+
 export function utilityDefinitions(): NodeDefinition[] {
   return NODES.map((node) => ({
     type: node.type,
@@ -1403,6 +1533,6 @@ export function utilityDefinitions(): NodeDefinition[] {
     keywords: node.keywords,
     inputs: node.inputs,
     outputs: [output(node.result)],
-    implementation: { kind: 'code', languages: { ...node.code, ...(LUA[node.type] ? { lua: LUA[node.type] } : {}), ...(GDSCRIPT[node.type] ? { gdscript: GDSCRIPT[node.type] } : {}) } }
+    implementation: { kind: 'code', languages: { ...node.code, ...(LUA[node.type] ? { lua: LUA[node.type] } : {}), ...(GDSCRIPT[node.type] ? { gdscript: GDSCRIPT[node.type] } : {}), ...(RUBY[node.type] ? { ruby: RUBY[node.type] } : {}) } }
   }));
 }

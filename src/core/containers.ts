@@ -253,13 +253,46 @@ const GDSCRIPT: Record<string, string> = {
   'core:map.values': 'return target.values()'
 };
 
+// The Ruby snippets: arrays, sets and maps are Ruby's Array, Set and Hash (insertion-ordered).
+const RB_RANGE = 'raise IndexError, "Index out of range" if index < 0 || index >= target.length';
+const RUBY: Record<string, string> = {
+  'core:array.add': 'target << item\nreturn target.length - 1',
+  'core:array.add-unique': 'return -1 if target.include?(item)\ntarget << item\nreturn target.length - 1',
+  'core:array.insert': 'raise IndexError, "Index out of range" if index < 0 || index > target.length\ntarget.insert(index, item)',
+  'core:array.remove-index': `${RB_RANGE}\ntarget.delete_at(index)`,
+  'core:array.remove-item': 'count = target.length\ntarget.delete(item)\nreturn target.length != count',
+  'core:array.set': `${RB_RANGE}\ntarget[index] = item`,
+  'core:array.clear': 'target.clear',
+  'core:array.get': `${RB_RANGE}\nreturn target[index]`,
+  'core:array.length': 'return target.length',
+  'core:array.last-index': 'return target.length - 1',
+  'core:array.find': 'return target.index(item) || -1',
+  'core:array.contains': 'return target.include?(item)',
+  'core:array.is-valid-index': 'return index >= 0 && index < target.length',
+  'core:array.is-empty': 'return target.empty?',
+  'core:set.add': 'target.add(item)',
+  'core:set.remove': 'return !target.delete?(item).nil?',
+  'core:set.clear': 'target.clear',
+  'core:set.contains': 'return target.include?(item)',
+  'core:set.length': 'return target.size',
+  'core:set.to-array': 'return target.to_a.sort',
+  'core:map.add': 'target[key] = value',
+  'core:map.remove': 'return false unless target.key?(key)\ntarget.delete(key)\nreturn true',
+  'core:map.clear': 'target.clear',
+  'core:map.find': 'raise KeyError, "Key not found" unless target.key?(key)\nreturn target[key]',
+  'core:map.contains': 'return target.key?(key)',
+  'core:map.length': 'return target.length',
+  'core:map.keys': 'return target.keys',
+  'core:map.values': 'return target.values'
+};
+
 // An Unreal container function as a code node: impure ones have exec pins.
 function fn(type: string, displayName: string, category: string, inputs: PinDefinition[], result: TypeRef | undefined, code: Snippets, description: string, options: { impure?: boolean; keywords?: string[] } = {}): NodeDefinition {
   return {
     type, version: 1, displayName, category, description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [pin('returnValue', 'Return Value', 'output', result)] : [])],
-    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}), ...(GO[type] ? { go: GO[type] } : {}), ...(LUA[type] ? { lua: LUA[type] } : {}), ...(GDSCRIPT[type] ? { gdscript: GDSCRIPT[type] } : {}) } },
+    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}), ...(GO[type] ? { go: GO[type] } : {}), ...(LUA[type] ? { lua: LUA[type] } : {}), ...(GDSCRIPT[type] ? { gdscript: GDSCRIPT[type] } : {}), ...(RUBY[type] ? { ruby: RUBY[type] } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {})
   };
 }

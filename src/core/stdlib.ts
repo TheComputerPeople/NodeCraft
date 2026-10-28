@@ -37,11 +37,12 @@ function node(type: string, displayName: string, category: string, inputs: PinDe
   const go = GO[type];
   const lua = LUA[type];
   const gdscript = GDSCRIPT[type];
+  const ruby = RUBY[type];
   return {
     type, version: 1, displayName, category, description: options.description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [result] : [])],
-    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}), ...(go ? { go } : {}), ...(lua ? { lua } : {}), ...(gdscript ? { gdscript } : {}) } },
+    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}), ...(go ? { go } : {}), ...(lua ? { lua } : {}), ...(gdscript ? { gdscript } : {}), ...(ruby ? { ruby } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {}),
     ...(options.compact ? { compact: true } : {})
   };
@@ -298,6 +299,55 @@ const GDSCRIPT: Record<string, string> = {
   'core:utilities.select': 'return a if pickA else b',
   'core:file.load-to-string': 'var file := FileAccess.open(filename, FileAccess.READ)\nif file == null:\n\treturn vg.fail("Can\'t read " + filename + ": " + error_string(FileAccess.get_open_error()))\nreturn file.get_as_text()',
   'core:file.save-string': 'var file := FileAccess.open(filename, FileAccess.WRITE)\nif file == null:\n\tvg.fail("Can\'t write " + filename + ": " + error_string(FileAccess.get_open_error()))\n\treturn\nfile.store_string(text)'
+};
+
+// The Ruby snippets (docs/more-languages.md, "Ruby"): errors are raised. An Integer divided by an
+// Integer is a whole number in Ruby, and % follows the divisor's sign, so Divide and % go through
+// Float, % with remainder (the sign of A). Floor of NaN or Infinity would raise, so they pass through.
+const RB_DIVIDE_BY_ZERO = 'raise ZeroDivisionError, "Divide by zero" if b == 0';
+const RB_NOT_FINITE = 'return value unless value.to_f.finite?';
+const RUBY: Record<string, string> = {
+  'core:math.subtract': 'return a - b',
+  'core:math.multiply': 'return a * b',
+  'core:math.divide': `${RB_DIVIDE_BY_ZERO}\nreturn a.to_f / b`,
+  'core:math.modulo': `${RB_DIVIDE_BY_ZERO}\nreturn a.to_f.remainder(b)`,
+  'core:math.less': 'return a < b',
+  'core:math.less-equal': 'return a <= b',
+  'core:math.greater': 'return a > b',
+  'core:math.greater-equal': 'return a >= b',
+  'core:math.equal': 'return a == b',
+  'core:math.not-equal': 'return a != b',
+  'core:math.and': 'return a && b',
+  'core:math.or': 'return a || b',
+  'core:math.not': 'return !a',
+  'core:math.min': 'return Float::NAN if a.to_f.nan? || b.to_f.nan?\nreturn [a, b].min',
+  'core:math.max': 'return Float::NAN if a.to_f.nan? || b.to_f.nan?\nreturn [a, b].max',
+  'core:math.clamp': 'return Float::NAN if value.to_f.nan?\nreturn [[value, minimum].max, maximum].min',
+  'core:math.abs': 'return value.abs',
+  'core:math.round': `${RB_NOT_FINITE}\nreturn (value + 0.5).floor`,
+  'core:math.floor': `${RB_NOT_FINITE}\nreturn value.floor`,
+  'core:math.ceil': `${RB_NOT_FINITE}\nreturn value.ceil`,
+  'core:math.sqrt': 'return value < 0 ? Float::NAN : Math.sqrt(value)',
+  // A negative base to a fractional power is a Complex in Ruby; JavaScript gives NaN.
+  'core:math.power': 'result = base.to_f**exponent\nreturn result.is_a?(Complex) ? Float::NAN : result',
+  'core:math.random-float-in-range': 'return minimum + rand * (maximum - minimum)',
+  'core:math.random-integer-in-range': 'return rand(minimum..maximum)',
+  'core:string.append': 'return a + b',
+  'core:string.len': 'return text.length',
+  'core:string.contains': 'return text.include?(part)',
+  'core:string.to-upper': 'return text.upcase',
+  'core:string.to-lower': 'return text.downcase',
+  'core:string.trim': 'return text.strip',
+  // gsub's replacement text reads \\1 and \\0; a block's result is used as it is.
+  'core:string.replace': 'return text if find.empty?\nreturn text.gsub(find) { replacement }',
+  'core:string.substring': 'first = [0, start].max\nreturn "" if first >= text.length\nreturn text[first, [0, count].max]',
+  'core:string.to-float': `return text.match?(/\\A${DECIMAL.slice(1)}\\z/) ? text.strip.to_f : 0.0`,
+  'core:string.to-int': `return text.match?(/\\A${INTEGER.slice(1)}\\z/) ? text.strip.to_i : 0`,
+  'core:utilities.is-valid': 'return !value.nil?',
+  'core:utilities.select': 'return pickA ? a : b',
+  // Binary reads and writes: Ruby's text mode turns \\n into \\r\\n on Windows.
+  'core:file.load-to-string': 'return File.binread(filename).force_encoding(Encoding::UTF_8)',
+  'core:file.save-string': 'File.binwrite(filename, text)'
 };
 
 // The Rust snippets, by node type: errors are panics, which stop the run (or fail the test).

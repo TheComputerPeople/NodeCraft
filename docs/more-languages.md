@@ -69,6 +69,14 @@ Decided (2026-10-28): the user asked for these four, Lua and GDScript first. Lua
 - **Symbol import:** module functions and class methods marked `@blueprint` in YARD comments, with types from `@param [Integer] points` and `@return [Float]`, read by a scanner.
 - **Debugging:** rdbg (the `debug` gem) through the VSCode rdbg Ruby Debugger extension (`KoichiSasada.vscode-rdbg`).
 
+- **As built** (`src/core/languages/ruby.ts`, `ruby-runtime.ts`), step 6:
+  - **Generator:** adapted from Python's. Variables are instance variables with accessors (other objects, and subclasses for protected ones, reach them through those); names are snake_case, since a capitalized name is a constant in Ruby. A parent's version of a function is called with `Parent.instance_method(:name).bind_call(self, ...)`, because `super` only reaches the method of the same name. Several outputs come back as an array. Delay's action is a block, which leaves with `next` (a `return` would leave the method), and each Delay keeps its own `started_*` variable, since blocks share the method's variables.
+  - **Literals:** strings are double-quoted with `#` escaped, so nothing is interpolated.
+  - **The support file** (`vgraph_runtime.rb`) is a companion file next to every generated file, as GDScript's is; each copy reopens the one module `Vg`, so they share its state. It has number formatting (Ruby's shortest digits laid out as JavaScript does), JSON, conversions, dispatchers and the latent queue.
+  - **Snippets:** the `RUBY` tables. An Integer divided by an Integer is a whole number in Ruby, and `%` follows the divisor's sign, so Divide and % go through Float (% with `remainder`). Replace uses `gsub`'s block form (its replacement text would read `\1`), Average adds in order (`Array#sum` compensates for rounding, JavaScript doesn't), and the file nodes read and write in binary (text mode turns `\n` into `\r\n` on Windows).
+  - **Run:** `ruby` runs a launcher in the scaffold folder that requires the generated file by its path.
+  - **Conformance:** all 25 fixtures pass, both object programs included.
+
 ## PHP (Tier 1)
 
 - **Toolchain:** PHP 8.3 or later (`php` on the PATH), with the `mbstring` extension enabled, and Xdebug 3 for debugging.
