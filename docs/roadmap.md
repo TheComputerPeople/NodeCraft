@@ -309,7 +309,17 @@ Steps, one commit each:
 5. Shared structs and enums: several target languages per type file, a generated file for each.
 6. Calls into another language: the project-function pattern documented with an example; the parity checklist and status.
 
-### Phase 8: Release
+### Phase 8: More languages
+
+Goal: Lua, GDScript, Ruby and PHP as Tier 1 packs, Lua and GDScript first (decided 2026-10-28). Lua and GDScript are the scripting languages of game engines, Blueprint's own audience; Ruby and PHP cover web back ends.
+
+Exit: each passes the conformance suite and the Phase 5 debugging exit check, with placement and symbol import, as Java and Go did.
+
+Design and steps: [more-languages.md](more-languages.md).
+
+### Phase 9: Release
+
+Marketplace packaging waits until the platform is complete and robust (decided 2026-10-28).
 
 - A "Coming from Unreal" guide that maps every Unreal concept to its equivalent here, and lists what doesn't apply.
 - An onboarding sample per Tier 1 language.
