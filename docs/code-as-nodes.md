@@ -152,6 +152,7 @@ Beyond Unreal's set, the library has everyday utilities, many adapted from Commo
 | Utilities / Array | Unique, Difference, Intersection (any element type), Average, Median |
 | Utilities / Map | Pick, Omit, Merge, Find or Default, Make Map From Arrays |
 | Utilities | Get Environment Variable |
+| Utilities / Time | Now, Get Accurate Real Time, Format Timestamp |
 | File | Normalize Path |
 
 The original leaves some behavior to each language. Here it's one contract, checked by the `utilities-*` fixtures in the conformance suite:
@@ -162,6 +163,7 @@ The original leaves some behavior to each language. Here it's one contract, chec
 - **Rounding.** Round To rounds halves away from zero, with a small correction for values just below a half (2.675 rounds to 2.68). Format Bytes rounds halves up in every language, where `toFixed` and `printf` disagree on exact halves.
 - **Paths.** Normalize Path works on the text alone, the same on every system: `/` and `\` both separate folders, `.` and empty parts go, `..` removes the folder before it, and the result uses `/`.
 - **Maps.** Maps keep their keys in the order they were added. Merge gives B's value where both maps have a key, at A's place in that order. Make Map From Arrays keeps a repeated key's first place and last value, and stops the run if Keys and Values differ in length.
+- **Time.** Now gives Unix milliseconds (whole milliseconds since 1970-01-01 00:00 UTC; Lua's clock counts whole seconds), as a float, so it fits every language's numbers. Format Timestamp writes one in ISO 8601 in UTC (`2026-10-28T09:30:00.000Z`) the same everywhere, years 1 to 9999; outside them, the run stops. Get Accurate Real Time is for timing: seconds on a clock that never goes back, from a moment that isn't a date. Lua has only processor time for it (`os.clock`, which its Delay waits on too), and C the time of day.
 - **Limits.** Parse Integer Strict accepts numbers up to 2^53 (in C#, its 32-bit ints). Format Bytes takes sizes up to 2^53 and up to 10 decimals. Round To takes 0 to 15 digits.
 - **Title case and trimming.** To Title Case, Trim Start and Trim End treat only ASCII whitespace as space and change only ASCII letters, so every language gives the same text (unlike Trim and Capitalize, which use each language's own rules; see below).
 - **Format String.** `{0}`, `{1}`, … are replaced by that item of Args; other braces stay as they are (`{x}`, an unclosed `{2`), so `{{0}}` gives `{` + the item + `}`. A placeholder with no item stops the run.

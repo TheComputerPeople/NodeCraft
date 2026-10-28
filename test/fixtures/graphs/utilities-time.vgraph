@@ -1,0 +1,380 @@
+{
+  "schemaVersion": 3,
+  "name": "UtilsTime",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "metadata": {
+    "description": "Utility nodes: the time, a clock, and timestamps in ISO 8601 (UTC). The clocks change, so they are checked against limits.",
+    "expectedOutput": [
+      "true",
+      "true",
+      "1970-01-01T00:00:00.000Z",
+      "2000-02-29T12:00:00.123Z",
+      "1969-12-31T23:59:59.999Z",
+      "1970-01-01T00:00:00.001Z",
+      "0001-01-01T00:00:00.000Z",
+      "9999-12-31T23:59:59.999Z",
+      "2026-10-28T09:30:00.000Z"
+    ]
+  },
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "print1",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 120
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "core:math.greater-equal",
+          "position": {
+            "x": 600,
+            "y": 120
+          },
+          "properties": {
+            "pin:b": 1700000000000
+          }
+        },
+        {
+          "id": "n1_a",
+          "type": "core:time.now",
+          "position": {
+            "x": 300,
+            "y": 120
+          },
+          "properties": {}
+        },
+        {
+          "id": "print2",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "core:math.greater-equal",
+          "position": {
+            "x": 600,
+            "y": 240
+          },
+          "properties": {
+            "pin:b": 0
+          }
+        },
+        {
+          "id": "n2_a",
+          "type": "core:time.real-time",
+          "position": {
+            "x": 300,
+            "y": 240
+          },
+          "properties": {}
+        },
+        {
+          "id": "print3",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:time.format-timestamp",
+          "position": {
+            "x": 600,
+            "y": 360
+          },
+          "properties": {
+            "pin:ms": 0
+          }
+        },
+        {
+          "id": "print4",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 480
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "core:time.format-timestamp",
+          "position": {
+            "x": 600,
+            "y": 480
+          },
+          "properties": {
+            "pin:ms": 951825600123
+          }
+        },
+        {
+          "id": "print5",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 600
+          },
+          "properties": {}
+        },
+        {
+          "id": "n5",
+          "type": "core:time.format-timestamp",
+          "position": {
+            "x": 600,
+            "y": 600
+          },
+          "properties": {
+            "pin:ms": -1
+          }
+        },
+        {
+          "id": "print6",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 720
+          },
+          "properties": {}
+        },
+        {
+          "id": "n6",
+          "type": "core:time.format-timestamp",
+          "position": {
+            "x": 600,
+            "y": 720
+          },
+          "properties": {
+            "pin:ms": 1.9
+          }
+        },
+        {
+          "id": "print7",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 840
+          },
+          "properties": {}
+        },
+        {
+          "id": "n7",
+          "type": "core:time.format-timestamp",
+          "position": {
+            "x": 600,
+            "y": 840
+          },
+          "properties": {
+            "pin:ms": -62135596800000
+          }
+        },
+        {
+          "id": "print8",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 960
+          },
+          "properties": {}
+        },
+        {
+          "id": "n8",
+          "type": "core:time.format-timestamp",
+          "position": {
+            "x": 600,
+            "y": 960
+          },
+          "properties": {
+            "pin:ms": 253402300799999
+          }
+        },
+        {
+          "id": "print9",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1080
+          },
+          "properties": {}
+        },
+        {
+          "id": "n9",
+          "type": "core:time.format-timestamp",
+          "position": {
+            "x": 600,
+            "y": 1080
+          },
+          "properties": {
+            "pin:ms": 1793179800000
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "print1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1_a",
+          "fromPin": "returnValue",
+          "toNode": "n1",
+          "toPin": "a"
+        },
+        {
+          "id": "w3",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "print1",
+          "toPin": "value"
+        },
+        {
+          "id": "w4",
+          "fromNode": "print1",
+          "fromPin": "execOut",
+          "toNode": "print2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w5",
+          "fromNode": "n2_a",
+          "fromPin": "returnValue",
+          "toNode": "n2",
+          "toPin": "a"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "print2",
+          "toPin": "value"
+        },
+        {
+          "id": "w7",
+          "fromNode": "print2",
+          "fromPin": "execOut",
+          "toNode": "print3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "print3",
+          "toPin": "value"
+        },
+        {
+          "id": "w9",
+          "fromNode": "print3",
+          "fromPin": "execOut",
+          "toNode": "print4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n4",
+          "fromPin": "returnValue",
+          "toNode": "print4",
+          "toPin": "value"
+        },
+        {
+          "id": "w11",
+          "fromNode": "print4",
+          "fromPin": "execOut",
+          "toNode": "print5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n5",
+          "fromPin": "returnValue",
+          "toNode": "print5",
+          "toPin": "value"
+        },
+        {
+          "id": "w13",
+          "fromNode": "print5",
+          "fromPin": "execOut",
+          "toNode": "print6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n6",
+          "fromPin": "returnValue",
+          "toNode": "print6",
+          "toPin": "value"
+        },
+        {
+          "id": "w15",
+          "fromNode": "print6",
+          "fromPin": "execOut",
+          "toNode": "print7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n7",
+          "fromPin": "returnValue",
+          "toNode": "print7",
+          "toPin": "value"
+        },
+        {
+          "id": "w17",
+          "fromNode": "print7",
+          "fromPin": "execOut",
+          "toNode": "print8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w18",
+          "fromNode": "n8",
+          "fromPin": "returnValue",
+          "toNode": "print8",
+          "toPin": "value"
+        },
+        {
+          "id": "w19",
+          "fromNode": "print8",
+          "fromPin": "execOut",
+          "toNode": "print9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w20",
+          "fromNode": "n9",
+          "fromPin": "returnValue",
+          "toNode": "print9",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

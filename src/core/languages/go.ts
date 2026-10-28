@@ -18,7 +18,7 @@ const RESERVED = new Set([
   'any', 'bool', 'byte', 'comparable', 'complex64', 'complex128', 'error', 'float32', 'float64', 'int', 'int8', 'int16', 'int32', 'int64',
   'rune', 'string', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'uintptr', 'true', 'false', 'iota', 'nil', 'append', 'cap', 'clear',
   'close', 'complex', 'copy', 'delete', 'imag', 'len', 'make', 'max', 'min', 'new', 'panic', 'print', 'println', 'real', 'recover',
-  'self', 'math', 'strings', 'strconv', 'regexp', 'utf8', 'os', 'fmt', 'sort', 'unicode', 'cast', 'ok', 'args', 'started'
+  'self', 'math', 'rand', 'strings', 'strconv', 'regexp', 'utf8', 'os', 'fmt', 'sort', 'slices', 'time', 'unicode', 'cast', 'ok', 'args', 'started'
 ]);
 
 const PRIMITIVES: Record<string, string> = { bool: 'bool', int: 'int', float: 'float64', string: 'string', any: 'any', wildcard: 'any' };
@@ -390,7 +390,7 @@ class GoEmitter {
     header.line();
     // Go refuses imports a file doesn't use: only the ones the code names.
     const code = body.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/\/\/.*$/gm, '');
-    const standard = ['math', 'math/rand', 'os', 'regexp', 'slices', 'sort', 'strconv', 'strings', 'unicode/utf8'].filter((path) => new RegExp(`(^|[^\\w.])${path.split('/').pop()}\\.`, 'm').test(code));
+    const standard = ['math', 'math/rand', 'os', 'regexp', 'slices', 'sort', 'strconv', 'strings', 'time', 'unicode/utf8'].filter((path) => new RegExp(`(^|[^\\w.])${path.split('/').pop()}\\.`, 'm').test(code));
     const imports = [...standard.map((p) => `"${p}"`), ...[...this.imports].sort().map(([path, name]) => `${name} "${path}"`)];
     if (imports.length) {
       header.line('import (');
