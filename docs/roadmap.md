@@ -327,7 +327,29 @@ Status: complete (October 2026).
   - PHP copies arrays on assignment, so its containers are the support file's objects. PHP Debug turns Xdebug's debug mode on only for its own launch of the current file, so the pack's configuration does the same.
 - **Deferred:** Composer's autoloader for generated PHP classes (generated files load each other with `require_once`), GDScript's signals and other Godot events as a framework pack, and subnormal numbers in GDScript's number formatting (Godot prints them as 0).
 
-### Phase 9: Release
+### Phase 9: Node authoring
+
+Goal: make nodes the ways Unreal does, from code and from other nodes, with nothing missing that Unreal's function libraries, member functions and properties offer. Decided 2026-10-28, after the utility library grew to 94 nodes: review how users make nodes, then build it as a phase.
+
+Today: functions marked `@blueprint` in all 12 languages, Blueprint Function and Macro Libraries, Collapse to Function and Macro, and `*.node.json` snippet nodes in versioned packages.
+
+Gaps (the review, with a design for each: [node-authoring.md](node-authoring.md)):
+
+- Function libraries serve one language.
+- Code classes' methods and properties aren't nodes.
+- Code functions have one output and can't be async.
+- No way from a node to its definition.
+- Less metadata than Unreal's (Compact Node Title, Deprecated, Advanced pins, ExpandBoolAsExecs).
+- Little feedback while writing code or snippet nodes.
+- Library graphs can't be packaged.
+
+Exit: a TypeScript and Python workspace that uses every path (a library for both languages, code classes through Target pins with several outputs and an async function, a tested node library, an added graph package), running from Run in both languages; each language's interop test covers code classes and several outputs.
+
+Status: designed; the recommendations await a decision.
+
+Design and steps: [node-authoring.md](node-authoring.md).
+
+### Phase 10: Release
 
 Marketplace packaging waits until the platform is complete and robust (decided 2026-10-28).
 
@@ -411,8 +433,13 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python, C#, C++ headers, Rust, Java, Lua, GDScript, Ruby, PHP; Go and other languages through their language server) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
+| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ⬜ | 9 |
+| Interop | Out parameters and several return values from code; latent (async) functions | ⬜ | 9 |
+| Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ⬜ | 9 |
+| Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | 🟡 (graphs in the same file) | 9 |
 | Library | Standard math, string, utility and file nodes, with containers' functions; more of Unreal's (Lerp, Map Range, trigonometry, string and set functions, array functions as new arrays) and everyday utilities (text, maps, time, encoding, UUIDs) | ✅ (array functions return new arrays where Unreal's change theirs) | — |
 | Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace and extensions, not a registry) | 6 |
+| Library | Blueprint Function Libraries usable from graphs in each of several languages; plugins that carry library graphs | 🟡 (one language per library; packages hold node files only) | 9 |
 | Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Rust has no inheritance or interfaces, Go no inheritance) | 6, 8 |
 | Languages | (Beyond Unreal) Workspaces with graphs in several languages: a new graph takes its folder's language, structs and enums can be shared between languages, and another language's code is reached through project functions | ✅ (generated cross-language bindings deferred) | 7 |
 | Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |
