@@ -364,6 +364,30 @@ test('structs and enums in the workspace become types and nodes that graphs impo
   assert.match(text, /Side: Faction = Faction\.LightBlue;/);
 });
 
+// The utility nodes (src/core/utilities.ts) are built in: a workspace with no node files of its own
+// uses them, and their generated code runs.
+test('the utility nodes are built in: a graph uses Slugify with nothing in the workspace', async () => {
+  const graph = workspaceFile('slug.vgraph');
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({
+    schemaVersion: 3, name: 'Slug', kind: 'class', language: 'javascript', variables: [], metadata: {},
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('slug', 'core:string.slugify', { 'pin:text': 'Café au lait!' }), node('p', 'core:console.print')],
+      connections: [
+        { id: 'c1', fromNode: 's', fromPin: 'execOut', toNode: 'p', toPin: 'execIn' },
+        { id: 'c2', fromNode: 'slug', fromPin: 'returnValue', toNode: 'p', toPin: 'value' }
+      ]
+    }]
+  }, null, 2)));
+  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  assert.deepEqual(vscode.languages.getDiagnostics(graph).map((d) => d.message), []);
+  const generated = workspaceFile('slug.vgraph.js');
+  const { execFileSync } = await import('node:child_process');
+  const run = `const { Slug } = await import(${JSON.stringify(generated.toString())}); new Slug().start();`;
+  assert.equal(execFileSync(process.platform === 'win32' ? 'node.exe' : 'node', ['--input-type=module', '-e', run], { encoding: 'utf8' }).trim(), 'caf-au-lait');
+});
+
 // docs/multi-language.md, gap 2: one struct for a TypeScript front end and a Python back end.
 test('a shared struct is generated for each of its languages, and graphs in each use it', async () => {
   const write = (name: string, doc: unknown) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(JSON.stringify(doc, null, 2)));
