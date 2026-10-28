@@ -2,7 +2,7 @@
 // and XML documentation comments (docs/program-structure.md, "C# language pack"). Like the other
 // scanners it parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedParam, isMarked, parseDocText } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -272,7 +272,20 @@ export function scanCSharp(source: string): CSharpScan {
         }
         const close = skipGroup(k);
         const accessible = !modifiers.includes('private') && !modifiers.includes('protected') && !modifiers.includes('file');
-        if (kind !== 'enum' && kind !== 'interface') classMembers(k + 1, close - 1, namespace ? `${namespace}.${name}` : name, accessible, generic);
+        // A class or record (not a struct, whose copies a Set would change) gives its instance members
+        // too (docs/node-authoring.md, gap 2), unless it's static or generic.
+        const instance = (kind === 'class' || (kind === 'record' && !at(j, 'struct'))) && accessible && !generic && !modifiers.includes('static');
+        const header = text(generic ? skipAngles(j + 2) : j + 2, k).replace(/\bwhere\b[\s\S]*$/, '');
+        const baseText = /^\s*(?:\([^)]*\))?\s*:\s*([^,]+)/.exec(header)?.[1].trim();
+        const base = baseText && !/^I[A-Z]/.test(baseText) ? mapCSharpType(baseText) : undefined;
+        const cls: ScannedClass | undefined = instance
+          ? {
+              name: namespace ? `${namespace}.${name}` : name, line: tokens[i].line, doc: parseXmlDoc(tokens[i].doc), type: mapCSharpType(name) ?? { id: `native:${name}` },
+              ...(base?.id.startsWith('native:') ? { base } : {}), ...(modifiers.includes('abstract') ? { abstract: true } : {}), methods: [], properties: []
+            }
+          : undefined;
+        if (kind !== 'enum' && kind !== 'interface') classMembers(k + 1, close - 1, namespace ? `${namespace}.${name}` : name, accessible, generic, cls);
+        if (cls) (result.classes ??= []).push(cls);
         i = close;
         continue;
       }
@@ -286,8 +299,9 @@ export function scanCSharp(source: string): CSharpScan {
     }
   };
 
-  // Members of a class, record or struct: static methods can become nodes.
-  const classMembers = (i: number, end: number, className: string, accessible: boolean, generic: boolean): void => {
+  // Members of a class, record or struct: static methods can become nodes, and a class's (`cls`)
+  // constructors, instance methods, properties and fields.
+  const classMembers = (i: number, end: number, className: string, accessible: boolean, generic: boolean, cls?: ScannedClass): void => {
     while (i < end) {
       if (at(i, '[')) {
         i = skipGroup(i);
@@ -305,7 +319,36 @@ export function scanCSharp(source: string): CSharpScan {
       }
       // A method: return type, name, optional <T>, then (parameters).
       let k = i;
-      while (k < end && !at(k, '(') && !at(k, '{') && !at(k, ';') && !at(k, '=')) k = at(k, '<') ? skipAngles(k) : k + 1;
+      while (k < end && !at(k, '(') && !at(k, '{') && !at(k, ';') && !at(k, '=') && !at(k, '=>')) k = at(k, '<') ? skipAngles(k) : k + 1;
+      const memberDoc = parseXmlDoc(doc);
+      const instanceSkip = (memberName: string, reason: string) => {
+        if (isMarked(memberDoc)) result.skipped.push({ name: memberName, line: tokens[first].line, reason, marked: true, container: className });
+      };
+      const access = modifiers.includes('public') || modifiers.includes('internal');
+      // A property ({ get; set; } or => expression) or field (; or = value) of a class.
+      if (cls && !at(k, '(') && k - i >= 2 && tokens[k - 1].kind === 'name' && !modifiers.includes('static') && !at(i, 'const') && !at(i, 'event')) {
+        const memberName = tokens[k - 1].text.replace(/^@/, '');
+        const type = mapCSharpType(text(i, k - 1));
+        let readonly = modifiers.includes('readonly') || at(k, '=>');
+        if (at(k, '{')) {
+          const accessors = text(k + 1, skipGroup(k) - 1);
+          readonly = !/(^|[;}\s])set\b/.test(accessors) || /\b(private|protected)\s+set\b/.test(accessors);
+        }
+        if (!access) instanceSkip(memberName, 'it isn\'t public or internal, so generated code can\'t use it');
+        else cls.properties.push({ name: memberName, line: tokens[first].line, ...(type ? { type } : {}), readonly, doc: memberDoc });
+        i = skipMember(first);
+        continue;
+      }
+      // A constructor: the class's name, then (parameters).
+      if (cls && at(k, '(') && k === i + 1 && tokens[i].text === className.split('.').pop() && !modifiers.includes('static')) {
+        const close = skipGroup(k);
+        const params = parseParams(k + 1, close - 1);
+        if (!access) instanceSkip(tokens[i].text, 'it isn\'t public or internal, so generated code can\'t call it');
+        else if ('reason' in params) instanceSkip(tokens[i].text, params.reason);
+        else cls.init = { name: tokens[i].text, line: tokens[first].line, params, returns: null, doc: memberDoc };
+        i = skipMember(close);
+        continue;
+      }
       if (!at(k, '(') || k - i < 2) {
         i = skipMember(first);
         continue;
@@ -316,13 +359,25 @@ export function scanCSharp(source: string): CSharpScan {
       const returnText = text(i, nameIndex);
       const close = skipGroup(k);
       const memberEnd = skipMember(close);
+      // An instance method of a class.
+      if (cls && !modifiers.includes('static') && /^[A-Za-z_]\w*$/.test(name) && returnText !== '') {
+        const params = parseParams(k + 1, close - 1);
+        const returns = mapReturn(returnText);
+        if (!access) instanceSkip(name, 'it isn\'t public or internal, so generated code can\'t call it');
+        else if (genericMethod) instanceSkip(name, 'generic methods can\'t be nodes yet');
+        else if (modifiers.includes('async') || /^(Task|ValueTask)\b|^System\.Threading\.Tasks\./.test(returnText)) instanceSkip(name, 'async methods become latent nodes with Phase 4\'s latent actions');
+        else if ('reason' in params) instanceSkip(name, params.reason);
+        else if ('reason' in returns) instanceSkip(name, returns.reason);
+        else cls.methods.push({ name, line: tokens[first].line, params, returns: returns.type, doc: memberDoc });
+        i = memberEnd;
+        continue;
+      }
       if (!modifiers.includes('static') || !/^[A-Za-z_]\w*$/.test(name) || name === className.split('.').pop() || returnText === '') {
         i = memberEnd;
         continue;
       }
       const docComment = parseXmlDoc(doc);
       const skip = (reason: string) => result.skipped.push({ name, line: tokens[first].line, reason, marked: isMarked(docComment), container: className });
-      const access = modifiers.includes('public') || modifiers.includes('internal');
       if (!access || !accessible) skip('it isn\'t public or internal, so generated code can\'t call it');
       else if (generic) skip('methods of generic classes can\'t be nodes yet');
       else if (genericMethod) skip('generic methods can\'t be nodes yet');

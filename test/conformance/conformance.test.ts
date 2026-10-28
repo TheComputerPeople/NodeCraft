@@ -331,6 +331,213 @@ describe('project functions', () => {
   }
 });
 
+// Classes in the project's code (docs/node-authoring.md, gap 2): a constructor, a method, a
+// property's Set and a getter's Get, called through Target pins, and a subclass's object where the
+// base class is expected.
+describe('code classes', () => {
+  const jsClasses = (exports: 'esm' | 'commonjs', typed: boolean): string => [
+    `${exports === 'esm' ? 'export ' : ''}class Counter {`,
+    '  /**',
+    '   * @blueprint',
+    ...(typed ? [] : ['   * @type {number}']),
+    '   */',
+    `  count${typed ? ': number' : ''} = 0;`,
+    '  /**',
+    '   * @blueprint',
+    ...(typed ? [] : ['   * @param {number} start']),
+    '   */',
+    `  constructor(start${typed ? ': number' : ''}) {`,
+    '    this.count = start;',
+    '  }',
+    '  /**',
+    '   * @blueprint',
+    ...(typed ? [] : ['   * @param {number} amount', '   * @returns {number}']),
+    '   */',
+    `  add(amount${typed ? ': number): number' : ')'} {`,
+    '    this.count += amount;',
+    '    return this.count;',
+    '  }',
+    '  /**',
+    '   * @blueprint pure',
+    ...(typed ? [] : ['   * @returns {number}']),
+    '   */',
+    `  get doubled()${typed ? ': number' : ''} {`,
+    '    return this.count * 2;',
+    '  }',
+    '}',
+    `${exports === 'esm' ? 'export ' : ''}class BigCounter extends Counter {`,
+    '  /**',
+    '   * @blueprint',
+    ...(typed ? [] : ['   * @param {number} start']),
+    '   */',
+    `  constructor(start${typed ? ': number' : ''}) {`,
+    '    super(start * 10);',
+    '  }',
+    '}',
+    ...(exports === 'commonjs' ? ['module.exports = { Counter, BigCounter };'] : []),
+    ''
+  ].join('\n');
+  const MODULES: Record<string, { path: string; text: string }> = {
+    typescript: { path: 'lib/counter.ts', text: jsClasses('esm', true) },
+    'javascript-esm': { path: 'lib/counter.mjs', text: jsClasses('esm', false) },
+    'javascript-commonjs': { path: 'lib/counter.cjs', text: jsClasses('commonjs', false) },
+    python: {
+      path: 'lib/game/counter.py',
+      text: [
+        'class Counter:',
+        '    count: float = 0',
+        '    """@blueprint"""',
+        '',
+        '    def __init__(self, start: float) -> None:',
+        '        """@blueprint"""',
+        '        self.count = start',
+        '',
+        '    def add(self, amount: float) -> float:',
+        '        """@blueprint"""',
+        '        self.count += amount',
+        '        return self.count',
+        '',
+        '    @property',
+        '    def doubled(self) -> float:',
+        '        """@blueprint pure"""',
+        '        return self.count * 2',
+        '',
+        '',
+        'class BigCounter(Counter):',
+        '    def __init__(self, start: float) -> None:',
+        '        """@blueprint"""',
+        '        super().__init__(start * 10)',
+        ''
+      ].join('\n')
+    },
+    csharp: {
+      path: 'lib/Counter.cs',
+      text: [
+        'namespace Game;',
+        '',
+        'public class Counter',
+        '{',
+        '    /// @blueprint',
+        '    public double Count { get; set; }',
+        '',
+        '    /// @blueprint',
+        '    public Counter(double start) { Count = start; }',
+        '',
+        '    /// @blueprint',
+        '    public double Add(double amount) { Count += amount; return Count; }',
+        '',
+        '    /// @blueprint',
+        '    public double Doubled => Count * 2;',
+        '}',
+        '',
+        'public class BigCounter : Counter',
+        '{',
+        '    /// @blueprint',
+        '    public BigCounter(double start) : base(start * 10) { }',
+        '}',
+        ''
+      ].join('\n')
+    }
+  };
+
+  // Start → c = Construct Counter(5) → Print(c.Add(3)) → c.Count = 20 → Print(c.Doubled) →
+  // b = Construct BigCounter(1) → Print(Add(Target b, 1)), with Add's Target a Counter.
+  function project(language: string, key: string): { registry: NodeRegistry; document: GraphDocument } {
+    const importer = languages.get(language)!.importer!;
+    const module = language === 'python' ? 'game.counter' : undefined;
+    const defs = exposeFunctions(importer.scan!(MODULES[key].text), { language, path: MODULES[key].path, module, exposeAll: false }).definitions;
+    const find = (suffix: string) => {
+      // "#Counter:new", or "#Game.Counter:new" in C# (with its namespace).
+      const found = defs.find((d) => d.type.toLowerCase().endsWith(suffix.toLowerCase()) || d.type.toLowerCase().endsWith(`.${suffix.slice(1)}`.toLowerCase()));
+      assert.ok(found, `no ${suffix} in ${defs.map((d) => d.type).join(', ')}`);
+      return found;
+    };
+    const r = registry();
+    r.registerMany(defs);
+    const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+    const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin });
+    const document: GraphDocument = {
+      schemaVersion: 3, name: 'Counting', kind: 'class', language, variables: [],
+      graphs: [{
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [
+          n('s', 'core:event.start'), n('c', find('#Counter:new').type, { 'pin:start': 5 }), n('add', find('#Counter:add').type, { 'pin:amount': 3 }), n('p1', 'core:console.print'),
+          n('set', find('#Counter:set:count').type, { 'pin:value': 20 }), n('get', find('#Counter:get:doubled').type), n('p2', 'core:console.print'),
+          n('b', find('#BigCounter:new').type, { 'pin:start': 1 }), n('add2', find('#Counter:add').type, { 'pin:amount': 1 }), n('p3', 'core:console.print')
+        ],
+        connections: [
+          w('s', 'execOut', 'c', 'execIn'), w('c', 'execOut', 'add', 'execIn'), w('add', 'execOut', 'p1', 'execIn'), w('p1', 'execOut', 'set', 'execIn'),
+          w('set', 'execOut', 'p2', 'execIn'), w('p2', 'execOut', 'b', 'execIn'), w('b', 'execOut', 'add2', 'execIn'), w('add2', 'execOut', 'p3', 'execIn'),
+          w('c', 'returnValue', 'add', 'target'), w('add', 'returnValue', 'p1', 'value'), w('c', 'returnValue', 'set', 'target'),
+          w('c', 'returnValue', 'get', 'target'), w('get', 'returnValue', 'p2', 'value'), w('b', 'returnValue', 'add2', 'target'), w('add2', 'returnValue', 'p3', 'value')
+        ]
+      }]
+    };
+    return { registry: r, document };
+  }
+
+  function build(language: string, key: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; importRoots?: string[] } {
+    const { registry: r, document } = project(language, key);
+    const dir = path.join(workDir, `classes-${key}`);
+    const module = MODULES[key];
+    fs.mkdirSync(path.join(dir, path.dirname(module.path)), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
+    fs.writeFileSync(path.join(dir, module.path), module.text);
+    if (language === 'python') fs.writeFileSync(path.join(dir, path.dirname(module.path), '__init__.py'), '');
+    const result = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'counting.vgraph', outputDir: 'graphs', namespace: 'Game', ...generate } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'graphs', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    return { file, className: result.output!.className, dir, importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)) };
+  }
+
+  test('a subclass object wires where its base class is expected, and nothing else does', () => {
+    const { registry: r, document } = project('typescript', 'typescript');
+    assert.deepEqual(compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'counting.vgraph' } }).diagnostics, []);
+    // Add's result (a number) isn't a Counter.
+    document.graphs[0].connections.push({ id: 'bad', fromNode: 'add', fromPin: 'returnValue', toNode: 'get', toPin: 'target' });
+    document.graphs[0].connections = document.graphs[0].connections.filter((c) => c.id === 'bad' || !(c.toNode === 'get' && c.toPin === 'target'));
+    assert.ok(compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'counting.vgraph' } }).diagnostics.some((d) => d.severity === 'error'));
+  });
+
+  for (const target of [
+    { label: 'TypeScript', language: 'typescript', key: 'typescript' },
+    { label: 'JavaScript (ES modules)', language: 'javascript', key: 'javascript-esm', moduleFormat: 'esm' as const },
+    { label: 'JavaScript (CommonJS)', language: 'javascript', key: 'javascript-commonjs', moduleFormat: 'commonjs' as const },
+    { label: 'Python', language: 'python', key: 'python' },
+    { label: 'C#', language: 'csharp', key: 'csharp' }
+  ]) {
+    test(`${target.label} constructs them and calls their members`, async (t) => {
+      const { file, className, dir, importRoots } = build(target.language, target.key, { moduleFormat: target.moduleFormat });
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? [path.join(dir, MODULES[target.key].path)] : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), ['8', '40', '11'], `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  for (const { language, key, flags } of [
+    { language: 'typescript', key: 'typescript', flags: { allowImportingTsExtensions: true } },
+    { language: 'javascript', key: 'javascript-esm', flags: { allowJs: true, checkJs: true } }
+  ]) {
+    test(`${language} using them type-checks under --strict`, () => {
+      const { file, dir } = build(`${language}`, key);
+      fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], ...flags },
+        files: [path.relative(dir, file)]
+      }));
+      const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+      const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    });
+  }
+});
+
 // A function library made of graphs (docs/program-structure.md, "Functions"), called from a graph
 // in another folder: its generated file is imported like project code, and Simulate runs the
 // library's graphs.

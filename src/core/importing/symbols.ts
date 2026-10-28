@@ -1,6 +1,6 @@
 // Functions read from project code, and how they become nodes (docs/code-as-nodes.md). Each language
 // pack's scanner produces a ModuleScan; exposeFunctions turns it into node definitions.
-import { NodeDefinition, PinDefinition } from '../model';
+import { CodeMember, FunctionImplementation, NodeDefinition, PinDefinition } from '../model';
 import { TypeRef } from '../types';
 
 export interface DocComment {
@@ -40,9 +40,40 @@ export interface SkippedFunction {
   container?: string;
 }
 
+// A class read from project code: its members marked @blueprint become nodes, as Unreal's
+// BlueprintCallable member functions and BlueprintReadWrite properties are (docs/node-authoring.md,
+// gap 2).
+export interface ScannedClass {
+  // The name other modules import it by (C#: with its namespace).
+  name: string;
+  line: number;
+  doc: DocComment;
+  // The type its objects have on pins ("native:Player"), and the type of the class it extends.
+  type: TypeRef;
+  base?: TypeRef;
+  // Its declared constructor. A class without one is constructed with no arguments, and the
+  // class's own marker exposes that.
+  init?: ScannedFunction;
+  // An abstract class can't be constructed.
+  abstract?: boolean;
+  methods: ScannedFunction[];
+  properties: ScannedProperty[];
+}
+
+export interface ScannedProperty {
+  name: string;
+  line: number;
+  // Absent: any value (no annotation).
+  type?: TypeRef;
+  // Read-only in the code (readonly, a getter without a setter, …): no Set node.
+  readonly: boolean;
+  doc: DocComment;
+}
+
 export interface ModuleScan {
   functions: ScannedFunction[];
   skipped: SkippedFunction[];
+  classes?: ScannedClass[];
 }
 
 export interface ExposeOptions {
@@ -75,14 +106,16 @@ export function functionNodeType(language: string, path: string, name: string): 
 
 export function exposeFunctions(scan: ModuleScan, options: ExposeOptions): ExposedFunctions {
   // With exposeAll, names starting with "_" stay private unless marked.
-  const definitions = scan.functions
-    .filter((fn) => isMarked(fn.doc) || (options.exposeAll && !fn.name.startsWith('_')))
-    .map((fn) => definitionFor(fn, options));
+  const definitions = [
+    ...scan.functions.filter((fn) => isMarked(fn.doc) || (options.exposeAll && !fn.name.startsWith('_'))).map((fn) => definitionFor(fn, options)),
+    // Class members only when marked: exposing every member would flood the palette.
+    ...(scan.classes ?? []).flatMap((cls) => classDefinitions(cls, options))
+  ];
   const skipped = scan.skipped.filter((s) => s.marked || (options.exposeAll && !s.name.startsWith('_')));
   return { definitions, skipped };
 }
 
-function definitionFor(fn: ScannedFunction, options: ExposeOptions): NodeDefinition {
+function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCategory = `Project / ${fileStem(options.path)}`): NodeDefinition {
   const tag = (name: string): string | undefined => fn.doc.tags.find((t) => t.name === name)?.text.trim();
   const pure = /^pure\b/i.test(tag(MARKER) ?? '');
   const category = tag('category');
@@ -101,7 +134,7 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions): NodeDefinit
     version: 1,
     displayName: tag('displayName') || words(fn.name),
     // Unreal nests categories with "|"; the palette shows them as "A / B".
-    category: category ? category.split('|').map((c) => c.trim()).filter(Boolean).join(' / ') : `Project / ${fileStem(options.path)}`,
+    category: category ? category.split('|').map((c) => c.trim()).filter(Boolean).join(' / ') : defaultCategory,
     ...(fn.doc.description ? { description: fn.doc.description } : {}),
     inputs: [...exec('input'), ...inputs],
     outputs: [...exec('output'), ...outputs],
@@ -109,6 +142,54 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions): NodeDefinit
     ...(keywords?.length ? { keywords } : {})
   };
 }
+
+// The nodes of a class's marked members: Construct from its constructor, a node per method with a
+// Target pin, and Get and Set for each property.
+function classDefinitions(cls: ScannedClass, options: ExposeOptions): NodeDefinition[] {
+  const simple = cls.name.slice(cls.name.lastIndexOf('.') + 1);
+  const member = (kind: CodeMember['kind'], name?: string): CodeMember => ({ kind, ...(name ? { name } : {}), type: cls.type.id, ...(cls.base ? { base: cls.base.id } : {}) });
+  const target: PinDefinition = { id: 'target', name: 'Target', kind: 'data', direction: 'input', type: cls.type };
+  const implementation = (kind: CodeMember['kind'], name?: string): FunctionImplementation => ({
+    kind: 'function', language: options.language, path: options.path, name: cls.name, ...(options.module ? { module: options.module } : {}), member: member(kind, name)
+  });
+  const type = (suffix: string) => functionNodeType(options.language, options.path, `${cls.name}:${suffix}`);
+  const definitions: NodeDefinition[] = [];
+  const init = cls.init;
+  if (!cls.abstract && (init ? isMarked(init.doc) : isMarked(cls.doc))) {
+    const base = definitionFor({ ...(init ?? { line: cls.line, params: [], doc: cls.doc }), name: simple, returns: cls.type }, options, `Project / ${simple}`);
+    definitions.push({
+      ...base, type: type('new'), displayName: `Construct ${simple}`,
+      // A constructor runs where execution reaches it, as Construct does for graph classes.
+      inputs: [EXEC_IN, ...base.inputs.filter((p) => p.kind === 'data')], outputs: [EXEC_OUT, ...base.outputs.filter((p) => p.kind === 'data')],
+      implementation: implementation('construct')
+    });
+  }
+  for (const method of cls.methods.filter((m) => isMarked(m.doc))) {
+    const base = definitionFor(method, options, `Project / ${simple}`);
+    const exec = base.inputs.filter((p) => p.kind === 'exec');
+    definitions.push({ ...base, type: type(method.name), inputs: [...exec, target, ...base.inputs.filter((p) => p.kind === 'data')], implementation: implementation('method', method.name) });
+  }
+  for (const property of cls.properties.filter((p) => isMarked(p.doc))) {
+    const tag = (name: string): string | undefined => property.doc.tags.find((t) => t.name === name)?.text.trim();
+    const title = tag('displayName') || words(property.name);
+    const category = tag('category');
+    const shared = {
+      version: 1,
+      category: category ? category.split('|').map((c) => c.trim()).filter(Boolean).join(' / ') : `Project / ${simple}`,
+      ...(property.doc.description ? { description: property.doc.description } : {})
+    };
+    const pin = (id: string, direction: PinDefinition['direction']): PinDefinition => ({ id, name: title, kind: 'data', direction, ...(property.type ? { type: property.type } : {}) });
+    definitions.push({ ...shared, type: type(`get:${property.name}`), displayName: `Get ${title}`, inputs: [target], outputs: [pin('returnValue', 'output')], implementation: implementation('get', property.name) });
+    // Unreal's BlueprintReadOnly: "@blueprint readonly", or a property the code can't write.
+    if (!property.readonly && !/^readonly\b/i.test(tag(MARKER) ?? '')) {
+      definitions.push({ ...shared, type: type(`set:${property.name}`), displayName: `Set ${title}`, inputs: [EXEC_IN, target, pin('value', 'input')], outputs: [EXEC_OUT], implementation: implementation('set', property.name) });
+    }
+  }
+  return definitions;
+}
+
+const EXEC_IN: PinDefinition = { id: 'execIn', name: '', kind: 'exec', direction: 'input' };
+const EXEC_OUT: PinDefinition = { id: 'execOut', name: '', kind: 'exec', direction: 'output' };
 
 // What generated code calls the function through. A C# method's container is its class (with its
 // namespace); a Rust function's is the inline modules inside its file's module.

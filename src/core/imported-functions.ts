@@ -142,7 +142,9 @@ export function adoptAliasedTypes(doc: GraphDocument, lookup: (type: string) => 
 export function describeFunction(type: string, stored?: NodeDefinition): { name: string; path: string } {
   // A library function: its name in the graph, in its .vgraph file.
   if (stored?.implementation?.kind === 'function' && stored.implementation.source) return { name: stored.displayName, path: stored.implementation.source.document };
-  if (stored?.implementation?.kind === 'function') return { name: stored.implementation.name, path: stored.implementation.path };
+  // A member of a class in the code: Class.member.
+  const member = stored?.implementation?.kind === 'function' ? stored.implementation.member : undefined;
+  if (stored?.implementation?.kind === 'function') return { name: member ? `${stored.implementation.name}.${member.name ?? 'constructor'}` : stored.implementation.name, path: stored.implementation.path };
   const hash = type.lastIndexOf('#');
   const path = type.startsWith('lib:') ? type.slice(4, hash) : type.slice(type.indexOf(':', 3) + 1, hash);
   return { name: type.slice(hash + 1), path };

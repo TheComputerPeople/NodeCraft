@@ -298,13 +298,33 @@ export function canAccess(access: Access | undefined, owner: string, from: Class
 
 // The class hierarchy test for types.ts: whether an object of class `from` is a `to` (the class, an
 // ancestor, or an interface it or an ancestor implements).
-export function subclassTest(definition: (type: string) => NodeDefinition | undefined, own?: ClassInfo): (from: string, to: string) => boolean {
+export function subclassTest(definition: (type: string) => NodeDefinition | undefined, own?: ClassInfo, codeBases?: ReadonlyMap<string, string>): (from: string, to: string) => boolean {
   return (from, to) => {
+    // A class from the project's code: up the bases its member nodes record (codeClassBases).
+    if (from.startsWith('native:')) {
+      const seen = new Set<string>();
+      for (let base = codeBases?.get(from); base && !seen.has(base); base = codeBases?.get(base)) {
+        if (base === to) return true;
+        seen.add(base);
+      }
+      return false;
+    }
     const type = own?.id === from ? own : classById(from, definition);
     if (!type) return false;
     const chain = [type, ...ancestors(type, definition)];
     return chain.some((c) => c.id === to || c.interfaces?.includes(to));
   };
+}
+
+// The class each class from the project's code extends, by type id, as its member nodes record it
+// (docs/node-authoring.md, gap 2).
+export function codeClassBases(definitions: Iterable<NodeDefinition>): Map<string, string> {
+  const bases = new Map<string, string>();
+  for (const d of definitions) {
+    const member = d.implementation?.kind === 'function' ? d.implementation.member : undefined;
+    if (member?.base) bases.set(member.type, member.base);
+  }
+  return bases;
 }
 
 // ---- Values (Simulate) --------------------------------------------------------------------------

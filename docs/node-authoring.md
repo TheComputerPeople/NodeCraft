@@ -60,6 +60,14 @@ Reviewed 2026-10-28, after the built-in utility library grew to 94 nodes. Each g
 | Ruby | public instance method | `initialize` | `attr_accessor` / `attr_reader` |
 | PHP | public instance method | `__construct` | public property |
 
+**Built (step 4): TypeScript, JavaScript, Python and C#.**
+
+- **Scanning.** Each scanner reads classes as well as functions (`ScannedClass` in src/core/importing/symbols.ts): the constructor, instance methods and properties, each with its own documentation, and the class it extends. A Python attribute is documented by the string after it, as Sphinx reads it. C# structs are left out, since Set would change a copy.
+- **Nodes.** `exposeFunctions` turns marked members into nodes typed `fn:<language>:<path>#<Class>:new`, `:<method>`, `:get:<property>` and `:set:<property>`. Their implementation is the class's, with a `member` saying which (`CodeMember` in src/core/model.ts).
+- **Generated code.** Each generator imports the class once, however many of its members a graph uses (`importKey` in src/core/compiler/ir.ts).
+- **Subclasses.** A subclass's objects connect to its base class's Target pins: `codeClassBases` in src/core/objects.ts collects each class's base from its member nodes.
+- **Tests.** A conformance test builds a `Counter` and a `BigCounter` subclass in each language and checks the output. The TypeScript and JavaScript versions also type-check under `--strict`.
+
 Classes from code as **parents** of graph classes (Unreal's Blueprint subclassing a C++ class, with BlueprintImplementableEvent) stay deferred. They need generated subclasses of user code in every language, which is a phase of its own.
 
 ## Gap 3: code functions have one output

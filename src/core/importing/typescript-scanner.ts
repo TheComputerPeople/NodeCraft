@@ -2,7 +2,7 @@
 // defaults and JSDoc (docs/code-as-nodes.md, "How declarations are read"). It parses only top-level
 // declarations and skips everything else by matching brackets, so it needs no compiler.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, ScannedProperty, SkippedFunction, isMarked, parseDocText } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'template' | 'regex' | 'punct';
 
@@ -150,8 +150,19 @@ interface Signature {
   jsdoc: DocComment;
 }
 
+// Modifiers before a class member's name.
+const MEMBER_MODIFIERS = new Set(['public', 'private', 'protected', 'static', 'readonly', 'abstract', 'override', 'declare', 'async', 'accessor', 'get', 'set']);
+
+// A class as declared, before we know whether it's exported.
+interface LocalClass {
+  scan: ScannedClass;
+  // Its marked members that can't be nodes, and why.
+  skipped: SkippedFunction[];
+}
+
 class DeclarationParser {
   private readonly locals = new Map<string, LocalFunction>();
+  private readonly classes = new Map<string, LocalClass>();
   // Exported name → local function name, from export lists and module.exports.
   private readonly exportedLocals = new Map<string, string>();
   private readonly result: ModuleScan = { functions: [], skipped: [] };
@@ -165,6 +176,19 @@ class DeclarationParser {
     for (const [exported, local] of this.exportedLocals) {
       const fn = this.locals.get(local);
       if (fn && exported !== 'default') this.add({ ...fn, name: exported });
+      const cls = this.classes.get(local);
+      if (cls && exported !== 'default') {
+        (this.result.classes ??= []).push({ ...cls.scan, name: exported });
+        this.result.skipped.push(...cls.skipped);
+      }
+    }
+    // A class that isn't exported can't be imported: its marked members say so.
+    for (const [name, cls] of this.classes) {
+      if (exportedNames.has(name)) continue;
+      const members: { name: string; line: number; doc: DocComment }[] = [...(cls.scan.init ? [cls.scan.init] : []), ...cls.scan.methods, ...cls.scan.properties];
+      for (const m of members.filter((member) => isMarked(member.doc))) {
+        this.result.skipped.push({ name: `${name}.${m.name}`, line: m.line, reason: `its class ${name} isn't exported, so generated code can't import it`, marked: true });
+      }
     }
     // A marked function that isn't exported can't be imported by generated code.
     for (const fn of this.locals.values()) {
@@ -192,7 +216,7 @@ class DeclarationParser {
       const declared = this.declaration(i + 1, doc, true);
       return declared ?? i + 1;
     }
-    if (t.text === 'function' || t.text === 'async' || t.text === 'const' || t.text === 'let' || t.text === 'var') {
+    if (t.text === 'function' || t.text === 'async' || t.text === 'const' || t.text === 'let' || t.text === 'var' || t.text === 'class' || t.text === 'abstract') {
       return this.declaration(i, doc, false) ?? i + 1;
     }
     if (this.javascript && (t.text === 'module' || t.text === 'exports')) return this.commonJsExport(i, doc);
@@ -203,6 +227,7 @@ class DeclarationParser {
   private declaration(i: number, statementDoc: string | undefined, exported: boolean): number | undefined {
     const doc = statementDoc ?? this.tokens[i]?.doc;
     if (this.at(i, 'declare')) return this.skipStatement(i, '');
+    if (this.at(i, 'class') || (this.at(i, 'abstract') && this.at(i + 1, 'class'))) return this.classDeclaration(i, doc, exported);
     const isAsync = this.at(i, 'async');
     const k = isAsync ? i + 1 : i;
     if (this.at(k, 'function')) {
@@ -263,6 +288,126 @@ class DeclarationParser {
     return undefined;
   }
 
+  // `class Name extends Base { members }` (docs/node-authoring.md, gap 2): its public constructor,
+  // instance methods and properties, for their markers to make nodes of.
+  private classDeclaration(i: number, doc: string | undefined, exported: boolean): number {
+    const abstract = this.at(i, 'abstract');
+    const k = abstract ? i + 1 : i;
+    const nameToken = this.tokens[k + 1];
+    if (nameToken?.kind !== 'name') return k + 1;
+    let j = k + 2;
+    if (this.at(j, '<')) j = this.skipAngles(j);
+    let base: TypeRef | undefined;
+    if (this.at(j, 'extends')) {
+      const end = this.skipType(j + 1);
+      base = mapTypeText(this.text(j + 1, end).replace(/<[\s\S]*$/, ''));
+      j = end;
+    }
+    while (j < this.tokens.length && !this.at(j, '{')) j++;
+    const close = this.skipGroup(j);
+    const name = nameToken.text;
+    const scan: ScannedClass = {
+      name, line: this.tokens[i].line, doc: parseJsDoc(doc), type: mapTypeText(name) ?? { id: `native:${name}` },
+      ...(base && base.id.startsWith('native:') ? { base } : {}), ...(abstract ? { abstract } : {}), methods: [], properties: []
+    };
+    const cls: LocalClass = { scan, skipped: [] };
+    this.classBody(j + 1, close - 1, cls);
+    this.classes.set(name, cls);
+    if (exported) this.exportedLocals.set(name, name);
+    return close;
+  }
+
+  // The members of a class body, from `start` to the closing brace at `end`.
+  private classBody(start: number, end: number, cls: LocalClass): void {
+    const getters = new Map<string, ScannedProperty>();
+    const setters = new Set<string>();
+    let m = start;
+    while (m < end) {
+      if (this.at(m, ';')) {
+        m++;
+        continue;
+      }
+      const first = this.tokens[m];
+      const jsdoc = parseJsDoc(first.doc);
+      const modifiers = new Set<string>();
+      let p = m;
+      // `get()` is a method named get, not an accessor: a modifier is followed by the member's name.
+      while (this.tokens[p]?.kind === 'name' && MEMBER_MODIFIERS.has(this.tokens[p].text) && !['(', '=', ':', ';', '?', '!', '<', '}'].includes(this.tokens[p + 1]?.text ?? '')) {
+        modifiers.add(this.tokens[p].text);
+        p++;
+      }
+      const generator = this.at(p, '*');
+      if (generator) p++;
+      const hidden = modifiers.has('private') || modifiers.has('protected') || this.at(p, '#');
+      if (this.at(p, '#')) p++;
+      const nameToken = this.tokens[p];
+      if (!nameToken || nameToken.kind !== 'name' || p >= end) {
+        // An index signature, a computed name or a static block: skipped.
+        m = this.at(p, '{') ? this.skipGroup(p) : this.skipMember(p + 1, end);
+        continue;
+      }
+      const name = nameToken.text;
+      const line = first.line;
+      const skip = (reason: string): void => {
+        if (isMarked(jsdoc)) cls.skipped.push({ name: `${cls.scan.name}.${name}`, line, reason, marked: true });
+      };
+      if (this.at(p + 1, '(') || this.at(p + 1, '<')) {
+        const parsed = this.signature(p + 1, first.doc);
+        m = Math.max(parsed.end, p + 2);
+        // An overload or abstract method has no body; the implementation (if any) follows.
+        if (parsed.overload) continue;
+        const signature = parsed.signature;
+        if (hidden) skip("it isn't public");
+        else if (modifiers.has('static')) skip('static methods of a class have no object; make it a module function instead');
+        else if (modifiers.has('async')) skip(ASYNC_REASON);
+        else if (generator) skip("generator functions can't be nodes");
+        else if ('reason' in signature) skip(signature.reason || "its parameters couldn't be read");
+        else if (modifiers.has('get')) getters.set(name, { name, line, ...(signature.returns ? { type: signature.returns } : {}), readonly: true, doc: jsdoc });
+        else if (modifiers.has('set')) setters.add(name);
+        else if (name === 'constructor') cls.scan.init = { name, line, params: signature.params, returns: null, doc: jsdoc };
+        else cls.scan.methods.push({ name, line, params: signature.params, returns: signature.returns, doc: jsdoc });
+        continue;
+      }
+      // A field: `name?: Type = value;`.
+      let q = p + 1;
+      if (this.at(q, '?') || this.at(q, '!')) q++;
+      let type: TypeRef | undefined;
+      if (this.at(q, ':')) {
+        const typeEnd = this.skipType(q + 1);
+        type = mapTypeText(this.text(q + 1, typeEnd));
+        q = typeEnd;
+      } else {
+        const tag = jsdoc.tags.find((t) => t.name === 'type');
+        const match = tag && /^\{(.+?)\}/.exec(tag.text);
+        type = match ? mapJsDocType(match[1]) : undefined;
+      }
+      m = this.skipMember(q, end);
+      if (hidden) skip("it isn't public");
+      else if (modifiers.has('static')) skip("static fields of a class have no object; they can't be nodes yet");
+      else cls.scan.properties.push({ name, line, ...(type ? { type } : {}), readonly: modifiers.has('readonly'), doc: jsdoc });
+    }
+    // Accessors: a getter is a property, writable when it has a setter too.
+    for (const [name, getter] of getters) cls.scan.properties.push({ ...getter, readonly: !setters.has(name) });
+  }
+
+  // From `i`, past the rest of a class member: an initializer, to its ";" or the end of its line.
+  private skipMember(i: number, end: number): number {
+    const continues = ['=', '.', '?.', '+', '-', '*', '/', '|', '&', '?', ':', '??', '||', '&&', ','];
+    let j = i;
+    while (j < end) {
+      const t = this.tokens[j];
+      if (t.text === ';' && t.kind === 'punct') return j + 1;
+      // Without semicolons, a member ends where a new line starts another.
+      if (j > i && t.line > this.tokens[j - 1].line && !continues.includes(this.tokens[j - 1].text) && !['.', '?.', ')', ']'].includes(t.text)) return j;
+      if (t.kind === 'punct' && OPEN[t.text]) {
+        j = this.skipGroup(j);
+        continue;
+      }
+      j++;
+    }
+    return end;
+  }
+
   // Reads `<T>(params): Type {body}` or `(params): Type =>`, starting at `<` or `(`.
   private signature(i: number, doc: string | undefined, arrow = false): { signature: Signature | { reason: string }; end: number; overload?: boolean; arrow?: boolean } {
     const jsdoc = parseJsDoc(doc);
@@ -297,8 +442,11 @@ class DeclarationParser {
 
   private params(start: number, end: number, jsdoc: DocComment): ScannedParam[] | { reason: string } {
     const params: ScannedParam[] = [];
-    for (const [from, to] of this.splitCommas(start, end)) {
-      if (from >= to) continue;
+    for (const [all, to] of this.splitCommas(start, end)) {
+      if (all >= to) continue;
+      // A constructor's parameter property (`public health: number`): the modifiers aren't the name.
+      let from = all;
+      while (from + 1 < to && ['public', 'private', 'protected', 'readonly', 'override'].includes(this.tokens[from].text) && this.tokens[from + 1].kind === 'name') from++;
       const first = this.tokens[from];
       if (first.text === '...') return { reason: 'rest parameters can\'t be pins' };
       if (first.text === '{' || first.text === '[') return { reason: 'destructured parameters can\'t be pins' };

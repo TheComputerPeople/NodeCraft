@@ -1,6 +1,7 @@
 // Visual IR: a language-neutral program produced from a graph document. Language packs turn it into
 // source code. Names here are raw (taken from graph ids); each generator makes them legal and
 // unique in its language.
+import type { CodeMember } from '../model';
 import { TypeRef } from '../types';
 import type { ClassMemberSpec } from './names';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
@@ -191,6 +192,15 @@ export interface IrImport {
   outputs?: { id: string; name: string; type?: TypeRef }[];
   // A struct or enum the program uses (`id` is its type id), imported from its generated file.
   userType?: UserType;
+  // A member of a class in the project's code: `name` is the class, and the first param the Target
+  // (but not for construct).
+  member?: CodeMember;
+}
+
+// Imports of one name from one module share one local name (a class's member nodes all import
+// the class).
+export function importKey(i: IrImport): string {
+  return `${i.path}\u0000${i.module ?? ''}\u0000${i.name}`;
 }
 
 // The type a structure or enumeration document declares, with each field's initial value.

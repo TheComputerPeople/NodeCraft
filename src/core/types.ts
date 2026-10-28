@@ -64,7 +64,8 @@ export function canConnect(from: TypeRef | undefined, to: TypeRef | undefined): 
 }
 
 // The workspace's class hierarchy (src/core/objects.ts): an object of a class connects where its
-// parent class is expected. Set by whoever knows the classes (the compiler, the editor).
+// parent class is expected, for graph classes and classes in the project's code. Set by whoever
+// knows the classes (the compiler, the editor).
 let isSubclass: ((from: string, to: string) => boolean) | undefined;
 
 export function setClassHierarchy(test: ((from: string, to: string) => boolean) | undefined): void {
@@ -74,6 +75,8 @@ export function setClassHierarchy(test: ((from: string, to: string) => boolean) 
 function elementsConnect(from: string, to: string): boolean {
   if (from === to || from.startsWith('wildcard') || to.startsWith('wildcard')) return true;
   if (from.startsWith('object:') && (to.startsWith('object:') || to.startsWith('interface:'))) return !!isSubclass?.(from, to);
+  // A class from the project's code: its objects connect where a class it extends is expected.
+  if (from.startsWith('native:') && to.startsWith('native:')) return !!isSubclass?.(from, to);
   // Numeric pins connect both ways until Phase 2 adds Unreal-style conversion nodes.
   return (from === 'int' && to === 'float') || (from === 'float' && to === 'int');
 }

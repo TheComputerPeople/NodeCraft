@@ -97,6 +97,20 @@ export interface FunctionImplementation {
   source?: { document: string; graph: string };
   // A library generated for several languages: the function in each of its other languages.
   variants?: Record<string, FunctionVariant>;
+  // A member of a class in the project's code (docs/node-authoring.md, gap 2): `name` is the class
+  // other code imports, and generated code constructs it, or calls or reads or writes the member on
+  // the Target pin's object.
+  member?: CodeMember;
+}
+
+export interface CodeMember {
+  kind: 'construct' | 'method' | 'get' | 'set';
+  // The method's or property's name in the code (absent for construct).
+  name?: string;
+  // The class's type ("native:Warrior"), and the type of the class it extends, so an object of it
+  // wires where the base class is expected.
+  type: string;
+  base?: string;
 }
 
 // A library function as another language's generated file has it.

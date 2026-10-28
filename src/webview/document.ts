@@ -9,7 +9,7 @@ import { libraryChange, libraryChangeMessage, syncLibraryVersions } from '../cor
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, UNBIND_ALL, UNBIND_EVENT, customEvents, documentDispatchers, eventName } from '../core/events';
-import { INTERFACE_CALL, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, PARENT_START, ancestors, canAccess, classTypeId, declaredClass, implementedInterfaces, interfaceById, subclassTest } from '../core/objects';
+import { INTERFACE_CALL, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, PARENT_START, ancestors, canAccess, classTypeId, declaredClass, implementedInterfaces, interfaceById, subclassTest, codeClassBases } from '../core/objects';
 import { setClassHierarchy } from '../core/types';
 import { listUserTypes } from '../core/user-types';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
@@ -183,7 +183,7 @@ export function setDefinitions(definitions: NodeDefinition[]): void {
 // An object of a subclass wires where its parent class is expected (src/core/objects.ts).
 export function updateClassHierarchy(): void {
   const own = state.document ? declaredClass(state.document) : undefined;
-  setClassHierarchy(subclassTest((type) => state.defByType.get(type), own));
+  setClassHierarchy(subclassTest((type) => state.defByType.get(type), own, codeClassBases(state.definitions)));
 }
 
 // The functions of the interfaces the document's class implements (with its ancestors').

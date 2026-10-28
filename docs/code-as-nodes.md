@@ -41,7 +41,7 @@ The setting `blueprintVisualScripting.exposeAllFunctions` exposes every exported
 
 ## What becomes a node
 
-- **Which functions:** exported top-level function declarations, and exported `const` arrow functions or function expressions, in TypeScript and JavaScript. Top-level `def` in Python. Methods and classes arrive with Phase 4's classes.
+- **Which functions:** exported top-level function declarations, and exported `const` arrow functions or function expressions, in TypeScript and JavaScript. Top-level `def` in Python. Members of classes: see [Classes](#classes).
 - **Pins:** each parameter becomes an input pin, named in words like the title. A literal default value (number, string, boolean) becomes the pin's default. The return value becomes an output pin named "Return Value", as in Unreal; a function returning `void` or `None` has none.
 - **Types** map to canonical types ([semantics.md](semantics.md), "Values"):
 
@@ -64,9 +64,29 @@ The setting `blueprintVisualScripting.exposeAllFunctions` exposes every exported
 
 The roadmap planned to read TypeScript with the TypeScript compiler API and Python with its `ast` module. Neither fits: TypeScript 7's compiler API is unstable and runs a native binary, and `ast` means running a Python interpreter from the workspace, which Restricted Mode must not do. Instead, each language pack has a small declaration scanner in `src/core`, written in TypeScript. It reads only what a node needs (names, parameters, annotations, defaults and the documentation comment) and skips everything else by matching brackets. The tests check its results against the real tools: generated code that calls the imported functions must type-check under `tsc --strict` and run under Node.js and Python.
 
+## Classes
+
+A class's members become nodes too, each when its own documentation comment is marked, as Unreal's `BlueprintCallable` member functions and `BlueprintReadWrite` properties are ([node-authoring.md](node-authoring.md), gap 2):
+
+| Member | Node | Unreal equivalent |
+|---|---|---|
+| Constructor | **Construct <Class>**, with exec pins and the object as Return Value | Construct Object from Class |
+| Method | A node with a **Target** pin for the object, then the method's parameters | `UFUNCTION(BlueprintCallable)` on a member function |
+| Property or field | **Get <Name>** (pure) and **Set <Name>**, each with a Target pin | `UPROPERTY(BlueprintReadWrite)` |
+| Read-only property, or one marked `@blueprint readonly` | **Get <Name>** only | `UPROPERTY(BlueprintReadOnly)` |
+
+- **What counts as a class member.**
+  - TypeScript and JavaScript: an exported class's constructor, instance methods, fields and get/set accessors.
+  - Python: `__init__`, methods, `@property` (with its setter, writable), and attributes annotated in the class body and documented by the string after them.
+  - C#: a class's or record's public constructors, instance methods, properties and fields. Structs are left out: Set would change a copy.
+  - Private members (and `_`-named ones in Python), static members and async methods are reported instead.
+- **Types.** Objects travel on pins of the class's `native:` type, as functions returning the class already make them. A subclass's object connects where its base class is expected, when the subclass has a marked member (its nodes record the base). The default category is "Project / <Class>".
+- **Generated code.** It imports the class and writes `new Player(…)` (`Player(…)` in Python), `target.heal(…)`, `target.health` and `target.health = …`. C# passes such objects as `object`, so it casts the Target to the class. An empty Target stops the run with the language's own null error, as Unreal stops on "Accessed None".
+- **Languages.** TypeScript, JavaScript, Python and C# so far; the other languages follow in Phase 9.
+
 ## Node identity
 
-An imported function's node type is `fn:<language>:<path>#<name>`, for example `fn:typescript:src/combat.ts#applyDamage`. The path is relative to the workspace folder, with `/` separators. The language is that of the module: `typescript` for `.ts`, `.mts` and `.cts`, `javascript` for `.js`, `.mjs` and `.cjs`, and `python` for `.py`. TSX/JSX modules are left out for now.
+An imported function's node type is `fn:<language>:<path>#<name>`, for example `fn:typescript:src/combat.ts#applyDamage`. A class member's adds the member: `#Player:new` (Construct), `#Player:heal`, `#Player:get:health` and `#Player:set:health`. The path is relative to the workspace folder, with `/` separators. The language is that of the module: `typescript` for `.ts`, `.mts` and `.cts`, `javascript` for `.js`, `.mjs` and `.cjs`, and `python` for `.py`. TSX/JSX modules are left out for now.
 
 A graph calls functions in its own language. A TypeScript graph may also call JavaScript modules, since TypeScript imports them directly. The palette shows only the functions a graph can call. The compiler reports the others.
 

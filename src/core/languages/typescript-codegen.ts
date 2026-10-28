@@ -1,5 +1,5 @@
 // Generates TypeScript, or JavaScript with JSDoc types, from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, classInfo, importKey, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
 import { relativeSpecifier, typescriptSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
@@ -157,7 +157,12 @@ class TypeScriptEmitter {
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
     for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     const moduleScope = this.library ? this.names : new NameScope(RESERVED, [this.className, FORMAT_HELPER, DISPATCHER_CLASS]);
-    for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
+    const locals = new Map<string, string>();
+    for (const i of program.imports) {
+      const local = locals.get(importKey(i)) ?? moduleScope.claim(i.name);
+      locals.set(importKey(i), local);
+      this.importNames.set(i.id, local);
+    }
     // Member variables keep their names; internal fields are private (TypeScript) or underscored (JavaScript).
     // A subclass's internal fields and methods carry its name: its parent's private ones may share theirs.
     const base = flavor.typed || this.library ? '' : '_';
@@ -544,12 +549,12 @@ class TypeScriptEmitter {
     }
     for (const [specifier, imports] of [...byModule].sort(([a], [b]) => compare(a, b))) {
       const alias = (name: string, as: string) => (name === as ? name : `${name}${esm ? ' as ' : ': '}${as}`);
-      const names = imports.flatMap((i) => {
+      const names = [...new Set(imports.flatMap((i) => {
         const local = this.importNames.get(i.id)!;
         if (i.userType?.kind !== 'interface') return [alias(i.name, local)];
         // An interface: its tag and guard at run time.
         return [alias(this.interfaceTag(i.name), this.interfaceTag(local)), alias(this.interfaceGuard(i.name), this.interfaceGuard(local))];
-      }).join(', ');
+      }))].join(', ');
       // An interface's type is imported as a type: Node.js strips it with the other types.
       const types = this.flavor.typed ? imports.filter((i) => i.userType?.kind === 'interface').map((i) => alias(i.name, this.importNames.get(i.id)!)) : [];
       if (types.length) this.out.line(`import type { ${types.join(', ')} } from ${JSON.stringify(specifier)};`);
@@ -1014,7 +1019,16 @@ class TypeScriptEmitter {
   private call(callee: IrCallee, args: IrExpr[]): string {
     const params = calleeSignature(callee, this.program)?.params ?? [];
     const list = args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ');
-    return callee.kind === 'helper' ? `${this.self(this.helperNames.get(callee.id)!)}(${list})` : `${this.importNames.get(callee.id)}(${list})`;
+    if (callee.kind === 'helper') return `${this.self(this.helperNames.get(callee.id)!)}(${list})`;
+    const local = this.importNames.get(callee.id)!;
+    const member = this.program.imports.find((i) => i.id === callee.id)?.member;
+    if (!member) return `${local}(${list})`;
+    // A code class's member (docs/node-authoring.md, gap 2), on the Target pin's object.
+    if (member.kind === 'construct') return `new ${local}(${list})`;
+    const [target, ...rest] = args;
+    const values = rest.map((a, i) => this.coerce(a, params[i + 1]?.type)).join(', ');
+    const object = this.targetRef(target);
+    return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
 
   private operand(e: IrExpr): string {

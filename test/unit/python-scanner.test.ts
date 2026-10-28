@@ -235,3 +235,58 @@ print(json.dumps(out))
     assert.ok(compared > 50);
   });
 });
+
+// Classes (docs/node-authoring.md, gap 2): __init__, public methods, @property (writable with a
+// setter) and annotated attributes documented by the string after them.
+describe('Python classes', () => {
+  const source = [
+    'class Player(Entity):',
+    '    health: float = 100',
+    '    """@blueprint"""',
+    '',
+    '    def __init__(self, name: str, start: float = 10) -> None:',
+    '        """@blueprint"""',
+    '        self.name = name',
+    '',
+    '    def heal(self, amount: float) -> float:',
+    '        """@blueprint"""',
+    '        return self.health + amount',
+    '',
+    '    @property',
+    '    def alive(self) -> bool:',
+    '        """@blueprint"""',
+    '        return self.health > 0',
+    '',
+    '    @property',
+    '    def label(self) -> str:',
+    '        """@blueprint"""',
+    '        return self.name',
+    '',
+    '    @label.setter',
+    '    def label(self, value: str) -> None:',
+    '        self.name = value',
+    '',
+    '    @staticmethod',
+    '    def make() -> "Player":',
+    '        """@blueprint"""',
+    '        return Player("x")',
+    '',
+    '    def _hidden(self):',
+    '        """@blueprint"""',
+    ''
+  ].join('\n');
+
+  test('reads __init__, methods, properties and attributes', () => {
+    const [cls] = scanPython(source).classes!;
+    assert.deepEqual([cls.name, cls.base], ['Player', { id: 'native:Entity' }]);
+    assert.deepEqual(cls.init!.params, [{ name: 'name', type: { id: 'string' } }, { name: 'start', type: { id: 'float' }, defaultValue: 10 }]);
+    assert.deepEqual(cls.methods.map((m) => [m.name, m.params.map((p) => p.name)]), [['heal', ['amount']]]);
+    assert.deepEqual(cls.properties.map((p) => [p.name, p.readonly, p.type]), [['health', false, { id: 'float' }], ['alive', true, { id: 'bool' }], ['label', false, { id: 'string' }]]);
+    assert.deepEqual(scanPython(source).skipped.map((s) => s.name), ['Player.make', 'Player._hidden']);
+  });
+
+  test('marked members become nodes with a Target', () => {
+    const { definitions } = exposeFunctions(scanPython(source), { language: 'python', path: 'game/player.py', module: 'game.player', exposeAll: false });
+    assert.deepEqual(definitions.map((d) => d.type.slice(d.type.indexOf('#') + 1)), ['Player:new', 'Player:heal', 'Player:get:health', 'Player:set:health', 'Player:get:alive', 'Player:get:label', 'Player:set:label']);
+  });
+});

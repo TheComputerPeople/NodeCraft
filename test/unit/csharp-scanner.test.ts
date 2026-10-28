@@ -144,3 +144,54 @@ describe('C# types', () => {
     test(text, () => assert.deepEqual(mapCSharpType(text), expected));
   }
 });
+
+// Classes (docs/node-authoring.md, gap 2): a class's public constructors, instance methods,
+// properties and fields; not a struct's (Set would change a copy).
+describe('C# classes', () => {
+  const source = [
+    'namespace Game;',
+    'public class Player : Entity, IDisposable',
+    '{',
+    '    /// @blueprint',
+    '    public double Health { get; set; } = 100;',
+    '    /// @blueprint',
+    '    public string Name { get; private set; }',
+    '    /// @blueprint',
+    '    public bool Alive => Health > 0;',
+    '    /// @blueprint',
+    '    public int Level;',
+    '    public const int Max = 10;',
+    '    /// @blueprint',
+    '    public Player(string name, double start = 10) { Name = name; }',
+    '    /// @blueprint',
+    '    public double Heal(double amount) { Health += amount; return Health; }',
+    '    /// @blueprint',
+    '    private void Secret() { }',
+    '    public void Dispose() { }',
+    '}',
+    'public struct Point',
+    '{',
+    '    /// @blueprint',
+    '    public int X;',
+    '}',
+    ''
+  ].join('\n');
+
+  test('reads constructors, instance methods, properties and fields of classes', () => {
+    const scan = scanCSharp(source);
+    assert.deepEqual(scan.classes!.map((c) => c.name), ['Game.Player']);
+    const [cls] = scan.classes!;
+    assert.deepEqual([cls.type, cls.base], [{ id: 'native:Player' }, { id: 'native:Entity' }]);
+    assert.deepEqual(cls.init!.params.map((p) => p.name), ['name', 'start']);
+    assert.deepEqual(cls.methods.map((m) => m.name), ['Heal', 'Dispose']);
+    assert.deepEqual(cls.properties.map((p) => [p.name, p.readonly]), [['Health', false], ['Name', true], ['Alive', true], ['Level', false]]);
+    assert.deepEqual(scan.skipped.filter((s) => s.marked).map((s) => s.name), ['Secret']);
+  });
+
+  test('marked members become nodes, named with the namespace', () => {
+    const { definitions } = exposeFunctions(scanCSharp(source), CS);
+    assert.deepEqual(definitions.map((d) => d.type.slice(d.type.indexOf('#') + 1)), [
+      'Game.Player:new', 'Game.Player:Heal', 'Game.Player:get:Health', 'Game.Player:set:Health', 'Game.Player:get:Name', 'Game.Player:get:Alive', 'Game.Player:get:Level', 'Game.Player:set:Level'
+    ]);
+  });
+});

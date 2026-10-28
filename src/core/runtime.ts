@@ -984,7 +984,8 @@ export class GraphRuntime {
   private callNode(context: GraphContext, node: GraphNode, definition: NodeDefinition, input: (pinId: string) => unknown): unknown {
     const implementation = definition.implementation;
     if (implementation?.kind === 'function') {
-      this.fail(context, node, `Simulate can't run your project's code ("${definition.displayName}" is ${implementation.name} in ${implementation.path}). Use Run to run the generated code.`);
+      const name = implementation.member ? `${implementation.name}.${implementation.member.name ?? 'constructor'}` : implementation.name;
+      this.fail(context, node, `Simulate can't run your project's code ("${definition.displayName}" is ${name} in ${implementation.path}). Use Run to run the generated code.`);
     }
     if (implementation?.kind !== 'code') this.fail(context, node, `No runtime implementation for ${node.type}.`);
     const pack = this.languages.get(context.run.language) ?? this.fail(context, node, `Unknown graph language "${context.run.language}".`);

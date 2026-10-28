@@ -279,3 +279,66 @@ describe('TypeScript types', () => {
     test(text, () => assert.deepEqual(mapTypeText(text), expected));
   }
 });
+
+// Classes (docs/node-authoring.md, gap 2): marked members of exported classes become nodes with a
+// Target pin; Construct comes from the constructor.
+describe('TypeScript classes', () => {
+  const source = [
+    'export class Player extends Entity {',
+    '  /** @blueprint */',
+    '  health: number = 100;',
+    '  /**',
+    '   * @blueprint readonly',
+    '   */',
+    '  name: string;',
+    '  /** @blueprint */',
+    '  private secret = 1;',
+    '  /** @blueprint */',
+    '  constructor(public start: number, label = "x") { super(); this.name = label; }',
+    '  /** @blueprint */',
+    '  heal(amount: number): number { return this.health += amount; }',
+    '  /** @blueprint */',
+    '  get alive(): boolean { return this.health > 0; }',
+    '  /** @blueprint */',
+    '  static make(): Player { return new Player(1); }',
+    '  get(): number { return 1; }',
+    '}',
+    'class Hidden {',
+    '  /** @blueprint */',
+    '  go() {}',
+    '}',
+    ''
+  ].join('\n');
+
+  test('reads the constructor, methods, fields and accessors', () => {
+    const [cls] = scanTypeScript(source).classes!;
+    assert.deepEqual([cls.name, cls.type, cls.base], ['Player', { id: 'native:Player' }, { id: 'native:Entity' }]);
+    assert.deepEqual(cls.init!.params, [{ name: 'start', type: { id: 'float' } }, { name: 'label', defaultValue: 'x' }]);
+    assert.deepEqual(cls.methods.map((m) => m.name), ['heal', 'get']);
+    assert.deepEqual(cls.properties.map((p) => [p.name, p.readonly]), [['health', false], ['name', false], ['alive', true]]);
+  });
+
+  test("says why marked members can't be nodes", () => {
+    assert.deepEqual(scanTypeScript(source).skipped.filter((s) => s.marked).map((s) => [s.name, s.reason]), [
+      ['Player.secret', "it isn't public"],
+      ['Player.make', 'static methods of a class have no object; make it a module function instead'],
+      ['Hidden.go', "its class Hidden isn't exported, so generated code can't import it"]
+    ]);
+  });
+
+  test('marked members become Construct, member nodes with a Target, and Get and Set', () => {
+    const { definitions } = exposeFunctions(scanTypeScript(source), TS);
+    assert.deepEqual(definitions.map((d) => [d.type, d.displayName, [...d.inputs, ...d.outputs].filter((p) => p.kind === 'data').map((p) => p.id).join(',')]), [
+      ['fn:typescript:src/combat.ts#Player:new', 'Construct Player', 'start,label,returnValue'],
+      ['fn:typescript:src/combat.ts#Player:heal', 'Heal', 'target,amount,returnValue'],
+      ['fn:typescript:src/combat.ts#Player:get:health', 'Get Health', 'target,returnValue'],
+      ['fn:typescript:src/combat.ts#Player:set:health', 'Set Health', 'target,value'],
+      ['fn:typescript:src/combat.ts#Player:get:name', 'Get Name', 'target,returnValue'],
+      ['fn:typescript:src/combat.ts#Player:get:alive', 'Get Alive', 'target,returnValue']
+    ]);
+    const heal = definitions[1];
+    assert.equal(heal.category, 'Project / Player');
+    assert.deepEqual(heal.inputs.find((p) => p.id === 'target')?.type, { id: 'native:Player' });
+    assert.deepEqual(heal.implementation?.kind === 'function' && heal.implementation.member, { kind: 'method', name: 'heal', type: 'native:Player', base: 'native:Entity' });
+  });
+});

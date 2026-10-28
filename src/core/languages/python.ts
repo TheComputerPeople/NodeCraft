@@ -1,5 +1,5 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, importKey, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
 import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
@@ -323,7 +323,12 @@ class PythonEmitter {
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
     for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     const moduleScope = this.library ? this.names : new NameScope(RESERVED, [this.className, ...MODULE_NAMES]);
-    for (const i of program.imports) this.importNames.set(i.id, moduleScope.claim(i.name));
+    const locals = new Map<string, string>();
+    for (const i of program.imports) {
+      const local = locals.get(importKey(i)) ?? moduleScope.claim(i.name);
+      locals.set(importKey(i), local);
+      this.importNames.set(i.id, local);
+    }
     // A subclass's internal attributes and methods carry its name: its parent's may share theirs.
     const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'snake')}_` : '_';
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
@@ -529,7 +534,7 @@ class PythonEmitter {
         const local = this.importNames.get(i.id)!;
         byModule.set(module, [...(byModule.get(module) ?? []), local === i.name ? local : `${i.name} as ${local}`]);
       }
-      return [...byModule].sort(([a], [b]) => compare(a, b)).map(([module, names]) => `from ${module} import ${names.join(', ')}`);
+      return [...byModule].sort(([a], [b]) => compare(a, b)).map(([module, names]) => `from ${module} import ${[...new Set(names)].join(', ')}`);
     };
     const parentClass = this.program.classInfo?.parent;
     const early = fromImports(this.program.imports.filter((i) => i.userType?.kind !== 'class' || i.id === parentClass));
@@ -961,7 +966,15 @@ class PythonEmitter {
 
   private call(callee: IrCallee, args: IrExpr[]): string {
     const list = args.map((a) => this.expr(a)).join(', ');
-    return callee.kind === 'helper' ? `${this.self(this.helperNames.get(callee.id)!)}(${list})` : `${this.importNames.get(callee.id)}(${list})`;
+    if (callee.kind === 'helper') return `${this.self(this.helperNames.get(callee.id)!)}(${list})`;
+    const local = this.importNames.get(callee.id)!;
+    const member = this.program.imports.find((i) => i.id === callee.id)?.member;
+    if (!member || member.kind === 'construct') return `${local}(${list})`;
+    // A code class's member (docs/node-authoring.md, gap 2), on the Target pin's object.
+    const [target, ...rest] = args;
+    const object = this.targetRef(target);
+    const values = rest.map((a) => this.expr(a)).join(', ');
+    return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
 
   // A method of the class, or (in a library) a module function.

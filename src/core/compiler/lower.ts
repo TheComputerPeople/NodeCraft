@@ -12,7 +12,7 @@ import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrPinValue, IrProgram, IrSlot, IrStatement, IrTest, ProgramTypes, SourceRef, exprType, readsStorageOnly } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
-import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest } from '../objects';
+import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest, codeClassBases } from '../objects';
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup, userTypeProblems } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
@@ -104,7 +104,7 @@ class Lowerer {
     const definition = (type: string) => options.registry.get(type);
     this.ancestors = this.ownClass ? ancestors(this.ownClass, definition) : [];
     // An object of a subclass connects where its parent class is expected.
-    setClassHierarchy(subclassTest(definition, this.ownClass));
+    setClassHierarchy(subclassTest(definition, this.ownClass, codeClassBases(options.registry.all())));
   }
 
   run(): LowerResult {
@@ -1274,6 +1274,7 @@ class Lowerer {
       language,
       path: target.path,
       ...(target.module ? { module: target.module } : {}),
+      ...(implementation.member ? { member: implementation.member } : {}),
       params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
       returns: def.outputs.find((p) => p.kind === 'data')?.type
     };

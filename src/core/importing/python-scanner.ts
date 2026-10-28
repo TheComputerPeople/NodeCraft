@@ -2,7 +2,7 @@
 // docstrings (docs/code-as-nodes.md, "How declarations are read"). It works on logical lines, so it
 // needs no Python interpreter.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, ScannedProperty, isMarked, parseDocText } from './symbols';
 
 interface LogicalLine {
   // Columns of leading whitespace (a tab counts as one).
@@ -109,34 +109,105 @@ export function scanPython(source: string): ModuleScan {
   const lines = logicalLines(source);
   const result: ModuleScan = { functions: [], skipped: [] };
   for (let i = 0; i < lines.length; i++) {
-    const header = lines[i];
-    if (header.indent !== 0) continue;
-    const match = /^(async\s+)?def\s+([A-Za-z_]\w*)\s*(\[)?/.exec(header.text);
-    if (!match) continue;
-    // The body: the following lines indented under the header (or the rest of a one-line def).
-    const body: LogicalLine[] = [];
-    for (let j = i + 1; j < lines.length && lines[j].indent > 0; j++) body.push(lines[j]);
-    const name = match[2];
-    const doc = body.length ? docstring(body[0]) : NO_DOC;
-    const skip = (reason: string): void => {
-      result.skipped.push({ name, line: header.line, reason, marked: isMarked(doc) });
-    };
-    const parsed = parseHeader(header.text, match[0].length);
-    if (match[1]) skip('async functions become latent nodes with Phase 4\'s latent actions');
-    else if (match[3]) skip('generic functions can\'t be nodes yet');
-    else if (!parsed) skip('its parameters couldn\'t be read');
-    else {
-      const inline = parsed.rest ? [{ indent: 1, line: header.line, text: parsed.rest, code: parsed.rest }] : [];
-      const statements = [...inline, ...body];
-      const params = parseParams(parsed.params);
-      const returns = parsed.returns !== undefined ? mapReturn(parsed.returns) : { type: returnsValue(statements) ? undefined : null };
-      if ('reason' in params) skip(params.reason);
-      else if ('reason' in returns) skip(returns.reason);
-      else if (yields(statements)) skip('generator functions can\'t be nodes');
-      else result.functions.push({ name, line: header.line, params, returns: returns.type, doc });
+    if (lines[i].indent !== 0) continue;
+    if (/^class\s/.test(lines[i].code)) {
+      const cls = scanClass(lines, i, result);
+      if (cls) (result.classes ??= []).push(cls);
+      continue;
     }
+    const def = scanDef(lines, i, false);
+    if (!def) continue;
+    if ('reason' in def.result) result.skipped.push({ name: def.name, line: def.line, reason: def.result.reason, marked: isMarked(def.doc) });
+    else result.functions.push(def.result);
   }
   return result;
+}
+
+const ASYNC_REASON = 'async functions become latent nodes with Phase 4\'s latent actions';
+
+// The `def` at lines[i]: the function, or why it can't be a node. A method's first parameter
+// (self) isn't a pin.
+function scanDef(lines: LogicalLine[], i: number, method: boolean): { name: string; line: number; doc: DocComment; result: ScannedFunction | { reason: string } } | undefined {
+  const header = lines[i];
+  const match = /^(async\s+)?def\s+([A-Za-z_]\w*)\s*(\[)?/.exec(header.text);
+  if (!match) return undefined;
+  // The body: the following lines indented under the header (or the rest of a one-line def).
+  const body: LogicalLine[] = [];
+  for (let j = i + 1; j < lines.length && lines[j].indent > header.indent; j++) body.push(lines[j]);
+  const name = match[2];
+  const line = header.line;
+  const doc = body.length ? docstring(body[0]) : NO_DOC;
+  const skip = (reason: string) => ({ name, line, doc, result: { reason } });
+  const parsed = parseHeader(header.text, match[0].length);
+  if (match[1]) return skip(ASYNC_REASON);
+  if (match[3]) return skip('generic functions can\'t be nodes yet');
+  if (!parsed) return skip('its parameters couldn\'t be read');
+  const inline = parsed.rest ? [{ indent: header.indent + 1, line, text: parsed.rest, code: parsed.rest }] : [];
+  const statements = [...inline, ...body];
+  const params = parseParams(method ? splitTop(parsed.params, ',').slice(1).join(',') : parsed.params);
+  const returns = parsed.returns !== undefined ? mapReturn(parsed.returns) : { type: returnsValue(statements) ? undefined : null };
+  if ('reason' in params) return skip(params.reason);
+  if ('reason' in returns) return skip(returns.reason);
+  if (yields(statements)) return skip('generator functions can\'t be nodes');
+  return { name, line, doc, result: { name, line, params, returns: returns.type, doc } };
+}
+
+// A class (docs/node-authoring.md, gap 2): its __init__, public methods, properties (@property,
+// writable with a setter) and annotated attributes, each documented by the string after it.
+function scanClass(lines: LogicalLine[], i: number, result: ModuleScan): ScannedClass | undefined {
+  const header = lines[i];
+  const match = /^class\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*(?:\((.*)\))?\s*:/.exec(header.text);
+  if (!match) return undefined;
+  const name = match[1];
+  const bases = splitTop(match[2] ?? '', ',').map((b) => b.trim()).filter((b) => b && !b.includes('='));
+  const end = lines.findIndex((l, j) => j > i && l.indent === 0);
+  const body = lines.slice(i + 1, end < 0 ? lines.length : end);
+  if (!body.length) return undefined;
+  const indent = body[0].indent;
+  const base = bases.map((b) => mapPythonType(b)).find((t) => t?.id.startsWith('native:') && !/^native:(ABC|Generic|Protocol)\b/.test(t.id));
+  const cls: ScannedClass = {
+    name, line: header.line, doc: docstring(body[0]), type: mapPythonType(name) ?? { id: `native:${name}` },
+    ...(base ? { base } : {}), ...(bases.includes('ABC') || /metaclass\s*=\s*ABCMeta/.test(match[2] ?? '') ? { abstract: true } : {}),
+    methods: [], properties: []
+  };
+  const getters = new Map<string, ScannedProperty>();
+  const setters = new Set<string>();
+  for (let k = 0; k < body.length; k++) {
+    const member = body[k];
+    if (member.indent !== indent) continue;
+    const skip = (memberName: string, reason: string, doc: DocComment): void => {
+      if (isMarked(doc)) result.skipped.push({ name: `${name}.${memberName}`, line: member.line, reason, marked: true });
+    };
+    // An annotated attribute (`health: int = 100`), documented by a string on the next line.
+    const attribute = /^([A-Za-z_]\w*)\s*:\s*([^=]+?)\s*(=.*)?$/.exec(member.text);
+    if (attribute && !/^(def|class|async)\b/.test(member.code)) {
+      const next = body[k + 1];
+      const doc = next && next.indent === indent ? docstring(next) : NO_DOC;
+      const attributeName = attribute[1];
+      if (attributeName.startsWith('_')) skip(attributeName, "it isn't public", doc);
+      else if (/^ClassVar\b/.test(attribute[2].trim())) skip(attributeName, "class variables have no object; they can't be nodes yet", doc);
+      else {
+        const type = mapPythonType(attribute[2]);
+        cls.properties.push({ name: attributeName, line: member.line, ...(type ? { type } : {}), readonly: false, doc });
+      }
+      continue;
+    }
+    const def = scanDef(body, k, true);
+    if (!def) continue;
+    const decorators: string[] = [];
+    for (let d = k - 1; d >= 0 && body[d].indent === indent && body[d].text.startsWith('@'); d--) decorators.push(body[d].text);
+    const memberName = def.name;
+    if (decorators.some((d) => /^@(staticmethod|classmethod)\b/.test(d))) skip(memberName, 'static methods of a class have no object; make it a module function instead', def.doc);
+    else if (memberName.startsWith('_') && memberName !== '__init__') skip(memberName, "it isn't public", def.doc);
+    else if (decorators.some((d) => new RegExp(`^@${memberName}\\.setter\\b`).test(d))) setters.add(memberName);
+    else if ('reason' in def.result) skip(memberName, def.result.reason, def.doc);
+    else if (decorators.some((d) => /^@(property|functools\.cached_property|cached_property)\b/.test(d))) {
+      getters.set(memberName, { name: memberName, line: def.line, ...(def.result.returns ? { type: def.result.returns } : {}), readonly: true, doc: def.doc });
+    } else if (memberName === '__init__') cls.init = { ...def.result, returns: null };
+    else cls.methods.push(def.result);
+  }
+  for (const [getter, property] of getters) cls.properties.push({ ...property, readonly: !setters.has(getter) });
+  return cls;
 }
 
 // `def name(params) -> returns: rest`, from just after the name.
