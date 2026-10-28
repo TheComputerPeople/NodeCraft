@@ -70,6 +70,15 @@ describe('capabilities in the editor', () => {
     assert.deepEqual(await options(), ['JavaScript', 'Echo']);
   });
 
+  // docs/multi-language.md, gap 3.
+  test('code nodes the language has no implementation of are left out', async (t) => {
+    const e = await open(t, { id: 'javascript', displayName: 'Echo', callable: ['echo'], capabilities: full, snippetLanguages: ['echo'], snippets: ['core:math.sqrt'] });
+    if (!e) return;
+    const names = await palette(e);
+    for (const hidden of ['Clamp', 'Slugify', 'Unique']) assert.ok(!names.includes(hidden), hidden);
+    for (const shown of ['Sqrt', 'Print', 'Branch']) assert.ok(names.includes(shown), shown);
+  });
+
   test('a language with every capability offers everything', async (t) => {
     const e = await open(t, { id: 'javascript', displayName: 'JavaScript', callable: ['javascript'], capabilities: full });
     if (!e) return;

@@ -1,6 +1,6 @@
 // The document being edited, the node definitions it uses, and syncing changes back to the host.
 import { DEFAULT_LANGUAGE } from '../core/languages';
-import { FULL_CAPABILITIES, missingCapabilities, nodeRequirements } from '../core/capabilities';
+import { FULL_CAPABILITIES, implementsCode, missingCapabilities, nodeRequirements } from '../core/capabilities';
 import type { LanguageCapabilities } from '../core/language-pack';
 import { pinDefinition, releaseWildcards } from '../core/editing';
 import { Access, GraphDocument, GraphNode, GraphPin, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
@@ -39,8 +39,8 @@ export interface PaletteEntry {
 }
 
 // Every node type, except that variable Get/Set nodes are offered once per declared variable
-// ("Get Score", "Set Score"), as in Unreal's action menu, and project functions only when the
-// graph's language can call them.
+// ("Get Score", "Set Score"), as in Unreal's action menu, and project functions and code nodes only
+// when the graph's language can call or compile them.
 // What the graph's language can express (src/core/capabilities.ts); the editor offers nothing else.
 export function languageCapabilities(): LanguageCapabilities {
   const id = state.document?.language || DEFAULT_LANGUAGE;
@@ -130,8 +130,9 @@ function callable(definition: NodeDefinition): boolean {
   const implementation = definition.implementation;
   // A macro library's macros are for graphs in its language.
   if (implementation?.kind === 'macro') return !implementation.language || !state.document?.language || implementation.language === state.document.language;
-  if (implementation?.kind !== 'function') return true;
   const language = state.languages.find((l) => l.id === state.document?.language);
+  if (implementation?.kind === 'code') return !language?.snippetLanguages || implementsCode(definition, language.snippetLanguages, language.snippets ?? []);
+  if (implementation?.kind !== 'function') return true;
   return !language || language.callable.includes(implementation.language);
 }
 

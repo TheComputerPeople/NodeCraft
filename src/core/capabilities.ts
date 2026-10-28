@@ -16,6 +16,14 @@ export const FULL_CAPABILITIES: LanguageCapabilities = {
   containers: ['array', 'set', 'map'], delegates: true
 };
 
+// Whether a target can compile a code node: it has a snippet in one of the target's snippet
+// languages, or the target's pack implements the node itself (docs/multi-language.md, gap 3).
+export function implementsCode(definition: NodeDefinition, snippetLanguages: readonly string[], ownSnippets: readonly string[]): boolean {
+  if (definition.implementation?.kind !== 'code') return true;
+  const sources = definition.implementation.languages;
+  return snippetLanguages.some((key) => sources[key] !== undefined) || ownSnippets.includes(definition.type);
+}
+
 export function supports(capabilities: LanguageCapabilities, need: Capability): boolean {
   if (need === 'array' || need === 'set' || need === 'map') return (capabilities.containers ?? FULL_CAPABILITIES.containers!).includes(need);
   return capabilities[need] ?? true;

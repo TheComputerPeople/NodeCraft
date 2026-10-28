@@ -279,6 +279,10 @@ export interface LanguageOption {
   displayName: string;
   // Languages of project functions a graph in this language can call (docs/code-as-nodes.md).
   callable: string[];
+  // The keys of a code node's snippets it can use, and the node types its pack implements itself;
+  // the editor hides code nodes with neither (docs/multi-language.md, gap 3).
+  snippetLanguages?: string[];
+  snippets?: string[];
   // What it can express; the editor hides the rest.
   capabilities?: LanguageCapabilities;
 }

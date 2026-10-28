@@ -53,6 +53,8 @@ So a type that both sides of a project need, such as a request that a TypeScript
 
 **Recommendation: hide them (small).**
 
+**Built (step 4).** Each language the editor offers now carries its snippet languages and the node types its pack implements itself, and the palette and action menu leave out code nodes with neither (`implementsCode` in src/core/capabilities.ts, the rule the compiler applies). A TypeScript graph still sees nodes with only JavaScript snippets, and C graphs see the standard library nodes the C pack implements.
+
 ## Gap 4: calling code in another language
 
 **Today.** A graph calls only code in its own language. What works now is a project function that crosses the boundary itself: a TypeScript function that calls the Python service over HTTP, or runs it as a subprocess, marked `@blueprint` and used as a node.
