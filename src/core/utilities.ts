@@ -4,33 +4,9 @@
 // the standard library counts it, and a rule broken (a negative length, an unknown word) stops the
 // run with the message, as Divide by zero does. Adapted from Common Utility Snippets v0.1.0 (MIT;
 // its notice is in THIRD_PARTY_NOTICES.md).
-import { NodeDefinition, PinDefinition, TypeRef } from './model';
-
-type Snippets = Record<string, string>;
-
-interface UtilityNode {
-  type: string;
-  displayName: string;
-  category: string;
-  description: string;
-  keywords: string[];
-  inputs: PinDefinition[];
-  result: TypeRef;
-  code: Snippets;
-}
-
-// ---- Pins ----------------------------------------------------------------------------------------
-
-const input = (id: string, name: string, type: TypeRef, defaultValue?: unknown): PinDefinition => ({ id, name, kind: 'data', direction: 'input', type, ...(defaultValue !== undefined ? { defaultValue } : {}) });
-const output = (type: TypeRef): PinDefinition => ({ id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', type });
-const STRING: TypeRef = { id: 'string' };
-const INT: TypeRef = { id: 'int' };
-const FLOAT: TypeRef = { id: 'float' };
-const BOOL: TypeRef = { id: 'bool' };
-const ARRAY: TypeRef = { id: 'wildcard', container: 'array' };
-const FLOATS: TypeRef = { id: 'float', container: 'array' };
-const MAP: TypeRef = { id: 'wildcard', container: 'map', valueType: { id: 'wildcard:value' } };
-const text = (id = 'text', name = 'Text') => input(id, name, STRING, '');
+import { NodeDefinition } from './model';
+import { MATH_UTILITIES } from './utilities-math';
+import { ARRAY, BOOL, FLOAT, FLOATS, INT, input, MAP, output, Snippets, STRING, text, UtilityNode } from './utility-kit';
 
 // ---- Shared code -------------------------------------------------------------------------------
 
@@ -1728,7 +1704,7 @@ return $drive . ($joined === '' ? '.' : $joined);`
 };
 
 export function utilityDefinitions(): NodeDefinition[] {
-  return NODES.map((node) => ({
+  return [...NODES, ...MATH_UTILITIES].map((node) => ({
     type: node.type,
     version: 1,
     displayName: node.displayName,
@@ -1737,6 +1713,7 @@ export function utilityDefinitions(): NodeDefinition[] {
     keywords: node.keywords,
     inputs: node.inputs,
     outputs: [output(node.result)],
-    implementation: { kind: 'code', languages: { ...node.code, ...(LUA[node.type] ? { lua: LUA[node.type] } : {}), ...(GDSCRIPT[node.type] ? { gdscript: GDSCRIPT[node.type] } : {}), ...(RUBY[node.type] ? { ruby: RUBY[node.type] } : {}), ...(PHP[node.type] ? { php: PHP[node.type] } : {}) } }
+    implementation: { kind: 'code', languages: { ...node.code, ...(LUA[node.type] ? { lua: LUA[node.type] } : {}), ...(GDSCRIPT[node.type] ? { gdscript: GDSCRIPT[node.type] } : {}), ...(RUBY[node.type] ? { ruby: RUBY[node.type] } : {}), ...(PHP[node.type] ? { php: PHP[node.type] } : {}) } },
+    ...(node.compact ? { compact: true } : {})
   }));
 }

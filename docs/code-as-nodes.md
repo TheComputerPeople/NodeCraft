@@ -117,6 +117,24 @@ Operators are compact nodes showing their symbol (`-`, `×`, `÷`, `%`, `<`, `==
 
 Collection nodes (Make Array, Length, Get, Add, Contains, Remove) arrive with Phase 4, with the wildcard pins they need.
 
+### More of Unreal's library
+
+More of Unreal's own nodes, with its names and categories, implemented in every language pack (and the C example pack, where C has the types):
+
+| Category | Nodes |
+|---|---|
+| Math | Lerp, Map Range Clamped, Map Range Unclamped, Sign, Wrap (Integer), Nearly Equal, Truncate, Fraction, Exp, Loge, Log |
+| Math / Trig | Sin, Cos, Tan, Asin, Acos, Atan, Atan2 (all in radians), Degrees To Radians, Radians To Degrees, Get PI |
+| Math / Boolean | XOR, NAND, NOR |
+| Math / Random | Random Bool |
+
+Their rules, where languages would disagree:
+
+- **Ranges.** Lerp doesn't clamp Alpha. Map Range with an empty in range (In Range A equal to B) gives Out Range B at or past it and Out Range A before it, as Unreal does. Wrap (Integer) includes both Min and Max: one past Max is Min again; Min greater than Max stops the run.
+- **Domains.** Asin and Acos take values outside -1 to 1 as the nearest end, as Unreal (and Godot) do. Loge and Log of a value that isn't positive, or Log in a base that isn't positive or is 1, stop the run with an error (languages would otherwise give -Infinity, NaN or an error of their own).
+- **Precision.** Log is `ln(A) / ln(Base)` in every language (no `log10` shortcut), so Log of 1000 in base 10 is 2.9999999999999996 everywhere. Math libraries can differ in the last digit of trigonometry and logarithms; the conformance fixture rounds those results to 10 places.
+- **Parts.** Truncate rounds toward zero and returns an integer; Fraction keeps A's sign (-1.25 gives -0.25), as Unreal's does.
+
 ### More utilities
 
 Beyond Unreal's set, the library has everyday utilities adapted from Common Utility Snippets v0.1.0 (MIT; see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)):

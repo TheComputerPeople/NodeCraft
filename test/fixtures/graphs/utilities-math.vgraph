@@ -1,0 +1,1564 @@
+{
+  "schemaVersion": 3,
+  "name": "UtilsMath",
+  "kind": "class",
+  "language": "javascript",
+  "variables": [],
+  "metadata": {
+    "description": "Utility nodes: Unreal's math, boolean and random nodes. Trigonometry and logarithms are rounded to 10 places, past the last-digit differences of math libraries.",
+    "expectedOutput": [
+      "12.5",
+      "15",
+      "50",
+      "100",
+      "150",
+      "80",
+      "1",
+      "-1",
+      "0",
+      "2",
+      "9",
+      "2",
+      "true",
+      "false",
+      "2",
+      "-2",
+      "0.75",
+      "-0.25",
+      "0.5",
+      "1",
+      "1",
+      "1.5707963268",
+      "1.0471975512",
+      "0.7853981634",
+      "2.3561944902",
+      "3.141592653589793",
+      "180",
+      "3.141592653589793",
+      "2.7182818285",
+      "2.302585093",
+      "3",
+      "3",
+      "true",
+      "false",
+      "false",
+      "true",
+      "flipped"
+    ]
+  },
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "print1",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 120
+          },
+          "properties": {}
+        },
+        {
+          "id": "n1",
+          "type": "core:math.lerp",
+          "position": {
+            "x": 600,
+            "y": 120
+          },
+          "properties": {
+            "pin:a": 10,
+            "pin:b": 20,
+            "pin:alpha": 0.25
+          }
+        },
+        {
+          "id": "print2",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n2",
+          "type": "core:math.lerp",
+          "position": {
+            "x": 600,
+            "y": 240
+          },
+          "properties": {
+            "pin:a": 0,
+            "pin:b": 10,
+            "pin:alpha": 1.5
+          }
+        },
+        {
+          "id": "print3",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n3",
+          "type": "core:math.map-range-clamped",
+          "position": {
+            "x": 600,
+            "y": 360
+          },
+          "properties": {
+            "pin:value": 5,
+            "pin:inRangeA": 0,
+            "pin:inRangeB": 10,
+            "pin:outRangeA": 0,
+            "pin:outRangeB": 100
+          }
+        },
+        {
+          "id": "print4",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 480
+          },
+          "properties": {}
+        },
+        {
+          "id": "n4",
+          "type": "core:math.map-range-clamped",
+          "position": {
+            "x": 600,
+            "y": 480
+          },
+          "properties": {
+            "pin:value": 15,
+            "pin:inRangeA": 0,
+            "pin:inRangeB": 10,
+            "pin:outRangeA": 0,
+            "pin:outRangeB": 100
+          }
+        },
+        {
+          "id": "print5",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 600
+          },
+          "properties": {}
+        },
+        {
+          "id": "n5",
+          "type": "core:math.map-range-unclamped",
+          "position": {
+            "x": 600,
+            "y": 600
+          },
+          "properties": {
+            "pin:value": 15,
+            "pin:inRangeA": 0,
+            "pin:inRangeB": 10,
+            "pin:outRangeA": 0,
+            "pin:outRangeB": 100
+          }
+        },
+        {
+          "id": "print6",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 720
+          },
+          "properties": {}
+        },
+        {
+          "id": "n6",
+          "type": "core:math.map-range-unclamped",
+          "position": {
+            "x": 600,
+            "y": 720
+          },
+          "properties": {
+            "pin:value": 2,
+            "pin:inRangeA": 0,
+            "pin:inRangeB": 10,
+            "pin:outRangeA": 100,
+            "pin:outRangeB": 0
+          }
+        },
+        {
+          "id": "print7",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 840
+          },
+          "properties": {}
+        },
+        {
+          "id": "n7",
+          "type": "core:math.map-range-clamped",
+          "position": {
+            "x": 600,
+            "y": 840
+          },
+          "properties": {
+            "pin:value": 3,
+            "pin:inRangeA": 3,
+            "pin:inRangeB": 3,
+            "pin:outRangeA": 0,
+            "pin:outRangeB": 1
+          }
+        },
+        {
+          "id": "print8",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 960
+          },
+          "properties": {}
+        },
+        {
+          "id": "n8",
+          "type": "core:math.sign",
+          "position": {
+            "x": 600,
+            "y": 960
+          },
+          "properties": {
+            "pin:value": -3.5
+          }
+        },
+        {
+          "id": "print9",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1080
+          },
+          "properties": {}
+        },
+        {
+          "id": "n9",
+          "type": "core:math.sign",
+          "position": {
+            "x": 600,
+            "y": 1080
+          },
+          "properties": {
+            "pin:value": 0
+          }
+        },
+        {
+          "id": "print10",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1200
+          },
+          "properties": {}
+        },
+        {
+          "id": "n10",
+          "type": "core:math.wrap",
+          "position": {
+            "x": 600,
+            "y": 1200
+          },
+          "properties": {
+            "pin:value": 12,
+            "pin:minimum": 0,
+            "pin:maximum": 9
+          }
+        },
+        {
+          "id": "print11",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1320
+          },
+          "properties": {}
+        },
+        {
+          "id": "n11",
+          "type": "core:math.wrap",
+          "position": {
+            "x": 600,
+            "y": 1320
+          },
+          "properties": {
+            "pin:value": -1,
+            "pin:minimum": 0,
+            "pin:maximum": 9
+          }
+        },
+        {
+          "id": "print12",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1440
+          },
+          "properties": {}
+        },
+        {
+          "id": "n12",
+          "type": "core:math.wrap",
+          "position": {
+            "x": 600,
+            "y": 1440
+          },
+          "properties": {
+            "pin:value": 5,
+            "pin:minimum": 1,
+            "pin:maximum": 3
+          }
+        },
+        {
+          "id": "print13",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1560
+          },
+          "properties": {}
+        },
+        {
+          "id": "n13",
+          "type": "core:math.nearly-equal",
+          "position": {
+            "x": 600,
+            "y": 1560
+          },
+          "properties": {
+            "pin:a": 1,
+            "pin:b": 1.0000001,
+            "pin:tolerance": 0.000001
+          }
+        },
+        {
+          "id": "print14",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1680
+          },
+          "properties": {}
+        },
+        {
+          "id": "n14",
+          "type": "core:math.nearly-equal",
+          "position": {
+            "x": 600,
+            "y": 1680
+          },
+          "properties": {
+            "pin:a": 1,
+            "pin:b": 1.1,
+            "pin:tolerance": 0.01
+          }
+        },
+        {
+          "id": "print15",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1800
+          },
+          "properties": {}
+        },
+        {
+          "id": "n15",
+          "type": "core:math.truncate",
+          "position": {
+            "x": 600,
+            "y": 1800
+          },
+          "properties": {
+            "pin:value": 2.7
+          }
+        },
+        {
+          "id": "print16",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 1920
+          },
+          "properties": {}
+        },
+        {
+          "id": "n16",
+          "type": "core:math.truncate",
+          "position": {
+            "x": 600,
+            "y": 1920
+          },
+          "properties": {
+            "pin:value": -2.7
+          }
+        },
+        {
+          "id": "print17",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2040
+          },
+          "properties": {}
+        },
+        {
+          "id": "n17",
+          "type": "core:math.fraction",
+          "position": {
+            "x": 600,
+            "y": 2040
+          },
+          "properties": {
+            "pin:value": 3.75
+          }
+        },
+        {
+          "id": "print18",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2160
+          },
+          "properties": {}
+        },
+        {
+          "id": "n18",
+          "type": "core:math.fraction",
+          "position": {
+            "x": 600,
+            "y": 2160
+          },
+          "properties": {
+            "pin:value": -1.25
+          }
+        },
+        {
+          "id": "print19",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2280
+          },
+          "properties": {}
+        },
+        {
+          "id": "n19",
+          "type": "core:math.round-to",
+          "position": {
+            "x": 600,
+            "y": 2280
+          },
+          "properties": {
+            "pin:digits": 10
+          }
+        },
+        {
+          "id": "n19_value",
+          "type": "core:math.sin",
+          "position": {
+            "x": 300,
+            "y": 2280
+          },
+          "properties": {
+            "pin:value": 0.5235987755982988
+          }
+        },
+        {
+          "id": "print20",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2400
+          },
+          "properties": {}
+        },
+        {
+          "id": "n20",
+          "type": "core:math.cos",
+          "position": {
+            "x": 600,
+            "y": 2400
+          },
+          "properties": {
+            "pin:value": 0
+          }
+        },
+        {
+          "id": "print21",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2520
+          },
+          "properties": {}
+        },
+        {
+          "id": "n21",
+          "type": "core:math.round-to",
+          "position": {
+            "x": 600,
+            "y": 2520
+          },
+          "properties": {
+            "pin:digits": 10
+          }
+        },
+        {
+          "id": "n21_value",
+          "type": "core:math.tan",
+          "position": {
+            "x": 300,
+            "y": 2520
+          },
+          "properties": {
+            "pin:value": 0.7853981633974483
+          }
+        },
+        {
+          "id": "print22",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2640
+          },
+          "properties": {}
+        },
+        {
+          "id": "n22",
+          "type": "core:math.round-to",
+          "position": {
+            "x": 600,
+            "y": 2640
+          },
+          "properties": {
+            "pin:digits": 10
+          }
+        },
+        {
+          "id": "n22_value",
+          "type": "core:math.asin",
+          "position": {
+            "x": 300,
+            "y": 2640
+          },
+          "properties": {
+            "pin:value": 2
+          }
+        },
+        {
+          "id": "print23",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2760
+          },
+          "properties": {}
+        },
+        {
+          "id": "n23",
+          "type": "core:math.round-to",
+          "position": {
+            "x": 600,
+            "y": 2760
+          },
+          "properties": {
+            "pin:digits": 10
+          }
+        },
+        {
+          "id": "n23_value",
+          "type": "core:math.acos",
+          "position": {
+            "x": 300,
+            "y": 2760
+          },
+          "properties": {
+            "pin:value": 0.5
+          }
+        },
+        {
+          "id": "print24",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 2880
+          },
+          "properties": {}
+        },
+        {
+          "id": "n24",
+          "type": "core:math.round-to",
+          "position": {
+            "x": 600,
+            "y": 2880
+          },
+          "properties": {
+            "pin:digits": 10
+          }
+        },
+        {
+          "id": "n24_value",
+          "type": "core:math.atan",
+          "position": {
+            "x": 300,
+            "y": 2880
+          },
+          "properties": {
+            "pin:value": 1
+          }
+        },
+        {
+          "id": "print25",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3000
+          },
+          "properties": {}
+        },
+        {
+          "id": "n25",
+          "type": "core:math.round-to",
+          "position": {
+            "x": 600,
+            "y": 3000
+          },
+          "properties": {
+            "pin:digits": 10
+          }
+        },
+        {
+          "id": "n25_value",
+          "type": "core:math.atan2",
+          "position": {
+            "x": 300,
+            "y": 3000
+          },
+          "properties": {
+            "pin:y": 1,
+            "pin:x": -1
+          }
+        },
+        {
+          "id": "print26",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3120
+          },
+          "properties": {}
+        },
+        {
+          "id": "n26",
+          "type": "core:math.degrees-to-radians",
+          "position": {
+            "x": 600,
+            "y": 3120
+          },
+          "properties": {
+            "pin:value": 180
+          }
+        },
+        {
+          "id": "print27",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n27",
+          "type": "core:math.radians-to-degrees",
+          "position": {
+            "x": 600,
+            "y": 3240
+          },
+          "properties": {
+            "pin:value": 3.141592653589793
+          }
+        },
+        {
+          "id": "print28",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n28",
+          "type": "core:math.pi",
+          "position": {
+            "x": 600,
+            "y": 3360
+          },
+          "properties": {}
+        },
+        {
+          "id": "print29",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3480
+          },
+          "properties": {}
+        },
+        {
+          "id": "n29",
+          "type": "core:math.round-to",
+          "position": {
+            "x": 600,
+            "y": 3480
+          },
+          "properties": {
+            "pin:digits": 10
+          }
+        },
+        {
+          "id": "n29_value",
+          "type": "core:math.exp",
+          "position": {
+            "x": 300,
+            "y": 3480
+          },
+          "properties": {
+            "pin:value": 1
+          }
+        },
+        {
+          "id": "print30",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3600
+          },
+          "properties": {}
+        },
+        {
+          "id": "n30",
+          "type": "core:math.round-to",
+          "position": {
+            "x": 600,
+            "y": 3600
+          },
+          "properties": {
+            "pin:digits": 10
+          }
+        },
+        {
+          "id": "n30_value",
+          "type": "core:math.loge",
+          "position": {
+            "x": 300,
+            "y": 3600
+          },
+          "properties": {
+            "pin:value": 10
+          }
+        },
+        {
+          "id": "print31",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3720
+          },
+          "properties": {}
+        },
+        {
+          "id": "n31",
+          "type": "core:math.round-to",
+          "position": {
+            "x": 600,
+            "y": 3720
+          },
+          "properties": {
+            "pin:digits": 10
+          }
+        },
+        {
+          "id": "n31_value",
+          "type": "core:math.log",
+          "position": {
+            "x": 300,
+            "y": 3720
+          },
+          "properties": {
+            "pin:value": 1000,
+            "pin:base": 10
+          }
+        },
+        {
+          "id": "print32",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3840
+          },
+          "properties": {}
+        },
+        {
+          "id": "n32",
+          "type": "core:math.round-to",
+          "position": {
+            "x": 600,
+            "y": 3840
+          },
+          "properties": {
+            "pin:digits": 10
+          }
+        },
+        {
+          "id": "n32_value",
+          "type": "core:math.log",
+          "position": {
+            "x": 300,
+            "y": 3840
+          },
+          "properties": {
+            "pin:value": 8,
+            "pin:base": 2
+          }
+        },
+        {
+          "id": "print33",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3960
+          },
+          "properties": {}
+        },
+        {
+          "id": "n33",
+          "type": "core:math.xor",
+          "position": {
+            "x": 600,
+            "y": 3960
+          },
+          "properties": {
+            "pin:a": true,
+            "pin:b": false
+          }
+        },
+        {
+          "id": "print34",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 4080
+          },
+          "properties": {}
+        },
+        {
+          "id": "n34",
+          "type": "core:math.xor",
+          "position": {
+            "x": 600,
+            "y": 4080
+          },
+          "properties": {
+            "pin:a": true,
+            "pin:b": true
+          }
+        },
+        {
+          "id": "print35",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 4200
+          },
+          "properties": {}
+        },
+        {
+          "id": "n35",
+          "type": "core:math.nand",
+          "position": {
+            "x": 600,
+            "y": 4200
+          },
+          "properties": {
+            "pin:a": true,
+            "pin:b": true
+          }
+        },
+        {
+          "id": "print36",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 4320
+          },
+          "properties": {}
+        },
+        {
+          "id": "n36",
+          "type": "core:math.nor",
+          "position": {
+            "x": 600,
+            "y": 4320
+          },
+          "properties": {
+            "pin:a": false,
+            "pin:b": false
+          }
+        },
+        {
+          "id": "print37",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 4440
+          },
+          "properties": {}
+        },
+        {
+          "id": "n37",
+          "type": "core:utilities.select",
+          "position": {
+            "x": 600,
+            "y": 4440
+          },
+          "properties": {
+            "pin:a": "flipped",
+            "pin:b": "flipped"
+          }
+        },
+        {
+          "id": "n37_pickA",
+          "type": "core:math.random-bool",
+          "position": {
+            "x": 300,
+            "y": 4440
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "print1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "n1",
+          "fromPin": "returnValue",
+          "toNode": "print1",
+          "toPin": "value"
+        },
+        {
+          "id": "w3",
+          "fromNode": "print1",
+          "fromPin": "execOut",
+          "toNode": "print2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w4",
+          "fromNode": "n2",
+          "fromPin": "returnValue",
+          "toNode": "print2",
+          "toPin": "value"
+        },
+        {
+          "id": "w5",
+          "fromNode": "print2",
+          "fromPin": "execOut",
+          "toNode": "print3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w6",
+          "fromNode": "n3",
+          "fromPin": "returnValue",
+          "toNode": "print3",
+          "toPin": "value"
+        },
+        {
+          "id": "w7",
+          "fromNode": "print3",
+          "fromPin": "execOut",
+          "toNode": "print4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w8",
+          "fromNode": "n4",
+          "fromPin": "returnValue",
+          "toNode": "print4",
+          "toPin": "value"
+        },
+        {
+          "id": "w9",
+          "fromNode": "print4",
+          "fromPin": "execOut",
+          "toNode": "print5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w10",
+          "fromNode": "n5",
+          "fromPin": "returnValue",
+          "toNode": "print5",
+          "toPin": "value"
+        },
+        {
+          "id": "w11",
+          "fromNode": "print5",
+          "fromPin": "execOut",
+          "toNode": "print6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w12",
+          "fromNode": "n6",
+          "fromPin": "returnValue",
+          "toNode": "print6",
+          "toPin": "value"
+        },
+        {
+          "id": "w13",
+          "fromNode": "print6",
+          "fromPin": "execOut",
+          "toNode": "print7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w14",
+          "fromNode": "n7",
+          "fromPin": "returnValue",
+          "toNode": "print7",
+          "toPin": "value"
+        },
+        {
+          "id": "w15",
+          "fromNode": "print7",
+          "fromPin": "execOut",
+          "toNode": "print8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w16",
+          "fromNode": "n8",
+          "fromPin": "returnValue",
+          "toNode": "print8",
+          "toPin": "value"
+        },
+        {
+          "id": "w17",
+          "fromNode": "print8",
+          "fromPin": "execOut",
+          "toNode": "print9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w18",
+          "fromNode": "n9",
+          "fromPin": "returnValue",
+          "toNode": "print9",
+          "toPin": "value"
+        },
+        {
+          "id": "w19",
+          "fromNode": "print9",
+          "fromPin": "execOut",
+          "toNode": "print10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w20",
+          "fromNode": "n10",
+          "fromPin": "returnValue",
+          "toNode": "print10",
+          "toPin": "value"
+        },
+        {
+          "id": "w21",
+          "fromNode": "print10",
+          "fromPin": "execOut",
+          "toNode": "print11",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w22",
+          "fromNode": "n11",
+          "fromPin": "returnValue",
+          "toNode": "print11",
+          "toPin": "value"
+        },
+        {
+          "id": "w23",
+          "fromNode": "print11",
+          "fromPin": "execOut",
+          "toNode": "print12",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w24",
+          "fromNode": "n12",
+          "fromPin": "returnValue",
+          "toNode": "print12",
+          "toPin": "value"
+        },
+        {
+          "id": "w25",
+          "fromNode": "print12",
+          "fromPin": "execOut",
+          "toNode": "print13",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w26",
+          "fromNode": "n13",
+          "fromPin": "returnValue",
+          "toNode": "print13",
+          "toPin": "value"
+        },
+        {
+          "id": "w27",
+          "fromNode": "print13",
+          "fromPin": "execOut",
+          "toNode": "print14",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w28",
+          "fromNode": "n14",
+          "fromPin": "returnValue",
+          "toNode": "print14",
+          "toPin": "value"
+        },
+        {
+          "id": "w29",
+          "fromNode": "print14",
+          "fromPin": "execOut",
+          "toNode": "print15",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w30",
+          "fromNode": "n15",
+          "fromPin": "returnValue",
+          "toNode": "print15",
+          "toPin": "value"
+        },
+        {
+          "id": "w31",
+          "fromNode": "print15",
+          "fromPin": "execOut",
+          "toNode": "print16",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w32",
+          "fromNode": "n16",
+          "fromPin": "returnValue",
+          "toNode": "print16",
+          "toPin": "value"
+        },
+        {
+          "id": "w33",
+          "fromNode": "print16",
+          "fromPin": "execOut",
+          "toNode": "print17",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w34",
+          "fromNode": "n17",
+          "fromPin": "returnValue",
+          "toNode": "print17",
+          "toPin": "value"
+        },
+        {
+          "id": "w35",
+          "fromNode": "print17",
+          "fromPin": "execOut",
+          "toNode": "print18",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w36",
+          "fromNode": "n18",
+          "fromPin": "returnValue",
+          "toNode": "print18",
+          "toPin": "value"
+        },
+        {
+          "id": "w37",
+          "fromNode": "print18",
+          "fromPin": "execOut",
+          "toNode": "print19",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w38",
+          "fromNode": "n19_value",
+          "fromPin": "returnValue",
+          "toNode": "n19",
+          "toPin": "value"
+        },
+        {
+          "id": "w39",
+          "fromNode": "n19",
+          "fromPin": "returnValue",
+          "toNode": "print19",
+          "toPin": "value"
+        },
+        {
+          "id": "w40",
+          "fromNode": "print19",
+          "fromPin": "execOut",
+          "toNode": "print20",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w41",
+          "fromNode": "n20",
+          "fromPin": "returnValue",
+          "toNode": "print20",
+          "toPin": "value"
+        },
+        {
+          "id": "w42",
+          "fromNode": "print20",
+          "fromPin": "execOut",
+          "toNode": "print21",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w43",
+          "fromNode": "n21_value",
+          "fromPin": "returnValue",
+          "toNode": "n21",
+          "toPin": "value"
+        },
+        {
+          "id": "w44",
+          "fromNode": "n21",
+          "fromPin": "returnValue",
+          "toNode": "print21",
+          "toPin": "value"
+        },
+        {
+          "id": "w45",
+          "fromNode": "print21",
+          "fromPin": "execOut",
+          "toNode": "print22",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w46",
+          "fromNode": "n22_value",
+          "fromPin": "returnValue",
+          "toNode": "n22",
+          "toPin": "value"
+        },
+        {
+          "id": "w47",
+          "fromNode": "n22",
+          "fromPin": "returnValue",
+          "toNode": "print22",
+          "toPin": "value"
+        },
+        {
+          "id": "w48",
+          "fromNode": "print22",
+          "fromPin": "execOut",
+          "toNode": "print23",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w49",
+          "fromNode": "n23_value",
+          "fromPin": "returnValue",
+          "toNode": "n23",
+          "toPin": "value"
+        },
+        {
+          "id": "w50",
+          "fromNode": "n23",
+          "fromPin": "returnValue",
+          "toNode": "print23",
+          "toPin": "value"
+        },
+        {
+          "id": "w51",
+          "fromNode": "print23",
+          "fromPin": "execOut",
+          "toNode": "print24",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w52",
+          "fromNode": "n24_value",
+          "fromPin": "returnValue",
+          "toNode": "n24",
+          "toPin": "value"
+        },
+        {
+          "id": "w53",
+          "fromNode": "n24",
+          "fromPin": "returnValue",
+          "toNode": "print24",
+          "toPin": "value"
+        },
+        {
+          "id": "w54",
+          "fromNode": "print24",
+          "fromPin": "execOut",
+          "toNode": "print25",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w55",
+          "fromNode": "n25_value",
+          "fromPin": "returnValue",
+          "toNode": "n25",
+          "toPin": "value"
+        },
+        {
+          "id": "w56",
+          "fromNode": "n25",
+          "fromPin": "returnValue",
+          "toNode": "print25",
+          "toPin": "value"
+        },
+        {
+          "id": "w57",
+          "fromNode": "print25",
+          "fromPin": "execOut",
+          "toNode": "print26",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w58",
+          "fromNode": "n26",
+          "fromPin": "returnValue",
+          "toNode": "print26",
+          "toPin": "value"
+        },
+        {
+          "id": "w59",
+          "fromNode": "print26",
+          "fromPin": "execOut",
+          "toNode": "print27",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w60",
+          "fromNode": "n27",
+          "fromPin": "returnValue",
+          "toNode": "print27",
+          "toPin": "value"
+        },
+        {
+          "id": "w61",
+          "fromNode": "print27",
+          "fromPin": "execOut",
+          "toNode": "print28",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w62",
+          "fromNode": "n28",
+          "fromPin": "returnValue",
+          "toNode": "print28",
+          "toPin": "value"
+        },
+        {
+          "id": "w63",
+          "fromNode": "print28",
+          "fromPin": "execOut",
+          "toNode": "print29",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w64",
+          "fromNode": "n29_value",
+          "fromPin": "returnValue",
+          "toNode": "n29",
+          "toPin": "value"
+        },
+        {
+          "id": "w65",
+          "fromNode": "n29",
+          "fromPin": "returnValue",
+          "toNode": "print29",
+          "toPin": "value"
+        },
+        {
+          "id": "w66",
+          "fromNode": "print29",
+          "fromPin": "execOut",
+          "toNode": "print30",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w67",
+          "fromNode": "n30_value",
+          "fromPin": "returnValue",
+          "toNode": "n30",
+          "toPin": "value"
+        },
+        {
+          "id": "w68",
+          "fromNode": "n30",
+          "fromPin": "returnValue",
+          "toNode": "print30",
+          "toPin": "value"
+        },
+        {
+          "id": "w69",
+          "fromNode": "print30",
+          "fromPin": "execOut",
+          "toNode": "print31",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w70",
+          "fromNode": "n31_value",
+          "fromPin": "returnValue",
+          "toNode": "n31",
+          "toPin": "value"
+        },
+        {
+          "id": "w71",
+          "fromNode": "n31",
+          "fromPin": "returnValue",
+          "toNode": "print31",
+          "toPin": "value"
+        },
+        {
+          "id": "w72",
+          "fromNode": "print31",
+          "fromPin": "execOut",
+          "toNode": "print32",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w73",
+          "fromNode": "n32_value",
+          "fromPin": "returnValue",
+          "toNode": "n32",
+          "toPin": "value"
+        },
+        {
+          "id": "w74",
+          "fromNode": "n32",
+          "fromPin": "returnValue",
+          "toNode": "print32",
+          "toPin": "value"
+        },
+        {
+          "id": "w75",
+          "fromNode": "print32",
+          "fromPin": "execOut",
+          "toNode": "print33",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w76",
+          "fromNode": "n33",
+          "fromPin": "returnValue",
+          "toNode": "print33",
+          "toPin": "value"
+        },
+        {
+          "id": "w77",
+          "fromNode": "print33",
+          "fromPin": "execOut",
+          "toNode": "print34",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w78",
+          "fromNode": "n34",
+          "fromPin": "returnValue",
+          "toNode": "print34",
+          "toPin": "value"
+        },
+        {
+          "id": "w79",
+          "fromNode": "print34",
+          "fromPin": "execOut",
+          "toNode": "print35",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w80",
+          "fromNode": "n35",
+          "fromPin": "returnValue",
+          "toNode": "print35",
+          "toPin": "value"
+        },
+        {
+          "id": "w81",
+          "fromNode": "print35",
+          "fromPin": "execOut",
+          "toNode": "print36",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w82",
+          "fromNode": "n36",
+          "fromPin": "returnValue",
+          "toNode": "print36",
+          "toPin": "value"
+        },
+        {
+          "id": "w83",
+          "fromNode": "print36",
+          "fromPin": "execOut",
+          "toNode": "print37",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w84",
+          "fromNode": "n37_pickA",
+          "fromPin": "returnValue",
+          "toNode": "n37",
+          "toPin": "pickA"
+        },
+        {
+          "id": "w85",
+          "fromNode": "n37",
+          "fromPin": "returnValue",
+          "toNode": "print37",
+          "toPin": "value"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}
