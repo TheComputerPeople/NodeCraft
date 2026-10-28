@@ -286,6 +286,8 @@ Known gaps to evaluate:
 
 Exit: a written gap analysis with a recommendation per gap, then a decision on which to build.
 
+Analysis: [multi-language.md](multi-language.md) (2026-10-27). It found a bug as well as gaps: a type from another language disappears from a graph without a compile error.
+
 ### Phase 8: Release
 
 - A "Coming from Unreal" guide that maps every Unreal concept to its equivalent here, and lists what doesn't apply.
