@@ -2,7 +2,9 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { SimulateBreakpoint } from '../core/debugger';
 import { LanguagePackRegistry } from '../core/language-pack';
-import { CompileReport, DebugAction, DebugState, DebugValue, FileSearchHit, PinRef, GraphDocument, HostMessage, LanguageOption, RevealTarget, RuntimeLogEvent, UIMessage, RunStatus } from '../core/model';
+import { CompileReport, DebugAction, DebugState, DebugValue, FileSearchHit, PinRef, GraphDocument, HostMessage, LanguageOption, LibraryFile, RevealTarget, RuntimeLogEvent, UIMessage, RunStatus } from '../core/model';
+import { newDocument } from '../core/blueprint-edits';
+import { generatedLanguages } from '../core/user-types';
 import { createResolver } from '../core/resolve';
 import { searchDocument } from '../core/search';
 import { NodeRegistry } from '../core/registry';
@@ -143,6 +145,12 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
           case 'reveal':
             if (message.target?.uri) await this.reveal(message.target);
             break;
+          case 'pickFunctionLibrary':
+            this.post(webviewPanel, { type: 'functionLibrary', library: await this.pickFunctionLibrary(document) });
+            break;
+          case 'saveLibrary':
+            if (message.library) await this.saveLibrary(document.uri, message.library);
+            break;
           case 'applyDocument': {
             if (!message.document) return;
             const text = serializeDocument(message.document);
@@ -275,6 +283,64 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     if (vscode.workspace.isTrusted) return true;
     this.post(panel, { type: 'error', message: RESTRICTED_MODE_MESSAGE });
     return false;
+  }
+
+  // Collapse to Function in Library: the workspace's function libraries the graph's language can
+  // call, or a new one (not written until the collapse saves it). Undefined when cancelled.
+  private async pickFunctionLibrary(document: vscode.TextDocument): Promise<LibraryFile | undefined> {
+    const folder = vscode.workspace.getWorkspaceFolder(document.uri);
+    if (!folder) return undefined;
+    let language: string | undefined;
+    try {
+      language = parseDocument(document.getText(), this.getFallbackName(document)).document.language;
+    } catch {
+      return undefined;
+    }
+    const libraries: LibraryFile[] = [];
+    for (const uri of await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.vgraph'), '**/node_modules/**', 2000)) {
+      const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+      const text = open ? open.getText() : new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+      if (!text.includes('"functionLibrary"')) continue;
+      try {
+        const library = parseDocument(text, path.basename(uri.fsPath, '.vgraph')).document;
+        if (library.kind === 'functionLibrary' && (!language || generatedLanguages(library).includes(language))) {
+          libraries.push({ path: path.relative(folder.uri.fsPath, uri.fsPath).split(path.sep).join('/'), document: library });
+        }
+      } catch {
+        // Not a readable graph file.
+      }
+    }
+    libraries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    const NEW = '$(add) New Function Library…';
+    const picked = await vscode.window.showQuickPick(
+      [...libraries.map((library) => ({ label: library.document.name, description: library.path, library })), { label: NEW, description: '', library: undefined }],
+      { placeHolder: 'Collapse into which function library?' }
+    );
+    if (!picked) return undefined;
+    if (picked.library) return picked.library;
+    const target = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.joinPath(document.uri, '..', `${this.getFallbackName(document)}Library.vgraph`),
+      filters: { 'Visual Graph': ['vgraph'] },
+      saveLabel: 'Create Function Library'
+    });
+    if (!target || !vscode.workspace.getWorkspaceFolder(target)) return undefined;
+    const name = path.basename(target.fsPath, '.vgraph');
+    // Its only function will be the collapsed one.
+    const library = { ...newDocument(name, language, 'functionLibrary'), graphs: [] };
+    return { path: path.relative(folder.uri.fsPath, target.fsPath).split(path.sep).join('/'), document: library };
+  }
+
+  // Writes a library the webview collapsed nodes into, and saves it, so it compiles as on save.
+  private async saveLibrary(from: vscode.Uri, library: LibraryFile): Promise<void> {
+    const folder = vscode.workspace.getWorkspaceFolder(from);
+    if (!folder) return;
+    const uri = vscode.Uri.joinPath(folder.uri, ...library.path.split('/'));
+    const create = new vscode.WorkspaceEdit();
+    create.createFile(uri, { ignoreIfExists: true });
+    await vscode.workspace.applyEdit(create);
+    const text = await vscode.workspace.openTextDocument(uri);
+    await this.updateDocument(text, serializeDocument(library.document));
+    await text.save();
   }
 
   private async updateDocument(document: vscode.TextDocument, text: string): Promise<void> {

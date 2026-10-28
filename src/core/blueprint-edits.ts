@@ -3,8 +3,9 @@
 import { testCases } from './tests';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables } from './functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from './macros';
-import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, CUSTOM_EVENT, DELEGATE_PIN, Dispatcher, UNBIND_EVENT, customEvents, documentDispatchers, eventName, isDispatcherNode } from './events';
-import { PARENT_CALL } from './objects';
+import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, CUSTOM_EVENT, DELEGATE_PIN, Dispatcher, UNBIND_EVENT, customEvents, documentDispatchers, eventName, isDispatcherNode, isEventNode } from './events';
+import { libraryNodeType } from './libraries';
+import { PARENT_CALL, SELF, isObjectNode } from './objects';
 import { DocumentKind, Graph, GraphConnection, GraphDocument, GraphKind, GraphNode, GraphPin, GraphVariable, NodeDefinition } from './model';
 import { VARIABLE_GET, VARIABLE_SET } from './resolve';
 import { createEmptyDocument, createGraph } from './serializer';
@@ -254,6 +255,47 @@ export function collapseToFunction(
   connectionId: () => string
 ): CollapseResult | string {
   if (!allowedGraphKinds(doc).includes('function')) return 'Only blueprints that hold functions can collapse nodes into one.';
+  return collapseInto(graph, nodeIds, lookup, connectionId, doc, (fn) => ({ type: FUNCTION_CALL, properties: { graph: fn.id } }));
+}
+
+// Collapse to Function in Library (docs/node-authoring.md, gap 10): as Collapse to Function, but the
+// new function goes into `library`, a function library graphs in `doc`'s language can call, saved at
+// `libraryPath` (workspace-relative), and the call is its library node. A library function has no
+// object, so the selection may not use the blueprint's own members.
+export function collapseToLibraryFunction(
+  doc: GraphDocument,
+  graph: Graph,
+  nodeIds: ReadonlySet<string>,
+  lookup: (node: GraphNode) => NodeDefinition | undefined,
+  connectionId: () => string,
+  library: GraphDocument,
+  libraryPath: string
+): CollapseResult | string {
+  if (library.kind !== 'functionLibrary') return `${library.name} isn't a function library.`;
+  const members = graph.nodes.filter((n) => nodeIds.has(n.id) && usesMembers(doc, graph, n));
+  if (members.length) return `The selection uses ${doc.name}'s own variables, functions, macros or events, which a function library can't reach.`;
+  return collapseInto(graph, nodeIds, lookup, connectionId, library, (fn) => ({ type: libraryNodeType(libraryPath, fn.id), properties: {} }));
+}
+
+// Whether a node reaches its blueprint's members: its variables, functions, local macros, custom
+// events, dispatchers, Self, or a member without a Target wire (which means Self).
+function usesMembers(doc: GraphDocument, graph: Graph, node: GraphNode): boolean {
+  if (node.type === VARIABLE_GET || node.type === VARIABLE_SET) return doc.variables.some((v) => v.id === node.properties.variable);
+  if (node.type === FUNCTION_CALL || node.type === MACRO_INSTANCE) return doc.graphs.some((g) => g.id === node.properties.graph);
+  if (isEventNode(node.type) || isDispatcherNode(node.type) || node.type === SELF || node.type === PARENT_CALL) return true;
+  if (isObjectNode(node.type)) return !graph.connections.some((c) => c.toNode === node.id && c.toPin === 'target');
+  return false;
+}
+
+// Moves the selection into a new function of `target` and puts `call(function)` in its place.
+function collapseInto(
+  graph: Graph,
+  nodeIds: ReadonlySet<string>,
+  lookup: (node: GraphNode) => NodeDefinition | undefined,
+  connectionId: () => string,
+  target: GraphDocument,
+  call: (fn: Graph) => Pick<GraphNode, 'type' | 'properties'>
+): CollapseResult | string {
   const inside = graph.nodes.filter((n) => nodeIds.has(n.id));
   if (!inside.length) return 'Select the nodes to collapse.';
   if (inside.some((n) => n.type.startsWith('core:event.') || n.type === FUNCTION_ENTRY || n.type === FUNCTION_RETURN)) return "Events, entry and return nodes can't be collapsed into a function.";
@@ -283,7 +325,7 @@ export function collapseToFunction(
 
   // The function and its signature: an input per outside output feeding the selection, an output per
   // inside output used outside.
-  const fn = addGraph(doc, 'function');
+  const fn = addGraph(target, 'function');
   const signature = (fn.signature ??= { inputs: [], outputs: [] });
   if (pure) signature.pure = true;
   const taken = new Set<string>();
@@ -339,19 +381,19 @@ export function collapseToFunction(
   }
 
   // In the original graph: the call takes the nodes' place and their outside wires.
-  const call: GraphNode = { id: uniqueName(`call_${fn.id}`, graph.nodes.map((n) => n.id)), type: FUNCTION_CALL, position: center, properties: { graph: fn.id } };
+  const callNode: GraphNode = { id: uniqueName(`call_${fn.id}`, graph.nodes.map((n) => n.id)), position: center, ...call(fn) };
   graph.nodes = graph.nodes.filter((n) => !isInside(n.id));
-  graph.nodes.push(call);
+  graph.nodes.push(callNode);
   graph.connections = graph.connections.filter((c) => !isInside(c.fromNode) && !isInside(c.toNode));
   const wireOut = (fromNode: string, fromPin: string, toNode: string, toPin: string) => graph.connections.push({ id: connectionId(), fromNode, fromPin, toNode, toPin });
   for (const [key, pin] of inputBySource) {
     const [node, out] = key.split('\u0000');
-    wireOut(node, out, call.id, pin.id);
+    wireOut(node, out, callNode.id, pin.id);
   }
-  for (const c of execIn) wireOut(c.fromNode, c.fromPin, call.id, 'execIn');
-  for (const c of dataOut) wireOut(call.id, outputBySource.get(`${c.fromNode}\u0000${c.fromPin}`)!.id, c.toNode, c.toPin);
-  for (const c of execOut) wireOut(call.id, 'execOut', c.toNode, c.toPin);
-  return { function: fn, call };
+  for (const c of execIn) wireOut(c.fromNode, c.fromPin, callNode.id, 'execIn');
+  for (const c of dataOut) wireOut(callNode.id, outputBySource.get(`${c.fromNode}\u0000${c.fromPin}`)!.id, c.toNode, c.toPin);
+  for (const c of execOut) wireOut(callNode.id, 'execOut', c.toNode, c.toPin);
+  return { function: fn, call: callNode };
 }
 
 // ---- Collapse to Macro (Unreal's node menu command) -------------------------------------------

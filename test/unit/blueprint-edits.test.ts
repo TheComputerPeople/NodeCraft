@@ -1,7 +1,9 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as edits from '../../src/core/blueprint-edits';
-import { GraphDocument } from '../../src/core/model';
+import { GraphDocument, RuntimeLogEvent } from '../../src/core/model';
+import { libraryDefinitions } from '../../src/core/libraries';
+import { GraphRuntime } from '../../src/core/runtime';
 import { compileDocument } from '../../src/core/compiler';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { NodeRegistry } from '../../src/core/registry';
@@ -202,5 +204,33 @@ describe('Collapse to Function', () => {
     branchy.graphs[0].connections = branchy.graphs[0].connections.filter((c) => c.toNode !== 'p2' || c.toPin !== 'execIn');
     branchy.graphs[0].connections.push(wire('q', 'then0', 'add', 'execIn'), wire('q', 'then1', 'p2', 'execIn'));
     assert.match(String(collapse(branchy, ['add', 'p2'])), /more than one place/);
+  });
+
+  // Collapse to Function in Library (docs/node-authoring.md, gap 10): the function goes into a
+  // library, and the call is its library node, whose pins are the new function's.
+  test('into a library: the function moves there and its library node is called', () => {
+    const doc = program();
+    const library: GraphDocument = { ...edits.newDocument('Tools', 'typescript', 'functionLibrary'), graphs: [] };
+    const result = edits.collapseToLibraryFunction(doc, doc.graphs[0], new Set(['max']), createResolver(registry, doc), ids, library, 'lib/Tools.vgraph');
+    assert.ok(typeof result !== 'string', String(result));
+    assert.deepEqual(library.graphs.map((g) => g.id), [result.function.id]);
+    assert.ok(!doc.graphs.some((g) => g.id === result.function.id), 'the blueprint gains no function');
+    assert.equal(result.call.type, `lib:lib/Tools.vgraph#${result.function.id}`);
+    // Calling it through the library gives the same program.
+    const r = new NodeRegistry();
+    r.registerMany(libraryDefinitions(library, { documentPath: 'lib/Tools.vgraph', generatedPath: 'lib/Tools.vgraph.ts', exports: { names: new Map([[result.function.id, 'newFunction']]) } }));
+    const events: RuntimeLogEvent[] = [];
+    new GraphRuntime(r, (e) => events.push(e), undefined, () => library).run(doc);
+    assert.deepEqual(logs(events), runs(program()));
+  });
+
+  test("into a library: a selection using the blueprint's members can't move", () => {
+    const doc = program();
+    const health = edits.addVariable(doc);
+    doc.graphs[0].nodes.push(node('get', 'core:variable.get', { variable: health.id }));
+    const library: GraphDocument = { ...edits.newDocument('Tools', 'typescript', 'functionLibrary'), graphs: [] };
+    const result = edits.collapseToLibraryFunction(doc, doc.graphs[0], new Set(['get', 'max']), createResolver(registry, doc), ids, library, 'lib/Tools.vgraph');
+    assert.match(String(result), /own variables, functions, macros or events/);
+    assert.deepEqual(library.graphs, []);
   });
 });

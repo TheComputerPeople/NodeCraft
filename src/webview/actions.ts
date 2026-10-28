@@ -8,14 +8,15 @@ import { MACRO_INPUTS, MACRO_OUTPUTS } from '../core/macros';
 import { functionStatus, isFunctionType, rebindFunctionNode } from '../core/imported-functions';
 import { libraryChange, refreshLibrary } from '../core/node-packages';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
-import { GraphNode, NodeDefinition, PinDefinition } from '../core/model';
+import { GraphNode, LibraryFile, NodeDefinition, PinDefinition } from '../core/model';
+import { libraryDefinitions } from '../core/libraries';
 import { structInfo } from '../core/user-types';
 import { CUSTOM_EVENT } from '../core/events';
 import { TEST_CASE } from '../core/tests';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, pinDef } from './document';
 import { isWatched, toggleWatch } from './values';
 import { dom, eventElement, pinElement, setStatus } from './dom';
-import { newConnectionId } from './host';
+import { newConnectionId, postToHost } from './host';
 import { clearCommentSelection } from './comments';
 import { hideContextMenu } from './menus';
 import { MenuItem } from './floating-menu';
@@ -76,6 +77,42 @@ export function collapseToFunction(): void {
   renderPalette();
   setStatus(`Collapsed into ${result.function.name}. Name it in My Blueprint.`);
   startRename('graph', result.function.id);
+}
+
+// Collapse to Function in Library (docs/node-authoring.md, gap 10): the host asks which function
+// library to use (or makes one), then the selection becomes a function there, called where it was.
+// The selection is the one when the command was chosen.
+let pendingLibraryCollapse: { graphId: string; nodeIds: Set<string> } | undefined;
+
+export function collapseToLibrary(): void {
+  if (!state.document || !state.graph || !state.selectedNodeIds.size) return;
+  pendingLibraryCollapse = { graphId: state.graph.id, nodeIds: new Set(state.selectedNodeIds) };
+  postToHost({ type: 'pickFunctionLibrary' });
+}
+
+export function finishCollapseToLibrary(library: LibraryFile | undefined): void {
+  const pending = pendingLibraryCollapse;
+  pendingLibraryCollapse = undefined;
+  const doc = state.document;
+  const graph = doc?.graphs.find((g) => g.id === pending?.graphId);
+  if (!pending || !library || !doc || !graph) return;
+  const result = edits.collapseToLibraryFunction(doc, graph, pending.nodeIds, lookupDefinition, newConnectionId, library.document, library.path);
+  if (typeof result === 'string') {
+    setStatus(result);
+    return;
+  }
+  postToHost({ type: 'saveLibrary', library });
+  // Until the host scans the saved library, its new node's pins come from the function itself.
+  const call = libraryDefinitions(library.document, { documentPath: library.path, generatedPath: library.path, exports: { names: new Map([[result.function.id, result.function.name]]) } });
+  state.definitions = [...state.definitions.filter((d) => d.type !== result.call.type), ...call];
+  state.defByType.set(result.call.type, call[0]);
+  state.selectedNodeIds = new Set([result.call.id]);
+  state.selectedNodeId = result.call.id;
+  markDirty();
+  render();
+  renderMyBlueprint();
+  renderPalette();
+  setStatus(`Collapsed into ${result.function.name} in ${library.document.name}. Open the library to name it.`);
 }
 
 // Unreal's Collapse to Macro: the selection becomes a new macro, used where it was.

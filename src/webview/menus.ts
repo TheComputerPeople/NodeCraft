@@ -2,7 +2,7 @@
 // (its pin actions above the node's) and a comment.
 import { PinAddress, definitionFor } from '../core/editing';
 import { PinKind } from '../core/model';
-import { addNode, collapseToFunction, collapseToMacro, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected, refreshFunctionNodes, replaceFunctionNode } from './actions';
+import { addNode, collapseToFunction, collapseToLibrary, collapseToMacro, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected, refreshFunctionNodes, replaceFunctionNode } from './actions';
 import { alignSelection, distributeSelection, straightenConnections } from './align';
 import { addBreakpoints, breakpointOn, enableBreakpoints, removeBreakpoints } from './breakpoints';
 import { PaletteEntry, functionProblem, libraryProblem, lookupDefinition, paletteEntries, searchText } from './document';
@@ -109,6 +109,7 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
       <button data-action="select-connected">Select Connected Nodes</button>
       <button data-action="center">Center View</button>
       <button data-action="collapse-function">Collapse to Function</button>
+      <button data-action="collapse-library">Collapse to Function in Library…</button>
       <button data-action="collapse-macro">Collapse to Macro</button>
       <div class="context-separator"></div>
       <div class="context-heading">Breakpoints</div>
@@ -138,6 +139,7 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
     'select-connected': () => selectConnected(nodeId),
     center: () => centerOnNode(nodeId),
     'collapse-function': collapseToFunction,
+    'collapse-library': collapseToLibrary,
     'collapse-macro': collapseToMacro,
     'add-breakpoint': () => addBreakpoints([nodeId]),
     'remove-breakpoint': () => removeBreakpoints([nodeId]),

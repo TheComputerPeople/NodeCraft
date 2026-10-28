@@ -1,6 +1,6 @@
 // Webview entry point: wires DOM and host events to the editor modules.
 import { HostMessage, RuntimeLogEvent } from '../core/model';
-import { addNode, compatibleEntriesForDraft, completeConnection, copySelection, deleteSelected, duplicateSelected, finishRewire, moveSelection, pasteText, pinMenuItems, refreshFunctionNodes } from './actions';
+import { addNode, compatibleEntriesForDraft, completeConnection, copySelection, deleteSelected, duplicateSelected, finishCollapseToLibrary, finishRewire, moveSelection, pasteText, pinMenuItems, refreshFunctionNodes } from './actions';
 import { deleteSelectedComments, finishCommentDrag, isDraggingComment, placeComment, selectedCommentIds, startCommentRename, updateCommentDrag, wrapSelectionInComment } from './comments';
 import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, setLanguage, showCompileResult } from './compile-results';
 import { applySettings, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
@@ -93,6 +93,9 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       break;
     case 'debugValues':
       receiveValues(message.requestId ?? -1, message.values ?? []);
+      break;
+    case 'functionLibrary':
+      finishCollapseToLibrary(message.library);
       break;
     case 'compileResult':
       if (message.compile) showCompileResult(message.compile);

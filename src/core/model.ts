@@ -327,14 +327,24 @@ export interface GraphBreakpoint {
   enabled: boolean;
 }
 
+// A function library file and its contents, for Collapse to Function in Library.
+export interface LibraryFile {
+  // Relative to the workspace folder, with "/" separators.
+  path: string;
+  document: GraphDocument;
+}
+
 export interface UIMessage {
   // run: compile, then run the generated code; simulate: run in the editor's interpreter.
   // findInAll: search every graph in the workspace; reveal: open another file at a hit.
   // setBreakpoints, setWatches: the file's breakpoints or watched pins changed; debugAction: a
   // debugger button; readValues: pins' values while paused (answered by 'debugValues').
   // debug: compile, then run the generated code under the language's debugger.
-  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'debug' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues';
+  // pickFunctionLibrary: ask which function library to collapse into (answered by
+  // 'functionLibrary'); saveLibrary: write that library with the new function.
+  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'debug' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues' | 'pickFunctionLibrary' | 'saveLibrary';
   document?: GraphDocument;
+  library?: LibraryFile;
   breakpoints?: GraphBreakpoint[];
   watches?: PinRef[];
   action?: DebugAction;
@@ -368,7 +378,10 @@ export interface HostMessage {
     | 'debugState'
     // Answers 'readValues', in the order asked.
     | 'debugValues'
+    // Answers 'pickFunctionLibrary': the library chosen (none when the pick was cancelled).
+    | 'functionLibrary'
     | 'error';
+  library?: LibraryFile;
   breakpoints?: GraphBreakpoint[];
   watches?: PinRef[];
   debug?: DebugState;

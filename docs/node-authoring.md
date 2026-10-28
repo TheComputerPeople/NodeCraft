@@ -178,6 +178,11 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
 ## Gap 10: smaller gaps
 
 - **Collapse to Function in Library…** moves the selection into a function library (an existing one with the graph's language, or a new one), as Collapse to Function does within a file. As in a library, the selection may not use Self, member variables or latent nodes.
+
+  **Built (step 3).**
+  - The node menu's **Collapse to Function in Library…** lists the workspace's function libraries the graph's language can call, and **New Function Library…**, which asks where to save it (in the graph's language, its only function the collapsed one).
+  - The new function goes into the library, which is saved (and so compiled); its library node takes the selection's place, wired as Collapse to Function wires its call.
+  - A selection that uses the blueprint's own variables, functions, macros, custom events, dispatchers or Self (or a member node without a Target wire) can't move, and the status bar says so. Delay is refused by the library's function graph, as in any function.
 - **The `subgraph` implementation kind** is in the model and schema but nothing implements it, and architecture.md still proposes `*.vfunc` files. Function libraries are that design, so the kind is removed and the doc updated.
 - **Generic and wildcard code functions** stay out. Unreal rarely uses them, and they need type inference across the scanners.
 
