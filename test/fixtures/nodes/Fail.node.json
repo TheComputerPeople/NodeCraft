@@ -23,7 +23,8 @@
       "go": "VgFail(\"boom\")",
       "lua": "error(\"boom\", 0)",
       "gdscript": "vg.fail(\"boom\")",
-      "ruby": "raise \"boom\""
+      "ruby": "raise \"boom\"",
+      "php": "throw new \\RuntimeException('boom');"
     }
   }
 }

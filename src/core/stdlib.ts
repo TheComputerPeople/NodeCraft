@@ -38,11 +38,12 @@ function node(type: string, displayName: string, category: string, inputs: PinDe
   const lua = LUA[type];
   const gdscript = GDSCRIPT[type];
   const ruby = RUBY[type];
+  const php = PHP[type];
   return {
     type, version: 1, displayName, category, description: options.description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [result] : [])],
-    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}), ...(go ? { go } : {}), ...(lua ? { lua } : {}), ...(gdscript ? { gdscript } : {}), ...(ruby ? { ruby } : {}) } },
+    implementation: { kind: 'code', languages: { ...rest, ...(typescript ? { typescript } : {}), ...(cpp ? { cpp } : {}), ...(rust ? { rust } : {}), ...(java ? { java } : {}), ...(go ? { go } : {}), ...(lua ? { lua } : {}), ...(gdscript ? { gdscript } : {}), ...(ruby ? { ruby } : {}), ...(php ? { php } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {}),
     ...(options.compact ? { compact: true } : {})
   };
@@ -348,6 +349,52 @@ const RUBY: Record<string, string> = {
   // Binary reads and writes: Ruby's text mode turns \\n into \\r\\n on Windows.
   'core:file.load-to-string': 'return File.binread(filename).force_encoding(Encoding::UTF_8)',
   'core:file.save-string': 'File.binwrite(filename, text)'
+};
+
+// The PHP snippets (docs/more-languages.md, "PHP"): errors are exceptions, text goes through mbstring
+// (code points), and == compares as the semantics do (Vg::equal: 1 equals 1.0, nothing else converts).
+// Floor of NaN or Infinity can't be an int, so they pass through.
+const PHP_DIVIDE_BY_ZERO = "if ($b == 0) {\n    throw new \\DivisionByZeroError('Divide by zero');\n}";
+const PHP_NOT_FINITE = 'if (!is_finite((float) $value)) {\n    return $value;\n}';
+const PHP: Record<string, string> = {
+  'core:math.subtract': 'return $a - $b;',
+  'core:math.multiply': 'return $a * $b;',
+  'core:math.divide': `${PHP_DIVIDE_BY_ZERO}\nreturn $a / $b;`,
+  'core:math.modulo': `${PHP_DIVIDE_BY_ZERO}\nreturn fmod($a, $b);`,
+  'core:math.less': 'return $a < $b;',
+  'core:math.less-equal': 'return $a <= $b;',
+  'core:math.greater': 'return $a > $b;',
+  'core:math.greater-equal': 'return $a >= $b;',
+  'core:math.equal': 'return Vg::equal($a, $b);',
+  'core:math.not-equal': 'return !Vg::equal($a, $b);',
+  'core:math.and': 'return $a && $b;',
+  'core:math.or': 'return $a || $b;',
+  'core:math.not': 'return !$a;',
+  'core:math.min': 'if (is_nan((float) $a) || is_nan((float) $b)) {\n    return NAN;\n}\nreturn min($a, $b);',
+  'core:math.max': 'if (is_nan((float) $a) || is_nan((float) $b)) {\n    return NAN;\n}\nreturn max($a, $b);',
+  'core:math.clamp': 'if (is_nan((float) $value)) {\n    return NAN;\n}\nreturn min(max($value, $minimum), $maximum);',
+  'core:math.abs': 'return abs($value);',
+  'core:math.round': `${PHP_NOT_FINITE}\nreturn (int) floor($value + 0.5);`,
+  'core:math.floor': `${PHP_NOT_FINITE}\nreturn (int) floor($value);`,
+  'core:math.ceil': `${PHP_NOT_FINITE}\nreturn (int) ceil($value);`,
+  'core:math.sqrt': 'return sqrt($value);',
+  'core:math.power': 'return $base ** $exponent;',
+  'core:math.random-float-in-range': 'return $minimum + mt_rand() / (mt_getrandmax() + 1) * ($maximum - $minimum);',
+  'core:math.random-integer-in-range': 'return random_int($minimum, $maximum);',
+  'core:string.append': 'return $a . $b;',
+  'core:string.len': "return mb_strlen($text, 'UTF-8');",
+  'core:string.contains': 'return str_contains($text, $part);',
+  'core:string.to-upper': "return mb_strtoupper($text, 'UTF-8');",
+  'core:string.to-lower': "return mb_strtolower($text, 'UTF-8');",
+  'core:string.trim': 'return trim($text);',
+  'core:string.replace': "return $find === '' ? $text : str_replace($find, $replacement, $text);",
+  'core:string.substring': "return mb_substr($text, max(0, $start), max(0, $count), 'UTF-8');",
+  'core:string.to-float': `return preg_match('/${DECIMAL}$/D', $text) ? (float) trim($text) : 0.0;`,
+  'core:string.to-int': `return preg_match('/${INTEGER}$/D', $text) ? (int) trim($text) : 0;`,
+  'core:utilities.is-valid': 'return $value !== null;',
+  'core:utilities.select': 'return $pickA ? $a : $b;',
+  'core:file.load-to-string': 'return file_get_contents($filename);',
+  'core:file.save-string': 'file_put_contents($filename, $text);'
 };
 
 // The Rust snippets, by node type: errors are panics, which stop the run (or fail the test).

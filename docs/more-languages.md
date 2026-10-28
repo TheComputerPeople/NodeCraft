@@ -91,6 +91,14 @@ Decided (2026-10-28): the user asked for these four, Lua and GDScript first. Lua
 - **Debugging:** Xdebug through the PHP Debug extension (`xdebug.php-debug`).
 - **Risk to settle first:** arrays. Graphs share containers by reference everywhere, and PHP copies arrays on assignment, so arrays (and maps, which are the same type) need a small wrapper class in the generated code.
 
+- **As built** (`src/core/languages/php.ts`, `php-runtime.ts`), step 8:
+  - **Containers:** the support file's `VgList` (a list in a public `$items` array), `VgMap` and `VgSet`, which are objects, so they're shared by reference. A map keeps its keys in order and each key exactly as given: PHP's arrays would turn `"1"` into `1` and `1.5` into `1`.
+  - **Generator:** adapted from Python's. Methods and properties are camelCase; property defaults must be constants in PHP, so the constructor sets them. Parent calls are `parent::name(...)`, Cast To is `instanceof`, interfaces are PHP interfaces, structs final classes with a `vgFields()` for printing, and enum values their names. Several outputs come back as an array. Delay's action is a closure (`$this` is bound; a retriggerable Delay passes its start count with `use`). `==` and `!=` compare as the semantics do (`Vg::equal`: 1 equals 1.0, nothing else converts). A graph's namespace comes from the generate options (Composer's PSR-4 roots in the extension, step 9); Run constructs the class by its fully qualified name.
+  - **The support file** (`vgraph_runtime.php`) is a companion next to every generated file. Its classes (namespace `Vgraph`) are declared only if they aren't yet, so copies in different folders share them. Number formatting builds on `json_encode`'s shortest form (`serialize_precision` -1).
+  - **Snippets:** the `PHP` tables. Text goes through mbstring; `mb_strtoupper` maps case fully, as JavaScript does (`ß` becomes `SS`).
+  - **Run:** `php` runs a launcher in the scaffold folder. PHP prints warnings to the output by default, so the launcher sends them to stderr and turns them into exceptions, which stop the run as errors do.
+  - **Conformance:** all 25 fixtures pass, both object programs included.
+
 ## Steps
 
 One commit each (large steps may take several):

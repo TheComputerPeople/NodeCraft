@@ -308,7 +308,8 @@ function generateOptions(language: string | undefined, graphFileName: string, gr
     moduleFormat: detectModuleFormat(graphDir, root),
     outputDir: path.relative(root, graphDir).split(path.sep).join('/'),
     importExtension: detectImportExtension(graphDir, root),
-    namespace: language === 'java' ? javaProject(graphDir, root).package : language === 'go' ? goPackage(graphDir, root).name : csharpNamespace(graphDir, root),
+    // PHP's namespace comes from Composer (Phase 8, step 9); until then, the global one.
+    namespace: language === 'java' ? javaProject(graphDir, root).package : language === 'go' ? goPackage(graphDir, root).name : language === 'php' ? undefined : csharpNamespace(graphDir, root),
     ...(language === 'go' && goPackage(graphDir, root).path ? { packagePath: goPackage(graphDir, root).path } : {})
   };
 }

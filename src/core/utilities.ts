@@ -1523,6 +1523,210 @@ const RUBY: Record<string, string> = {
   ].join('\n')
 };
 
+// ---- PHP ----------------------------------------------------------------------------------------
+//
+// The PHP versions, by node type (docs/more-languages.md, "PHP"): text through mbstring (code points),
+// containers the support file's VgList and VgMap, and items compared as the semantics do (Vg::equal).
+
+const PHP_WORDS = String.raw`$chars = mb_str_split($text);
+$kind = function (?string $c): ?string {
+    if ($c === null || strlen($c) !== 1) {
+        return null;
+    }
+    if ($c >= 'A' && $c <= 'Z') {
+        return 'upper';
+    }
+    if ($c >= 'a' && $c <= 'z') {
+        return 'lower';
+    }
+    return ctype_digit($c) ? 'digit' : null;
+};
+$words = [];
+$word = '';
+foreach ($chars as $i => $c) {
+    $k = $kind($c);
+    if ($k === null) {
+        if ($word !== '') {
+            $words[] = strtolower($word);
+        }
+        $word = '';
+        continue;
+    }
+    $prev = $word === '' ? null : $kind(substr($word, -1));
+    $following = $kind($chars[$i + 1] ?? null);
+    if ($word !== '' && $k === 'upper' && ($prev === 'lower' || $prev === 'digit' || ($prev === 'upper' && $following === 'lower'))) {
+        $words[] = strtolower($word);
+        $word = '';
+    }
+    $word .= $c;
+}
+if ($word !== '') {
+    $words[] = strtolower($word);
+}`;
+
+const phpPad = (left: boolean) => String.raw`if (mb_strlen($fill) !== 1) {
+    throw new \InvalidArgumentException('Fill must be one character');
+}
+$missing = $width - mb_strlen($text);
+$padding = $missing > 0 ? str_repeat($fill, $missing) : '';
+return ` + (left ? '$padding . $text;' : '$text . $padding;');
+
+// Items of $left that pass `keep`, each once, in order.
+const phpUnique = (keep: string) => String.raw`$result = [];
+foreach ($left->items as $item) {
+    if (!(` + keep + String.raw`)) {
+        continue;
+    }
+    foreach ($result as $x) {
+        if (Vg::equal($x, $item)) {
+            continue 2;
+        }
+    }
+    $result[] = $item;
+}
+return new VgList($result);`;
+const phpIn = (list: string) => `array_filter(${list}->items, fn ($x) => Vg::equal($x, $item)) !== []`;
+
+const PHP: Record<string, string> = {
+  'core:string.is-empty': "return $text === '';",
+  'core:string.is-blank': "return trim($text) === '';",
+  'core:string.normalize-whitespace': "return implode(' ', preg_split('/\\s+/', trim($text), -1, PREG_SPLIT_NO_EMPTY));",
+  'core:string.truncate': String.raw`if ($maxLength < 0) {
+    throw new \InvalidArgumentException("Max Length can't be negative");
+}
+if (mb_strlen($text) <= $maxLength) {
+    return $text;
+}
+return mb_substr($text, 0, max(0, $maxLength - mb_strlen($suffix))) . mb_substr($suffix, 0, $maxLength);`,
+  'core:string.capitalize': "return $text === '' ? $text : mb_strtoupper(mb_substr($text, 0, 1)) . mb_substr($text, 1);",
+  'core:string.to-camel-case': `${PHP_WORDS}\nforeach ($words as $i => $w) {\n    if ($i > 0) {\n        $words[$i] = ucfirst($w);\n    }\n}\nreturn implode('', $words);`,
+  'core:string.to-snake-case': `${PHP_WORDS}\nreturn implode('_', $words);`,
+  'core:string.to-kebab-case': `${PHP_WORDS}\nreturn implode('-', $words);`,
+  'core:string.slugify': `${PHP_WORDS}\nreturn implode('-', $words);`,
+  'core:string.pad-left': phpPad(true),
+  'core:string.pad-right': phpPad(false),
+  'core:string.word-count': "return count(preg_split('/\\s+/', trim($text), -1, PREG_SPLIT_NO_EMPTY));",
+  'core:string.mask': String.raw`if ($visibleStart < 0 || $visibleEnd < 0) {
+    throw new \InvalidArgumentException("Visible counts can't be negative");
+}
+if (mb_strlen($mask) !== 1) {
+    throw new \InvalidArgumentException('Mask must be one character');
+}
+$length = mb_strlen($text);
+$first = min($visibleStart, $length);
+$last = min($visibleEnd, $length - $first);
+return mb_substr($text, 0, $first) . str_repeat($mask, $length - $first - $last) . mb_substr($text, $length - $last);`,
+  'core:math.in-range': String.raw`if ($start > $end) {
+    throw new \InvalidArgumentException("Start can't be greater than End");
+}
+return $value >= $start && $value < $end;`,
+  'core:math.round-to': String.raw`if (!is_finite((float) $value)) {
+    throw new \InvalidArgumentException('Value must be a finite number');
+}
+if ($digits < 0 || $digits > 15) {
+    throw new \InvalidArgumentException('Digits must be from 0 to 15');
+}
+$factor = 10 ** $digits;
+return ($value <=> 0) * floor((abs($value) + 2.220446049250313e-16) * $factor + 0.5) / $factor;`,
+  'core:string.format-bytes': String.raw`if (!is_finite((float) $size) || $size < 0 || $size > 9007199254740992) {
+    throw new \InvalidArgumentException('Size must be from 0 to 2^53');
+}
+if ($decimals < 0 || $decimals > 10) {
+    throw new \InvalidArgumentException('Decimals must be from 0 to 10');
+}
+if ($size < 1024) {
+    return (int) $size . ' B';
+}
+$units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+$value = (float) $size;
+$index = -1;
+do {
+    $value /= 1024;
+    $index++;
+} while ($value >= 1024 && $index < count($units) - 1);
+$scale = 10 ** $decimals;
+$scaled = floor($value * $scale + 0.5);
+$whole = floor($scaled / $scale);
+$fraction = str_pad((string) (int) ($scaled - $whole * $scale), $decimals, '0', STR_PAD_LEFT);
+return (int) $whole . ($decimals > 0 ? '.' . $fraction : '') . ' ' . $units[$index];`,
+  'core:string.parse-boolean': String.raw`$value = mb_strtolower(trim($text));
+if (in_array($value, ['true', '1', 'yes', 'y', 'on'], true)) {
+    return true;
+}
+if (in_array($value, ['false', '0', 'no', 'n', 'off'], true)) {
+    return false;
+}
+throw new \InvalidArgumentException('Not a boolean: "' . $text . '"');`,
+  'core:string.parse-integer-strict': String.raw`$value = trim($text);
+if (!preg_match('/^[+-]?[0-9]+$/D', $value)) {
+    throw new \InvalidArgumentException('Not an integer: "' . $text . '"');
+}
+if (strlen(ltrim($value, '+-')) > 16 || abs((int) $value) > 9007199254740991) {
+    throw new \InvalidArgumentException('Integer out of range: "' . $text . '"');
+}
+return (int) $value;`,
+  'core:array.unique': phpUnique('true').replace(/\$left/g, '$items'),
+  'core:array.difference': phpUnique(`!(${phpIn('$right')})`),
+  'core:array.intersection': phpUnique(phpIn('$right')),
+  'core:array.average': String.raw`if (count($values->items) === 0) {
+    throw new \InvalidArgumentException('Average needs at least one value');
+}
+$total = 0.0;
+foreach ($values->items as $value) {
+    $total += $value;
+}
+return $total / count($values->items);`,
+  'core:array.median': String.raw`if (count($values->items) === 0) {
+    throw new \InvalidArgumentException('Median needs at least one value');
+}
+$sorted = $values->items;
+sort($sorted);
+$middle = intdiv(count($sorted), 2);
+return count($sorted) % 2 === 1 ? $sorted[$middle] : ($sorted[$middle - 1] + $sorted[$middle]) / 2;`,
+  'core:map.pick': String.raw`$result = new VgMap();
+foreach ($keys->items as $key) {
+    if ($source->has($key) && !$result->has($key)) {
+        $result->put($key, $source->get($key));
+    }
+}
+return $result;`,
+  'core:map.omit': String.raw`$result = new VgMap();
+foreach ($source->keys as $i => $key) {
+    foreach ($keys->items as $excluded) {
+        if (Vg::equal($excluded, $key)) {
+            continue 2;
+        }
+    }
+    $result->put($key, $source->values[$i]);
+}
+return $result;`,
+  'core:utilities.get-env': 'return getenv($name) === false ? $fallback : getenv($name);',
+  'core:file.normalize-path': String.raw`$rest = str_replace('\\', '/', $path);
+$drive = '';
+if (preg_match('/^[A-Za-z]:/', $rest)) {
+    $drive = substr($rest, 0, 2);
+    $rest = substr($rest, 2);
+}
+$absolute = str_starts_with($rest, '/');
+$parts = [];
+foreach (explode('/', $rest) as $part) {
+    if ($part === '' || $part === '.') {
+        continue;
+    }
+    if ($part === '..') {
+        if ($parts && end($parts) !== '..') {
+            array_pop($parts);
+        } elseif (!$absolute) {
+            $parts[] = '..';
+        }
+    } else {
+        $parts[] = $part;
+    }
+}
+$joined = ($absolute ? '/' : '') . implode('/', $parts);
+return $drive . ($joined === '' ? '.' : $joined);`
+};
+
 export function utilityDefinitions(): NodeDefinition[] {
   return NODES.map((node) => ({
     type: node.type,
@@ -1533,6 +1737,6 @@ export function utilityDefinitions(): NodeDefinition[] {
     keywords: node.keywords,
     inputs: node.inputs,
     outputs: [output(node.result)],
-    implementation: { kind: 'code', languages: { ...node.code, ...(LUA[node.type] ? { lua: LUA[node.type] } : {}), ...(GDSCRIPT[node.type] ? { gdscript: GDSCRIPT[node.type] } : {}), ...(RUBY[node.type] ? { ruby: RUBY[node.type] } : {}) } }
+    implementation: { kind: 'code', languages: { ...node.code, ...(LUA[node.type] ? { lua: LUA[node.type] } : {}), ...(GDSCRIPT[node.type] ? { gdscript: GDSCRIPT[node.type] } : {}), ...(RUBY[node.type] ? { ruby: RUBY[node.type] } : {}), ...(PHP[node.type] ? { php: PHP[node.type] } : {}) } }
   }));
 }

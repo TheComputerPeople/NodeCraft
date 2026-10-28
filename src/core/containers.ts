@@ -286,13 +286,48 @@ const RUBY: Record<string, string> = {
   'core:map.values': 'return target.values'
 };
 
+// The PHP snippets: lists, sets and maps are the support file's VgList, VgSet and VgMap, shared by
+// reference (PHP copies its arrays on assignment); a list's items are its $items array.
+const PHP_RANGE = "if ($index < 0 || $index >= count($target->items)) {\n    throw new \\OutOfRangeException('Index out of range');\n}";
+const PHP_FIND = 'foreach ($target->items as $i => $x) {\n    if (Vg::equal($x, $item)) {\n        return $i;\n    }\n}';
+const PHP: Record<string, string> = {
+  'core:array.add': '$target->items[] = $item;\nreturn count($target->items) - 1;',
+  'core:array.add-unique': 'foreach ($target->items as $x) {\n    if (Vg::equal($x, $item)) {\n        return -1;\n    }\n}\n$target->items[] = $item;\nreturn count($target->items) - 1;',
+  'core:array.insert': "if ($index < 0 || $index > count($target->items)) {\n    throw new \\OutOfRangeException('Index out of range');\n}\narray_splice($target->items, $index, 0, [$item]);",
+  'core:array.remove-index': `${PHP_RANGE}\narray_splice($target->items, $index, 1);`,
+  'core:array.remove-item': '$count = count($target->items);\n$target->items = array_values(array_filter($target->items, fn ($x) => !Vg::equal($x, $item)));\nreturn count($target->items) !== $count;',
+  'core:array.set': `${PHP_RANGE}\n$target->items[$index] = $item;`,
+  'core:array.clear': '$target->items = [];',
+  'core:array.get': `${PHP_RANGE}\nreturn $target->items[$index];`,
+  'core:array.length': 'return count($target->items);',
+  'core:array.last-index': 'return count($target->items) - 1;',
+  'core:array.find': `${PHP_FIND}\nreturn -1;`,
+  'core:array.contains': 'foreach ($target->items as $x) {\n    if (Vg::equal($x, $item)) {\n        return true;\n    }\n}\nreturn false;',
+  'core:array.is-valid-index': 'return $index >= 0 && $index < count($target->items);',
+  'core:array.is-empty': 'return count($target->items) === 0;',
+  'core:set.add': '$target->add($item);',
+  'core:set.remove': 'return $target->remove($item);',
+  'core:set.clear': '$target->items = [];',
+  'core:set.contains': 'return $target->contains($item);',
+  'core:set.length': 'return count($target->items);',
+  'core:set.to-array': 'return $target->sorted();',
+  'core:map.add': '$target->put($key, $value);',
+  'core:map.remove': 'return $target->remove($key);',
+  'core:map.clear': '$target->clear();',
+  'core:map.find': "if (!$target->has($key)) {\n    throw new \\OutOfBoundsException('Key not found');\n}\nreturn $target->get($key);",
+  'core:map.contains': 'return $target->has($key);',
+  'core:map.length': 'return $target->count();',
+  'core:map.keys': 'return new VgList($target->keys);',
+  'core:map.values': 'return new VgList($target->values);'
+};
+
 // An Unreal container function as a code node: impure ones have exec pins.
 function fn(type: string, displayName: string, category: string, inputs: PinDefinition[], result: TypeRef | undefined, code: Snippets, description: string, options: { impure?: boolean; keywords?: string[] } = {}): NodeDefinition {
   return {
     type, version: 1, displayName, category, description,
     inputs: [...(options.impure ? [execIn] : []), ...inputs],
     outputs: [...(options.impure ? [execOut] : []), ...(result ? [pin('returnValue', 'Return Value', 'output', result)] : [])],
-    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}), ...(GO[type] ? { go: GO[type] } : {}), ...(LUA[type] ? { lua: LUA[type] } : {}), ...(GDSCRIPT[type] ? { gdscript: GDSCRIPT[type] } : {}), ...(RUBY[type] ? { ruby: RUBY[type] } : {}) } },
+    implementation: { kind: 'code', languages: { ...code, ...(CPP[type] ? { cpp: CPP[type] } : {}), ...(RUST[type] ? { rust: RUST[type] } : {}), ...(JAVA[type] ? { java: JAVA[type] } : {}), ...(GO[type] ? { go: GO[type] } : {}), ...(LUA[type] ? { lua: LUA[type] } : {}), ...(GDSCRIPT[type] ? { gdscript: GDSCRIPT[type] } : {}), ...(RUBY[type] ? { ruby: RUBY[type] } : {}), ...(PHP[type] ? { php: PHP[type] } : {}) } },
     ...(options.keywords ? { keywords: options.keywords } : {})
   };
 }
