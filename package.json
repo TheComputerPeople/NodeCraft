@@ -176,6 +176,12 @@
             "type": "string"
           },
           "markdownDescription": "Command-line arguments Run passes to a graph's **Main** event (its Args output). Simulate passes them too."
+        },
+        "blueprintVisualScripting.defaultLanguage": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "The language of new graphs in this folder, by language id (`typescript`, `javascript`, `python`, `csharp`, `cpp`, `rust`, `java`, `go`, or another installed pack's). Set it per folder in a multi-root workspace or a folder's `.vscode/settings.json`. When empty, **New Graph** uses the project files nearest to where the graph is saved (`tsconfig.json`, `pyproject.toml`, `go.mod`, ...)."
         }
       }
     },

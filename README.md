@@ -23,6 +23,7 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 2. Press `F5` (or choose **Run Blueprint Visual Scripting Extension** in Run and Debug). An Extension Development Host opens the `sample` workspace.
 3. Open `sample/demo.vgraph`.
 4. Click **Compile**. The graph's target language is JavaScript, so `demo.vgraph.js` appears next to it. Pick another language in the toolbar to generate TypeScript (`demo.vgraph.ts`) or Python (`demo_vgraph.py`) instead. Saving the graph also compiles it (setting: `blueprintVisualScripting.compileOnSave`).
+   **New Graph** (Command Palette) starts a graph in the language of the project files nearest to where it's saved, so a repository with a TypeScript `web/` and a Python `api/` gets the right one in each; the `blueprintVisualScripting.defaultLanguage` setting overrides that per folder.
 5. Click **▶ Run** to run the generated code with Node.js (22.18 or later, which runs TypeScript directly), Python 3 or the .NET SDK (8 or later; C# graphs are built in a small project the extension keeps in the temporary folder), or **Simulate** to run the graph inside the editor. Output appears in the `Blueprint Visual Scripting` Output channel.
 
 How graphs behave when they run is specified in [docs/semantics.md](docs/semantics.md); every language's generated code is tested against it.

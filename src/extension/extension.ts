@@ -7,7 +7,7 @@ import { DocumentKind } from '../core/model';
 import { serializeDocument } from '../core/serializer';
 import { CompileService } from './compile-service';
 import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
-import { detectWorkspaceLanguage } from './languages';
+import { detectNewGraphLanguage } from './languages';
 import { NodeLibraries } from './node-libraries';
 import { isGeneratedFrom } from './placement';
 import { GraphLibraries } from './graph-libraries';
@@ -160,7 +160,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       if (!target) return;
 
       const name = target.path.split('/').pop()?.replace(/\.vgraph$/i, '') || 'NewGraph';
-      const language = await detectWorkspaceLanguage(languages);
+      const language = await detectNewGraphLanguage(languages, target);
       const graphDocument = newDocument(name, language?.id, picked.documentKind);
       await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(serializeDocument(graphDocument)));
       await vscode.commands.executeCommand('vscode.open', target);

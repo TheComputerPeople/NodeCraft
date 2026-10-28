@@ -6,7 +6,9 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { LanguagePack } from '../../../src/core/language-pack';
 import type { NodeDefinition } from '../../../src/core/model';
+import { builtinLanguagePacks } from '../../../src/core/languages';
 import { javascriptPack } from '../../../src/core/languages/javascript';
+import { detectNewGraphLanguage } from '../../../src/extension/languages';
 
 const EXTENSION_ID = 'local.blueprint-visual-scripting';
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
@@ -57,6 +59,26 @@ test('activates when a .vgraph file opens in the graph editor', async () => {
 test('registers the New Graph command', async () => {
   const commands = await vscode.commands.getCommands(true);
   assert.ok(commands.includes('blueprintVisualScripting.createGraph'));
+});
+
+// docs/multi-language.md, gap 1: a repository with a TypeScript web/ and a Python api/.
+test("a new graph takes its folder's language, and the folder's setting wins", async () => {
+  const folder = workspaceFile('multi').fsPath;
+  fs.mkdirSync(path.join(folder, 'api', 'handlers'), { recursive: true });
+  fs.mkdirSync(path.join(folder, 'web'), { recursive: true });
+  fs.writeFileSync(path.join(folder, 'api', 'pyproject.toml'), '[project]\nname = "api"\n');
+  fs.writeFileSync(path.join(folder, 'web', 'tsconfig.json'), '{}\n');
+  const settings = vscode.workspace.getConfiguration('blueprintVisualScripting');
+  try {
+    const languageOf = async (file: string) => (await detectNewGraphLanguage(builtinLanguagePacks(), workspaceFile(`multi/${file}`)))?.id;
+    assert.equal(await languageOf('api/handlers/New.vgraph'), 'python');
+    assert.equal(await languageOf('web/New.vgraph'), 'typescript');
+    await settings.update('defaultLanguage', 'go', vscode.ConfigurationTarget.Workspace);
+    assert.equal(await languageOf('api/handlers/New.vgraph'), 'go');
+  } finally {
+    await settings.update('defaultLanguage', undefined, vscode.ConfigurationTarget.Workspace);
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
 });
 
 test('opening a schema 1 file does not modify it', async () => {

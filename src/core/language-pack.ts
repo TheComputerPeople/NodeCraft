@@ -276,4 +276,24 @@ export class LanguagePackRegistry {
   detect(hasMarker: (glob: string) => boolean): LanguagePack | undefined {
     return this.all().find((pack) => pack.workspaceMarkers.some(hasMarker));
   }
+
+  // The language of a new graph (docs/multi-language.md, gap 1): the folder's setting, else the
+  // pack with a marker in the nearest folder (`folders` lists each folder's file names, from the
+  // graph's own folder up to the workspace folder; priority order breaks ties within one folder).
+  // Undefined when neither decides; the caller then detects over the whole workspace.
+  detectNewGraph(setting: string | undefined, folders: string[][]): LanguagePack | undefined {
+    const configured = setting ? this.get(setting) : undefined;
+    if (configured) return configured;
+    for (const names of folders) {
+      const pack = this.all().find((p) => p.workspaceMarkers.some((glob) => names.some((name) => markerMatches(glob, name))));
+      if (pack) return pack;
+    }
+    return undefined;
+  }
+}
+
+// Whether a file name matches a marker glob such as "**/tsconfig.json" or "**/*.csproj".
+function markerMatches(glob: string, name: string): boolean {
+  const pattern = glob.replace(/^(\*\*\/)+/, '');
+  return new RegExp(`^${pattern.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*')}$`, 'i').test(name);
 }

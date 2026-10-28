@@ -23,6 +23,8 @@ Written 2026-10-27, after Phase 6 (nine languages: TypeScript, JavaScript, Pytho
 
 **Recommendation: build both.** Small: detection already exists; it needs the save location and a resource-scoped setting.
 
+**Built (step 3).** New Graph decides in this order: the `blueprintVisualScripting.defaultLanguage` setting for the folder the graph is saved in (a language id; ignored when no installed pack has it), then the nearest folder from there up to the workspace folder with a pack's marker file, then detection over the whole workspace as before. `LanguagePackRegistry.detectNewGraph` holds the rule; src/extension/languages.ts reads the folders and the setting.
+
 ## Gap 2: types used across languages
 
 **Today.** A struct, enum, class or interface `.vgraph` file has one language, and the type pickers of graphs in other languages don't list it. Probing what happens when a graph uses one anyway found two bugs:

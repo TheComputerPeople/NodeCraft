@@ -23,6 +23,19 @@ describe('LanguagePackRegistry.detect', () => {
     assert.equal(packs.detect((glob) => glob === '**/package.json')?.id, 'javascript');
   });
 
+  // docs/multi-language.md, gap 1: web/ (TypeScript) and api/ (Python) in one repository.
+  test("a new graph takes the language of the nearest folder with project files", () => {
+    assert.equal(packs.detectNewGraph(undefined, [['handlers.py'], ['pyproject.toml', 'README.md'], ['README.md']])?.id, 'python');
+    assert.equal(packs.detectNewGraph(undefined, [[], ['tsconfig.json', 'package.json']])?.id, 'typescript', 'priority order within a folder');
+    assert.equal(packs.detectNewGraph(undefined, [['Game.CSPROJ']])?.id, 'csharp', 'globs, ignoring case');
+    assert.equal(packs.detectNewGraph(undefined, [['notes.txt'], []]), undefined, 'nothing nearby: the caller detects over the workspace');
+  });
+
+  test("the folder's defaultLanguage setting wins, unless no pack has that id", () => {
+    assert.equal(packs.detectNewGraph('go', [['pyproject.toml']])?.id, 'go');
+    assert.equal(packs.detectNewGraph('cobol', [['pyproject.toml']])?.id, 'python');
+  });
+
   test('returns undefined when no marker is present', () => {
     assert.equal(packs.detect(() => false), undefined);
   });
