@@ -4,7 +4,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { copyNodes, pasteNodes } from '../../src/core/clipboard';
 import { lowerDocument } from '../../src/core/compiler/lower';
-import { functionStatus, rebindFunctionNode, signatureChanges, syncImportedFunctions } from '../../src/core/imported-functions';
+import { adoptAliasedTypes, functionStatus, rebindFunctionNode, signatureChanges, syncImportedFunctions } from '../../src/core/imported-functions';
 import { NodeDefinition, PinDefinition } from '../../src/core/model';
 import { NodeRegistry } from '../../src/core/registry';
 import { createResolver } from '../../src/core/resolve';
@@ -172,5 +172,30 @@ describe('copying nodes that call project functions', () => {
     const to = doc([], []);
     pasteNodes(to, to.graphs[0], text, { x: 0, y: 0 }, { node: () => 'n1', connection: () => 'c1' });
     assert.deepEqual(to.importedFunctions, { [old.type]: old });
+  });
+});
+
+// A function library's functions were "fn:" nodes of its generated file; now they are "lib:" nodes
+// (docs/node-authoring.md, gap 1). Graphs that still use the old types find the new nodes, and are
+// saved with them.
+describe('nodes of a former type', () => {
+  const library: NodeDefinition = { ...fn('scale', [['value', 'float']]), type: 'lib:lib/Math.vgraph#Scale', aliases: ['fn:typescript:lib/Math.vgraph.ts#scale'] };
+
+  test('find their definition by its alias', () => {
+    const registry = new NodeRegistry();
+    registry.register(library);
+    assert.equal(registry.get('fn:typescript:lib/Math.vgraph.ts#scale')?.type, library.type);
+    assert.ok(!registry.all().some((d) => d.type.startsWith('fn:typescript:lib/Math')));
+  });
+
+  test("take the definition's type, with their stored signature", () => {
+    const old = 'fn:typescript:lib/Math.vgraph.ts#scale';
+    const graph = doc([node('s', old), node('p', 'core:console.print')], []);
+    graph.importedFunctions = { [old]: library };
+    const lookup = (type: string) => (type === old || type === library.type ? library : undefined);
+    assert.equal(adoptAliasedTypes(graph, lookup), true);
+    assert.equal(graph.graphs[0].nodes[0].type, library.type);
+    assert.deepEqual(Object.keys(graph.importedFunctions), [library.type]);
+    assert.equal(adoptAliasedTypes(graph, lookup), false);
   });
 });

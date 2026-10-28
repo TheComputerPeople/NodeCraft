@@ -1,15 +1,16 @@
 // Function libraries across files (docs/program-structure.md, "Functions"): the functions of a
-// `functionLibrary` graph file become nodes that any graph in the same language can call. They are
-// called like project functions (src/core/importing/symbols.ts): generated code imports them from
-// the library's generated file, under the names its language pack exports them as.
+// `functionLibrary` graph file become nodes that graphs in the library's languages can call. They
+// are called like project functions (src/core/importing/symbols.ts): generated code imports them
+// from the library's generated file in its own language, under the names its language pack exports
+// them as. A library generated for several languages has a file for each (docs/node-authoring.md,
+// gap 1), so its nodes' types name the library and function, not a language.
 import { functionNodeType } from './importing/symbols';
 import { MACRO_INSTANCE, MacroLookup, expandMacros, macroInstanceDefinition, macroLookup } from './macros';
-import { GraphDocument, NodeDefinition, PinDefinition } from './model';
+import { FunctionVariant, GraphDocument, NodeDefinition, PinDefinition } from './model';
 
-export interface LibraryLocation {
-  // The library's .vgraph file, relative to the workspace folder with "/" separators.
-  documentPath: string;
-  // Its generated file, likewise.
+// Where one language generates a library.
+export interface LibraryOutput {
+  // The generated file, relative to the workspace folder with "/" separators.
   generatedPath: string;
   // The exported name of each function (by graph id), and the class holding them (C#).
   exports: { names: Map<string, string>; container?: string };
@@ -17,22 +18,44 @@ export interface LibraryLocation {
   module?: string;
 }
 
+export interface LibraryLocation extends LibraryOutput {
+  // The library's .vgraph file, relative to the workspace folder with "/" separators.
+  documentPath: string;
+  // Its other languages' generated files.
+  others?: Record<string, LibraryOutput>;
+}
+
+// A library function's node type.
+export function libraryNodeType(documentPath: string, graphId: string): string {
+  return `lib:${documentPath}#${graphId}`;
+}
+
 export function libraryDefinitions(doc: GraphDocument, location: LibraryLocation): NodeDefinition[] {
   const language = doc.language;
   if (doc.kind !== 'functionLibrary' || !language) return [];
-  const container = location.exports.container;
-  // C# calls Namespace.Class.Method; Python imports the function from the module.
-  const module = container ? (location.module ? `${location.module}.${container}` : container) : location.module;
+  // A function's name and module in one language's generated file. C# calls
+  // Namespace.Class.Method; Python imports the function from the module.
+  const variant = (output: LibraryOutput, graphId: string): FunctionVariant | undefined => {
+    const name = output.exports.names.get(graphId);
+    if (!name) return undefined;
+    const container = output.exports.container;
+    const module = container ? (output.module ? `${output.module}.${container}` : container) : output.module;
+    return { path: output.generatedPath, name, ...(module ? { module } : {}) };
+  };
   return doc.graphs.filter((g) => g.kind === 'function').flatMap((graph) => {
-    const name = location.exports.names.get(graph.id);
-    if (!name) return [];
+    const own = variant(location, graph.id);
+    if (!own) return [];
+    const variants = Object.fromEntries(Object.entries(location.others ?? {}).flatMap(([other, output]) => {
+      const found = variant(output, graph.id);
+      return found ? [[other, found]] : [];
+    }));
     const signature = graph.signature ?? { inputs: [], outputs: [] };
     const exec = (direction: PinDefinition['direction']): PinDefinition[] => signature.pure ? [] : [{ id: direction === 'input' ? 'execIn' : 'execOut', name: '', kind: 'exec', direction }];
     const data = (direction: PinDefinition['direction']) => (pin: (typeof signature.inputs)[number]): PinDefinition => ({
       id: pin.id, name: pin.name, kind: 'data', direction, ...(pin.type ? { type: pin.type } : {}), ...(pin.defaultValue !== undefined ? { defaultValue: pin.defaultValue } : {})
     });
     return [{
-      type: functionNodeType(language, location.generatedPath, container ? `${module}.${name}` : name),
+      type: libraryNodeType(location.documentPath, graph.id),
       version: 1,
       displayName: graph.name,
       category: signature.category || doc.name,
@@ -40,9 +63,12 @@ export function libraryDefinitions(doc: GraphDocument, location: LibraryLocation
       inputs: [...exec('input'), ...signature.inputs.filter((p) => p.kind === 'data').map(data('input'))],
       outputs: [...exec('output'), ...signature.outputs.filter((p) => p.kind === 'data').map(data('output'))],
       implementation: {
-        kind: 'function', language, path: location.generatedPath, name, ...(module ? { module } : {}),
-        source: { document: location.documentPath, graph: graph.id }
-      }
+        kind: 'function', language, ...own,
+        source: { document: location.documentPath, graph: graph.id },
+        ...(Object.keys(variants).length ? { variants } : {})
+      },
+      // Before libraries had several languages, their nodes were the generated file's functions.
+      aliases: [functionNodeType(language, own.path, own.module && location.exports.container ? `${own.module}.${own.name}` : own.name)]
     }];
   });
 }

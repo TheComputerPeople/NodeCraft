@@ -10,7 +10,7 @@ import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { graphFileDefinitions } from '../core/graph-files';
-import { duplicateTypes, typeLanguages } from '../core/user-types';
+import { duplicateTypes, generatedLanguages } from '../core/user-types';
 import { csharpNamespace, goPackage, javaProject, phpNamespace, pythonModule } from './placement';
 
 const GLOB = '**/*.vgraph';
@@ -120,12 +120,13 @@ export class GraphLibraries implements vscode.Disposable {
     };
     const generator = doc.language ? this.languages.get(doc.language)?.generator : undefined;
     const own = output(doc.language) ?? { generatedPath: relative(root, uri.fsPath) };
-    // A shared struct or enum is generated for its other languages too (docs/multi-language.md).
-    const others = Object.fromEntries(typeLanguages(doc).slice(1).flatMap((language) => {
+    // A shared struct, enum or function library is generated for its other languages too
+    // (docs/multi-language.md, gap 2; docs/node-authoring.md, gap 1).
+    const others = Object.fromEntries(generatedLanguages(doc).slice(1).flatMap((language) => {
       const other = output(language);
       return other ? [[language, other]] : [];
     }));
-    const definitions = graphFileDefinitions(doc, { document: relative(root, uri.fsPath), ...own, ...(Object.keys(others).length ? { others } : {}) }, generator);
+    const definitions = graphFileDefinitions(doc, { document: relative(root, uri.fsPath), ...own, ...(Object.keys(others).length ? { others } : {}) }, generator, (language) => this.languages.get(language)?.generator);
     return definitions && { path: relative(root, uri.fsPath), definitions };
   }
 

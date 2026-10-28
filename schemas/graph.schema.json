@@ -38,7 +38,7 @@
         "type": "string",
         "minLength": 1
       },
-      "description": "A structure's or enumeration's other target languages: it is generated for each of them too, so graphs in any of them use the one type."
+      "description": "A structure's, enumeration's or function library's other target languages: it is generated for each of them too, so graphs in any of them use it."
     },
     "parent": {
       "type": "string",

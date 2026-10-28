@@ -8,6 +8,8 @@ export interface Disposable {
 
 export class NodeRegistry {
   private readonly definitions = new Map<string, NodeDefinition>();
+  // Former node types, to the definitions that took them over (NodeDefinition.aliases).
+  private readonly aliases = new Map<string, NodeDefinition>();
   // Definitions from the workspace, by source: node libraries, the project's functions.
   private readonly sources = new Map<string, NodeDefinition[]>();
   private readonly listeners = new Set<() => void>();
@@ -17,7 +19,9 @@ export class NodeRegistry {
   }
 
   register(definition: NodeDefinition): void {
-    this.definitions.set(definition.type, normalizeNodeDefinition(definition));
+    const normalized = normalizeNodeDefinition(definition);
+    this.definitions.set(definition.type, normalized);
+    for (const alias of definition.aliases ?? []) this.aliases.set(alias, normalized);
   }
 
   registerMany(definitions: NodeDefinition[]): void {
@@ -29,6 +33,7 @@ export class NodeRegistry {
   setSource(source: string, definitions: NodeDefinition[]): void {
     this.sources.set(source, definitions);
     this.definitions.clear();
+    this.aliases.clear();
     this.registerMany(builtinNodeDefinitions());
     for (const list of this.sources.values()) this.registerMany(list);
     this.listeners.forEach((listener) => listener());
@@ -40,7 +45,7 @@ export class NodeRegistry {
   }
 
   get(type: string): NodeDefinition | undefined {
-    return this.definitions.get(type);
+    return this.definitions.get(type) ?? this.aliases.get(type);
   }
 
   all(): NodeDefinition[] {

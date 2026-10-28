@@ -41,6 +41,9 @@ export interface NodeDefinition {
   requires?: Capability[];
   // The package it comes from (src/core/node-packages.ts), set when packages are resolved.
   library?: { name: string; version: string };
+  // Node types that used to mean this node: graphs that still use one get this node, and are
+  // saved with its type (a function library's functions were "fn:" nodes of its generated file).
+  aliases?: string[];
 }
 
 // A language feature a graph can need (docs/language-breadth.md, "Capabilities, enforced").
@@ -81,7 +84,7 @@ export interface MacroImplementation {
 // A function in the project's own code, which generated code imports (docs/code-as-nodes.md).
 export interface FunctionImplementation {
   kind: 'function';
-  // The module's language: "typescript", "javascript" or "python".
+  // The module's language ("typescript", "python", …); a library's first language.
   language: string;
   // The module's path relative to the workspace folder, with "/" separators.
   path: string;
@@ -92,6 +95,15 @@ export interface FunctionImplementation {
   // A function of a graph library: its .vgraph file (workspace-relative) and function graph, so
   // Simulate can run it (src/core/libraries.ts).
   source?: { document: string; graph: string };
+  // A library generated for several languages: the function in each of its other languages.
+  variants?: Record<string, FunctionVariant>;
+}
+
+// A library function as another language's generated file has it.
+export interface FunctionVariant {
+  path: string;
+  name: string;
+  module?: string;
 }
 
 export interface GraphNode {
@@ -180,8 +192,9 @@ export interface GraphDocument {
   name: string;
   kind: DocumentKind;
   language?: string;
-  // A structure's or enumeration's other target languages: it's generated for each of them too, so
-  // graphs in any of them use the one type (docs/multi-language.md, gap 2).
+  // A structure's, enumeration's or function library's other target languages: it's generated for
+  // each of them too, so graphs in any of them use it (docs/multi-language.md, gap 2;
+  // docs/node-authoring.md, gap 1).
   languages?: string[];
   // Member variables; a structure's fields; libraries and enumerations have none.
   variables: GraphVariable[];

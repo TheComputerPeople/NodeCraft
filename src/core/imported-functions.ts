@@ -5,8 +5,9 @@
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from './model';
 import { canConnect, formatType } from './types';
 
+// A project function's node ("fn:"), or a function library's ("lib:", src/core/libraries.ts).
 export function isFunctionType(type: string): boolean {
-  return type.startsWith('fn:');
+  return type.startsWith('fn:') || type.startsWith('lib:');
 }
 
 export type FunctionStatus =
@@ -118,12 +119,32 @@ export function syncImportedFunctions(doc: GraphDocument, current: (type: string
   return true;
 }
 
+// Gives each node whose type is a former one (NodeDefinition.aliases) its definition's type, and
+// moves the stored signature with it. Returns whether anything changed.
+export function adoptAliasedTypes(doc: GraphDocument, lookup: (type: string) => NodeDefinition | undefined): boolean {
+  let changed = false;
+  for (const node of doc.graphs.flatMap((g) => g.nodes)) {
+    const current = lookup(node.type)?.type;
+    if (!current || current === node.type) continue;
+    const stored = doc.importedFunctions?.[node.type];
+    if (stored && doc.importedFunctions) {
+      delete doc.importedFunctions[node.type];
+      doc.importedFunctions[current] ??= stored;
+    }
+    node.type = current;
+    changed = true;
+  }
+  return changed;
+}
+
 // A function's name and module for messages, from its stored signature or else its node type
-// ("fn:<language>:<path>#<name>").
+// ("fn:<language>:<path>#<name>", or "lib:<library path>#<function graph id>").
 export function describeFunction(type: string, stored?: NodeDefinition): { name: string; path: string } {
+  // A library function: its name in the graph, in its .vgraph file.
+  if (stored?.implementation?.kind === 'function' && stored.implementation.source) return { name: stored.displayName, path: stored.implementation.source.document };
   if (stored?.implementation?.kind === 'function') return { name: stored.implementation.name, path: stored.implementation.path };
   const hash = type.lastIndexOf('#');
-  const path = type.slice(type.indexOf(':', 3) + 1, hash);
+  const path = type.startsWith('lib:') ? type.slice(4, hash) : type.slice(type.indexOf(':', 3) + 1, hash);
   return { name: type.slice(hash + 1), path };
 }
 

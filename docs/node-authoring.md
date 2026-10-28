@@ -27,6 +27,13 @@ Reviewed 2026-10-28, after the built-in utility library grew to 94 nodes. Each g
 - What a library function may use is checked for each of its languages, so a node with no snippet in one of them, or another language's project function, is a compile error for that language, on the node.
 - Simulate runs library functions from the graph, as today, whatever the languages.
 
+**Built (step 2).**
+
+- **Languages.** A function library's Details show its **Also generate for** checkboxes under Library, as a struct's editor does. Compiling writes a file per language (`generatedLanguages` in src/core/user-types.ts now covers libraries).
+- **Node types.** A library function's node is `lib:<library path>#<function graph id>`. Its definition keeps the first language's file and adds the others as `variants` (`FunctionImplementation` in src/core/model.ts), and the compiler imports the one in the graph's language.
+- **Wrong language.** A graph in a language the library isn't generated for gets: `"Scale" is in a TypeScript and Python function library (lib/MathTools.vgraph); add Go to its languages to call it from this graph.`
+- **Migration.** A definition can name the node types it replaced (`aliases`); the registry and the editor find it under them, and the editor saves a graph's old `fn:` library nodes as `lib:` nodes, with their stored signatures, the next time the graph is saved.
+
 ## Gap 2: code classes have no nodes
 
 **Today.** Only free and static functions are nodes. Unreal's everyday pattern, a `BlueprintCallable` member function called through a **Target** pin and a `BlueprintReadWrite` property read and written by Get and Set nodes, has been deferred since Phase 3. A code type reaches a graph only as a `native:` pin that passes values through untouched. The Lua scanner even says so: "It takes self (a method): only module functions can be nodes."

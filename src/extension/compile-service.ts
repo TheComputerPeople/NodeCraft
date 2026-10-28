@@ -9,7 +9,7 @@ import { PinExpression } from '../core/language-pack';
 import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
-import { typeLanguages } from '../core/user-types';
+import { generatedLanguages } from '../core/user-types';
 import { cppRunSources, csharpNamespace, csharpRunSources, godotProject, goPackage, goRunSources, javaProject, phpNamespace, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
 import { OutputPlans } from './output-plans';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
@@ -238,7 +238,7 @@ export class CompileService implements vscode.Disposable {
   private async compileOtherLanguages(graph: GraphDocument, graphFileName: string, graphDir: string, root: string): Promise<{ paths: string[]; diagnostics: CompileDiagnostic[] }> {
     const paths: string[] = [];
     const diagnostics: CompileDiagnostic[] = [];
-    for (const language of typeLanguages(graph).slice(1)) {
+    for (const language of generatedLanguages(graph).slice(1)) {
       const pack = this.languages.get(language);
       const named = (list: CompileDiagnostic[]) => list.map((d) => ({ ...d, message: `${pack?.displayName ?? language}: ${d.message}` }));
       const result = compileDocument({ ...graph, language }, { registry: this.registry, languages: this.languages, generate: generateOptions(language, graphFileName, graphDir, root) });

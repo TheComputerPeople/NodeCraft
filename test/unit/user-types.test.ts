@@ -11,7 +11,7 @@ import { GraphDocument } from '../../src/core/model';
 import { NodeRegistry } from '../../src/core/registry';
 import { createResolver } from '../../src/core/resolve';
 import { parseDocument, serializeDocument } from '../../src/core/serializer';
-import { StructValue, declaredType, duplicateTypes, listUserTypes, typeLanguages, typeLookup, userTypeDefinitions } from '../../src/core/user-types';
+import { StructValue, declaredType, duplicateTypes, generatedLanguages, listUserTypes, typeLookup, userTypeDefinitions } from '../../src/core/user-types';
 import { defaultValue, formatValue, fromStored, storedDefault } from '../../src/core/values';
 import { logs, node, run, wire } from './helpers';
 
@@ -224,13 +224,15 @@ describe('shared structs and enums', () => {
     assert.deepEqual(logs(run(printPoint('python'), sharedRegistry())), ['{"X":2}']);
   });
 
-  test('only structures and enumerations list other languages, and the list never repeats its own', () => {
+  test('only structures, enumerations and function libraries list other languages, and the list never repeats its own', () => {
     assert.deepEqual(parseDocument(serializeDocument(shared)).document.languages, ['python']);
-    assert.throws(() => parseDocument(JSON.stringify({ ...shared, kind: 'class', variables: [], graphs: [{ id: 'g', name: 'EventGraph', kind: 'event', nodes: [], connections: [] }] })), /only a structure or enumeration has other languages/);
+    assert.throws(() => parseDocument(JSON.stringify({ ...shared, kind: 'class', variables: [], graphs: [{ id: 'g', name: 'EventGraph', kind: 'event', nodes: [], connections: [] }] })), /only a structure, enumeration or function library has other languages/);
+    const library = parseDocument(JSON.stringify({ ...shared, kind: 'functionLibrary', variables: [], graphs: [{ id: 'f', name: 'F', kind: 'function', nodes: [], connections: [] }] })).document;
+    assert.deepEqual(generatedLanguages(library), ['typescript', 'python']);
     const doc = structuredClone(shared);
     setTypeLanguages(doc, ['python', 'typescript', 'python', 'go']);
     assert.deepEqual(doc.languages, ['python', 'go']);
-    assert.deepEqual(typeLanguages(doc), ['typescript', 'python', 'go']);
+    assert.deepEqual(generatedLanguages(doc), ['typescript', 'python', 'go']);
     setTypeLanguages(doc, []);
     assert.equal('languages' in doc, false);
   });

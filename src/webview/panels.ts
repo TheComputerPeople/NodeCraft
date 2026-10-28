@@ -1,13 +1,13 @@
 // The node palette (left) and the Details panel (right).
 import { supports } from '../core/capabilities';
 import {
-  addSignaturePin, findVariable, functionUses, removeSignaturePin, renameGraph, renameSignaturePin, renameVariable, setFunctionPure, setSignaturePinType, setVariableType, variableUses
+  addSignaturePin, findVariable, functionUses, removeSignaturePin, renameGraph, renameSignaturePin, renameVariable, setFunctionPure, setSignaturePinType, setTypeLanguages, setVariableType, variableUses
 } from '../core/blueprint-edits';
 import { FUNCTION_ENTRY } from '../core/functions';
 import { MACRO_INPUTS, MACRO_OUTPUTS } from '../core/macros';
 import { definitionFor } from '../core/editing';
 import { SWITCH_INT, SWITCH_STRING, switchIntCases, switchStringCases } from '../core/flow-control';
-import { Access, Graph, GraphNode, GraphVariable } from '../core/model';
+import { Access, Graph, GraphDocument, GraphNode, GraphVariable } from '../core/model';
 import { ContainerKind, TypeRef } from '../core/types';
 import { defaultValue } from '../core/values';
 import { formatType } from '../core/types';
@@ -365,12 +365,47 @@ function renderFunctionDetails(graph: Graph): void {
     fields.appendChild(add);
   }
 
+  // A function library's languages: its functions are nodes in graphs of each (docs/node-authoring.md, gap 1).
+  if (doc.kind === 'functionLibrary') {
+    const shared = alsoGenerateFor(doc, refresh);
+    if (shared) {
+      fields.insertAdjacentHTML('beforeend', '<div class="details-heading">Library</div>');
+      fields.appendChild(shared);
+    }
+  }
+
   const uses = functionUses(doc, graph.id);
   const usage = uses ? `${macro ? 'Used' : 'Called'} by ${uses} node${uses === 1 ? '' : 's'}.` : `Not ${macro ? 'used' : 'called'} yet: drag it from My Blueprint onto a graph.`;
   fields.insertAdjacentHTML('beforeend', `<div class="muted">${usage}</div>`);
   wrapper.appendChild(fields);
   dom.inspector.innerHTML = '';
   dom.inspector.appendChild(wrapper);
+}
+
+// The other languages a shared struct, enum or function library is generated for, as checkboxes;
+// undefined when no other language is available (docs/multi-language.md, gap 2).
+export function alsoGenerateFor(doc: GraphDocument, changed: () => void): HTMLElement | undefined {
+  const others = state.languages.filter((l) => l.id !== doc.language);
+  if (!others.length) return undefined;
+  const shared = document.createElement('div');
+  shared.className = 'type-languages';
+  shared.setAttribute('role', 'group');
+  shared.setAttribute('aria-label', 'Also Generate For');
+  shared.insertAdjacentHTML('beforeend', '<span class="muted">Also generate for</span>');
+  for (const language of others) {
+    const label = document.createElement('label');
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = doc.languages?.includes(language.id) ?? false;
+    box.addEventListener('change', () => {
+      const chosen = (doc.languages ?? []).filter((l) => l !== language.id);
+      setTypeLanguages(doc, box.checked ? [...chosen, language.id] : chosen);
+      changed();
+    });
+    label.append(box, document.createTextNode(` ${language.displayName}`));
+    shared.appendChild(label);
+  }
+  return shared;
 }
 
 // Unreal's pin type picker: a type, a container, and a map's value type. Macros also offer Exec.

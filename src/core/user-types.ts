@@ -70,16 +70,17 @@ export function enumTypeId(name: string): string {
   return `enum:${name}`;
 }
 
-// The languages a structure or enumeration is generated for: its own, then its other languages.
-export function typeLanguages(doc: GraphDocument): string[] {
-  const others = doc.kind === 'structure' || doc.kind === 'enumeration' ? doc.languages ?? [] : [];
+// The languages a structure, enumeration or function library is generated for: its own, then its
+// other languages.
+export function generatedLanguages(doc: GraphDocument): string[] {
+  const others = doc.kind === 'structure' || doc.kind === 'enumeration' || doc.kind === 'functionLibrary' ? doc.languages ?? [] : [];
   return [...new Set([doc.language ?? '', ...others].filter(Boolean))];
 }
 
 // The type a structure or enumeration document declares. `sources` are where its other languages
 // generate it, for a shared type.
 export function declaredType(doc: GraphDocument, source?: TypeSource, sources?: Record<string, TypeSource>): StructInfo | EnumInfo | undefined {
-  const languages = typeLanguages(doc);
+  const languages = generatedLanguages(doc);
   const all = { ...sources, ...(source && doc.language ? { [doc.language]: source } : {}) };
   const shared = languages.length > 1 ? { languages, ...(Object.keys(all).length ? { sources: all } : {}) } : {};
   const common = { name: doc.name, ...(doc.language ? { language: doc.language } : {}), ...(typeof doc.metadata?.description === 'string' ? { description: doc.metadata.description } : {}), ...(source ? { source } : {}), ...shared };

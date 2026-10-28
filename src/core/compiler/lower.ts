@@ -1257,16 +1257,23 @@ class Lowerer {
     if (existing) return existing;
     const implementation = def.implementation;
     if (implementation?.kind !== 'function') return undefined;
-    if (!this.options.importLanguages.includes(implementation.language)) {
-      this.error('wrong-language', `"${def.displayName}" is ${this.languageName(implementation.language)} code (${implementation.path}); a ${this.options.languageName} graph can't call it.`, info.graph.id, node.id);
+    // A library generated for several languages: the generated file in one this graph imports.
+    const language = [implementation.language, ...Object.keys(implementation.variants ?? {})].find((l) => this.options.importLanguages.includes(l));
+    if (!language) {
+      const library = implementation.source;
+      const message = library
+        ? `"${def.displayName}" is in a ${[implementation.language, ...Object.keys(implementation.variants ?? {})].map((l) => this.languageName(l)).join(' and ')} function library (${library.document}); add ${this.options.languageName} to its languages to call it from this graph.`
+        : `"${def.displayName}" is ${this.languageName(implementation.language)} code (${implementation.path}); a ${this.options.languageName} graph can't call it.`;
+      this.error('wrong-language', message, info.graph.id, node.id);
       return undefined;
     }
+    const target = language === implementation.language ? implementation : implementation.variants![language];
     const imported: IrImport = {
       id: def.type,
-      name: implementation.name,
-      language: implementation.language,
-      path: implementation.path,
-      ...(implementation.module ? { module: implementation.module } : {}),
+      name: target.name,
+      language,
+      path: target.path,
+      ...(target.module ? { module: target.module } : {}),
       params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
       returns: def.outputs.find((p) => p.kind === 'data')?.type
     };

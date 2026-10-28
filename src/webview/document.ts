@@ -4,7 +4,7 @@ import { FULL_CAPABILITIES, implementsCode, missingCapabilities, nodeRequirement
 import type { LanguageCapabilities } from '../core/language-pack';
 import { pinDefinition, releaseWildcards } from '../core/editing';
 import { Access, GraphDocument, GraphNode, GraphPin, HostMessage, NodeDefinition, PinDefinition } from '../core/model';
-import { describeFunction, functionStatus, isFunctionType, syncImportedFunctions } from '../core/imported-functions';
+import { adoptAliasedTypes, describeFunction, functionStatus, isFunctionType, syncImportedFunctions } from '../core/imported-functions';
 import { libraryChange, libraryChangeMessage, syncLibraryVersions } from '../core/node-packages';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
@@ -133,7 +133,8 @@ function callable(definition: NodeDefinition): boolean {
   const language = state.languages.find((l) => l.id === state.document?.language);
   if (implementation?.kind === 'code') return !language?.snippetLanguages || implementsCode(definition, language.snippetLanguages, language.snippets ?? []);
   if (implementation?.kind !== 'function') return true;
-  return !language || language.callable.includes(implementation.language);
+  // A library generated for several languages can be called from each of them.
+  return !language || [implementation.language, ...Object.keys(implementation.variants ?? {})].some((l) => language.callable.includes(l));
 }
 
 // Text an entry matches in searches: its name, category, description and keywords.
@@ -153,7 +154,8 @@ export function functionProblem(node: GraphNode): { severity: 'error' | 'warning
   }
   if (status.state === 'missing' && state.functionsLoaded) {
     const offer = status.candidates.length ? ` Right-click the node to replace it with ${status.candidates.map((c) => c.displayName).join(' or ')}.` : '';
-    return { severity: 'error', status, message: `${name} in ${path} no longer exists, or is no longer marked @blueprint.${offer}` };
+    const gone = node.type.startsWith('lib:') ? 'no longer exists' : 'no longer exists, or is no longer marked @blueprint';
+    return { severity: 'error', status, message: `${name} in ${path} ${gone}.${offer}` };
   }
   return undefined;
 }
@@ -172,7 +174,8 @@ export function pinDef(nodeId: string, pinId: string): PinDefinition | undefined
 
 export function setDefinitions(definitions: NodeDefinition[]): void {
   state.definitions = definitions;
-  state.defByType = new Map(definitions.map((d) => [d.type, d]));
+  // A node of a former type (NodeDefinition.aliases) finds its definition, and takes its type when saved.
+  state.defByType = new Map(definitions.flatMap((d) => [[d.type, d] as const, ...(d.aliases ?? []).map((alias) => [alias, d] as const)]));
   updateClassHierarchy();
   renderPalette();
 }
@@ -269,6 +272,8 @@ export function flushSave(): void {
   clearTimeout(state.saveTimer);
   state.dirty = false;
   pruneBreakpoints();
+  // Nodes of a former type become their definition's (a function library's "fn:" nodes, "lib:").
+  adoptAliasedTypes(state.document, (type) => state.defByType.get(type));
   // Store the signature of each project function the graph calls, with the graph.
   syncImportedFunctions(state.document, (type) => state.defByType.get(type));
   // And the version of each node package it uses.

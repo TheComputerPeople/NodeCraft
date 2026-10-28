@@ -367,22 +367,30 @@ describe('function libraries', () => {
     };
   }
 
-  // The library's nodes as the workspace service makes them, for a library compiled into lib/.
-  function definitions(language: string): NodeDefinition[] {
-    const lib = library(language);
+  // Where a language generates the library, compiled into lib/.
+  function output(lib: GraphDocument, language: string) {
     const generator = languages.get(language)!.generator!;
-    const generated = `lib/${generator.outputFileName('MathTools.vgraph')}`;
-    return libraryDefinitions(lib, {
-      documentPath: 'lib/MathTools.vgraph',
-      generatedPath: generated,
+    return {
+      generatedPath: `lib/${generator.outputFileName('MathTools.vgraph')}`,
       exports: generator.libraryExports(lib.name, lib.graphs.map((g) => ({ id: g.id, name: g.name }))),
       module: language === 'python' ? 'math_tools_vgraph' : language === 'csharp' ? 'Lib' : undefined
+    };
+  }
+
+  // The library's nodes as the workspace service makes them; `others` are its other languages.
+  function definitions(language: string, others: string[] = []): NodeDefinition[] {
+    const lib = library(language);
+    return libraryDefinitions(lib, {
+      documentPath: 'lib/MathTools.vgraph',
+      ...output(lib, language),
+      ...(others.length ? { others: Object.fromEntries(others.map((other) => [other, output(lib, other)])) } : {})
     });
   }
 
-  // Start → Difference And Product(10, 4) → Print(Difference) → Print(Scale(Product)).
-  function caller(language: string): { registry: NodeRegistry; document: GraphDocument } {
-    const defs = definitions(language);
+  // Start → Difference And Product(10, 4) → Print(Difference) → Print(Scale(Product)), in
+  // `language`, calling a library whose first language is `libraryLanguage` (and has `others`).
+  function caller(language: string, libraryLanguage = language, others: string[] = []): { registry: NodeRegistry; document: GraphDocument } {
+    const defs = definitions(libraryLanguage, others);
     const diff = defs.find((d) => d.displayName === 'Difference And Product')!;
     const scale = defs.find((d) => d.displayName === 'Scale')!;
     const r = registry();
@@ -404,18 +412,45 @@ describe('function libraries', () => {
     return { registry: r, document };
   }
 
-  test('the library makes a node per function', () => {
+  test('the library makes a node per function, named by the library, not a language', () => {
     const defs = definitions('typescript');
     assert.deepEqual(defs.map((d) => [d.type, d.displayName, d.category]), [
-      ['fn:typescript:lib/MathTools.vgraph.ts#differenceAndProduct', 'Difference And Product', 'MathTools'],
-      ['fn:typescript:lib/MathTools.vgraph.ts#scale', 'Scale', 'MathTools']
+      ['lib:lib/MathTools.vgraph#DiffProduct', 'Difference And Product', 'MathTools'],
+      ['lib:lib/MathTools.vgraph#Scale', 'Scale', 'MathTools']
     ]);
     assert.deepEqual(defs[1].inputs.map((p) => [p.id, p.defaultValue]), [['value', undefined], ['factor', 2]]);
     assert.ok(defs[0].inputs.some((p) => p.kind === 'exec') && !defs[1].inputs.some((p) => p.kind === 'exec'));
-    assert.deepEqual(definitions('csharp').map((d) => d.type), [
-      'fn:csharp:lib/MathTools.vgraph.cs#Lib.MathTools.DifferenceAndProduct',
-      'fn:csharp:lib/MathTools.vgraph.cs#Lib.MathTools.Scale'
+    // Graphs made before libraries had several languages used the generated file's functions.
+    assert.deepEqual(defs.map((d) => d.aliases), [['fn:typescript:lib/MathTools.vgraph.ts#differenceAndProduct'], ['fn:typescript:lib/MathTools.vgraph.ts#scale']]);
+    assert.deepEqual(definitions('csharp').map((d) => d.aliases), [
+      ['fn:csharp:lib/MathTools.vgraph.cs#Lib.MathTools.DifferenceAndProduct'],
+      ['fn:csharp:lib/MathTools.vgraph.cs#Lib.MathTools.Scale']
     ]);
+  });
+
+  test('a library for several languages names its function in each', () => {
+    const [diff] = definitions('typescript', ['python', 'csharp']);
+    assert.deepEqual(diff.implementation?.kind === 'function' && diff.implementation.variants, {
+      python: { path: 'lib/math_tools_vgraph.py', name: 'difference_and_product', module: 'math_tools_vgraph' },
+      csharp: { path: 'lib/MathTools.vgraph.cs', name: 'DifferenceAndProduct', module: 'Lib.MathTools' }
+    });
+  });
+
+  test('a graph in a language the library isn\'t generated for can\'t call it', () => {
+    const { registry: r, document } = caller('go', 'typescript', ['python']);
+    const result = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'Caller.vgraph' } });
+    assert.deepEqual(result.diagnostics.filter((d) => d.nodeId === 'd').map((d) => d.message), [
+      '"Difference And Product" is in a TypeScript and Python function library (lib/MathTools.vgraph); add Go to its languages to call it from this graph.'
+    ]);
+  });
+
+  test('a graph made with the generated file\'s functions still calls them', () => {
+    const { registry: r, document } = caller('typescript');
+    for (const node of document.graphs[0].nodes) node.type = r.get(node.type)?.aliases?.[0] ?? node.type;
+    assert.ok(document.graphs[0].nodes.some((node) => node.type.startsWith('fn:')));
+    const result = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'Caller.vgraph' } });
+    assert.deepEqual(result.diagnostics, []);
+    assert.match(result.output!.text, /differenceAndProduct\(/);
   });
 
   test('Simulate runs the library\'s graphs', () => {
@@ -438,16 +473,18 @@ describe('function libraries', () => {
     assert.match(error?.message ?? '', /lib\/MathTools\.vgraph/);
   });
 
-  // Compiles the library into lib/ and the caller into graphs/.
-  function build(key: string, language: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; libFile: string; importRoots?: string[] } {
+  // Compiles the library into lib/ and the caller into graphs/. A library for several languages
+  // (`libraryLanguage` first, then `others`) is compiled in the caller's language, as the
+  // extension writes a file for each.
+  function build(key: string, language: string, generate: Partial<GenerateOptions> = {}, libraryLanguage = language, others: string[] = []): { file: string; className: string; dir: string; libFile: string; importRoots?: string[] } {
     const dir = path.join(workDir, `library-${key}`);
     fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
-    const lib = compileDocument(library(language), { registry: registry(), languages, generate: { sourceFileName: 'MathTools.vgraph', outputDir: 'lib', namespace: 'Lib', ...generate } });
+    const lib = compileDocument({ ...library(libraryLanguage), language }, { registry: registry(), languages, generate: { sourceFileName: 'MathTools.vgraph', outputDir: 'lib', namespace: 'Lib', ...generate } });
     assert.deepEqual(lib.diagnostics, []);
     const libFile = path.join(dir, 'lib', lib.output!.fileName);
     fs.writeFileSync(libFile, lib.output!.text);
-    const { registry: r, document } = caller(language);
+    const { registry: r, document } = caller(language, libraryLanguage, others);
     const result = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'Caller.vgraph', outputDir: 'graphs', namespace: 'Game', ...generate } });
     assert.deepEqual(result.diagnostics, []);
     const file = path.join(dir, 'graphs', result.output!.fileName);
@@ -468,6 +505,21 @@ describe('function libraries', () => {
       try {
         const sources = target.language === 'csharp' ? [libFile] : undefined;
         outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), ['computing', '6', '80'], `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  // One library for TypeScript and Python: a graph in each calls its own language's file.
+  for (const language of ['typescript', 'python']) {
+    test(`a TypeScript and Python library is called from ${language === 'python' ? 'Python' : 'TypeScript'}`, async (t) => {
+      const { file, className, dir, importRoots } = build(`shared-${language}`, language, {}, 'typescript', ['python']);
+      let outcome;
+      try {
+        outcome = await runGeneratedCode(languages.get(language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), importRoots, timeoutMs: 180000 });
       } catch (error) {
         if (error instanceof ToolNotFoundError) return t.skip(error.message);
         throw error;

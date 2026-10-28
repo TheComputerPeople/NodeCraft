@@ -101,8 +101,8 @@ function normalizeDocument(raw: Record<string, unknown>, fallbackName: string): 
   if (doc.interfaces !== undefined && (doc.kind !== 'class' || !Array.isArray(doc.interfaces) || doc.interfaces.some((i) => typeof i !== 'string' || !i.startsWith('interface:')))) {
     throw new Error('Invalid .vgraph document: only a class implements interfaces, as a list of "interface:<Name>".');
   }
-  if (doc.languages !== undefined && ((doc.kind !== 'structure' && doc.kind !== 'enumeration') || !Array.isArray(doc.languages) || doc.languages.some((l) => typeof l !== 'string' || !l))) {
-    throw new Error('Invalid .vgraph document: only a structure or enumeration has other languages, as a list of language ids.');
+  if (doc.languages !== undefined && ((doc.kind !== 'structure' && doc.kind !== 'enumeration' && doc.kind !== 'functionLibrary') || !Array.isArray(doc.languages) || doc.languages.some((l) => typeof l !== 'string' || !l))) {
+    throw new Error('Invalid .vgraph document: only a structure, enumeration or function library has other languages, as a list of language ids.');
   }
   if (doc.parent !== undefined && (doc.kind !== 'class' || typeof doc.parent !== 'string' || !doc.parent.startsWith('object:'))) throw new Error('Invalid .vgraph document: only a class has a parent class, as "object:<Name>".');
   const ids = new Set<string>();
