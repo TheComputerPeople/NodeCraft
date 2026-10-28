@@ -125,7 +125,8 @@ function godotCommands(): string[][] {
 }
 
 function godotFromEnvironment(): string | undefined {
-  return typeof process !== 'undefined' ? process.env.GODOT : undefined;
+  // Core code also builds for the webview, which has no Node types.
+  return (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.GODOT;
 }
 
 // The project Godot runs in: the graph's own (so its res:// paths and autoloads work), else the
