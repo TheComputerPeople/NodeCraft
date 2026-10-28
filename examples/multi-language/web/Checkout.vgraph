@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 3,
+  "name": "Checkout",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "apple",
+          "type": "fn:typescript:web/pricing.ts#priceOf",
+          "position": {
+            "x": 220,
+            "y": 0
+          },
+          "properties": {
+            "pin:item": "apple"
+          }
+        },
+        {
+          "id": "coffee",
+          "type": "fn:typescript:web/pricing.ts#priceOf",
+          "position": {
+            "x": 220,
+            "y": 140
+          },
+          "properties": {
+            "pin:item": "coffee"
+          }
+        },
+        {
+          "id": "total",
+          "type": "core:math.add",
+          "position": {
+            "x": 480,
+            "y": 60
+          },
+          "properties": {}
+        },
+        {
+          "id": "print",
+          "type": "core:console.print",
+          "position": {
+            "x": 700,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "apple",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "apple",
+          "fromPin": "execOut",
+          "toNode": "coffee",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w3",
+          "fromNode": "coffee",
+          "fromPin": "execOut",
+          "toNode": "total",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w4",
+          "fromNode": "total",
+          "fromPin": "execOut",
+          "toNode": "print",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w5",
+          "fromNode": "apple",
+          "fromPin": "returnValue",
+          "toNode": "total",
+          "toPin": "a"
+        },
+        {
+          "id": "w6",
+          "fromNode": "coffee",
+          "fromPin": "returnValue",
+          "toNode": "total",
+          "toPin": "b"
+        },
+        {
+          "id": "w7",
+          "fromNode": "total",
+          "fromPin": "result",
+          "toNode": "print",
+          "toPin": "value"
+        }
+      ],
+      "comments": [
+        {
+          "id": "note",
+          "text": "Price Of runs the Python pricing service (api/pricing.py)",
+          "position": {
+            "x": 180,
+            "y": -60
+          },
+          "size": {
+            "width": 520,
+            "height": 220
+          }
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "description": "A TypeScript graph that prices an order with the Python pricing service."
+  },
+  "importedFunctions": {
+    "fn:typescript:web/pricing.ts#priceOf": {
+      "type": "fn:typescript:web/pricing.ts#priceOf",
+      "version": 1,
+      "displayName": "Price Of",
+      "category": "Pricing",
+      "description": "The price of an item, from the Python pricing service (api/pricing.py).",
+      "inputs": [
+        {
+          "id": "execIn",
+          "name": "",
+          "kind": "exec",
+          "direction": "input"
+        },
+        {
+          "id": "item",
+          "name": "Item",
+          "kind": "data",
+          "direction": "input",
+          "type": {
+            "id": "string"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "id": "execOut",
+          "name": "",
+          "kind": "exec",
+          "direction": "output"
+        },
+        {
+          "id": "returnValue",
+          "name": "Return Value",
+          "kind": "data",
+          "direction": "output",
+          "type": {
+            "id": "float"
+          }
+        }
+      ],
+      "implementation": {
+        "kind": "function",
+        "language": "typescript",
+        "path": "web/pricing.ts",
+        "name": "priceOf"
+      }
+    }
+  }
+}

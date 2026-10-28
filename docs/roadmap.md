@@ -288,7 +288,19 @@ Exit: a written gap analysis with a recommendation per gap, then a decision on w
 
 Analysis: [multi-language.md](multi-language.md) (2026-10-27). It found a bug as well as gaps: a type from another language disappears from a graph without a compile error.
 
-Decided (2026-10-27): all of its recommendations. Steps, one commit each:
+Decided (2026-10-27): all of its recommendations.
+
+Status: complete (October 2026).
+
+- **Built:**
+  - A new graph takes the language of the project files nearest to where it's saved, and the `blueprintVisualScripting.defaultLanguage` setting can set it per folder.
+  - A graph that uses another language's struct, enum, class or interface gets a compile error, and Simulate stops with it (before, the value vanished from the generated code). A type name declared in two files is reported.
+  - The palette hides code nodes with no implementation in the graph's language.
+  - Structs and enums can be shared: one file, generated for each of its languages.
+- **Documented:** calls into another language go through a project function that crosses the boundary ([examples/multi-language](../examples/multi-language/README.md)).
+- **Deferred:** generated bindings for cross-language calls (a process boundary from a shared interface), and shared classes and interfaces. Both need a call boundary between languages.
+
+Steps, one commit each:
 
 1. The gap analysis.
 2. Report a type used from another language, and a type name declared twice.
@@ -382,6 +394,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Library | Standard math, string, utility and file nodes | ✅ (collection nodes need Phase 4) | — |
 | Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace and extensions, not a registry) | 6 |
 | Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++, Rust, Java and Go; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Rust has no inheritance or interfaces, Go no inheritance) | 6 |
+| Languages | (Beyond Unreal) Workspaces with graphs in several languages: a new graph takes its folder's language, structs and enums can be shared between languages, and another language's code is reached through project functions | ✅ (generated cross-language bindings deferred) | 7 |
 | Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go and declarative packs' code) | — |
 | Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go and declarative packs' code) | — |
 | Debugging | Execution flow highlighting | ✅ (run trail and exec wire pulses, in Simulate) | — |

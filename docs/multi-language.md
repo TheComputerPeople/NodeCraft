@@ -4,7 +4,7 @@ Phase 7 of the [roadmap](roadmap.md) is analysis first: find where a workspace w
 
 Written 2026-10-27, after Phase 6 (nine languages: TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, and C as a separate extension).
 
-**Decided (2026-10-27): every recommendation below is accepted.** Phase 7 builds gaps 1 to 3 and documents gap 4, in the steps listed at the end. Each gap's section records what was built.
+**Decided (2026-10-27): every recommendation below is accepted.** Phase 7 builds gaps 1 to 3 and documents gap 4, in the steps listed at the end. Each gap's section records what was built; all six steps are done.
 
 ## What already works
 
@@ -67,6 +67,8 @@ So a type that both sides of a project need, such as a request that a TypeScript
 - **WebAssembly components.** Typed interfaces across languages, but toolchain support differs by language and is still changing, and it would add a build step to every pack. Not recommended now.
 
 **Recommendation: don't build bindings in this phase.** Document the project-function pattern, with an example. Revisit the process boundary after the release (Phase 8) if users ask for it; shared types (gap 2) are the first part of it either way.
+
+**Built (step 6).** [examples/multi-language](../examples/multi-language/README.md) is the pattern as a project: a Python pricing service in `api/`, and a TypeScript graph in `web/` that calls it through `priceOf`, a project function that runs the service and reads its JSON answer. The conformance tests compile the graph and check it matches its committed generated file, then run it (with Python installed) and check it prints the total.
 
 ## Summary
 
