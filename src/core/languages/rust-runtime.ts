@@ -42,6 +42,35 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Text(String),
+    // An object of a class from the project's code (docs/node-authoring.md, gap 2).
+    Object(CodeObject),
+}
+
+// An object of a class from the project's code, shared by the graphs that pass it on. Two are equal
+// when they are the same object; they have no order.
+#[derive(Clone)]
+pub struct CodeObject(pub Rc<dyn std::any::Any>);
+impl std::fmt::Debug for CodeObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("object") }
+}
+impl PartialEq for CodeObject {
+    fn eq(&self, other: &Self) -> bool { Rc::as_ptr(&self.0) as *const () == Rc::as_ptr(&other.0) as *const () }
+}
+impl PartialOrd for CodeObject {
+    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> { None }
+}
+
+// A new object of a class from the project's code, as a value graphs pass on.
+pub fn code_new<T: 'static>(object: T) -> Value {
+    Value::Object(CodeObject(Rc::new(RefCell::new(object))))
+}
+
+// The object as class T (else the run stops, as Unreal stops on "Accessed None").
+pub fn code_object<T: 'static>(value: &Value) -> Rc<RefCell<T>> {
+    match value {
+        Value::Object(CodeObject(object)) => object.clone().downcast::<RefCell<T>>().unwrap_or_else(|_| panic!("Accessed None")),
+        _ => panic!("Accessed None"),
+    }
 }
 
 impl From<bool> for Value { fn from(v: bool) -> Self { Value::Bool(v) } }
@@ -287,6 +316,7 @@ impl Format for Value {
             Value::Int(v) => v.text(),
             Value::Float(v) => v.text(),
             Value::Text(v) => v.clone(),
+            Value::Object(_) => "object".into(),
         }
     }
     fn json(&self) -> String {
@@ -340,6 +370,7 @@ impl ToNumber for Value {
             Value::Int(v) => *v as f64,
             Value::Float(v) => *v,
             Value::Text(v) => v.to_number(),
+            Value::Object(_) => f64::NAN,
         }
     }
 }
@@ -362,6 +393,7 @@ impl ToBoolean for Value {
             Value::Int(v) => *v != 0,
             Value::Float(v) => v.to_boolean(),
             Value::Text(v) => !v.is_empty(),
+            Value::Object(_) => true,
         }
     }
 }

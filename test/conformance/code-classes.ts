@@ -16,6 +16,8 @@ export function codeClassGraph(definitions: NodeDefinition[], language: string):
     assert.ok(found, `no ${member} in ${definitions.map((d) => d.type).join(', ')}`);
     return found;
   };
+  // Construct: the constructor, or (Go) the function that makes one, New<Class>.
+  const construct = (cls: string) => (definitions.some((d) => new RegExp(`(#|\\.|::)${cls}:new$`, 'i').test(d.type)) ? find(`${cls}:new`) : find(`New${cls}`));
   // Add of a BigCounter: the base class's method, or the subclass's own in a language without
   // inheritance.
   const bigAdd = definitions.some((d) => /BigCounter:add$/i.test(d.type)) ? find('BigCounter:add') : find('Counter:add');
@@ -28,9 +30,9 @@ export function codeClassGraph(definitions: NodeDefinition[], language: string):
     graphs: [{
       id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
       nodes: [
-        n('s', 'core:event.start'), n('c', find('Counter:new').type, { 'pin:start': 5 }), n('add', find('Counter:add').type, { 'pin:amount': 3 }), n('p1', 'core:console.print'),
+        n('s', 'core:event.start'), n('c', construct('Counter').type, { 'pin:start': 5 }), n('add', find('Counter:add').type, { 'pin:amount': 3 }), n('p1', 'core:console.print'),
         n('set', find('Counter:set:count').type, { 'pin:value': 20 }), n('get', doubled.type), n('p2', 'core:console.print'),
-        n('b', find('BigCounter:new').type, { 'pin:start': 1 }), n('add2', bigAdd.type, { 'pin:amount': 1 }), n('p3', 'core:console.print')
+        n('b', construct('BigCounter').type, { 'pin:start': 1 }), n('add2', bigAdd.type, { 'pin:amount': 1 }), n('p3', 'core:console.print')
       ],
       connections: [
         w('s', 'execOut', 'c', 'execIn'), w('c', 'execOut', 'add', 'execIn'), w('add', 'execOut', 'p1', 'execIn'), w('p1', 'execOut', 'set', 'execIn'),

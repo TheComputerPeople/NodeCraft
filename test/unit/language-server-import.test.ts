@@ -75,3 +75,25 @@ describe('language server symbol import', () => {
     assert.deepEqual(parseSignature('function pick<T>(items: T[]): T', 'pick', TS_SPEC), { reason: 'generic functions can\'t be nodes yet' });
   });
 });
+
+// Members of classes and structs (docs/node-authoring.md, gap 2): a method's symbol names its owner
+// (Go's receiver), a field's carries its type; Go's objects are pointers.
+describe('class members through the language server', () => {
+  const GO: LanguageServerImport = { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], objectsByPointer: true };
+  const goSpelling = spelling({ bool: 'bool', int: 'int', float: 'float64', string: 'string' });
+  const source = ['package counter', '', 'type Counter struct {', '\t// @blueprint', '\tCount float64', '}', '', '// @blueprint', 'func (c *Counter) Add(amount float64) float64 { return 0 }', ''].join('\n');
+
+  test("a struct's fields and methods become its class, typed as a pointer", () => {
+    const scan = scanSymbols(source, [
+      { name: 'Count', owner: 'Counter', field: { type: 'float64' }, line: 4, nameLine: 4, containers: [] },
+      { name: 'Add', owner: '*Counter', line: 8, nameLine: 8, containers: [], hover: '```go\nfunc (c *Counter) Add(amount float64) float64\n```' }
+    ], GO, goSpelling);
+    assert.deepEqual(scan.functions, []);
+    const [cls] = scan.classes!;
+    assert.deepEqual([cls.name, cls.type], ['Counter', { id: 'native:*Counter' }]);
+    assert.deepEqual(cls.properties.map((p) => [p.name, p.type]), [['Count', { id: 'float' }]]);
+    assert.deepEqual(cls.methods.map((m) => [m.name, m.params, m.returns]), [['Add', [{ name: 'amount', type: { id: 'float' } }], { id: 'float' }]]);
+    const { definitions } = exposeFunctions(scan, { language: 'go', path: 'counter/counter.go', module: 'example.com/counter', exposeAll: false });
+    assert.deepEqual(definitions.map((d) => d.type.slice(d.type.indexOf('#') + 1)), ['Counter:Add', 'Counter:get:Count', 'Counter:set:Count']);
+  });
+});

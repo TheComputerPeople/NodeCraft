@@ -3,7 +3,7 @@
 // inline modules inside it, with their parameters, types and documentation. Like the other scanners
 // it parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'lifetime' | 'punct';
 
@@ -164,6 +164,116 @@ export function scanRust(source: string): ModuleScan {
     return tokens.length;
   };
 
+  // A struct's objects are classes (docs/node-authoring.md, gap 2): its pub fields, with the methods
+  // and constructor of its impl blocks in the file.
+  const structs = new Map<string, ScannedClass>();
+  const impls: { name: string; module: string; methods: ScannedFunction[]; constructors: ScannedFunction[] }[] = [];
+
+  // `struct Name { pub field: Type, … }` at `i` (after its visibility).
+  const struct = (i: number, first: number, module: string, doc: DocComment): number => {
+    const nameToken = tokens[i + 1];
+    if (nameToken?.kind !== 'name' || !at(i + 2, '{')) return skipItem(i);
+    const close = skipGroup(i + 2);
+    const name = nameToken.text;
+    const cls: ScannedClass = { name: module ? `${module}::${name}` : name, line: tokens[first].line, doc, type: mapRustType(name) ?? { id: `native:${name}` }, methods: [], properties: [] };
+    let j = i + 3;
+    while (j < close - 1) {
+      let fieldDoc = tokens[j].doc;
+      while (at(j, '#') && at(j + 1, '[')) {
+        fieldDoc = tokens[j].doc ?? fieldDoc;
+        j = skipGroup(j + 1);
+      }
+      const fieldFirst = j;
+      const pub = at(j, 'pub');
+      if (pub) j = at(j + 1, '(') ? skipGroup(j + 1) : j + 1;
+      let k = j;
+      while (k < close - 1 && !at(k, ',')) k = at(k, '<') ? skipAngles(k) : at(k, '(') || at(k, '[') ? skipGroup(k) : k + 1;
+      if (tokens[j]?.kind === 'name' && at(j + 1, ':')) {
+        const fieldDocComment = parseDoc(fieldDoc);
+        const field = tokens[j].text;
+        if (!pub) {
+          if (isMarked(fieldDocComment)) result.skipped.push({ name: `${name}.${field}`, line: tokens[fieldFirst].line, reason: "it isn't pub, so generated code can't use it", marked: true });
+        } else {
+          const type = mapRustType(text(j + 2, k));
+          cls.properties.push({ name: field, line: tokens[fieldFirst].line, ...(type ? { type } : {}), readonly: false, doc: fieldDocComment });
+        }
+      }
+      j = k + 1;
+    }
+    structs.set(name, cls);
+    return close;
+  };
+
+  // `impl Name { … }` at `i`: its pub functions taking self are methods; those returning Self or
+  // the type are constructors.
+  const impl = (i: number, module: string): number => {
+    if (at(i + 1, '<')) return skipItem(i);
+    let j = i + 1;
+    const nameToken = tokens[j];
+    if (nameToken?.kind !== 'name' || !at(j + 1, '{')) return skipItem(i);
+    j++;
+    const close = skipGroup(j);
+    const name = nameToken.text;
+    const block = { name, module, methods: [] as ScannedFunction[], constructors: [] as ScannedFunction[] };
+    let k = j + 1;
+    while (k < close - 1) {
+      let doc = tokens[k].doc;
+      while (at(k, '#') && at(k + 1, '[')) {
+        doc = tokens[k].doc ?? doc;
+        k = skipGroup(k + 1);
+      }
+      const first = k;
+      const pub = at(k, 'pub');
+      if (pub) k = at(k + 1, '(') ? skipGroup(k + 1) : k + 1;
+      const isAsync = at(k, 'async');
+      if (isAsync) k++;
+      if (!at(k, 'fn') || tokens[k + 1]?.kind !== 'name') {
+        k = skipItem(k);
+        continue;
+      }
+      const fnName = tokens[k + 1].text;
+      let open = k + 2;
+      const generic = at(open, '<');
+      if (generic) open = skipAngles(open);
+      const paramsClose = skipGroup(open);
+      let r = paramsClose;
+      let returnText = '';
+      if (at(r, '->')) {
+        r++;
+        const from = r;
+        while (r < close && !at(r, '{') && !at(r, ';') && !at(r, 'where')) r = at(r, '<') ? skipAngles(r) : at(r, '(') || at(r, '[') ? skipGroup(r) : r + 1;
+        returnText = text(from, r);
+      }
+      const docComment = parseDoc(doc);
+      const skip = (reason: string) => {
+        if (isMarked(docComment)) result.skipped.push({ name: `${name}.${fnName}`, line: tokens[first].line, reason, marked: true });
+      };
+      // The receiver: &self, &mut self (a method), or none.
+      let p = open + 1;
+      if (at(p, '&')) p++;
+      if (at(p, 'mut')) p++;
+      const method = at(p, 'self');
+      const afterSelf = method ? (at(p + 1, ',') ? p + 2 : p + 1) : open + 1;
+      if (!pub) skip("it isn't pub, so generated code can't call it");
+      else if (isAsync) skip("async functions can't be nodes yet");
+      else if (generic) skip("generic functions can't be nodes yet");
+      else if (method && at(open + 1, 'self')) skip('methods that take self by value would consume the object; take &self or &mut self');
+      else {
+        const params = parseParams(afterSelf, paramsClose - 1);
+        if ('reason' in params) skip(params.reason);
+        else if (method) {
+          const returns = mapReturn(returnText);
+          if ('reason' in returns) skip(returns.reason);
+          else block.methods.push({ name: fnName, line: tokens[first].line, params, returns: returns.type, doc: docComment });
+        } else if (returnText === 'Self' || returnText === name) block.constructors.push({ name: fnName, line: tokens[first].line, params, returns: null, doc: docComment });
+        else skip('associated functions without self have no object; make it a free function instead');
+      }
+      k = skipItem(paramsClose);
+    }
+    impls.push(block);
+    return close;
+  };
+
   const items = (i: number, end: number, module: string): void => {
     let attributeDoc: string[] | undefined;
     let testOnly = false;
@@ -208,6 +318,14 @@ export function scanRust(source: string): ModuleScan {
         qualifiers.push(tokens[i].text);
         i++;
         if (qualifiers[qualifiers.length - 1] === 'extern' && tokens[i]?.kind === 'string') i++;
+      }
+      if (!qualifiers.length && at(i, 'struct') && visibility && !skipTest) {
+        i = struct(i, first, module, parseDoc(doc));
+        continue;
+      }
+      if (!qualifiers.length && at(i, 'impl') && !skipTest) {
+        i = impl(i, module);
+        continue;
       }
       if (!at(i, 'fn') || tokens[i + 1]?.kind !== 'name') {
         i = SKIPPED_ITEMS.has(tokens[i]?.text ?? '') || !qualifiers.length ? skipItem(first) : skipItem(i);
@@ -282,6 +400,14 @@ export function scanRust(source: string): ModuleScan {
   };
 
   items(0, tokens.length, '');
+  // Each struct with its impl blocks' methods and constructor (a marked one, else `new`).
+  for (const block of impls) {
+    const cls = structs.get(block.name);
+    if (!cls) continue;
+    cls.methods.push(...block.methods);
+    cls.init = block.constructors.find((c) => isMarked(c.doc)) ?? block.constructors.find((c) => c.name === 'new') ?? cls.init;
+  }
+  if (structs.size) result.classes = [...structs.values()];
   return result;
 }
 

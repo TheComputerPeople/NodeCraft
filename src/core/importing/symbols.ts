@@ -162,7 +162,8 @@ function classDefinitions(cls: ScannedClass, options: ExposeOptions): NodeDefini
       ...base, type: type('new'), displayName: `Construct ${simple}`,
       // A constructor runs where execution reaches it, as Construct does for graph classes.
       inputs: [EXEC_IN, ...base.inputs.filter((p) => p.kind === 'data')], outputs: [EXEC_OUT, ...base.outputs.filter((p) => p.kind === 'data')],
-      implementation: implementation('construct')
+      // Its name in the code, for languages whose constructors are functions (Rust's `new`).
+      implementation: implementation('construct', init?.name)
     });
   }
   for (const method of cls.methods.filter((m) => isMarked(m.doc))) {

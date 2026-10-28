@@ -5,7 +5,7 @@
 // and mapped back through the pack's own spellings; types it doesn't know become native types.
 import { LanguageServerImport } from '../language-pack';
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedParam, isMarked, parseDocText } from './symbols';
 
 // Why a function is skipped when its hover has no signature (the server may still be loading).
 export const NO_SIGNATURE = 'the language server gave no signature for it';
@@ -19,16 +19,37 @@ export interface SymbolFunction {
   // The namespaces or modules it's inside, outermost first.
   containers: string[];
   hover?: string;
+  // A member of a class or struct (docs/node-authoring.md, gap 2): the type it belongs to (Go's
+  // receiver, "*Counter").
+  owner?: string;
+  // A field rather than a method: its declared type (the symbol's detail).
+  field?: { type?: string };
 }
 
 export function scanSymbols(text: string, functions: SymbolFunction[], spec: LanguageServerImport, spell: (type: TypeRef) => string): ModuleScan {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const result: ModuleScan = { functions: [], skipped: [] };
   const known = spellings(spell);
+  // The classes the members belong to, by name.
+  const classes = new Map<string, ScannedClass>();
+  const classOf = (owner: string, line: number, container: string | undefined): ScannedClass => {
+    const name = owner.replace(/^\*/, '');
+    const existing = classes.get(name);
+    if (existing) return existing;
+    const typeText = spec.objectsByPointer ? `*${name}` : name;
+    const cls: ScannedClass = { name: container ? `${container}${spec.namespaceSeparator ?? '.'}${name}` : name, line, doc: NO_DOC, type: typeFromText(typeText, known) ?? { id: `native:${typeText}` }, methods: [], properties: [] };
+    classes.set(name, cls);
+    return cls;
+  };
   for (const fn of functions) {
     const doc = docAbove(lines, fn, spec.comments);
     const container = fn.containers.length ? fn.containers.join(spec.namespaceSeparator ?? '.') : undefined;
     const line = fn.line + 1;
+    if (fn.owner && fn.field) {
+      const type = fn.field.type ? typeFromText(fn.field.type, known) : undefined;
+      classOf(fn.owner, line, container).properties.push({ name: fn.name, line, ...(type ? { type } : {}), readonly: false, doc });
+      continue;
+    }
     const skip = (reason: string) => result.skipped.push({ name: fn.name, line, reason, marked: isMarked(doc), ...(container ? { container } : {}) });
     const signature = fn.hover !== undefined ? findSignature(fn.hover, fn.name) : undefined;
     if (!signature) {
@@ -42,8 +63,10 @@ export function scanSymbols(text: string, functions: SymbolFunction[], spec: Lan
     }
     const params: ScannedParam[] = parsed.params.map((p) => ({ name: p.name, ...(p.type ? { type: typeFromText(p.type, known) } : {}), ...(p.defaultValue !== undefined ? { defaultValue: p.defaultValue } : {}) }));
     const returns = parsed.returns === null ? null : parsed.returns ? typeFromText(parsed.returns, known) : undefined;
-    result.functions.push({ name: fn.name, line, params, returns, doc, ...(container ? { container } : {}) });
+    if (fn.owner) classOf(fn.owner, line, container).methods.push({ name: fn.name, line, params, returns, doc });
+    else result.functions.push({ name: fn.name, line, params, returns, doc, ...(container ? { container } : {}) });
   }
+  if (classes.size) result.classes = [...classes.values()];
   return result;
 }
 

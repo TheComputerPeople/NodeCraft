@@ -81,10 +81,12 @@ A class's members become nodes too, each when its own documentation comment is m
   - C#: a class's or record's public constructors, instance methods, properties and fields. Structs are left out: Set would change a copy.
   - C++: a class's or struct's public constructors (initializer lists included), member functions and data members (`const` ones read-only), in headers.
   - Java: a public class's public constructors, instance methods and fields (`final` ones read-only).
+  - Rust: a `pub struct`'s `pub` fields, with its `impl` block's `pub` methods taking `&self` or `&mut self`, and its constructor (a function returning `Self`: a marked one, else `new`).
+  - Go (through gopls): a struct's fields and its methods. Go has no constructors, so a struct's `New…` function, already a node, makes the objects; the Target pins take the pointer it returns (`*Counter`).
   - Private members (and `_`-named ones in Python), static members and async methods are reported instead.
 - **Types.** Objects travel on pins of the class's `native:` type, as functions returning the class already make them. A subclass's object connects where its base class is expected, when the subclass has a marked member (its nodes record the base). The default category is "Project / <Class>".
-- **Generated code.** It imports the class and writes `new Player(…)` (`Player(…)` in Python), `target.heal(…)`, `target.health` and `target.health = …`. C# and Java pass such objects as `object`/`Object`, so they cast the Target to the class. C++ passes them in a `std::any`, as the object and as each class it extends (`vgraph::code_new<Player, Entity>(…)`), and `vgraph::code_object<Player>(target)` finds the object as the class it needs. An empty Target stops the run with the language's own null error (C++: "Accessed None"), as Unreal stops on "Accessed None".
-- **Languages.** TypeScript, JavaScript, Python, C#, C++ and Java so far; the other languages follow in Phase 9.
+- **Generated code.** It imports the class and writes `new Player(…)` (`Player(…)` in Python), `target.heal(…)`, `target.health` and `target.health = …`. C# and Java pass such objects as `object`/`Object`, so they cast the Target to the class. C++ passes them in a `std::any`, as the object and as each class it extends (`vgraph::code_new<Player, Entity>(…)`), and `vgraph::code_object<Player>(target)` finds the object as the class it needs. Rust passes them as a `vgraph::Value` holding the object (`vgraph::code_new`), borrowed for each use (`vgraph::code_object::<Counter>(&target).borrow_mut().add(…)`). Go passes them as `any` and asserts the Target to the struct's pointer. An empty Target stops the run with the language's own null error (C++ and Rust: "Accessed None"), as Unreal stops on "Accessed None".
+- **Languages.** TypeScript, JavaScript, Python, C#, C++, Java, Rust and Go so far; the other languages follow in Phase 9.
 
 ## Node identity
 

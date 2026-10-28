@@ -1035,7 +1035,11 @@ test('Go functions marked @blueprint become nodes through gopls', async () => {
   await requireGoDebugger();
   const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
   await write('gomod/go.mod', 'module example.com/app\n\ngo 1.22\n');
-  await write('gomod/scores/scores.go', 'package scores\n\n// Twice doubles a value.\n// @blueprint pure\nfunc Twice(value float64) float64 {\n\treturn value * 2\n}\n');
+  await write('gomod/scores/scores.go', [
+    'package scores', '', '// Twice doubles a value.', '// @blueprint pure', 'func Twice(value float64) float64 {', '\treturn value * 2', '}', '',
+    // A struct's field and method (docs/node-authoring.md, gap 2), as gopls reports them.
+    'type Counter struct {', '\t// @blueprint', '\tCount float64', '}', '', '// @blueprint', 'func (c *Counter) Add(amount float64) float64 {', '\tc.Count += amount', '\treturn c.Count', '}', ''
+  ].join('\n'));
   await write('gomod/graphs/doc.go', 'package graphs\n');
   const graph = workspaceFile('gomod/graphs/uses_go.vgraph');
   await write('gomod/graphs/uses_go.vgraph', projectGraph('UsesGo', 'go', 'fn:go:gomod/scores/scores.go#Twice'));
@@ -1051,4 +1055,40 @@ test('Go functions marked @blueprint become nodes through gopls', async () => {
   assert.match(text, /scores "example\.com\/app\/scores"/);
   assert.match(text, /scores\.Twice\(4\)/);
   assert.ok(await exists(workspaceFile('gomod/graphs/vgraph_runtime.go')), 'the package\'s support code');
+
+  // The struct's field became a Get node with a Target of the struct's pointer.
+  const counterGraph = workspaceFile('gomod/graphs/uses_counter.vgraph');
+  await write('gomod/graphs/uses_counter.vgraph', projectGraph('UsesCounter', 'go', 'fn:go:gomod/scores/scores.go#Counter:get:Count'));
+  const counterGenerated = workspaceFile('gomod/graphs/uses_counter_vgraph.go');
+  const until = Date.now() + 90000;
+  while (!(await exists(counterGenerated)) && Date.now() < until) {
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', counterGraph);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  assert.ok(await exists(counterGenerated), `It doesn't compile: ${vscode.languages.getDiagnostics(counterGraph).map((d) => d.message).join('; ')}`);
+  assert.match(await readText(counterGenerated), /\.\(\*scores\.Counter\)\.Count/);
+
+  // Its method, which gopls names "(*Counter).Add", became a node too: Start → Add → Print.
+  const addGraph = workspaceFile('gomod/graphs/uses_add.vgraph');
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  await write('gomod/graphs/uses_add.vgraph', JSON.stringify({
+    schemaVersion: 3, name: 'UsesAdd', kind: 'class', language: 'go', variables: [],
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('a', 'fn:go:gomod/scores/scores.go#Counter:Add', { 'pin:amount': 2 }), node('p', 'core:console.print')],
+      connections: [
+        { id: 'c1', fromNode: 's', fromPin: 'execOut', toNode: 'a', toPin: 'execIn' },
+        { id: 'c2', fromNode: 'a', fromPin: 'execOut', toNode: 'p', toPin: 'execIn' },
+        { id: 'c3', fromNode: 'a', fromPin: 'returnValue', toNode: 'p', toPin: 'value' }
+      ]
+    }]
+  }, null, 2));
+  const addGenerated = workspaceFile('gomod/graphs/uses_add_vgraph.go');
+  const addUntil = Date.now() + 90000;
+  while (!(await exists(addGenerated)) && Date.now() < addUntil) {
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', addGraph);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  assert.ok(await exists(addGenerated), `It doesn't compile: ${vscode.languages.getDiagnostics(addGraph).map((d) => d.message).join('; ')}`);
+  assert.match(await readText(addGenerated), /\.\(\*scores\.Counter\)\.Add\(2\)/);
 });

@@ -906,7 +906,16 @@ class RustEmitter {
       lets.push(`let ${temp} = ${this.coerce(a, type)};`);
       return temp;
     });
-    return `{ ${lets.join(' ')} ${name}(${list.join(', ')}) }`;
+    const member = callee.kind === 'import' ? this.program.imports.find((i) => i.id === callee.id)?.member : undefined;
+    if (!member) return `{ ${lets.join(' ')} ${name}(${list.join(', ')}) }`;
+    // A code class's member (docs/node-authoring.md, gap 2): its objects travel as values holding
+    // the object (vgraph::code_new), borrowed for each use (vgraph::code_object).
+    if (member.kind === 'construct') return `{ ${lets.join(' ')} vgraph::code_new(${name}::${member.name ?? 'new'}(${list.join(', ')})) }`;
+    const [target, ...rest] = list;
+    const object = `vgraph::code_object::<${name}>(&${target})`;
+    if (member.kind === 'get') return `{ ${lets.join(' ')} let value = ${object}.borrow().${member.name}.clone(); value }`;
+    if (member.kind === 'set') return `{ ${lets.join(' ')} ${object}.borrow_mut().${member.name} = ${rest[0]}; }`;
+    return `{ ${lets.join(' ')} let result = ${object}.borrow_mut().${member.name}(${rest.join(', ')}); result }`;
   }
 
   // A function from the project's code or a library graph, through its module in the crate.

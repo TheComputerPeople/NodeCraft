@@ -178,6 +178,8 @@ export class ProjectFunctions implements vscode.Disposable {
     const wanted = functions.filter((f) => exposeAll || lines.slice(Math.max(0, f.nameLine - 30), f.nameLine).some((l) => l.includes('@blueprint')));
     if (!wanted.length) return undefined;
     for (const fn of wanted) {
+      // A field's type comes with its symbol.
+      if (fn.field) continue;
       try {
         const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', uri, fn.position);
         fn.hover = (hovers ?? []).flatMap((h) => h.contents.map((c) => (typeof c === 'string' ? c : 'language' in c ? `\`\`\`${c.language}\n${c.value}\n\`\`\`` : c.value))).join('\n');
@@ -224,14 +226,25 @@ export class ProjectFunctions implements vscode.Disposable {
   }
 }
 
-// The functions among the document's symbols: at the top level, or in namespaces and modules.
+// The functions among the document's symbols: at the top level, or in namespaces and modules. And
+// the members of classes and structs (docs/node-authoring.md, gap 2): methods inside them, Go's
+// methods ("(*Counter).Add", beside their struct), and fields with their types.
 function collectFunctions(symbols: (vscode.DocumentSymbol | vscode.SymbolInformation)[]): (SymbolFunction & { position: vscode.Position })[] {
   const found: (SymbolFunction & { position: vscode.Position })[] = [];
   const walk = (list: (vscode.DocumentSymbol | vscode.SymbolInformation)[], containers: string[]) => {
     for (const s of list) {
       if ('children' in s) {
-        if (s.kind === vscode.SymbolKind.Function) found.push({ name: s.name, line: s.range.start.line, nameLine: s.selectionRange.start.line, containers, position: s.selectionRange.start });
-        else if ([vscode.SymbolKind.Namespace, vscode.SymbolKind.Module, vscode.SymbolKind.Package].includes(s.kind)) walk(s.children, [...containers, s.name]);
+        const at = { line: s.range.start.line, nameLine: s.selectionRange.start.line, containers, position: s.selectionRange.start };
+        const receiver = /^\((\*?[\w$]+)\)\.([\w$]+)$/.exec(s.name);
+        if (s.kind === vscode.SymbolKind.Function) found.push({ name: s.name, ...at });
+        else if (s.kind === vscode.SymbolKind.Method && receiver) found.push({ name: receiver[2], owner: receiver[1], ...at });
+        else if ([vscode.SymbolKind.Class, vscode.SymbolKind.Struct].includes(s.kind)) {
+          for (const member of s.children) {
+            const memberAt = { line: member.range.start.line, nameLine: member.selectionRange.start.line, containers, position: member.selectionRange.start, owner: s.name };
+            if (member.kind === vscode.SymbolKind.Method) found.push({ name: member.name, ...memberAt });
+            else if (member.kind === vscode.SymbolKind.Field || member.kind === vscode.SymbolKind.Property) found.push({ name: member.name, ...memberAt, field: { ...(member.detail ? { type: member.detail } : {}) } });
+          }
+        } else if ([vscode.SymbolKind.Namespace, vscode.SymbolKind.Module, vscode.SymbolKind.Package].includes(s.kind)) walk(s.children, [...containers, s.name]);
       } else if (s.kind === vscode.SymbolKind.Function) {
         const start = s.location.range.start;
         found.push({ name: s.name, line: start.line, nameLine: start.line, containers: s.containerName ? [s.containerName] : [], position: start });

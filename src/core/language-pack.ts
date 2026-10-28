@@ -226,6 +226,9 @@ export interface LanguageServerImport {
   void?: string[];
   // Joins the namespaces a function is in, for calling it (".", or "::" for C++).
   namespaceSeparator?: string;
+  // Objects are passed by pointer (Go's *T): a member's Target pin is the pointer type, as
+  // constructor functions return it.
+  objectsByPointer?: boolean;
 }
 
 export interface LanguagePack {

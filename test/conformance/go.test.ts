@@ -17,6 +17,7 @@ import { NodeRegistry } from '../../src/core/registry';
 import { goPackage, goRunSources } from '../../src/extension/placement';
 import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
+import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-go-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -109,5 +110,98 @@ describe('Go project functions', () => {
     }
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['42', 'Red: 3']);
+  });
+});
+
+// Structs as classes (docs/node-authoring.md, gap 2), found through gopls: a struct's fields and its
+// methods ("(*Counter).Add"), used through Target pins of the pointer type its New function returns.
+// Go has no inheritance, so BigCounter is a struct of its own with its own Add.
+const COUNTER = [
+  'package counter',
+  '',
+  '// Counter counts.',
+  'type Counter struct {',
+  '\t// @blueprint',
+  '\tCount float64',
+  '}',
+  '',
+  '// @blueprint',
+  'func NewCounter(start float64) *Counter {',
+  '\treturn &Counter{Count: start}',
+  '}',
+  '',
+  '// @blueprint',
+  'func (c *Counter) Add(amount float64) float64 {',
+  '\tc.Count += amount',
+  '\treturn c.Count',
+  '}',
+  '',
+  '// @blueprint pure',
+  'func (c *Counter) Doubled() float64 {',
+  '\treturn c.Count * 2',
+  '}',
+  '',
+  '// BigCounter counts in tens.',
+  'type BigCounter struct {',
+  '\tcount float64',
+  '}',
+  '',
+  '// @blueprint',
+  'func NewBigCounter(start float64) *BigCounter {',
+  '\treturn &BigCounter{count: start * 10}',
+  '}',
+  '',
+  '// @blueprint',
+  'func (b *BigCounter) Add(amount float64) float64 {',
+  '\tb.count += amount',
+  '\treturn b.count',
+  '}',
+  ''
+].join('\n');
+
+describe('Go code classes', () => {
+  test('a graph uses a struct\'s fields and methods through gopls\'s symbols', async (t) => {
+    const project = path.join(workDir, 'classes');
+    const files: Record<string, string> = { 'go.mod': 'module example.com/classes\n\ngo 1.22\n', 'counter/counter.go': COUNTER, 'graphs/doc.go': '// Package graphs holds the graphs.\npackage graphs\n' };
+    for (const [name, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+      fs.writeFileSync(path.join(project, name), text);
+    }
+    const graphDir = path.join(project, 'graphs');
+    const pkg = goPackage(graphDir, project);
+    // As gopls describes them (0-based lines).
+    const lineOf = (text: string) => COUNTER.split('\n').findIndex((l) => l.includes(text));
+    const at = (text: string) => ({ line: lineOf(text), nameLine: lineOf(text), containers: [] });
+    const hover = (signature: string) => `\`\`\`go\n${signature}\n\`\`\``;
+    const scan = scanSymbols(COUNTER, [
+      { name: 'Count', owner: 'Counter', field: { type: 'float64' }, ...at('\tCount float64') },
+      { name: 'NewCounter', ...at('func NewCounter'), hover: hover('func NewCounter(start float64) *Counter') },
+      { name: 'Add', owner: '*Counter', ...at('func (c *Counter) Add'), hover: hover('func (c *Counter) Add(amount float64) float64') },
+      { name: 'Doubled', owner: '*Counter', ...at('func (c *Counter) Doubled'), hover: hover('func (c *Counter) Doubled() float64') },
+      { name: 'NewBigCounter', ...at('func NewBigCounter'), hover: hover('func NewBigCounter(start float64) *BigCounter') },
+      { name: 'Add', owner: '*BigCounter', ...at('func (b *BigCounter) Add'), hover: hover('func (b *BigCounter) Add(amount float64) float64') }
+    ], builtinLanguagePacks().get('go')!.importer!.languageServer!, (type) => builtinLanguagePacks().get('go')!.mapType(type));
+    const definitions = exposeFunctions(scan, { language: 'go', path: 'counter/counter.go', module: 'example.com/classes/counter', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(codeClassGraph(definitions, 'go'), {
+      registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Counting.vgraph', outputDir: 'graphs', namespace: pkg.name, packagePath: pkg.path }
+    });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    assert.match(output.text, /any\(.+\)\.\(\*counter\.Counter\)\.Add\(/);
+    const file = path.join(graphDir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    const plan = goPlacement({ generatedFiles: [`graphs/${output.fileName}`], readFile: (f) => fs.readFileSync(path.join(project, f), 'utf8'), exists: (f) => fs.existsSync(path.join(project, f)) });
+    for (const owned of plan.ownedFiles ?? []) fs.writeFileSync(path.join(project, owned.path), owned.text);
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('go')!.generator!.runner!, file, output.className, { cwd: project, sources: goRunSources(file), goModule: pkg.module, timeoutMs: 300000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.stderr, '');
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), CODE_CLASS_OUTPUT);
   });
 });

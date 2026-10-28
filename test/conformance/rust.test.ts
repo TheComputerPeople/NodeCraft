@@ -17,6 +17,7 @@ import { NodeRegistry } from '../../src/core/registry';
 import { rustCrateModules, rustRunSources } from '../../src/extension/placement';
 import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
+import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-rust-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -134,5 +135,85 @@ describe('Rust project functions', () => {
     }
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['42', 'Red: 3']);
+  });
+});
+
+// Structs as classes (docs/node-authoring.md, gap 2): pub fields, and the methods and constructor
+// of their impl blocks, used through Target pins. Rust has no inheritance, so BigCounter is a
+// struct of its own with its own Add.
+const COUNTER = [
+  'pub struct Counter {',
+  '    /// @blueprint',
+  '    pub count: f64,',
+  '}',
+  '',
+  'impl Counter {',
+  '    /// @blueprint',
+  '    pub fn new(start: f64) -> Self {',
+  '        Counter { count: start }',
+  '    }',
+  '',
+  '    /// @blueprint',
+  '    pub fn add(&mut self, amount: f64) -> f64 {',
+  '        self.count += amount;',
+  '        self.count',
+  '    }',
+  '',
+  '    /// @blueprint pure',
+  '    pub fn doubled(&self) -> f64 {',
+  '        self.count * 2.0',
+  '    }',
+  '}',
+  '',
+  'pub struct BigCounter {',
+  '    count: f64,',
+  '}',
+  '',
+  'impl BigCounter {',
+  '    /// @blueprint',
+  '    pub fn new(start: f64) -> Self {',
+  '        BigCounter { count: start * 10.0 }',
+  '    }',
+  '',
+  '    /// @blueprint',
+  '    pub fn add(&mut self, amount: f64) -> f64 {',
+  '        self.count += amount;',
+  '        self.count',
+  '    }',
+  '}',
+  ''
+].join('\n');
+
+describe('Rust code classes', () => {
+  test('a graph constructs structs and uses their fields and methods', async (t) => {
+    const project = path.join(workDir, 'classes');
+    const files: Record<string, string> = {
+      'Cargo.toml': '[package]\nname = "classes"\nversion = "0.1.0"\nedition = "2021"\n\n[workspace]\n',
+      'src/main.rs': 'mod counter;\n\nfn main() {}\n',
+      'src/counter.rs': COUNTER
+    };
+    for (const [name, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+      fs.writeFileSync(path.join(project, name), text);
+    }
+    const definitions = exposeFunctions(scanRust(COUNTER), { language: 'rust', path: 'src/counter.rs', module: 'counter', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(codeClassGraph(definitions, 'rust'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Counting.vgraph', outputDir: 'src/graphs' } });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    const file = path.join(project, 'src/graphs', output.fileName);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, output.text);
+    const sources = rustRunSources(file, project, output.importedFiles ?? []);
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('rust')!.generator!.runner!, file, output.className, { cwd: project, sources: sources.generated, crate: sources.crate, timeoutMs: 300000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.stderr, '');
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), CODE_CLASS_OUTPUT);
   });
 });

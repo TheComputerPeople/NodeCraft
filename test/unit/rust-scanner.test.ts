@@ -114,3 +114,45 @@ describe('Rust scanner', () => {
     assert.deepEqual(mapRustType('Vec<Vec<i64>>'), { id: 'native:Vec<Vec<i64>>' });
   });
 });
+
+// Structs as classes (docs/node-authoring.md, gap 2): pub fields, and the impl block's methods
+// (taking &self or &mut self) and constructor (returning Self).
+describe('Rust structs', () => {
+  const source = [
+    'pub struct Counter {',
+    '    /// @blueprint',
+    '    pub count: f64,',
+    '    /// @blueprint',
+    '    secret: i64,',
+    '}',
+    '',
+    'impl Counter {',
+    '    /// @blueprint',
+    '    pub fn new(start: f64) -> Self { Counter { count: start, secret: 0 } }',
+    '    /// @blueprint',
+    '    pub fn add(&mut self, amount: f64) -> f64 { self.count += amount; self.count }',
+    '    /// @blueprint',
+    '    pub fn total(&self) -> f64 { self.count }',
+    '    /// @blueprint',
+    '    pub fn helper(x: i64) -> i64 { x }',
+    '    /// @blueprint',
+    '    pub fn into_count(self) -> f64 { self.count }',
+    '}',
+    ''
+  ].join('\n');
+
+  test('reads pub fields, methods and the constructor', () => {
+    const scan = scanRust(source);
+    const [cls] = scan.classes!;
+    assert.deepEqual([cls.name, cls.type], ['Counter', { id: 'native:Counter' }]);
+    assert.deepEqual(cls.init!.name, 'new');
+    assert.deepEqual(cls.methods.map((m) => [m.name, m.params.map((p) => p.name)]), [['add', ['amount']], ['total', []]]);
+    assert.deepEqual(cls.properties.map((p) => p.name), ['count']);
+    assert.deepEqual(scan.skipped.filter((s) => s.marked).map((s) => s.name), ['Counter.secret', 'Counter.helper', 'Counter.into_count']);
+  });
+
+  test('marked members become nodes', () => {
+    const { definitions } = exposeFunctions(scanRust(source), { language: 'rust', path: 'src/counter.rs', module: 'counter', exposeAll: false });
+    assert.deepEqual(definitions.map((d) => d.type.slice(d.type.indexOf('#') + 1)), ['Counter:new', 'Counter:add', 'Counter:total', 'Counter:get:count', 'Counter:set:count']);
+  });
+});

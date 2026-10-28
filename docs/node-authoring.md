@@ -75,6 +75,15 @@ Reviewed 2026-10-28, after the built-in utility library grew to 94 nodes. Each g
 - **Java objects.** Java casts the Target to the class, as C# does.
 - **Tests.** The Counter test is shared (test/conformance/code-classes.ts). The C++ and Java versions use a pure method for Doubled, since neither language has properties.
 
+**Built (step 5, part 2): Rust and Go.**
+
+- **Rust.** The scanner reads `pub struct`s' `pub` fields and the methods and constructor of their `impl` blocks. A method taking `self` by value would consume the object, so it's reported instead. Objects travel as a new `Object` variant of the runtime's `vgraph::Value`: an `Rc<RefCell<T>>`, equal only to itself. `vgraph::code_object::<T>` borrows it for each use.
+- **Go (Tier 2).** The extension now collects methods and fields from the language server's document symbols as well as functions:
+  - gopls names methods `(*Counter).Add`, beside their struct; other servers nest them in the class symbol.
+  - A field's type is the symbol's detail.
+  - The Go pack sets `objectsByPointer`, so the class's type is `*Counter`, as its `New` function returns it. Generated code asserts `any(target).(*counter.Counter)`.
+- **Tests.** Rust and Go have no inheritance, so their BigCounter is a struct of its own, and the shared graph uses its own Add.
+
 Classes from code as **parents** of graph classes (Unreal's Blueprint subclassing a C++ class, with BlueprintImplementableEvent) stay deferred. They need generated subclasses of user code in every language, which is a phase of its own.
 
 ## Gap 3: code functions have one output

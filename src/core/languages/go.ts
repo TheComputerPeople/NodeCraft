@@ -212,7 +212,7 @@ export const goPack: LanguagePack = {
   mapType,
   generator: goGenerator,
   // Functions marked // @blueprint, found through gopls (Tier 2).
-  importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'] } }
+  importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], objectsByPointer: true } }
 };
 
 class GoEmitter {
@@ -837,7 +837,14 @@ class GoEmitter {
     const list = args.map((a, i) => this.coerce(a, signature?.params[i]?.type)).join(', ');
     if (callee.kind === 'helper') return `${this.self()}${this.helperNames.get(callee.id)}(${list})`;
     const imported = this.program.imports.find((i) => i.id === callee.id)!;
-    return `${this.importQualifier(imported)}${imported.name}(${list})`;
+    const member = imported.member;
+    if (!member || member.kind === 'construct') return `${this.importQualifier(imported)}${imported.name}(${list})`;
+    // A struct's method or field (docs/node-authoring.md, gap 2): its objects travel as `any`, so the
+    // Target is asserted to the struct's pointer.
+    const [target, ...rest] = args;
+    const object = `any(${this.expr(target)}).(*${this.importQualifier(imported)}${imported.name})`;
+    const values = rest.map((a, i) => this.coerce(a, signature?.params[i + 1]?.type)).join(', ');
+    return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
 
   // A function of another package is called through its import; of this one, directly.
