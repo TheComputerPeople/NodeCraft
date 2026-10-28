@@ -5,7 +5,7 @@
   "language": "javascript",
   "variables": [],
   "metadata": {
-    "description": "Utility nodes: Unreal's array functions, and strings split into and joined from arrays.",
+    "description": "Utility nodes: Unreal's array functions, and strings split into, joined from and formatted with arrays.",
     "expectedOutput": [
       "[\"a\",\"\",\"b\",\"\"]",
       "[\"a\",\"b\"]",
@@ -14,6 +14,8 @@
       "[\"a\",\"b\"]",
       "a-b-c",
       "",
+      "1 + 1 = 2, {2 and {x}",
+      "{it} costs $1 \\0",
       "[3,2,1]",
       "[20,30]",
       "[40]",
@@ -242,15 +244,13 @@
         },
         {
           "id": "n8",
-          "type": "core:array.reverse",
+          "type": "core:string.format",
           "position": {
             "x": 600,
             "y": 960
           },
           "properties": {
-            "wildcards": {
-              "wildcard": "int"
-            }
+            "pin:format": "{0} + {0} = {1}, {2 and {x}"
           }
         },
         {
@@ -261,13 +261,12 @@
             "y": 960
           },
           "properties": {
-            "pins": 3,
+            "pins": 2,
             "wildcards": {
-              "wildcard": "int"
+              "wildcard": "string"
             },
-            "pin:item0": 1,
-            "pin:item1": 2,
-            "pin:item2": 3
+            "pin:item0": "1",
+            "pin:item1": "2"
           }
         },
         {
@@ -281,17 +280,13 @@
         },
         {
           "id": "n9",
-          "type": "core:array.slice",
+          "type": "core:string.format",
           "position": {
             "x": 600,
             "y": 1080
           },
           "properties": {
-            "wildcards": {
-              "wildcard": "int"
-            },
-            "pin:start": 1,
-            "pin:count": 2
+            "pin:format": "{{0}} costs $1 \\0"
           }
         },
         {
@@ -302,14 +297,11 @@
             "y": 1080
           },
           "properties": {
-            "pins": 4,
+            "pins": 1,
             "wildcards": {
-              "wildcard": "int"
+              "wildcard": "string"
             },
-            "pin:item0": 10,
-            "pin:item1": 20,
-            "pin:item2": 30,
-            "pin:item3": 40
+            "pin:item0": "it"
           }
         },
         {
@@ -323,7 +315,7 @@
         },
         {
           "id": "n10",
-          "type": "core:array.slice",
+          "type": "core:array.reverse",
           "position": {
             "x": 600,
             "y": 1200
@@ -331,9 +323,7 @@
           "properties": {
             "wildcards": {
               "wildcard": "int"
-            },
-            "pin:start": 3,
-            "pin:count": 5
+            }
           }
         },
         {
@@ -344,14 +334,13 @@
             "y": 1200
           },
           "properties": {
-            "pins": 4,
+            "pins": 3,
             "wildcards": {
               "wildcard": "int"
             },
-            "pin:item0": 10,
-            "pin:item1": 20,
-            "pin:item2": 30,
-            "pin:item3": 40
+            "pin:item0": 1,
+            "pin:item1": 2,
+            "pin:item2": 3
           }
         },
         {
@@ -365,15 +354,17 @@
         },
         {
           "id": "n11",
-          "type": "core:array.sort",
+          "type": "core:array.slice",
           "position": {
             "x": 600,
             "y": 1320
           },
           "properties": {
             "wildcards": {
-              "wildcard": "string"
-            }
+              "wildcard": "int"
+            },
+            "pin:start": 1,
+            "pin:count": 2
           }
         },
         {
@@ -384,13 +375,14 @@
             "y": 1320
           },
           "properties": {
-            "pins": 3,
+            "pins": 4,
             "wildcards": {
-              "wildcard": "string"
+              "wildcard": "int"
             },
-            "pin:item0": "b",
-            "pin:item1": "B",
-            "pin:item2": "a"
+            "pin:item0": 10,
+            "pin:item1": 20,
+            "pin:item2": 30,
+            "pin:item3": 40
           }
         },
         {
@@ -404,15 +396,17 @@
         },
         {
           "id": "n12",
-          "type": "core:array.sort",
+          "type": "core:array.slice",
           "position": {
             "x": 600,
             "y": 1440
           },
           "properties": {
             "wildcards": {
-              "wildcard": "float"
-            }
+              "wildcard": "int"
+            },
+            "pin:start": 3,
+            "pin:count": 5
           }
         },
         {
@@ -423,13 +417,14 @@
             "y": 1440
           },
           "properties": {
-            "pins": 3,
+            "pins": 4,
             "wildcards": {
-              "wildcard": "float"
+              "wildcard": "int"
             },
-            "pin:item0": 2.5,
-            "pin:item1": -1,
-            "pin:item2": 10
+            "pin:item0": 10,
+            "pin:item1": 20,
+            "pin:item2": 30,
+            "pin:item3": 40
           }
         },
         {
@@ -450,7 +445,7 @@
           },
           "properties": {
             "wildcards": {
-              "wildcard": "bool"
+              "wildcard": "string"
             }
           }
         },
@@ -464,11 +459,11 @@
           "properties": {
             "pins": 3,
             "wildcards": {
-              "wildcard": "bool"
+              "wildcard": "string"
             },
-            "pin:item0": true,
-            "pin:item1": false,
-            "pin:item2": true
+            "pin:item0": "b",
+            "pin:item1": "B",
+            "pin:item2": "a"
           }
         },
         {
@@ -489,38 +484,25 @@
           },
           "properties": {
             "wildcards": {
-              "wildcard": "int"
+              "wildcard": "float"
             }
           }
         },
         {
           "id": "n14_items",
-          "type": "core:array.shuffle",
+          "type": "core:array.make",
           "position": {
             "x": 300,
             "y": 1680
           },
           "properties": {
-            "wildcards": {
-              "wildcard": "int"
-            }
-          }
-        },
-        {
-          "id": "n14_items_items",
-          "type": "core:array.make",
-          "position": {
-            "x": 0,
-            "y": 1680
-          },
-          "properties": {
             "pins": 3,
             "wildcards": {
-              "wildcard": "int"
+              "wildcard": "float"
             },
-            "pin:item0": 3,
-            "pin:item1": 1,
-            "pin:item2": 2
+            "pin:item0": 2.5,
+            "pin:item1": -1,
+            "pin:item2": 10
           }
         },
         {
@@ -534,15 +516,19 @@
         },
         {
           "id": "n15",
-          "type": "core:array.sum",
+          "type": "core:array.sort",
           "position": {
             "x": 600,
             "y": 1800
           },
-          "properties": {}
+          "properties": {
+            "wildcards": {
+              "wildcard": "bool"
+            }
+          }
         },
         {
-          "id": "n15_values",
+          "id": "n15_items",
           "type": "core:array.make",
           "position": {
             "x": 300,
@@ -551,11 +537,11 @@
           "properties": {
             "pins": 3,
             "wildcards": {
-              "wildcard": "float"
+              "wildcard": "bool"
             },
-            "pin:item0": 0.1,
-            "pin:item1": 0.2,
-            "pin:item2": 0.3
+            "pin:item0": true,
+            "pin:item1": false,
+            "pin:item2": true
           }
         },
         {
@@ -569,25 +555,45 @@
         },
         {
           "id": "n16",
-          "type": "core:array.sum",
+          "type": "core:array.sort",
           "position": {
             "x": 600,
             "y": 1920
           },
-          "properties": {}
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
         },
         {
-          "id": "n16_values",
-          "type": "core:array.make",
+          "id": "n16_items",
+          "type": "core:array.shuffle",
           "position": {
             "x": 300,
             "y": 1920
           },
           "properties": {
-            "pins": 0,
             "wildcards": {
-              "wildcard": "float"
+              "wildcard": "int"
             }
+          }
+        },
+        {
+          "id": "n16_items_items",
+          "type": "core:array.make",
+          "position": {
+            "x": 0,
+            "y": 1920
+          },
+          "properties": {
+            "pins": 3,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 3,
+            "pin:item1": 1,
+            "pin:item2": 2
           }
         },
         {
@@ -601,7 +607,7 @@
         },
         {
           "id": "n17",
-          "type": "core:array.min",
+          "type": "core:array.sum",
           "position": {
             "x": 600,
             "y": 2040
@@ -620,9 +626,9 @@
             "wildcards": {
               "wildcard": "float"
             },
-            "pin:item0": 3,
-            "pin:item1": -2.5,
-            "pin:item2": 7
+            "pin:item0": 0.1,
+            "pin:item1": 0.2,
+            "pin:item2": 0.3
           }
         },
         {
@@ -636,7 +642,7 @@
         },
         {
           "id": "n18",
-          "type": "core:array.max",
+          "type": "core:array.sum",
           "position": {
             "x": 600,
             "y": 2160
@@ -651,13 +657,10 @@
             "y": 2160
           },
           "properties": {
-            "pins": 3,
+            "pins": 0,
             "wildcards": {
               "wildcard": "float"
-            },
-            "pin:item0": 3,
-            "pin:item1": -2.5,
-            "pin:item2": 7
+            }
           }
         },
         {
@@ -671,15 +674,28 @@
         },
         {
           "id": "n19",
-          "type": "core:array.range",
+          "type": "core:array.min",
           "position": {
             "x": 600,
             "y": 2280
           },
+          "properties": {}
+        },
+        {
+          "id": "n19_values",
+          "type": "core:array.make",
+          "position": {
+            "x": 300,
+            "y": 2280
+          },
           "properties": {
-            "pin:start": 0,
-            "pin:stop": 5,
-            "pin:step": 1
+            "pins": 3,
+            "wildcards": {
+              "wildcard": "float"
+            },
+            "pin:item0": 3,
+            "pin:item1": -2.5,
+            "pin:item2": 7
           }
         },
         {
@@ -693,15 +709,28 @@
         },
         {
           "id": "n20",
-          "type": "core:array.range",
+          "type": "core:array.max",
           "position": {
             "x": 600,
             "y": 2400
           },
+          "properties": {}
+        },
+        {
+          "id": "n20_values",
+          "type": "core:array.make",
+          "position": {
+            "x": 300,
+            "y": 2400
+          },
           "properties": {
-            "pin:start": 10,
-            "pin:stop": 0,
-            "pin:step": -3
+            "pins": 3,
+            "wildcards": {
+              "wildcard": "float"
+            },
+            "pin:item0": 3,
+            "pin:item1": -2.5,
+            "pin:item2": 7
           }
         },
         {
@@ -721,8 +750,8 @@
             "y": 2520
           },
           "properties": {
-            "pin:start": 3,
-            "pin:stop": 3,
+            "pin:start": 0,
+            "pin:stop": 5,
             "pin:step": 1
           }
         },
@@ -737,31 +766,15 @@
         },
         {
           "id": "n22",
-          "type": "core:array.first",
+          "type": "core:array.range",
           "position": {
             "x": 600,
             "y": 2640
           },
           "properties": {
-            "wildcards": {
-              "wildcard": "string"
-            }
-          }
-        },
-        {
-          "id": "n22_items",
-          "type": "core:array.make",
-          "position": {
-            "x": 300,
-            "y": 2640
-          },
-          "properties": {
-            "pins": 2,
-            "wildcards": {
-              "wildcard": "string"
-            },
-            "pin:item0": "x",
-            "pin:item1": "y"
+            "pin:start": 10,
+            "pin:stop": 0,
+            "pin:step": -3
           }
         },
         {
@@ -775,31 +788,15 @@
         },
         {
           "id": "n23",
-          "type": "core:array.last",
+          "type": "core:array.range",
           "position": {
             "x": 600,
             "y": 2760
           },
           "properties": {
-            "wildcards": {
-              "wildcard": "string"
-            }
-          }
-        },
-        {
-          "id": "n23_items",
-          "type": "core:array.make",
-          "position": {
-            "x": 300,
-            "y": 2760
-          },
-          "properties": {
-            "pins": 2,
-            "wildcards": {
-              "wildcard": "string"
-            },
-            "pin:item0": "x",
-            "pin:item1": "y"
+            "pin:start": 3,
+            "pin:stop": 3,
+            "pin:step": 1
           }
         },
         {
@@ -813,14 +810,14 @@
         },
         {
           "id": "n24",
-          "type": "core:array.random-item",
+          "type": "core:array.first",
           "position": {
             "x": 600,
             "y": 2880
           },
           "properties": {
             "wildcards": {
-              "wildcard": "int"
+              "wildcard": "string"
             }
           }
         },
@@ -832,11 +829,12 @@
             "y": 2880
           },
           "properties": {
-            "pins": 1,
+            "pins": 2,
             "wildcards": {
-              "wildcard": "int"
+              "wildcard": "string"
             },
-            "pin:item0": 7
+            "pin:item0": "x",
+            "pin:item1": "y"
           }
         },
         {
@@ -850,19 +848,19 @@
         },
         {
           "id": "n25",
-          "type": "core:array.append",
+          "type": "core:array.last",
           "position": {
             "x": 600,
             "y": 3000
           },
           "properties": {
             "wildcards": {
-              "wildcard": "int"
+              "wildcard": "string"
             }
           }
         },
         {
-          "id": "n25_a",
+          "id": "n25_items",
           "type": "core:array.make",
           "position": {
             "x": 300,
@@ -871,25 +869,10 @@
           "properties": {
             "pins": 2,
             "wildcards": {
-              "wildcard": "int"
+              "wildcard": "string"
             },
-            "pin:item0": 1,
-            "pin:item1": 2
-          }
-        },
-        {
-          "id": "n25_b",
-          "type": "core:array.make",
-          "position": {
-            "x": 300,
-            "y": 3000
-          },
-          "properties": {
-            "pins": 1,
-            "wildcards": {
-              "wildcard": "int"
-            },
-            "pin:item0": 3
+            "pin:item0": "x",
+            "pin:item1": "y"
           }
         },
         {
@@ -903,10 +886,100 @@
         },
         {
           "id": "n26",
-          "type": "core:array.swap",
+          "type": "core:array.random-item",
           "position": {
             "x": 600,
             "y": 3120
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n26_items",
+          "type": "core:array.make",
+          "position": {
+            "x": 300,
+            "y": 3120
+          },
+          "properties": {
+            "pins": 1,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 7
+          }
+        },
+        {
+          "id": "print27",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n27",
+          "type": "core:array.append",
+          "position": {
+            "x": 600,
+            "y": 3240
+          },
+          "properties": {
+            "wildcards": {
+              "wildcard": "int"
+            }
+          }
+        },
+        {
+          "id": "n27_a",
+          "type": "core:array.make",
+          "position": {
+            "x": 300,
+            "y": 3240
+          },
+          "properties": {
+            "pins": 2,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 1,
+            "pin:item1": 2
+          }
+        },
+        {
+          "id": "n27_b",
+          "type": "core:array.make",
+          "position": {
+            "x": 300,
+            "y": 3240
+          },
+          "properties": {
+            "pins": 1,
+            "wildcards": {
+              "wildcard": "int"
+            },
+            "pin:item0": 3
+          }
+        },
+        {
+          "id": "print28",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n28",
+          "type": "core:array.swap",
+          "position": {
+            "x": 600,
+            "y": 3360
           },
           "properties": {
             "wildcards": {
@@ -917,11 +990,11 @@
           }
         },
         {
-          "id": "n26_items",
+          "id": "n28_items",
           "type": "core:array.make",
           "position": {
             "x": 300,
-            "y": 3120
+            "y": 3360
           },
           "properties": {
             "pins": 3,
@@ -1182,59 +1255,59 @@
         },
         {
           "id": "w36",
-          "fromNode": "n14_items_items",
-          "fromPin": "array",
-          "toNode": "n14_items",
-          "toPin": "items"
-        },
-        {
-          "id": "w37",
           "fromNode": "n14_items",
-          "fromPin": "returnValue",
+          "fromPin": "array",
           "toNode": "n14",
           "toPin": "items"
         },
         {
-          "id": "w38",
+          "id": "w37",
           "fromNode": "n14",
           "fromPin": "returnValue",
           "toNode": "print14",
           "toPin": "value"
         },
         {
-          "id": "w39",
+          "id": "w38",
           "fromNode": "print14",
           "fromPin": "execOut",
           "toNode": "print15",
           "toPin": "execIn"
         },
         {
-          "id": "w40",
-          "fromNode": "n15_values",
+          "id": "w39",
+          "fromNode": "n15_items",
           "fromPin": "array",
           "toNode": "n15",
-          "toPin": "values"
+          "toPin": "items"
         },
         {
-          "id": "w41",
+          "id": "w40",
           "fromNode": "n15",
           "fromPin": "returnValue",
           "toNode": "print15",
           "toPin": "value"
         },
         {
-          "id": "w42",
+          "id": "w41",
           "fromNode": "print15",
           "fromPin": "execOut",
           "toNode": "print16",
           "toPin": "execIn"
         },
         {
-          "id": "w43",
-          "fromNode": "n16_values",
+          "id": "w42",
+          "fromNode": "n16_items_items",
           "fromPin": "array",
+          "toNode": "n16_items",
+          "toPin": "items"
+        },
+        {
+          "id": "w43",
+          "fromNode": "n16_items",
+          "fromPin": "returnValue",
           "toNode": "n16",
-          "toPin": "values"
+          "toPin": "items"
         },
         {
           "id": "w44",
@@ -1294,73 +1367,73 @@
         },
         {
           "id": "w52",
+          "fromNode": "n19_values",
+          "fromPin": "array",
+          "toNode": "n19",
+          "toPin": "values"
+        },
+        {
+          "id": "w53",
           "fromNode": "n19",
           "fromPin": "returnValue",
           "toNode": "print19",
           "toPin": "value"
         },
         {
-          "id": "w53",
+          "id": "w54",
           "fromNode": "print19",
           "fromPin": "execOut",
           "toNode": "print20",
           "toPin": "execIn"
         },
         {
-          "id": "w54",
+          "id": "w55",
+          "fromNode": "n20_values",
+          "fromPin": "array",
+          "toNode": "n20",
+          "toPin": "values"
+        },
+        {
+          "id": "w56",
           "fromNode": "n20",
           "fromPin": "returnValue",
           "toNode": "print20",
           "toPin": "value"
         },
         {
-          "id": "w55",
+          "id": "w57",
           "fromNode": "print20",
           "fromPin": "execOut",
           "toNode": "print21",
           "toPin": "execIn"
         },
         {
-          "id": "w56",
+          "id": "w58",
           "fromNode": "n21",
           "fromPin": "returnValue",
           "toNode": "print21",
           "toPin": "value"
         },
         {
-          "id": "w57",
+          "id": "w59",
           "fromNode": "print21",
           "fromPin": "execOut",
           "toNode": "print22",
           "toPin": "execIn"
         },
         {
-          "id": "w58",
-          "fromNode": "n22_items",
-          "fromPin": "array",
-          "toNode": "n22",
-          "toPin": "items"
-        },
-        {
-          "id": "w59",
+          "id": "w60",
           "fromNode": "n22",
           "fromPin": "returnValue",
           "toNode": "print22",
           "toPin": "value"
         },
         {
-          "id": "w60",
+          "id": "w61",
           "fromNode": "print22",
           "fromPin": "execOut",
           "toNode": "print23",
           "toPin": "execIn"
-        },
-        {
-          "id": "w61",
-          "fromNode": "n23_items",
-          "fromPin": "array",
-          "toNode": "n23",
-          "toPin": "items"
         },
         {
           "id": "w62",
@@ -1399,44 +1472,86 @@
         },
         {
           "id": "w67",
-          "fromNode": "n25_a",
+          "fromNode": "n25_items",
           "fromPin": "array",
           "toNode": "n25",
-          "toPin": "a"
+          "toPin": "items"
         },
         {
           "id": "w68",
-          "fromNode": "n25_b",
-          "fromPin": "array",
-          "toNode": "n25",
-          "toPin": "b"
-        },
-        {
-          "id": "w69",
           "fromNode": "n25",
           "fromPin": "returnValue",
           "toNode": "print25",
           "toPin": "value"
         },
         {
-          "id": "w70",
+          "id": "w69",
           "fromNode": "print25",
           "fromPin": "execOut",
           "toNode": "print26",
           "toPin": "execIn"
         },
         {
-          "id": "w71",
+          "id": "w70",
           "fromNode": "n26_items",
           "fromPin": "array",
           "toNode": "n26",
           "toPin": "items"
         },
         {
-          "id": "w72",
+          "id": "w71",
           "fromNode": "n26",
           "fromPin": "returnValue",
           "toNode": "print26",
+          "toPin": "value"
+        },
+        {
+          "id": "w72",
+          "fromNode": "print26",
+          "fromPin": "execOut",
+          "toNode": "print27",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w73",
+          "fromNode": "n27_a",
+          "fromPin": "array",
+          "toNode": "n27",
+          "toPin": "a"
+        },
+        {
+          "id": "w74",
+          "fromNode": "n27_b",
+          "fromPin": "array",
+          "toNode": "n27",
+          "toPin": "b"
+        },
+        {
+          "id": "w75",
+          "fromNode": "n27",
+          "fromPin": "returnValue",
+          "toNode": "print27",
+          "toPin": "value"
+        },
+        {
+          "id": "w76",
+          "fromNode": "print27",
+          "fromPin": "execOut",
+          "toNode": "print28",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w77",
+          "fromNode": "n28_items",
+          "fromPin": "array",
+          "toNode": "n28",
+          "toPin": "items"
+        },
+        {
+          "id": "w78",
+          "fromNode": "n28",
+          "fromPin": "returnValue",
+          "toNode": "print28",
           "toPin": "value"
         }
       ],

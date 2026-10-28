@@ -147,7 +147,7 @@ Beyond Unreal's set, the library has everyday utilities, many adapted from Commo
 
 | Category | Nodes |
 |---|---|
-| String | Is Empty, Is Blank, Normalize Whitespace, Truncate, Capitalize, To Camel Case, To Snake Case, To Kebab Case, Slugify, Pad Left, Pad Right, Word Count, Mask, Format Bytes, Parse Boolean, Parse Integer Strict |
+| String | Is Empty, Is Blank, Normalize Whitespace, Truncate, Capitalize, To Camel Case, To Snake Case, To Kebab Case, To Title Case, Slugify, Pad Left, Pad Right, Trim Start, Trim End, Word Count, Mask, Format String, Format Bytes, Parse Boolean, Parse Integer Strict |
 | Math | In Range, Round To |
 | Utilities / Array | Unique, Difference, Intersection (any element type), Average, Median |
 | Utilities / Map | Pick, Omit, Merge, Find or Default, Make Map From Arrays |
@@ -163,6 +163,8 @@ The original leaves some behavior to each language. Here it's one contract, chec
 - **Paths.** Normalize Path works on the text alone, the same on every system: `/` and `\` both separate folders, `.` and empty parts go, `..` removes the folder before it, and the result uses `/`.
 - **Maps.** Maps keep their keys in the order they were added. Merge gives B's value where both maps have a key, at A's place in that order. Make Map From Arrays keeps a repeated key's first place and last value, and stops the run if Keys and Values differ in length.
 - **Limits.** Parse Integer Strict accepts numbers up to 2^53 (in C#, its 32-bit ints). Format Bytes takes sizes up to 2^53 and up to 10 decimals. Round To takes 0 to 15 digits.
+- **Title case and trimming.** To Title Case, Trim Start and Trim End treat only ASCII whitespace as space and change only ASCII letters, so every language gives the same text (unlike Trim and Capitalize, which use each language's own rules; see below).
+- **Format String.** `{0}`, `{1}`, … are replaced by that item of Args; other braces stay as they are (`{x}`, an unclosed `{2`), so `{{0}}` gives `{` + the item + `}`. A placeholder with no item stops the run.
 - **Upper case and spaces.** Capitalize uses each language's upper-casing for the first character, so non-ASCII letters can differ: C++ and Lua change ASCII letters only. In C++ and Lua, too, only ASCII spaces count as whitespace (Is Blank, Normalize Whitespace, Word Count, Trim).
 
 Nine of the original's 36 functions aren't included. Group By, Count By and Sum By take a function, which graphs can't pass. Chunk, Flatten, Flatten One Level and Zip return nested arrays, which pin types can't express. Coalesce takes any number of arguments of any type, and Select covers two. Clamp is already in the library.

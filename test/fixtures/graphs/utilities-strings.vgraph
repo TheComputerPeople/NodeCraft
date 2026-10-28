@@ -30,7 +30,12 @@
       "false",
       "false",
       "true",
-      "false"
+      "false",
+      "Hello World  Café-au-lait",
+      "élan\tVital",
+      "a b  |",
+      "|  a b",
+      ""
     ]
   },
   "graphs": [
@@ -549,6 +554,128 @@
             "pin:a": "É",
             "pin:b": "é"
           }
+        },
+        {
+          "id": "print25",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3000
+          },
+          "properties": {}
+        },
+        {
+          "id": "n25",
+          "type": "core:string.to-title-case",
+          "position": {
+            "x": 600,
+            "y": 3000
+          },
+          "properties": {
+            "pin:text": "hello wORLD  café-au-lait"
+          }
+        },
+        {
+          "id": "print26",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3120
+          },
+          "properties": {}
+        },
+        {
+          "id": "n26",
+          "type": "core:string.to-title-case",
+          "position": {
+            "x": 600,
+            "y": 3120
+          },
+          "properties": {
+            "pin:text": "élan\tvital"
+          }
+        },
+        {
+          "id": "print27",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3240
+          },
+          "properties": {}
+        },
+        {
+          "id": "n27",
+          "type": "core:string.append",
+          "position": {
+            "x": 600,
+            "y": 3240
+          },
+          "properties": {
+            "pin:b": "|"
+          }
+        },
+        {
+          "id": "n27_a",
+          "type": "core:string.trim-start",
+          "position": {
+            "x": 300,
+            "y": 3240
+          },
+          "properties": {
+            "pin:text": " \t a b  "
+          }
+        },
+        {
+          "id": "print28",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3360
+          },
+          "properties": {}
+        },
+        {
+          "id": "n28",
+          "type": "core:string.append",
+          "position": {
+            "x": 600,
+            "y": 3360
+          },
+          "properties": {
+            "pin:a": "|"
+          }
+        },
+        {
+          "id": "n28_b",
+          "type": "core:string.trim-end",
+          "position": {
+            "x": 300,
+            "y": 3360
+          },
+          "properties": {
+            "pin:text": "  a b \t "
+          }
+        },
+        {
+          "id": "print29",
+          "type": "core:console.print",
+          "position": {
+            "x": 900,
+            "y": 3480
+          },
+          "properties": {}
+        },
+        {
+          "id": "n29",
+          "type": "core:string.trim-start",
+          "position": {
+            "x": 600,
+            "y": 3480
+          },
+          "properties": {
+            "pin:text": "   "
+          }
         }
       ],
       "connections": [
@@ -886,6 +1013,90 @@
           "fromNode": "n24",
           "fromPin": "returnValue",
           "toNode": "print24",
+          "toPin": "value"
+        },
+        {
+          "id": "w49",
+          "fromNode": "print24",
+          "fromPin": "execOut",
+          "toNode": "print25",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w50",
+          "fromNode": "n25",
+          "fromPin": "returnValue",
+          "toNode": "print25",
+          "toPin": "value"
+        },
+        {
+          "id": "w51",
+          "fromNode": "print25",
+          "fromPin": "execOut",
+          "toNode": "print26",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w52",
+          "fromNode": "n26",
+          "fromPin": "returnValue",
+          "toNode": "print26",
+          "toPin": "value"
+        },
+        {
+          "id": "w53",
+          "fromNode": "print26",
+          "fromPin": "execOut",
+          "toNode": "print27",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w54",
+          "fromNode": "n27_a",
+          "fromPin": "returnValue",
+          "toNode": "n27",
+          "toPin": "a"
+        },
+        {
+          "id": "w55",
+          "fromNode": "n27",
+          "fromPin": "returnValue",
+          "toNode": "print27",
+          "toPin": "value"
+        },
+        {
+          "id": "w56",
+          "fromNode": "print27",
+          "fromPin": "execOut",
+          "toNode": "print28",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w57",
+          "fromNode": "n28_b",
+          "fromPin": "returnValue",
+          "toNode": "n28",
+          "toPin": "b"
+        },
+        {
+          "id": "w58",
+          "fromNode": "n28",
+          "fromPin": "returnValue",
+          "toNode": "print28",
+          "toPin": "value"
+        },
+        {
+          "id": "w59",
+          "fromNode": "print28",
+          "fromPin": "execOut",
+          "toNode": "print29",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w60",
+          "fromNode": "n29",
+          "fromPin": "returnValue",
+          "toNode": "print29",
           "toPin": "value"
         }
       ],

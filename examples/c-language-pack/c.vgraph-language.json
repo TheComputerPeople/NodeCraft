@@ -106,7 +106,10 @@
     "core:string.left": "const char* end = text;\nfor (long long taken = 0; *end && taken < count; taken++) {\n    end++;\n    while ((*end & 0xC0) == 0x80) end++;\n}\nreturn vg_copy(text, (size_t)(end - text));",
     "core:string.right": "long long skip = vg_length(text) - (count > 0 ? count : 0);\nconst char* start = text;\nfor (long long i = 0; *start && i < skip; i++) {\n    start++;\n    while ((*start & 0xC0) == 0x80) start++;\n}\nreturn start;",
     "core:string.is-numeric": "const char* p = text;\nif (*p == '+' || *p == '-') p++;\nint digits = 0, points = 0;\nfor (; *p; p++) {\n    if (*p >= '0' && *p <= '9') digits++;\n    else if (*p == '.') points++;\n    else return false;\n}\nreturn digits > 0 && points <= 1;",
-    "core:string.equal-ignore-case": "for (;; a++, b++) {\n    char x = *a >= 'A' && *a <= 'Z' ? (char)(*a + 32) : *a;\n    char y = *b >= 'A' && *b <= 'Z' ? (char)(*b + 32) : *b;\n    if (x != y) return false;\n    if (!x) return true;\n}"
+    "core:string.equal-ignore-case": "for (;; a++, b++) {\n    char x = *a >= 'A' && *a <= 'Z' ? (char)(*a + 32) : *a;\n    char y = *b >= 'A' && *b <= 'Z' ? (char)(*b + 32) : *b;\n    if (x != y) return false;\n    if (!x) return true;\n}",
+    "core:string.to-title-case": "char* result = vg_copy(text, strlen(text));\nbool start = true;\nfor (char* p = result; *p; p++) {\n    if (start && *p >= 'a' && *p <= 'z') *p = (char)(*p - 32);\n    else if (!start && *p >= 'A' && *p <= 'Z') *p = (char)(*p + 32);\n    start = vg_is_space(*p);\n}\nreturn result;",
+    "core:string.trim-start": "while (vg_is_space(*text)) text++;\nreturn text;",
+    "core:string.trim-end": "size_t length = strlen(text);\nwhile (length > 0 && vg_is_space(text[length - 1])) length--;\nreturn vg_copy(text, length);"
   },
   "types": {
     "map": {

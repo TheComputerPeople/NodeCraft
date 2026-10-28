@@ -279,3 +279,281 @@ export const STRING_UTILITIES: UtilityNode[] = [
     }
   }
 ];
+
+// ---- Everyday text --------------------------------------------------------------------------------
+//
+// Whitespace here is ASCII's (space, tab, line feed, vertical tab, form feed, carriage return), and
+// only ASCII letters change case, so these give the same text in every language. (GDScript's
+// locals avoid `start`, the Start event's function there.)
+
+// Format's placeholders: {0}, {1}, … An index with more than 9 digits can't be in range.
+const NO_ARGUMENT = 'No argument for {';
+
+export const TEXT_UTILITIES: UtilityNode[] = [
+  {
+    type: 'core:string.to-title-case', displayName: 'To Title Case', category: 'String', result: STRING, keywords: ['title', 'capitalize words', 'case', 'heading'],
+    inputs: [text()],
+    description: 'The text with each word\'s first letter in capitals and its other letters small; words are separated by whitespace. Only ASCII letters change.',
+    code: {
+      javascript: [
+        'let result = \'\';',
+        'let start = true;',
+        'for (const c of text) {',
+        "  result += start && c >= 'a' && c <= 'z' ? c.toUpperCase() : !start && c >= 'A' && c <= 'Z' ? c.toLowerCase() : c;",
+        "  start = c === ' ' || (c >= '\\t' && c <= '\\r');",
+        '}',
+        'return result;'
+      ].join('\n'),
+      python: [
+        'result = ""',
+        'start = True',
+        'for c in text:',
+        '    result += c.upper() if start and "a" <= c <= "z" else c.lower() if not start and "A" <= c <= "Z" else c',
+        '    start = c == " " or "\\t" <= c <= "\\r"',
+        'return result'
+      ].join('\n'),
+      csharp: [
+        'var result = new System.Text.StringBuilder();',
+        'var start = true;',
+        'foreach (var c in text)',
+        '{',
+        "    result.Append(start && c >= 'a' && c <= 'z' ? (char)(c - 32) : !start && c >= 'A' && c <= 'Z' ? (char)(c + 32) : c);",
+        "    start = c == ' ' || (c >= '\\t' && c <= '\\r');",
+        '}',
+        'return result.ToString();'
+      ].join('\n'),
+      cpp: [
+        'bool start = true;',
+        'for (auto& c : text) {',
+        "    if (start && c >= 'a' && c <= 'z') c = static_cast<char>(c - 32);",
+        "    else if (!start && c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);",
+        "    start = c == ' ' || (c >= '\\t' && c <= '\\r');",
+        '}',
+        'return text;'
+      ].join('\n'),
+      rust: [
+        'let mut result = String::new();',
+        'let mut start = true;',
+        'for c in text.chars() {',
+        '    result.push(if start { c.to_ascii_uppercase() } else { c.to_ascii_lowercase() });',
+        "    start = c == ' ' || ('\\t'..='\\r').contains(&c);",
+        '}',
+        'return result;'
+      ].join('\n'),
+      java: [
+        'var result = new StringBuilder();',
+        'boolean start = true;',
+        'for (char c : text.toCharArray()) {',
+        "    result.append(start && c >= 'a' && c <= 'z' ? (char) (c - 32) : !start && c >= 'A' && c <= 'Z' ? (char) (c + 32) : c);",
+        "    start = c == ' ' || (c >= '\\t' && c <= '\\r');",
+        '}',
+        'return result.toString();'
+      ].join('\n'),
+      go: [
+        'var result strings.Builder',
+        'start := true',
+        'for _, c := range text {',
+        "\tif start && c >= 'a' && c <= 'z' {",
+        '\t\tc -= 32',
+        "\t} else if !start && c >= 'A' && c <= 'Z' {",
+        '\t\tc += 32',
+        '\t}',
+        '\tresult.WriteRune(c)',
+        "\tstart = c == ' ' || (c >= '\\t' && c <= '\\r')",
+        '}',
+        'return result.String()'
+      ].join('\n'),
+      lua: [
+        'local start = true',
+        'return (text:gsub(".", function(c)',
+        '  local out = c',
+        '  if start and c:match("^%l$") then out = c:upper() elseif not start and c:match("^%u$") then out = c:lower() end',
+        '  start = c:match("^%s$") ~= nil',
+        '  return out',
+        'end))'
+      ].join('\n'),
+      gdscript: [
+        'var result := ""',
+        'var word_start := true',
+        'for i in text.length():',
+        '\tvar c := text.unicode_at(i)',
+        '\tif word_start and c >= 97 and c <= 122:',
+        '\t\tc -= 32',
+        '\telif not word_start and c >= 65 and c <= 90:',
+        '\t\tc += 32',
+        '\tresult += char(c)',
+        '\tword_start = c == 32 or (c >= 9 and c <= 13)',
+        'return result'
+      ].join('\n'),
+      ruby: [
+        'start = true',
+        'return text.each_char.map { |c|',
+        '  out = start && c.between?("a", "z") ? c.upcase : (!start && c.between?("A", "Z") ? c.downcase : c)',
+        '  start = c == " " || c.between?("\\t", "\\r")',
+        '  out',
+        '}.join'
+      ].join('\n'),
+      php: [
+        "$result = '';",
+        '$start = true;',
+        'for ($i = 0; $i < strlen($text); $i++) {',
+        '    $c = $text[$i];',
+        "    $result .= $start && $c >= 'a' && $c <= 'z' ? strtoupper($c) : (!$start && $c >= 'A' && $c <= 'Z' ? strtolower($c) : $c);",
+        '    $start = strpos(" \\t\\n\\v\\f\\r", $c) !== false;',
+        '}',
+        'return $result;'
+      ].join('\n')
+    }
+  },
+  {
+    type: 'core:string.trim-start', displayName: 'Trim Start', category: 'String', result: STRING, keywords: ['trim leading', 'strip', 'whitespace', 'left'],
+    inputs: [text('text', 'Source String')], description: 'The text without the whitespace at its start.',
+    code: {
+      javascript: "return text.replace(/^[ \\t\\n\\v\\f\\r]+/, '');",
+      python: 'return text.lstrip(" \\t\\n\\v\\f\\r")',
+      csharp: "return text.TrimStart(' ', '\\t', '\\n', '\\v', '\\f', '\\r');",
+      cpp: 'auto first = text.find_first_not_of(" \\t\\n\\v\\f\\r");\nreturn first == std::string::npos ? "" : text.substr(first);',
+      rust: "return text.trim_start_matches(|c: char| c == ' ' || ('\\t'..='\\r').contains(&c)).to_string();",
+      java: String.raw`return text.replaceAll("^[ \\t\\n\\x0B\\f\\r]+", "");`,
+      go: 'return strings.TrimLeft(text, " \\t\\n\\v\\f\\r")',
+      lua: 'return (text:gsub("^%s+", ""))',
+      gdscript: 'return text.lstrip(" \\t\\n\\v\\f\\r")',
+      ruby: 'return text.sub(/\\A[ \\t\\n\\v\\f\\r]+/, "")',
+      php: 'return ltrim($text, " \\t\\n\\v\\f\\r");'
+    }
+  },
+  {
+    type: 'core:string.trim-end', displayName: 'Trim End', category: 'String', result: STRING, keywords: ['trim trailing', 'strip', 'whitespace', 'right'],
+    inputs: [text('text', 'Source String')], description: 'The text without the whitespace at its end.',
+    code: {
+      javascript: "return text.replace(/[ \\t\\n\\v\\f\\r]+$/, '');",
+      python: 'return text.rstrip(" \\t\\n\\v\\f\\r")',
+      csharp: "return text.TrimEnd(' ', '\\t', '\\n', '\\v', '\\f', '\\r');",
+      cpp: 'auto last = text.find_last_not_of(" \\t\\n\\v\\f\\r");\nreturn last == std::string::npos ? "" : text.substr(0, last + 1);',
+      rust: "return text.trim_end_matches(|c: char| c == ' ' || ('\\t'..='\\r').contains(&c)).to_string();",
+      java: String.raw`return text.replaceAll("[ \\t\\n\\x0B\\f\\r]+$", "");`,
+      go: 'return strings.TrimRight(text, " \\t\\n\\v\\f\\r")',
+      lua: 'return (text:gsub("%s+$", ""))',
+      gdscript: 'return text.rstrip(" \\t\\n\\v\\f\\r")',
+      ruby: 'return text.sub(/[ \\t\\n\\v\\f\\r]+\\z/, "")',
+      php: 'return rtrim($text, " \\t\\n\\v\\f\\r");'
+    }
+  },
+  {
+    type: 'core:string.format', displayName: 'Format String', category: 'String', result: STRING, keywords: ['format', 'template', 'placeholder', 'interpolate', 'printf'],
+    inputs: [input('format', 'Format', STRING, '{0}'), input('items', 'Args', STRINGS)],
+    description: 'Format with each {0}, {1}, … replaced by that item of Args (0 is the first). A placeholder without an item stops the run with an error; other braces stay as they are.',
+    code: {
+      javascript: [
+        'return format.replace(/\\{([0-9]+)\\}/g, (_, digits) => {',
+        `  if (digits.length > 9 || Number(digits) >= items.length) throw new Error('${NO_ARGUMENT}' + digits + '}');`,
+        '  return items[Number(digits)];',
+        '});'
+      ].join('\n'),
+      python: [
+        'import re',
+        'def fill(match):',
+        '    digits = match.group(1)',
+        '    if len(digits) > 9 or int(digits) >= len(items):',
+        `        raise IndexError("${NO_ARGUMENT}" + digits + "}")`,
+        '    return items[int(digits)]',
+        'return re.sub(r"\\{([0-9]+)\\}", fill, format)'
+      ].join('\n'),
+      csharp: [
+        'return System.Text.RegularExpressions.Regex.Replace(format, @"\\{([0-9]+)\\}", (match) =>',
+        '{',
+        '    var digits = match.Groups[1].Value;',
+        `    if (digits.Length > 9 || int.Parse(digits) >= items.Count) throw new ArgumentException("${NO_ARGUMENT}" + digits + "}");`,
+        '    return items[int.Parse(digits)];',
+        '});'
+      ].join('\n'),
+      cpp: [
+        'std::string result;',
+        'for (std::size_t i = 0; i < format.size();) {',
+        '    std::size_t j = i + 1;',
+        "    while (format[i] == '{' && j < format.size() && format[j] >= '0' && format[j] <= '9') j++;",
+        "    if (format[i] == '{' && j > i + 1 && j < format.size() && format[j] == '}') {",
+        '        std::string digits = format.substr(i + 1, j - i - 1);',
+        `        if (digits.size() > 9 || std::stoll(digits) >= static_cast<long long>(items.size())) throw std::out_of_range("${NO_ARGUMENT}" + digits + "}");`,
+        '        result += items[std::stoll(digits)];',
+        '        i = j + 1;',
+        '    } else {',
+        '        result += format[i++];',
+        '    }',
+        '}',
+        'return result;'
+      ].join('\n'),
+      rust: [
+        'let mut result = String::new();',
+        'let mut rest = format.as_str();',
+        "while let Some(open) = rest.find('{') {",
+        '    result.push_str(&rest[..open]);',
+        '    let after = &rest[open + 1..];',
+        '    let digits: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();',
+        "    if !digits.is_empty() && after[digits.len()..].starts_with('}') {",
+        '        let index: usize = if digits.len() > 9 { usize::MAX } else { digits.parse().unwrap() };',
+        '        if index >= items.len() { panic!("No argument for {{{}}}", digits); }',
+        '        result.push_str(&items[index]);',
+        '        rest = &after[digits.len() + 1..];',
+        '    } else {',
+        "        result.push('{');",
+        '        rest = after;',
+        '    }',
+        '}',
+        'result.push_str(rest);',
+        'return result;'
+      ].join('\n'),
+      java: [
+        'return java.util.regex.Pattern.compile("\\\\{([0-9]+)\\\\}").matcher(format).replaceAll((match) -> {',
+        '    String digits = match.group(1);',
+        `    if (digits.length() > 9 || Integer.parseInt(digits) >= items.size()) throw new IndexOutOfBoundsException("${NO_ARGUMENT}" + digits + "}");`,
+        '    return java.util.regex.Matcher.quoteReplacement(items.get(Integer.parseInt(digits)));',
+        '});'
+      ].join('\n'),
+      go: [
+        'return regexp.MustCompile(`\\{([0-9]+)\\}`).ReplaceAllStringFunc(format, func(match string) string {',
+        '\tdigits := match[1 : len(match)-1]',
+        '\tindex, _ := strconv.Atoi(digits)',
+        '\tif len(digits) > 9 || index >= len(*items) {',
+        `\t\tVgFail("${NO_ARGUMENT}" + digits + "}")`,
+        '\t}',
+        '\treturn (*items)[index]',
+        '})'
+      ].join('\n'),
+      lua: [
+        'return (format:gsub("{(%d+)}", function(digits)',
+        `  if #digits > 9 or tonumber(digits) >= items.n then error("${NO_ARGUMENT}" .. digits .. "}", 0) end`,
+        '  return items[tonumber(digits) + 1]',
+        'end))'
+      ].join('\n'),
+      gdscript: [
+        'var result := ""',
+        'var at := 0',
+        'for found in RegEx.create_from_string(r"\\{([0-9]+)\\}").search_all(format):',
+        '\tvar digits := found.get_string(1)',
+        '\tif digits.length() > 9 or digits.to_int() >= items.size():',
+        `\t\treturn vg.fail("${NO_ARGUMENT}" + digits + "}")`,
+        '\tresult += format.substr(at, found.get_start() - at) + items[digits.to_int()]',
+        '\tat = found.get_end()',
+        'return result + format.substr(at)'
+      ].join('\n'),
+      ruby: [
+        // `format` is a Ruby method, so the snippet names the pin.
+        'return ${format}.gsub(/\\{([0-9]+)\\}/) do',
+        '  digits = Regexp.last_match(1)',
+        `  raise IndexError, "${NO_ARGUMENT}#{digits}}" if digits.length > 9 || digits.to_i >= items.length`,
+        '  items[digits.to_i]',
+        'end'
+      ].join('\n'),
+      php: [
+        "return preg_replace_callback('/\\{([0-9]+)\\}/', function ($match) use ($items) {",
+        '    $digits = $match[1];',
+        '    if (strlen($digits) > 9 || (int) $digits >= count($items->items)) {',
+        `        throw new \\OutOfRangeException('${NO_ARGUMENT}' . $digits . '}');`,
+        '    }',
+        '    return $items->items[(int) $digits];',
+        '}, $format);'
+      ].join('\n')
+    }
+  }
+];
