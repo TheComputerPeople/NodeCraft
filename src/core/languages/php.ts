@@ -7,7 +7,8 @@ import { relativeSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
-import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
+import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
+import { scanPhp } from '../importing/php-scanner';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
 import { PHP_RUNTIME_FILE, phpRuntime } from './php-runtime';
@@ -108,6 +109,19 @@ const phpRunner: CodeRunner = {
   missingToolMessage: 'PHP was not found. Install PHP 8.3 or later, enable mbstring in php.ini, and make sure `php` is on the PATH.'
 };
 
+// Xdebug through the PHP Debug extension, running Run's launcher; PHP needs Xdebug loaded (php.ini's
+// zend_extension=xdebug).
+const phpDebugger: CodeDebugger = {
+  type: 'php',
+  extension: { id: 'xdebug.php-debug', name: 'PHP Debug' },
+  configuration: (_file, _className, context) => ({
+    type: 'php', request: 'launch', name: 'Debug Graph', program: `${context.scaffoldDir}/run.php`, args: context.args ?? [], cwd: context.cwd, stopOnEntry: false,
+    ...(context.command?.length ? { runtimeExecutable: context.command[0], runtimeArgs: context.command.slice(1) } : {})
+  }),
+  // Xdebug writes a whole float with a point (30.0); the graph shows 30.
+  displayValue: (text) => (/^-?\d+\.0$/.test(text) ? text.slice(0, -2) : text)
+};
+
 const phpGenerator: CodeGenerator = {
   libraryExports: (name, functions) => ({ names: phpExportNames(functions), container: phpClassName(name) }),
   snippetLanguages: ['php'],
@@ -116,7 +130,8 @@ const phpGenerator: CodeGenerator = {
   // Graph files in one folder share its namespace.
   moduleName: (_generatedFileName, options) => options.namespace,
   generate: (program, options) => new PhpEmitter(program, options).emit(),
-  runner: phpRunner
+  runner: phpRunner,
+  debugger: phpDebugger
 };
 
 export const phpPack: LanguagePack = {
@@ -126,7 +141,9 @@ export const phpPack: LanguagePack = {
   workspaceMarkers: ['**/composer.json'],
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
-  generator: phpGenerator
+  generator: phpGenerator,
+  // Functions and public static methods marked @blueprint in docblocks.
+  importer: { extensions: ['.php'], scan: scanPhp }
 };
 
 class PhpEmitter {
@@ -162,7 +179,8 @@ class PhpEmitter {
     for (const i of program.imports) {
       if (i.userType) this.importNames.set(i.id, this.typeReference(i.userType));
       // A library's or project's static method by its class's qualified name (written with dots by
-      // graph libraries, as C# names them), or a function by its own.
+      // graph libraries, as C# names them); a function by its namespace (ending with \) and name.
+      else if (i.module?.endsWith('\\')) this.importNames.set(i.id, `\\${i.module}${i.name}`);
       else this.importNames.set(i.id, i.module ? `\\${i.module.replace(/\./g, '\\')}::${i.name}` : `\\${i.name}`);
     }
     const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'camel')}_` : '_';

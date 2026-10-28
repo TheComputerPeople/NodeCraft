@@ -10,7 +10,7 @@ import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { typeLanguages } from '../core/user-types';
-import { cppRunSources, csharpNamespace, csharpRunSources, godotProject, goPackage, goRunSources, javaProject, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
+import { cppRunSources, csharpNamespace, csharpRunSources, godotProject, goPackage, goRunSources, javaProject, phpNamespace, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
 import { OutputPlans } from './output-plans';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
 
@@ -308,8 +308,7 @@ function generateOptions(language: string | undefined, graphFileName: string, gr
     moduleFormat: detectModuleFormat(graphDir, root),
     outputDir: path.relative(root, graphDir).split(path.sep).join('/'),
     importExtension: detectImportExtension(graphDir, root),
-    // PHP's namespace comes from Composer (Phase 8, step 9); until then, the global one.
-    namespace: language === 'java' ? javaProject(graphDir, root).package : language === 'go' ? goPackage(graphDir, root).name : language === 'php' ? undefined : csharpNamespace(graphDir, root),
+    namespace: language === 'java' ? javaProject(graphDir, root).package : language === 'go' ? goPackage(graphDir, root).name : language === 'php' ? phpNamespace(graphDir, root) : csharpNamespace(graphDir, root),
     ...(language === 'go' && goPackage(graphDir, root).path ? { packagePath: goPackage(graphDir, root).path } : {})
   };
 }

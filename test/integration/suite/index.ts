@@ -865,6 +865,17 @@ test('exit check: debugging a function graph in generated Ruby', async () => {
   await exitCheck('ruby');
 });
 
+// PHP is debugged with Xdebug, which php.ini must load (zend_extension=xdebug).
+function requirePhpDebugger(): void {
+  if (!vscode.extensions.getExtension('xdebug.php-debug')) throw new Skip('the PHP Debug extension is not loaded');
+  if (!/^xdebug$/im.test(spawnSync('php', ['-m'], { encoding: 'utf8' }).stdout ?? '')) throw new Skip('PHP has no Xdebug (php -m)');
+}
+
+test('exit check: debugging a function graph in generated PHP', async () => {
+  requirePhpDebugger();
+  await exitCheck('php');
+});
+
 test('exit check: debugging a function graph in generated C#', async () => {
   if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) throw new Skip('the C# extension is not loaded');
   await exitCheck('csharp');
@@ -977,6 +988,11 @@ test('Debug does the same in generated GDScript (godot-tools)', async () => {
 test('Debug does the same in generated Ruby (rdbg)', async () => {
   if (!vscode.extensions.getExtension('KoichiSasada.vscode-rdbg')) throw new Skip('the VSCode rdbg Ruby Debugger extension is not loaded');
   await debugSample('ruby', 'debug_ruby_vgraph.rb');
+});
+
+test('Debug does the same in generated PHP (Xdebug)', async () => {
+  requirePhpDebugger();
+  await debugSample('php', 'debug_php.vgraph.php');
 });
 
 test('Debug does the same in generated Go (Delve)', async () => {

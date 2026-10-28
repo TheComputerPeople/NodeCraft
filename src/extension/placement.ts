@@ -309,6 +309,33 @@ export function goPackage(graphDir: string, stopDir: string): { name: string; pa
   return { name, path: relative ? `${modulePath}/${relative}` : modulePath, module: { path: modulePath, dir: path.dirname(modFile) } };
 }
 
+// A PHP graph's namespace (docs/more-languages.md, "PHP"): under a PSR-4 root of the nearest
+// composer.json, the root's namespace and the folders below it; else none (the global namespace).
+export function phpNamespace(graphDir: string, stopDir: string): string | undefined {
+  const composer = findUp(graphDir, 'composer.json', stopDir);
+  if (!composer) return undefined;
+  let roots: Record<string, string | string[]> = {};
+  try {
+    const json = JSON.parse(fs.readFileSync(composer, 'utf8')) as { autoload?: { 'psr-4'?: Record<string, string | string[]> }; 'autoload-dev'?: { 'psr-4'?: Record<string, string | string[]> } };
+    roots = { ...json.autoload?.['psr-4'], ...json['autoload-dev']?.['psr-4'] };
+  } catch {
+    return undefined;
+  }
+  const base = path.dirname(composer);
+  let best: { prefix: string; segments: string[] } | undefined;
+  for (const [prefix, dirs] of Object.entries(roots)) {
+    for (const dir of Array.isArray(dirs) ? dirs : [dirs]) {
+      const relative = path.relative(path.resolve(base, dir), graphDir);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+      const segments = relative.split(path.sep).filter(Boolean);
+      if (!best || segments.length < best.segments.length) best = { prefix, segments };
+    }
+  }
+  if (!best) return undefined;
+  const parts = [...best.prefix.split('\\').filter(Boolean), ...best.segments];
+  return parts.every((p) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(p)) ? parts.join('\\') : undefined;
+}
+
 // A GDScript graph's Godot project (docs/more-languages.md, "GDScript"): the nearest folder with a
 // project.godot, up to the workspace folder.
 export function godotProject(graphDir: string, stopDir: string): string | undefined {

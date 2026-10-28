@@ -11,7 +11,7 @@ import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { graphFileDefinitions } from '../core/graph-files';
 import { duplicateTypes, typeLanguages } from '../core/user-types';
-import { csharpNamespace, goPackage, javaProject, pythonModule } from './placement';
+import { csharpNamespace, goPackage, javaProject, phpNamespace, pythonModule } from './placement';
 
 const GLOB = '**/*.vgraph';
 const EXCLUDE = '**/{node_modules,.git,.venv,venv,dist,out,build,bin,obj}/**';
@@ -115,7 +115,7 @@ export class GraphLibraries implements vscode.Disposable {
       const generator = language ? this.languages.get(language)?.generator : undefined;
       if (!generator) return undefined;
       const generated = path.join(dir, generator.outputFileName(path.basename(uri.fsPath)));
-      const module = language === 'python' ? pythonModule(generated, root).module : language === 'csharp' ? csharpNamespace(dir, root) : language === 'java' ? javaProject(dir, root).package : language === 'go' ? goPackage(dir, root).path ?? goPackage(dir, root).name : undefined;
+      const module = language === 'python' ? pythonModule(generated, root).module : language === 'csharp' ? csharpNamespace(dir, root) : language === 'java' ? javaProject(dir, root).package : language === 'go' ? goPackage(dir, root).path ?? goPackage(dir, root).name : language === 'php' ? phpNamespace(dir, root) : undefined;
       return { generatedPath: relative(root, generated), ...(module ? { module } : {}) };
     };
     const generator = doc.language ? this.languages.get(doc.language)?.generator : undefined;
