@@ -66,7 +66,7 @@ async function fromNpm(workspaceFolder: vscode.Uri, source: NpmSource, dir: stri
 
 // Asks for a search on npm, and which package it found.
 async function pickFromNpm(workspaceFolder: vscode.Uri): Promise<NpmSource | undefined> {
-  const text = await vscode.window.showInputBox({ prompt: 'Search npm for Blueprint packages', placeHolder: 'combat' });
+  const text = await vscode.window.showInputBox({ prompt: 'Search npm for Blueprint packages', placeHolder: 'math' });
   if (text === undefined) return undefined;
   const registry = registryFor('', await workspaceNpmrc(workspaceFolder));
   const found = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Searching npm' }, () => searchPackages(registry, text));

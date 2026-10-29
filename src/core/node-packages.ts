@@ -43,7 +43,7 @@ export function manifestProblems(value: unknown): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return ['A package manifest must be a JSON object.'];
   const m = value as Partial<NodePackageManifest>;
   const problems: string[] = [];
-  if (typeof m.name !== 'string' || !/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(m.name)) problems.push('"name" must be a package name, such as "combat-nodes" or "@studio/combat-nodes".');
+  if (typeof m.name !== 'string' || !/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(m.name)) problems.push('"name" must be a package name, such as "math-nodes" or "@studio/math-nodes".');
   if (typeof m.version !== 'string' || !parseVersion(m.version)) problems.push('"version" must be a semantic version, such as "1.2.0".');
   const list = (value: unknown) => Array.isArray(value) && value.every((n) => typeof n === 'string');
   if (m.nodes !== undefined && !list(m.nodes)) problems.push('"nodes" must list the package\'s node definition files.');
