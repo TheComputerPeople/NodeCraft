@@ -79,10 +79,25 @@ export function formatValue(value: unknown): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   try {
-    return JSON.stringify(value, (_key, v: unknown) => (v instanceof Set ? [...v].sort(compareValues) : v instanceof Map ? Object.fromEntries(v) : v)) ?? '';
+    return json(value) ?? '';
   } catch {
     return String(value);
   }
+}
+
+// JSON, as JSON.stringify writes it, but with a map's keys in the order they were added: a plain
+// object would list integer keys first, in ascending order.
+function json(value: unknown): string | undefined {
+  if (value instanceof Set) return json([...value].sort(compareValues));
+  if (value instanceof Map) return `{${[...value].map(([key, item]) => `${JSON.stringify(String(key))}:${json(item) ?? 'null'}`).join(',')}}`;
+  if (Array.isArray(value)) return `[${value.map((item) => json(item) ?? 'null').join(',')}]`;
+  if (value !== null && typeof value === 'object' && typeof (value as { toJSON?: unknown }).toJSON !== 'function') {
+    return `{${Object.entries(value).flatMap(([key, item]) => {
+      const text = json(item);
+      return text === undefined ? [] : [`${JSON.stringify(key)}:${text}`];
+    }).join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function compareValues(a: unknown, b: unknown): number {

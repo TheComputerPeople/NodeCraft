@@ -116,6 +116,11 @@ module Vg
   end
 
   # Containers and structs print as JSON: sets in ascending order, hashes in the order keys were added.
+  # Values in the semantics' order. Ruby's booleans don't compare, so they sort as 0 and 1.
+  def self.sorted(values)
+    values.sort_by { |item| item == true ? 1 : (item == false ? 0 : item) }
+  end
+
   def self.json(value)
     case value
     when nil then "null"
@@ -125,7 +130,7 @@ module Vg
     when Float then value.nan? || value.infinite? ? "null" : format_number(value)
     when String then JSON.generate(value)
     when Array then "[" + value.map { |item| json(item) }.join(",") + "]"
-    when Set then json(value.to_a.sort)
+    when Set then json(sorted(value.to_a))
     when Hash then "{" + value.map { |key, item| JSON.generate(key_text(key)) + ":" + json(item) }.join(",") + "}"
     else
       if value.respond_to?(:vg_fields)

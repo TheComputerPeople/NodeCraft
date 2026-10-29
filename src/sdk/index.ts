@@ -36,5 +36,7 @@ export type { DeclarativeDebugger, DeclarativePackDefinition, DeclarativeRunner,
 
 // The conformance suite.
 export { runConformance, loadFixtureSet, programFiles, defaultFixtureSet, formatReport, runNodeExamples, simulateNodeExamples, loadNodeFiles } from '../conformance/conformance';
+export { auditPack, auditCases, auditGraph, formatAudit } from '../conformance/audit';
+export type { AuditCase, AuditFinding, AuditOptions, AuditReport } from '../conformance/audit';
 export type { ConformanceOptions, ConformanceReport, Fixture, FixtureResult, FixtureSet, NodeTestOptions, ResultStatus } from '../conformance/conformance';
 export type { NodeExample } from '../core/model';

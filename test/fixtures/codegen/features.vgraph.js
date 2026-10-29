@@ -45,5 +45,15 @@ function formatValue(value) {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return JSON.stringify(value, (_key, v) => v instanceof Set ? [...v].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)) : v instanceof Map ? Object.fromEntries(v) : v) ?? "";
+  /** @param {unknown} v @returns {string | undefined} */
+  const json = (v) => {
+    if (v instanceof Set) return json([...v].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+    if (v instanceof Map) return "{" + [...v].map(([k, x]) => JSON.stringify(String(k)) + ":" + (json(x) ?? "null")).join(",") + "}";
+    if (Array.isArray(v)) return "[" + v.map((x) => json(x) ?? "null").join(",") + "]";
+    if (v !== null && typeof v === "object" && typeof Object(v).toJSON !== "function") {
+      return "{" + Object.entries(v).flatMap(([k, x]) => { const t = json(x); return t === undefined ? [] : [JSON.stringify(k) + ":" + t]; }).join(",") + "}";
+    }
+    return JSON.stringify(v);
+  };
+  return json(value) ?? "";
 }

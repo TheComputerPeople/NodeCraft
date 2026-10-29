@@ -12,6 +12,10 @@ import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
 import { LUA_RUNTIME_FILE, LUA_RUNTIME_MODULE, luaRuntime } from './lua-runtime';
 
+// Snippet helpers and imports a module keeps as locals; beyond it, helpers go in one table, under
+// Lua's limit of 200 locals in a chunk.
+const MAX_HELPER_LOCALS = 150;
+
 // Lua's keywords, and the globals generated code uses, which names must not hide.
 const RESERVED = new Set([
   'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'goto', 'if', 'in', 'local', 'nil', 'not', 'or', 'repeat',
@@ -194,6 +198,9 @@ class LuaEmitter {
   // An import's local (its module's, for a project function; the type's, for a struct or class).
   private readonly importNames = new Map<string, string>();
   private readonly moduleLocals = new Map<string, string>();
+  // A module with many snippet helpers keeps them in one table, its name here: Lua allows 200 locals
+  // in a chunk.
+  private readonly helperTable: string | undefined;
   private readonly types: Map<string, UserType>;
   private readonly classNames = new Map<string, ClassMemberNames>();
 
@@ -222,7 +229,11 @@ class LuaEmitter {
     const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'snake')}_` : '_';
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
     for (const b of program.blocks) this.blockNames.set(b.id, this.library ? this.moduleScope.claim(b.name, 'snake') : this.names.claim(b.name, 'snake', internal));
-    for (const h of program.helpers) this.helperNames.set(h.id, this.moduleScope.claim(h.name, 'snake'));
+    this.helperTable = program.helpers.length + this.moduleLocals.size > MAX_HELPER_LOCALS ? this.moduleScope.claim('vg_helpers', 'snake') : undefined;
+    const helperScope = new NameScope(RESERVED);
+    for (const h of program.helpers) {
+      this.helperNames.set(h.id, this.helperTable ? `${this.helperTable}.${helperScope.claim(h.name, 'snake')}` : this.moduleScope.claim(h.name, 'snake'));
+    }
   }
 
   emit(): GeneratedCode {
@@ -334,6 +345,7 @@ class LuaEmitter {
     if (parent) header.line(`setmetatable(${this.className}, { __index = ${this.userTypeName(parent)} })`);
     if (this.program.helpers.length) {
       header.line();
+      if (this.helperTable) header.line(`local ${this.helperTable} = {}`);
       for (const helper of this.program.helpers) this.helperFunction(header, helper);
       header.trimTrailingBlank();
     }
@@ -478,7 +490,7 @@ class LuaEmitter {
     }));
     const byPin = new Map(params.map((p) => [p.pinId, p.name]));
     const code = helper.code.replace(/\$\{([^}]+)\}/g, (_m, pin: string) => byPin.get(pin) ?? pin);
-    out.line(`local function ${this.helperNames.get(helper.id)}(${params.map((p) => p.name).join(', ')})`);
+    out.line(`${this.helperTable ? '' : 'local '}function ${this.helperNames.get(helper.id)}(${params.map((p) => p.name).join(', ')})`);
     out.indent();
     for (const line of dedent(code)) out.line(line);
     out.dedent();

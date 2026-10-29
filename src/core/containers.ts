@@ -275,7 +275,7 @@ const RUBY: Record<string, string> = {
   'core:set.clear': 'target.clear',
   'core:set.contains': 'return target.include?(item)',
   'core:set.length': 'return target.size',
-  'core:set.to-array': 'return target.to_a.sort',
+  'core:set.to-array': 'return Vg.sorted(target.to_a)',
   'core:map.add': 'target[key] = value',
   'core:map.remove': 'return false unless target.key?(key)\ntarget.delete(key)\nreturn true',
   'core:map.clear': 'target.clear',

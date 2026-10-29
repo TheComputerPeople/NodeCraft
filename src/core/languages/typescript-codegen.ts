@@ -1136,8 +1136,20 @@ class TypeScriptEmitter {
     out.line(`if (typeof value === "string") return value;`);
     out.line(`if (typeof value === "number" || typeof value === "boolean") return String(value);`);
     // Containers print as JSON: sets in ascending order (they have no order of their own), maps as
-    // objects in the order their keys were added.
-    out.line(`return JSON.stringify(value, (_key, v) => v instanceof Set ? [...v].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)) : v instanceof Map ? Object.fromEntries(v) : v) ?? "";`);
+    // objects in the order their keys were added (which a plain object wouldn't keep for integer keys).
+    if (!flavor.typed) out.line('/** @param {unknown} v @returns {string | undefined} */');
+    out.line(`const json = (v${flavor.typed ? ': unknown): string | undefined' : ')'} => {`);
+    out.indent();
+    out.line('if (v instanceof Set) return json([...v].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));');
+    out.line('if (v instanceof Map) return "{" + [...v].map(([k, x]) => JSON.stringify(String(k)) + ":" + (json(x) ?? "null")).join(",") + "}";');
+    out.line('if (Array.isArray(v)) return "[" + v.map((x) => json(x) ?? "null").join(",") + "]";');
+    out.line('if (v !== null && typeof v === "object" && typeof Object(v).toJSON !== "function") {');
+    out.line('  return "{" + Object.entries(v).flatMap(([k, x]) => { const t = json(x); return t === undefined ? [] : [JSON.stringify(k) + ":" + t]; }).join(",") + "}";');
+    out.line('}');
+    out.line('return JSON.stringify(v);');
+    out.dedent();
+    out.line('};');
+    out.line('return json(value) ?? "";');
     out.dedent();
     out.line('}');
   }

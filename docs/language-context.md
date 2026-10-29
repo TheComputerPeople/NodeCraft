@@ -37,6 +37,27 @@ The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts)
 - **What a mismatch becomes.** Each is either fixed (the snippet or generator), or the node is left out of that language: the language loses the snippet, or the node declares what it needs. The doc records each one found.
 - **Kept.** The audit becomes a conformance test, so a new node, or a new pack through the SDK's conformance suite, gets the same check.
 
+**Built (steps 2 to 4, in one commit).** The harness builds and runs in one go, and the findings were few, so the three steps were one.
+
+- **The harness** (src/conformance/audit.ts, `auditPack`):
+  - **Cases.** A case is each node the palette offers in the language, through the same checks (`implementsCode`, the capabilities). Nodes with wildcard pins are one case per element type (int, float, string, bool), or per key and value pair for maps. That's 344 cases in TypeScript, from 212 nodes less the structural ones (entries, returns, members, macros, events, dispatchers, tests and Object Is Valid, which takes an object), which the fixtures cover.
+  - **Graph.** One class graph: each case is a custom event with its node, sample inputs from variables of concrete types (the node's `wildcards` set as the editor sets them), and a Print of each output, and a label for each of several exec outputs. Start prints a marker and calls each case in turn. Nodes that read files or give another value each time (random, time, UUIDs, Shuffle, Random Item) are built and never called.
+  - **Rounds.** A compile error on a case, a build error traced through `nodeLines`, or a crash (the last marker printed) takes that case out (out of the graph, or out of the run), and the rest run again.
+  - **Comparison.** When everything runs, each case's lines are compared with Simulate's. Simulate runs the graph as a TypeScript graph, and first runs each case alone: a case Simulate stops on isn't run in the language.
+  - **Numbers.** They may differ in their last bits (up to 4 units in the last place), since platforms' math libraries round sines and logarithms differently. They must still be written as Simulate writes them, the shortest form that reads back.
+- **Kept.**
+  - test/conformance/audit.test.ts runs it in all 12 languages (each built and run once; C++ takes the longest, about 10 s). It checks there are no findings and that more than 300 cases ran.
+  - Its self-check gives Python a wrong String Reverse and expects that finding, and no other.
+  - The SDK exports `auditPack`, and `blueprint-conformance <pack> --audit` runs it for any pack.
+- **What it found** (the first full run, 2026-10-29), and the fixes:
+  - **Maps printed with integer keys sorted, in Simulate, TypeScript and JavaScript.** Print wrote a map through a plain object, which lists integer-like keys first and in ascending order. The semantics say insertion order, which the other ten languages kept: Pick and Make Map From Arrays with int keys printed differently. Simulate's `formatValue` and the generated TypeScript/JavaScript print helper now write maps themselves, in order.
+  - **Lua: big graphs didn't load.** Each code node's snippet is a module-level local function, and Lua allows 200 locals in a chunk. A graph using about 200 kinds of code node failed with "too many local variables". Past 150 helpers and imports, the helpers are fields of one local table (`vg_helpers`); smaller graphs are generated as before.
+  - **Ruby: sets of booleans crashed** Set To Array and Print, which sorted them with Ruby's `sort` (`false` and `true` don't compare). A runtime `Vg.sorted` sorts them as Sort already did, false first.
+  - **Last-bit differences** in Sin and Tan (C++, Rust, C#, GDScript, Ruby, PHP, Python) and Acos (Go): expected, see Numbers above.
+- **Limits.**
+  - Simulate runs TypeScript's and JavaScript's own snippets (the `javascript` key), so in those two languages the audit checks the generator, not the snippet. The snippets themselves are checked by the fixtures' expected outputs.
+  - Sample inputs are typical ones. Edge cases (empty arrays, out-of-range indexes, errors) stay with the fixtures, since a crash in one case stops the program.
+
 ## Part 2: the language's terms
 
 **Design.**
@@ -101,7 +122,7 @@ One commit each; large steps may take several.
 1. This design, and the roadmap.
 2. The audit: the one-node graphs, compiling and building in every language, mapped to nodes; the mismatches recorded.
 3. Fixing what the audit finds by compiling and building.
-4. The audit's runs against Simulate, and fixing what they find.
+4. The audit's runs against Simulate, and fixing what they find. (Steps 2 to 4 were one commit.)
 5. Terms: `terms` in packs, `typeText` in generators, the name templates (src/core/terms.ts), the 12 languages' terms.
 6. Terms in the webview: palette, Add Node menu, node titles, pins, the type picker, Details, My Blueprint; search by both names.
 7. Code preview: `previewNode`, the palette's pane and the menu's.

@@ -58,6 +58,22 @@ Options:
 | `--timeout <ms>` | The limit for each run |
 | `--commonjs` | Generates CommonJS (JavaScript packs) |
 | `--nodes <file or folder>` | Tests a node library instead (below) |
+| `--audit` | Audits every built-in node in the pack's language instead (below); `--filter` picks nodes by type |
+
+### The node audit
+
+```sh
+npx blueprint-conformance my-pack.js --audit
+```
+
+With `--audit`, every built-in node your pack's language is offered runs in it once, and what it prints is compared with Simulate's (the editor's own runtime, which defines the semantics):
+
+- **Cases:** each node, with sample inputs; a node with wildcard pins once for each element type (int, float, string, bool; for maps, three key and value pairs).
+- **One program:** all the cases are one generated class, built and run once. A build error is traced to its node through `nodeLines`, and a crash to the last case that started; that case is taken out and the rest run again.
+- **Built, not run:** nodes that read files or give another value each time (random, time, UUIDs).
+- **Numbers** may differ in their last bits (platforms' math libraries do), as long as they're written as Simulate writes them.
+
+It lists each finding: a compile error, a build error, a crash, or other output. It exits with 1 when there is one.
 
 ### Node libraries
 
