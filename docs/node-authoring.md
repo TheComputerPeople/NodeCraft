@@ -176,6 +176,25 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - a snippet node's `*.node.json` file, at its entry.
 - **Find References** in the same menu searches every graph for that node type, through Find in All Blueprints.
 
+**Built (step 9).**
+
+- **Where.** `definitionSite` (src/core/navigation.ts) says where a node is defined:
+  - a function or macro graph of this file;
+  - a library's graph (its definition's `source`);
+  - the project's code (its implementation's `path`);
+  - or a node file, for snippet nodes and packages' nodes.
+  - Built-in nodes have none: the menu leaves out Go to Definition, and F12 says so in the status bar.
+- **Opening.** The webview opens this file's graphs itself and asks the host for the rest:
+  - A library graph opens in its own editor, at the function, as Find in All Blueprints opens a hit.
+  - Code opens in a text editor at the declaration's line.
+  - A node file opens at the line naming its type: `NodeLibraries` remembers the file each type was read from.
+- **Lines kept apart.** `exposeFunctions` returns each node type's line beside the definitions, not in them, and `ProjectFunctions.locate` finds it from the latest scan. Graph files store the definitions they call, so a line in them would change every graph whenever code above a function moved.
+- **Find References** (Shift+F12, or the node's menu) opens the Find panel searching every file. The host lists each node of the type, or of one of its aliases, in every graph (`findReferences`), through the search Find in All Blueprints uses.
+- **Tests.**
+  - Unit: each kind of site, the lines of functions and class members (and that the definitions carry none), and references through aliases.
+  - Webview: double-click, the menu and F12 ask the host, and Shift+F12 shows the results.
+  - Integration: VS Code opens a TypeScript function at its line, and a node file at its type.
+
 ## Gap 6: little metadata
 
 **Today.** A graph function has a Description and a Category. A code function adds a display name and keywords. Unreal's functions also have Keywords, a **Compact Node Title** (drawn like an operator), **Deprecated** (with a message), **Advanced** pins (hidden behind the node's arrow), display names for pins, and **ExpandBoolAsExecs** / **ExpandEnumAsExecs**, which turn a result into exec outputs.

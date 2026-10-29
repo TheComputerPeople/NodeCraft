@@ -349,7 +349,8 @@ describe('editing tools', () => {
     await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
     assert.equal(await menuTitle(e), 'End');
     assert.deepEqual(await menuHeadings(e), ['Breakpoints', 'Alignment'], 'no empty Pin Actions section');
-    assert.equal((await menuButtons(e))[0], 'Duplicate');
+    // The node's own actions, starting with Find References (End is built in: no Go to Definition).
+    assert.deepEqual((await menuButtons(e)).slice(0, 2), ['Find References', 'Duplicate']);
   });
 
   test('right-clicking a comment title opens the comment menu: Rename and Delete', async (t) => {

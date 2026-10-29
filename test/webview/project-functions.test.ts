@@ -157,4 +157,38 @@ describe('project function nodes', () => {
     assert.equal(await e.page.$('.node[data-node="s"] .node-latent'), null, 'no clock on other nodes');
     assert.ok(await e.page.$('.pin[data-node="f"][data-pin="completed"]'));
   });
+
+  test('Go to Definition: double-click, the menu or F12 asks the host to open the code; Start has none', async (t) => {
+    const e = await open(t, documentWith(undefined), [applyDamage]);
+    if (!e) return;
+    const asked = async () => (await e.posted()).filter((m) => m.type === 'goToDefinition');
+    await e.page.locator('.node[data-node="f"] .node-header').dblclick();
+    await e.page.waitForFunction(() => (window as unknown as { __posted: { type: string }[] }).__posted.some((m) => m.type === 'goToDefinition'));
+    assert.deepEqual((await asked()).map((m) => [m.nodeType, m.site]), [[applyDamage.type, { kind: 'code', path: 'lib/score.ts' }]]);
+    assert.ok((await menu(e)).includes('Go to Definition'));
+    await e.page.keyboard.press('Escape');
+    await e.page.locator('.node[data-node="f"] .node-header').click();
+    await e.page.keyboard.press('F12');
+    await e.page.waitForFunction(() => (window as unknown as { __posted: { type: string }[] }).__posted.filter((m) => m.type === 'goToDefinition').length === 2);
+    // Start is built in: no menu item, and F12 says so.
+    const box = (await e.page.locator('.node[data-node="s"] .node-header').boundingBox())!;
+    await e.page.mouse.click(box.x + 30, box.y + 8, { button: 'right' });
+    const items = await e.page.$$eval('#context-menu button', (els) => els.map((el) => el.textContent));
+    assert.ok(!items.includes('Go to Definition') && items.includes('Find References'));
+  });
+
+  test('Find References searches every graph through the host and lists what it finds', async (t) => {
+    const e = await open(t, documentWith(undefined), [applyDamage]);
+    if (!e) return;
+    await e.page.locator('.node[data-node="f"] .node-header').click();
+    await e.page.keyboard.press('Shift+F12');
+    await e.page.waitForFunction(() => (window as unknown as { __posted: { type: string }[] }).__posted.some((m) => m.type === 'findReferences'));
+    assert.equal((await e.posted()).find((m) => m.type === 'findReferences')?.nodeType, applyDamage.type);
+    assert.equal(await e.page.inputValue('#find-input'), 'Apply Damage');
+    await e.send({ type: 'findResults', results: [
+      { kind: 'node', graphId: 'EventGraph', graphName: 'EventGraph', id: 'f', label: 'Apply Damage', uri: 'file:///game.vgraph', file: 'game.vgraph', current: true },
+      { kind: 'node', graphId: 'EventGraph', graphName: 'EventGraph', id: 'x', label: 'Apply Damage', uri: 'file:///other.vgraph', file: 'other.vgraph', current: false }
+    ] });
+    assert.deepEqual(await e.page.$$eval('#find-list .find-file', (els) => els.map((el) => el.textContent)), ['game.vgraph', 'other.vgraph']);
+  });
 });

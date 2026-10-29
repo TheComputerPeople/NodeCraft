@@ -13,6 +13,7 @@ import { showDebugState } from './debugger';
 import { receiveValues, setWatches } from './values';
 import { clearBreakpoints, pruneBreakpoints, setBreakpoints, toggleSelectedBreakpoints } from './breakpoints';
 import { finishVariableDrag, removeVariable, startRename, updateVariableDrag } from './my-blueprint';
+import { findReferences, goToDefinition } from './navigation';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showNodeContextMenu } from './menus';
 import { renderPalette } from './panels';
 import { render, renderDrafts, renderEdges, scheduleRuntimePaint, updateEdgesFor } from './render';
@@ -182,6 +183,11 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
   } else if (e.key === 'F7') {
     compileNow();
+    e.preventDefault();
+  } else if (e.key === 'F12' && !mod && state.selectedNodeId) {
+    // Go to Definition; Shift+F12, Find References (VS Code's keys).
+    if (e.shiftKey) findReferences(state.selectedNodeId);
+    else goToDefinition(state.selectedNodeId);
     e.preventDefault();
   } else if (e.key === 'F9' && mod && e.shiftKey) {
     clearBreakpoints();

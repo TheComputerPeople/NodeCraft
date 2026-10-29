@@ -1,5 +1,6 @@
 import type { LanguageCapabilities } from './language-pack';
 import type { CompileDiagnostic } from './compiler/diagnostics';
+import type { DefinitionSite } from './navigation';
 import type { SearchHit } from './search';
 import type { TypeRef } from './types';
 import type { EnumInfo, Enumerator, StructInfo } from './user-types';
@@ -377,8 +378,12 @@ export interface UIMessage {
   // debug: compile, then run the generated code under the language's debugger.
   // pickFunctionLibrary: ask which function library to collapse into (answered by
   // 'functionLibrary'); saveLibrary: write that library with the new function.
-  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'debug' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues' | 'pickFunctionLibrary' | 'saveLibrary';
+  // goToDefinition: open where `nodeType` is defined (`site`, outside this file); findReferences:
+  // every node of `nodeType` in the workspace (answered by 'findResults').
+  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'debug' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues' | 'pickFunctionLibrary' | 'saveLibrary' | 'goToDefinition' | 'findReferences';
   document?: GraphDocument;
+  nodeType?: string;
+  site?: DefinitionSite;
   library?: LibraryFile;
   breakpoints?: GraphBreakpoint[];
   watches?: PinRef[];

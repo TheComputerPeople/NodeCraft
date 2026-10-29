@@ -101,6 +101,9 @@ export interface ExposedFunctions {
   definitions: NodeDefinition[];
   // Functions that were meant to be nodes but can't be: marked ones, or all of them with exposeAll.
   skipped: SkippedFunction[];
+  // Each node type's declaration line (1-based), for Go to Definition. Not part of the definitions,
+  // which graph files store: a moved line would change them.
+  lines: Map<string, number>;
 }
 
 // The marker tag, as in UFUNCTION(BlueprintCallable); "@blueprint pure" is BlueprintPure.
@@ -116,13 +119,18 @@ export function functionNodeType(language: string, path: string, name: string): 
 
 export function exposeFunctions(scan: ModuleScan, options: ExposeOptions): ExposedFunctions {
   // With exposeAll, names starting with "_" stay private unless marked.
+  const lines = new Map<string, number>();
   const definitions = [
-    ...scan.functions.filter((fn) => isMarked(fn.doc) || (options.exposeAll && !fn.name.startsWith('_'))).map((fn) => definitionFor(fn, options)),
+    ...scan.functions.filter((fn) => isMarked(fn.doc) || (options.exposeAll && !fn.name.startsWith('_'))).map((fn) => {
+      const def = definitionFor(fn, options);
+      lines.set(def.type, fn.line);
+      return def;
+    }),
     // Class members only when marked: exposing every member would flood the palette.
-    ...(scan.classes ?? []).flatMap((cls) => classDefinitions(cls, options))
+    ...(scan.classes ?? []).flatMap((cls) => classDefinitions(cls, options, lines))
   ];
   const skipped = scan.skipped.filter((s) => s.marked || (options.exposeAll && !s.name.startsWith('_')));
-  return { definitions, skipped };
+  return { definitions, skipped, lines };
 }
 
 function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCategory = `Project / ${fileStem(options.path)}`): NodeDefinition {
@@ -160,7 +168,7 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
 
 // The nodes of a class's marked members: Construct from its constructor, a node per method with a
 // Target pin, and Get and Set for each property.
-function classDefinitions(cls: ScannedClass, options: ExposeOptions): NodeDefinition[] {
+function classDefinitions(cls: ScannedClass, options: ExposeOptions, lines: Map<string, number>): NodeDefinition[] {
   // Without its namespace or module ("Game.Player", "game::Player").
   const simple = cls.title ?? cls.name.split(/::|\.|\\/).pop()!;
   const member = (kind: CodeMember['kind'], name?: string): CodeMember => ({ kind, ...(name ? { name } : {}), type: cls.type.id, ...(cls.base ? { base: cls.base.id } : {}) });
@@ -180,11 +188,13 @@ function classDefinitions(cls: ScannedClass, options: ExposeOptions): NodeDefini
       // Its name in the code, for languages whose constructors are functions (Rust's `new`).
       implementation: implementation('construct', init?.name)
     });
+    lines.set(type('new'), init?.line ?? cls.line);
   }
   for (const method of cls.methods.filter((m) => isMarked(m.doc))) {
     const base = definitionFor(method, options, `Project / ${simple}`);
     const exec = base.inputs.filter((p) => p.kind === 'exec');
     definitions.push({ ...base, type: type(method.name), inputs: [...exec, target, ...base.inputs.filter((p) => p.kind === 'data')], implementation: { ...implementation('method', method.name), ...(method.results ? { results: method.results } : {}) } });
+    lines.set(type(method.name), method.line);
   }
   for (const property of cls.properties.filter((p) => isMarked(p.doc))) {
     const tag = (name: string): string | undefined => property.doc.tags.find((t) => t.name === name)?.text.trim();
@@ -197,6 +207,8 @@ function classDefinitions(cls: ScannedClass, options: ExposeOptions): NodeDefini
     };
     const pin = (id: string, direction: PinDefinition['direction']): PinDefinition => ({ id, name: title, kind: 'data', direction, ...(property.type ? { type: property.type } : {}) });
     definitions.push({ ...shared, type: type(`get:${property.name}`), displayName: `Get ${title}`, inputs: [target], outputs: [pin('returnValue', 'output')], implementation: implementation('get', property.name) });
+    lines.set(type(`get:${property.name}`), property.line);
+    lines.set(type(`set:${property.name}`), property.line);
     // Unreal's BlueprintReadOnly: "@blueprint readonly", or a property the code can't write.
     if (!property.readonly && !/^readonly\b/i.test(tag(MARKER) ?? '')) {
       definitions.push({ ...shared, type: type(`set:${property.name}`), displayName: `Set ${title}`, inputs: [EXEC_IN, target, pin('value', 'input')], outputs: [EXEC_OUT], implementation: implementation('set', property.name) });

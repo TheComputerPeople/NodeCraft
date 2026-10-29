@@ -29,6 +29,17 @@ export function closeFind(): void {
   dom.find.hidden = true;
 }
 
+// Find References: the panel searching every file, titled with the node's name, until the host's
+// results arrive (as 'findResults').
+export function showReferences(title: string): void {
+  clearTimeout(searchTimer);
+  dom.find.hidden = false;
+  dom.findAll.checked = true;
+  updatePlaceholder();
+  dom.findInput.value = title;
+  dom.findList.innerHTML = '<li class="find-empty">Finding references…</li>';
+}
+
 function updatePlaceholder(): void {
   dom.findInput.placeholder = dom.findAll.checked ? 'Search every graph in the workspace' : 'Search this graph file';
 }

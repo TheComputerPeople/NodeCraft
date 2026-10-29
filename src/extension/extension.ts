@@ -59,7 +59,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   // Breakpoints on nodes, kept per workspace (docs/debugging.md).
   const marks = new DebugMarks(context.workspaceState);
   context.subscriptions.push(marks);
-  const provider = new GraphEditorProvider(context, registry, languages, compiler, output, () => projectFunctions.loaded, marks);
+  const provider = new GraphEditorProvider(context, registry, languages, compiler, output, () => projectFunctions.loaded, marks, {
+    code: (type) => projectFunctions.locate(type),
+    nodeFile: (type) => nodeLibraries.locate(type)
+  });
   // Debugging generated code with the language's debugger (docs/debugging.md).
   const codeDebug = new CodeDebugService(provider, compiler, marks, registry, languages, output);
   context.subscriptions.push(

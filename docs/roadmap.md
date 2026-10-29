@@ -436,7 +436,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes deferred) | — |
 | Interop | Out parameters and several return values from code; latent (async) functions | ✅ (several outputs in every language but GDScript, which has none; async functions in TypeScript, JavaScript, Python, C# and Java, the languages with a standard future) | — |
 | Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ⬜ | 9 |
-| Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | 🟡 (graphs in the same file) | 9 |
+| Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | ✅ (also F12 and Shift+F12; node files open at their type) | — |
 | Library | Standard math, string, utility and file nodes, with containers' functions; more of Unreal's (Lerp, Map Range, trigonometry, string and set functions, array functions as new arrays) and everyday utilities (text, maps, time, encoding, UUIDs) | ✅ (array functions return new arrays where Unreal's change theirs) | — |
 | Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace and extensions, not a registry) | 6 |
 | Library | Blueprint Function Libraries usable from graphs in each of several languages; plugins that carry library graphs | 🟡 (one language per library; packages hold node files only) | 9 |

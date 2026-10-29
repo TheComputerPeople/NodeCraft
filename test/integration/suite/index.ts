@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { LanguagePack } from '../../../src/core/language-pack';
 import type { NodeDefinition } from '../../../src/core/model';
+import type { DefinitionSite } from '../../../src/core/navigation';
 import { builtinLanguagePacks } from '../../../src/core/languages';
 import { javascriptPack } from '../../../src/core/languages/javascript';
 import { detectNewGraphLanguage } from '../../../src/extension/languages';
@@ -276,6 +277,32 @@ test('functions marked @blueprint become nodes that generated code imports', asy
   }
 });
 
+test("Go to Definition opens a project function's code at its line, and a node file at its type", async () => {
+  const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
+  await write('lib/navigate.ts', '// Somewhere to go.\n\n/** @blueprint */\nexport function arrive(): void {}\n');
+  await write('nodes/Shout.node.json', JSON.stringify({
+    type: 'test.shout', version: 1, displayName: 'Shout', category: 'Test', inputs: [], outputs: [],
+    implementation: { kind: 'code', languages: { typescript: 'console.log("!");' } }
+  }, null, 2));
+  const graph = workspaceFile('lib/navigate.vgraph');
+  const api = (vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi).testing;
+  const opened = () => vscode.window.activeTextEditor;
+  // The scan and the node files load in the background: ask until each one is found.
+  const until = async (type: string, site: Parameters<typeof api.provider.goToDefinition>[2], file: string, line: number) => {
+    const deadline = Date.now() + 20000;
+    for (;;) {
+      await api.provider.goToDefinition(graph, type, site);
+      const editor = opened();
+      if (editor?.document.uri.toString() === workspaceFile(file).toString() && editor.selection.active.line === line) return;
+      if (Date.now() > deadline) throw new Error(`${type} never opened ${file} at line ${line + 1}; the active editor: ${editor?.document.uri.toString()}:${editor?.selection.active.line}`);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  };
+  await until('fn:typescript:lib/navigate.ts#arrive', { kind: 'code', path: 'lib/navigate.ts' }, 'lib/navigate.ts', 3);
+  await until('test.shout', { kind: 'node-file' }, 'nodes/Shout.node.json', 1);
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+});
+
 test('the functions of a function library graph become nodes that other graphs import', async () => {
   const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
   const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
@@ -442,6 +469,7 @@ interface ExtensionInternals {
       act(action: string): void;
       read(file: vscode.Uri, pins: { graphId: string; nodeId: string; pinId: string }[]): Promise<{ value?: string; unavailable?: string }[]>;
     } | undefined;
+    goToDefinition(from: vscode.Uri, nodeType: string, site: DefinitionSite): Promise<void>;
   };
 }
 

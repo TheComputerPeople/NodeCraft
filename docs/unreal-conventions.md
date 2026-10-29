@@ -37,6 +37,8 @@ Sources:
 | Cut / copy / paste / duplicate | Ctrl + X / C / V / D | Epic |
 | Rename a node or edit a comment | F2, or click the title | Epic |
 | Go to the graph a node refers to | Double-click the node | Epic |
+| Go to Definition: the graph, library graph, code or node file a node comes from | Double-click the node, F12, or node context menu | Epic (double-click); F12 is VS Code's |
+| Find References: every node of that type in every graph | Shift+F12, or node context menu | Epic (menu); Shift+F12 is VS Code's |
 | Comment around the selection | C | Epic |
 | Place a node | Hold a key and click: B Branch, S Sequence, C Comment, P BeginPlay (our Start), F For Each Loop, G Gate, M MultiGate, N Do N, O Do Once, D Delay | Epic |
 | Align (top, middle, bottom, left, center, right), straighten connections | Node context menu → Alignment | Epic (menu) |

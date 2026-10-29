@@ -148,6 +148,10 @@ export async function fetchScore(player: string): Promise<number> {
 - **Where.** In event graphs and the macros they use, as Delay: a function graph runs to its end at once, so a latent node there is a compile error.
 - **Other languages.** Rust's futures need an executor the project chooses, Go uses goroutines, and C++, Lua, Ruby and PHP have no standard future. GDScript's `await` will come with a Godot framework pack.
 
+## Going to the code
+
+Double-click a project function's node (or press F12, or pick **Go to Definition** in its menu) to open its code at the declaration, as Unreal opens a C++ node's source. **Find References** (Shift+F12) lists every node calling it, in every graph ([node-authoring.md](node-authoring.md), gap 5).
+
 ## Node identity
 
 An imported function's node type is `fn:<language>:<path>#<name>`, for example `fn:typescript:src/combat.ts#applyDamage`. A class member's adds the member: `#Player:new` (Construct), `#Player:heal`, `#Player:get:health` and `#Player:set:health`. The path is relative to the workspace folder, with `/` separators. The language is that of the module: `typescript` for `.ts`, `.mts` and `.cts`, `javascript` for `.js`, `.mjs` and `.cjs`, and `python` for `.py`. TSX/JSX modules are left out for now.

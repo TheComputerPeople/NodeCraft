@@ -18,6 +18,8 @@ export class NodeLibraries implements vscode.Disposable {
   private readonly api = new Map<string, NodePackage>();
   private workspace: { packages: NodePackage[]; loose: NodeDefinition[]; manifestProblems: Map<string, string[]> } = { packages: [], loose: [], manifestProblems: new Map() };
   private readonly subscriptions: vscode.Disposable[] = [];
+  // The file each node type was read from, for Go to Definition.
+  private files = new Map<string, vscode.Uri>();
   private generation = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -57,8 +59,19 @@ export class NodeLibraries implements vscode.Disposable {
     this.timer = setTimeout(() => void this.reload(), RELOAD_DEBOUNCE_MS);
   }
 
+  // The *.node.json file a node type was read from.
+  locate(type: string): vscode.Uri | undefined {
+    return this.files.get(type);
+  }
+
   private async reload(): Promise<void> {
     const current = ++this.generation;
+    const files = new Map<string, vscode.Uri>();
+    const read = async (file: vscode.Uri): Promise<NodeDefinition | undefined> => {
+      const def = await readDefinition(file);
+      if (def) files.set(def.type, file);
+      return def;
+    };
     const packages: NodePackage[] = [];
     const manifestProblemsByFile = new Map<string, string[]>();
     const claimed = new Set<string>();
@@ -83,7 +96,7 @@ export class NodeLibraries implements vscode.Disposable {
         if (!files.length) missing.push(entry);
         for (const file of files) {
           claimed.add(file.toString());
-          const def = await readDefinition(file);
+          const def = await read(file);
           if (def) nodes.push(def);
         }
       }
@@ -97,11 +110,12 @@ export class NodeLibraries implements vscode.Disposable {
     const loose: NodeDefinition[] = [];
     for (const file of await vscode.workspace.findFiles(NODE_LIBRARY_GLOB, EXCLUDE, 500)) {
       if (claimed.has(file.toString())) continue;
-      const def = await readDefinition(file);
+      const def = await read(file);
       if (def) loose.push(def);
     }
     // A newer reload started while this one was reading; its result wins.
     if (current !== this.generation) return;
+    this.files = files;
     this.workspace = { packages, loose, manifestProblems: manifestProblemsByFile };
     this.publish();
   }

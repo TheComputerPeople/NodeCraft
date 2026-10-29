@@ -3,6 +3,7 @@
 import { PinAddress, definitionFor } from '../core/editing';
 import { PinKind } from '../core/model';
 import { addNode, collapseToFunction, collapseToLibrary, collapseToMacro, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected, refreshFunctionNodes, replaceFunctionNode } from './actions';
+import { findReferences, goToDefinition, siteOf } from './navigation';
 import { alignSelection, distributeSelection, straightenConnections } from './align';
 import { addBreakpoints, breakpointOn, enableBreakpoints, removeBreakpoints } from './breakpoints';
 import { PaletteEntry, functionProblem, libraryProblem, lookupDefinition, paletteEntries, searchText } from './document';
@@ -104,6 +105,8 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
       <div class="context-title">${escapeHtml(def.displayName)}</div>
       ${pinSection}
       ${functionItems.map((item, i) => `<button data-function-action="${i}">${escapeHtml(item.label)}</button>`).join('')}
+      ${siteOf(nodeId) ? '<button data-action="go-to-definition" title="F12">Go to Definition</button>' : ''}
+      <button data-action="find-references" title="Shift+F12">Find References</button>
       <button data-action="duplicate">Duplicate</button>
       <button data-action="disconnect">Disconnect All Connections</button>
       <button data-action="select-connected">Select Connected Nodes</button>
@@ -134,6 +137,8 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
   dom.contextMenu.hidden = false;
   positionContextMenu(clientX, clientY);
   const actions: Record<string, () => void> = {
+    'go-to-definition': () => goToDefinition(nodeId),
+    'find-references': () => findReferences(nodeId),
     duplicate: duplicateSelected,
     disconnect: disconnectSelected,
     'select-connected': () => selectConnected(nodeId),

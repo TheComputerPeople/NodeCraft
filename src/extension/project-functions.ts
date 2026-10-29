@@ -25,6 +25,8 @@ const SOURCE = 'functions';
 
 interface FileFunctions {
   definitions: NodeDefinition[];
+  // Each node type's declaration line (1-based).
+  lines: Map<string, number>;
   // Workspace-relative path, for messages.
   path: string;
   skipped: SkippedFunction[];
@@ -105,6 +107,15 @@ export class ProjectFunctions implements vscode.Disposable {
     this.subscriptions.forEach((s) => s.dispose());
   }
 
+  // Where a project function's node type is declared, as of the latest scan (Go to Definition).
+  locate(type: string): { uri: vscode.Uri; line: number } | undefined {
+    for (const [key, file] of this.files) {
+      const line = file.lines.get(type);
+      if (line !== undefined) return { uri: vscode.Uri.parse(key), line };
+    }
+    return undefined;
+  }
+
   private queue(uri: vscode.Uri): void {
     if (!this.packsFor(uri).length) return;
     this.changed.add(uri.toString());
@@ -145,6 +156,7 @@ export class ProjectFunctions implements vscode.Disposable {
     const relative = path.relative(folder.uri.fsPath, uri.fsPath).split(path.sep).join('/');
     const definitions: NodeDefinition[] = [];
     const skipped: SkippedFunction[] = [];
+    const lines = new Map<string, number>();
     for (const pack of packs) {
       const importer = pack.importer!;
       const scan = importer.scan ? importer.scan(text) : importer.languageServer ? await this.symbolScan(uri, text, importer.languageServer, pack, exposeAll) : undefined;
@@ -155,9 +167,10 @@ export class ProjectFunctions implements vscode.Disposable {
       const exposed = exposeFunctions(scan, { language: pack.id, path: relative, module, exposeAll });
       definitions.push(...exposed.definitions);
       skipped.push(...exposed.skipped);
+      for (const [type, line] of exposed.lines) lines.set(type, line);
     }
     if (!definitions.length && !skipped.length) return undefined;
-    return { definitions, path: relative, skipped };
+    return { definitions, lines, path: relative, skipped };
   }
 
   // Tier 2 (docs/language-breadth.md): the functions the language server reports, with their hovers.

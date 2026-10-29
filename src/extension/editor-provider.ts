@@ -6,7 +6,8 @@ import { CompileReport, DebugAction, DebugState, DebugValue, FileSearchHit, PinR
 import { newDocument } from '../core/blueprint-edits';
 import { generatedLanguages } from '../core/user-types';
 import { createResolver } from '../core/resolve';
-import { searchDocument } from '../core/search';
+import { DefinitionSite, findReferences } from '../core/navigation';
+import { SearchHit, searchDocument } from '../core/search';
 import { NodeRegistry } from '../core/registry';
 import { GraphRuntime } from '../core/runtime';
 import { parseDocument, serializeDocument } from '../core/serializer';
@@ -20,6 +21,13 @@ import { createNonce, renderEditorHtml } from './webview-html';
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
 
 type PanelSet = Set<vscode.WebviewPanel>;
+
+// Where the extension finds what Go to Definition opens outside graphs: a project function's
+// declaration (src/extension/project-functions.ts), a node file (src/extension/node-libraries.ts).
+export interface DefinitionLocator {
+  code?(type: string): { uri: vscode.Uri; line: number } | undefined;
+  nodeFile?(type: string): vscode.Uri | undefined;
+}
 
 export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly panelsByDocument = new Map<string, PanelSet>();
@@ -36,7 +44,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     private readonly output: () => vscode.OutputChannel,
     // Whether the project's functions have been scanned (src/extension/project-functions.ts).
     private readonly functionsLoaded: () => boolean = () => true,
-    private readonly marks: DebugMarks = new DebugMarks(context.workspaceState)
+    private readonly marks: DebugMarks = new DebugMarks(context.workspaceState),
+    private readonly locator: DefinitionLocator = {}
   ) {
     // Every panel of a file shows its breakpoints and watches, wherever they were changed.
     context.subscriptions.push(marks.watches.onDidChange((uri) => this.broadcast(uri.toString(), { type: 'watches', watches: marks.watches.get(uri) })));
@@ -145,6 +154,12 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
           case 'reveal':
             if (message.target?.uri) await this.reveal(message.target);
             break;
+          case 'goToDefinition':
+            if (message.nodeType && message.site) await this.goToDefinition(document.uri, message.nodeType, message.site);
+            break;
+          case 'findReferences':
+            this.post(webviewPanel, { type: 'findResults', results: await this.findAcrossGraphs(key, (doc, resolve) => findReferences(doc, message.nodeType ?? '', resolve)) });
+            break;
           case 'pickFunctionLibrary':
             this.post(webviewPanel, { type: 'functionLibrary', library: await this.pickFunctionLibrary(document) });
             break;
@@ -211,6 +226,11 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   // text for files that are open (so unsaved changes are found too).
   private async findInAll(query: string, currentKey: string): Promise<FileSearchHit[]> {
     if (!query.trim()) return [];
+    return this.findAcrossGraphs(currentKey, (doc, resolve) => searchDocument(doc, query, resolve));
+  }
+
+  // Runs `search` on every graph in the workspace (Find in All Blueprints, Find References).
+  private async findAcrossGraphs(currentKey: string, search: (doc: GraphDocument, resolve: ReturnType<typeof createResolver>) => SearchHit[]): Promise<FileSearchHit[]> {
     const files = await vscode.workspace.findFiles('**/*.vgraph', '**/node_modules/**', 2000);
     const results: FileSearchHit[] = [];
     for (const uri of files) {
@@ -229,12 +249,48 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
         continue;
       }
       const resolve = createResolver(this.registry, graphDocument);
-      for (const hit of searchDocument(graphDocument, query, resolve)) {
+      for (const hit of search(graphDocument, resolve)) {
         results.push({ ...hit, uri: uri.toString(), file: vscode.workspace.asRelativePath(uri), current: uri.toString() === currentKey });
         if (results.length >= MAX_FIND_RESULTS) return results;
       }
     }
     return results;
+  }
+
+  // Go to Definition (docs/node-authoring.md, gap 5): a library's graph, the project's code at the
+  // declaration, or a node file at its type.
+  async goToDefinition(from: vscode.Uri, nodeType: string, site: DefinitionSite): Promise<void> {
+    const folder = vscode.workspace.getWorkspaceFolder(from)?.uri;
+    const name = this.registry.get(nodeType)?.displayName ?? nodeType;
+    if (site.kind === 'library' && folder) {
+      const uri = vscode.Uri.joinPath(folder, ...site.document.split('/'));
+      await this.reveal({ uri: uri.toString(), kind: 'graph', id: site.graphId, graphId: site.graphId });
+      return;
+    }
+    if (site.kind === 'code') {
+      const found = this.locator.code?.(nodeType);
+      const uri = found?.uri ?? (folder ? vscode.Uri.joinPath(folder, ...site.path.split('/')) : undefined);
+      if (uri) {
+        await this.showText(uri, (found?.line ?? 1) - 1);
+        return;
+      }
+    }
+    if (site.kind === 'node-file') {
+      const uri = this.locator.nodeFile?.(nodeType);
+      if (uri) {
+        // The line naming its type.
+        const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+        const line = text.split(/\r?\n/).findIndex((l) => l.includes(JSON.stringify(nodeType)));
+        await this.showText(uri, Math.max(0, line));
+        return;
+      }
+    }
+    void vscode.window.showInformationMessage(`"${name}" has no definition in the workspace to open.`);
+  }
+
+  private async showText(uri: vscode.Uri, line: number): Promise<void> {
+    const position = new vscode.Position(line, 0);
+    await vscode.window.showTextDocument(uri, { selection: new vscode.Range(position, position), viewColumn: vscode.ViewColumn.Active });
   }
 
   // Opens another graph file at a Find in All Blueprints hit.
