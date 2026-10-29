@@ -26,7 +26,8 @@
   ],
   "activationEvents": [
     "onCustomEditor:blueprintVisualScripting.graphEditor",
-    "onCommand:blueprintVisualScripting.createGraph"
+    "onCommand:blueprintVisualScripting.createGraph",
+    "onCommand:blueprintVisualScripting.newNode"
   ],
   "main": "./dist/extension/extension.js",
   "capabilities": {
@@ -44,12 +45,21 @@
       {
         "fileMatch": "*.vgraph-package.json",
         "url": "./schemas/node-package.schema.json"
+      },
+      {
+        "fileMatch": "*.node.json",
+        "url": "./schemas/node.schema.json"
       }
     ],
     "commands": [
       {
         "command": "blueprintVisualScripting.createGraph",
         "title": "New Graph",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.newNode",
+        "title": "New Node",
         "category": "Blueprint Visual Scripting"
       },
       {
@@ -204,6 +214,11 @@
         }
       ],
       "explorer/context": [
+        {
+          "command": "blueprintVisualScripting.newNode",
+          "when": "explorerResourceIsFolder",
+          "group": "blueprint@0"
+        },
         {
           "command": "blueprintVisualScripting.compile",
           "when": "resourceExtname == .vgraph",

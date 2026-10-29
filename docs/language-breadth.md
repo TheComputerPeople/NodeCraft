@@ -212,6 +212,7 @@ A node library becomes a package with a manifest, building on `node-package.sche
 
 As built (`src/core/node-packages.ts`, `src/extension/node-libraries.ts`):
 
+- **Node files** are checked as they're written ([node-authoring.md](node-authoring.md), gap 8). `schemas/node.schema.json` validates them in the editor, with completion. Warnings mark a snippet's `${pin}` with no such input, and a type another file defines too. Information marks a language the workspace's graphs use that the node has no snippet for. **New Node** (Command Palette, or a folder's menu in the Explorer) writes one to start from.
 - **Manifests** are checked: the name, a semantic version, the node files and valid ranges. `schemas/node-package.schema.json` validates them in the editor. A manifest's `nodes` are paths or globs relative to it. Node files no package holds load on their own, as before.
 - **Ranges** follow npm's syntax as far as packages use it: exact versions, `^`, `~`, `1.x`, `*`, comparisons and `||`. Prereleases come before their release and don't match ranges of releases.
 - **Resolution:** workspace packages and the libraries other extensions register (`registerNodeLibrary`, which now takes optional `dependencies` and `engines`) are resolved together. A package's nodes carry it (`NodeDefinition.library`).

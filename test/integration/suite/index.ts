@@ -322,6 +322,31 @@ test('a marked function that cannot be a node warns in its file; Expose adds the
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 });
 
+test('New Node writes a node file to start from; node files show their problems', async () => {
+  const created = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.newNode', workspaceFile('lib'), { name: 'Clamp Health', category: 'Combat' });
+  assert.equal(created?.toString(), workspaceFile('lib/ClampHealth.node.json').toString());
+  const definition = JSON.parse(await readText(created)) as NodeDefinition;
+  assert.equal(definition.type, 'user.combat.clamp-health');
+  assert.ok(definition.implementation?.kind === 'code' && Object.keys(definition.implementation.languages).length > 0);
+
+  // A snippet using an input the node doesn't have, and a type another file defines too.
+  const broken = workspaceFile('lib/Broken.node.json');
+  const copy = workspaceFile('lib/BrokenCopy.node.json');
+  const text = JSON.stringify({ ...definition, type: 'test.broken', implementation: { kind: 'code', languages: { typescript: 'return ${value} * ${factor};' } } }, null, 2);
+  await vscode.workspace.fs.writeFile(broken, new TextEncoder().encode(text));
+  await vscode.workspace.fs.writeFile(copy, new TextEncoder().encode(text));
+  try {
+    const messages = () => vscode.languages.getDiagnostics(broken).filter((d) => d.source === 'Blueprint').map((d) => d.message);
+    await waitFor(() => messages().length >= 2, 'the problems in Broken.node.json', 20000);
+    assert.ok(messages().includes('The typescript snippet uses ${factor}, but "Clamp Health" has no data input "factor".'), messages().join('\n'));
+    assert.ok(messages().some((m) => m.startsWith('"test.broken" is also defined in lib/BrokenCopy.node.json')), messages().join('\n'));
+  } finally {
+    await vscode.workspace.fs.delete(copy);
+    await vscode.workspace.fs.delete(broken);
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  }
+});
+
 test('the functions of a function library graph become nodes that other graphs import', async () => {
   const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
   const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });

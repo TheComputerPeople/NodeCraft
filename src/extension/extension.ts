@@ -8,7 +8,8 @@ import { serializeDocument } from '../core/serializer';
 import { CompileService } from './compile-service';
 import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
 import { detectNewGraphLanguage } from './languages';
-import { NodeLibraries } from './node-libraries';
+import { NodeLibraries, workspaceSnippetLanguages } from './node-libraries';
+import { newNodeDefinition } from '../core/node-files';
 import { isGeneratedFrom } from './placement';
 import { GraphLibraries } from './graph-libraries';
 import { DebugMarks } from './breakpoints';
@@ -29,7 +30,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   // Libraries load in the background; open editors receive the updated definitions when ready.
   const registry = new NodeRegistry();
   const languages = builtinLanguagePacks();
-  const nodeLibraries = new NodeLibraries(registry);
+  const nodeLibraries = new NodeLibraries(registry, languages);
   context.subscriptions.push(nodeLibraries);
 
   let outputChannel: vscode.OutputChannel | undefined;
@@ -170,6 +171,31 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       await vscode.commands.executeCommand('vscode.open', target);
     })
   );
+  // New Node (docs/node-authoring.md, gap 8): a snippet node to start from, in the folder picked in
+  // the Explorer (else the workspace's nodes folder), with a snippet for each language its graphs use.
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newNode', async (folder?: vscode.Uri, given?: { name: string; category: string }): Promise<vscode.Uri | undefined> => {
+    const name = given?.name ?? await vscode.window.showInputBox({ prompt: "The node's name", placeHolder: 'Clamp Health', validateInput: (v) => (v.trim() ? undefined : 'Give the node a name.') });
+    if (!name?.trim()) return undefined;
+    const category = given?.category ?? await vscode.window.showInputBox({ prompt: 'Its category in the palette ("|" nests one in another)', value: 'My Nodes' });
+    if (category === undefined) return undefined;
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+    let directory = folder ?? (workspaceFolder && vscode.Uri.joinPath(workspaceFolder, 'nodes'));
+    if (!directory) {
+      void vscode.window.showErrorMessage('Open a folder first: New Node writes its file there.');
+      return undefined;
+    }
+    if (folder && (await vscode.workspace.fs.stat(folder).then((s) => s.type, () => vscode.FileType.Unknown)) === vscode.FileType.File) directory = vscode.Uri.joinPath(folder, '..');
+    const fileName = `${name.trim().split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('') || 'NewNode'}.node.json`;
+    const target = vscode.Uri.joinPath(directory, fileName);
+    if (await vscode.workspace.fs.stat(target).then(() => true, () => false)) {
+      void vscode.window.showErrorMessage(`${vscode.workspace.asRelativePath(target)} already exists.`);
+      return undefined;
+    }
+    const definition = newNodeDefinition(name, category.trim() || 'My Nodes', await workspaceSnippetLanguages(languages));
+    await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(`${JSON.stringify(definition, null, 2)}\n`));
+    await vscode.window.showTextDocument(target);
+    return target;
+  }));
   return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans } };
 }
 

@@ -291,6 +291,19 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - A node type defined twice.
 - **Examples.** A node may list `examples`: inputs and the outputs they give. **Test Node Library** builds a graph from them, runs it in Simulate and in each language the library and workspace share (the conformance runner), and reports each example's result. Nodes without examples are compiled in each language, not run. The SDK's `blueprint-conformance` gains `--nodes <file>`, so extensions can test their node libraries too.
 
+**Built (step 13): the schema, New Node and file diagnostics.**
+
+- **Schema.** `package.json` associates `*.node.json` with `schemas/node.schema.json`, so VS Code's JSON support validates node files and completes their fields.
+- **New Node** (`blueprintVisualScripting.newNode`; Command Palette, or a folder's menu in the Explorer) asks for a name and a category. It writes `<Name>.node.json` in that folder (else the workspace's `nodes` folder) and opens it. The node (`newNodeDefinition` in src/core/node-files.ts) has exec pins, a float input and output, and a snippet returning the input for each language the workspace's graphs use (TypeScript when there are none yet). Its type is `user.<category>.<name>`.
+- **File diagnostics.** `NodeLibraries` keeps each node file's text and checks it (`nodeFileProblems`):
+  - A `${pin}` with no such data input: a warning on the placeholder.
+  - A language the workspace's graphs use with no snippet for it: information on `"languages"`, unless the language's own pack implements the node.
+  - A type another file defines too: a warning on the type, naming the other file.
+  - They're checked again when the graphs' languages change.
+- **Tests.**
+  - Unit: each problem, New Node's definition (valid against the schema, read by the registry, compiled in a graph), and its fallback.
+  - Integration: the command writes the file, and VS Code shows the problems of a broken node file.
+
 ## Gap 9: library graphs can't be packaged
 
 **Today.** A `*.vgraph-package.json` holds `*.node.json` files only, and extensions can register only those. Function and macro libraries, structs and enums can't be versioned or shipped. Unreal plugins carry Blueprint libraries.
