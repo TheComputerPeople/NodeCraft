@@ -239,7 +239,7 @@ export function scanCpp(source: string): ModuleScan {
         const returns = mapReturn(returnText);
         if ('reason' in params) skip(params.reason);
         else if ('reason' in returns) skip(returns.reason);
-        else result.functions.push(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, ...(namespace ? { container: namespace } : {}) }, outs, returnText));
+        else result.functions.push(withFuture(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, ...(namespace ? { container: namespace } : {}) }, outs, returnText), returnText, outs));
       }
       i = declEnd;
     }
@@ -357,7 +357,7 @@ export function scanCpp(source: string): ModuleScan {
           const returns = mapReturn(returnText);
           if ('reason' in params) skip(name, params.reason);
           else if ('reason' in returns) skip(name, returns.reason);
-          else cls.methods.push(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment }, outs, returnText));
+          else cls.methods.push(withFuture(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment }, outs, returnText), returnText, outs));
         }
         i = declEnd;
         continue;
@@ -505,6 +505,15 @@ const SIMPLE: Record<string, TypeRef> = {
   double: { id: 'float' }, float: { id: 'float' },
   'std::string': { id: 'string' }, 'std::string_view': { id: 'string' }
 };
+
+// Async (docs/node-authoring.md, gap 4): a function returning a std::future or std::shared_future
+// is a latent node, whose value is the future's.
+function withFuture(fn: ScannedFunction, returnText: string, outs: unknown[]): ScannedFunction {
+  const future = /^(?:static |inline |constexpr |virtual )*std::(?:shared_)?future<(.*)>$/.exec(normalize(returnText));
+  if (!future || outs.length) return fn;
+  const value = future[1].trim();
+  return { ...fn, returns: value === 'void' ? null : mapCppType(value), latent: true };
+}
 
 function mapReturn(text: string): { type: TypeRef | null | undefined } | { reason: string } {
   const t = normalize(text);

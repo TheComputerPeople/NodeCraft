@@ -5,7 +5,7 @@
 export const CPP_RUNTIME_GUARD = 'VGRAPH_RUNTIME_1';
 
 export const CPP_RUNTIME_INCLUDES = [
-  '<algorithm>', '<any>', '<cctype>', '<charconv>', '<chrono>', '<cmath>', '<cstdint>', '<cstdio>', '<fstream>', '<functional>', '<iostream>',
+  '<algorithm>', '<any>', '<cctype>', '<charconv>', '<chrono>', '<cmath>', '<cstdint>', '<cstdio>', '<fstream>', '<functional>', '<future>', '<iostream>',
   '<memory>', '<random>', '<regex>', '<set>', '<sstream>', '<stdexcept>', '<string>', '<thread>', '<tuple>', '<typeindex>', '<typeinfo>', '<utility>', '<vector>'
 ];
 
@@ -123,34 +123,82 @@ private:
 };
 
 // Latent actions of every class run from one queue, in the order they fall due, once start() has
-// returned: run_latent_actions() runs them.
+// returned: run_latent_actions() runs them. Async functions' futures wait beside it, and each one's
+// Completed joins the queue when it's ready (docs/node-authoring.md, gap 4).
 struct LatentAction {
     double due;
     long long order;
+    std::function<void()> run;
+};
+struct LatentWait {
+    std::function<bool()> ready;
     std::function<void()> run;
 };
 inline std::vector<LatentAction>& latent_queue() {
     static std::vector<LatentAction> queue;
     return queue;
 }
+inline std::vector<LatentWait>& latent_waiting() {
+    static std::vector<LatentWait> waiting;
+    return waiting;
+}
+inline long long latent_order() {
+    static long long order = 0;
+    return order++;
+}
 inline double latent_clock() {
     static const auto start = std::chrono::steady_clock::now();
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 }
 inline void delay(double seconds, std::function<void()> then) {
-    static long long order = 0;
-    latent_queue().push_back({latent_clock() + std::max(0.0, seconds), order++, std::move(then)});
+    latent_queue().push_back({latent_clock() + std::max(0.0, seconds), latent_order(), std::move(then)});
+}
+// An async function's future: then runs with its value (none for a future of void) when it's
+// ready; get() throws the function's exception. A deferred future runs when its Completed does.
+template <class T, class Then> void await_latent(std::future<T> future, Then then) {
+    auto shared = std::make_shared<std::future<T>>(std::move(future));
+    latent_waiting().push_back({
+        [shared] { return shared->wait_for(std::chrono::seconds(0)) != std::future_status::timeout; },
+        [shared, then] {
+            if constexpr (std::is_void_v<T>) {
+                shared->get();
+                then();
+            } else {
+                then(shared->get());
+            }
+        }
+    });
+}
+template <class T, class Then> void await_latent(std::shared_future<T> future, Then then) {
+    await_latent(std::async(std::launch::deferred, [future] { return future.get(); }), then);
 }
 inline void run_latent_actions() {
     auto& queue = latent_queue();
-    while (!queue.empty()) {
+    auto& waiting = latent_waiting();
+    while (!queue.empty() || !waiting.empty()) {
+        for (auto it = waiting.begin(); it != waiting.end();) {
+            if (it->ready()) {
+                queue.push_back({latent_clock(), latent_order(), it->run});
+                it = waiting.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        if (queue.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
         auto next = std::min_element(queue.begin(), queue.end(), [](const LatentAction& a, const LatentAction& b) {
             return a.due < b.due || (a.due == b.due && a.order < b.order);
         });
+        double wait = next->due - latent_clock();
+        if (wait > 0) {
+            // While futures are pending, look at them again soon.
+            std::this_thread::sleep_for(std::chrono::duration<double>(waiting.empty() ? wait : std::min(wait, 0.001)));
+            continue;
+        }
         LatentAction action = *next;
         queue.erase(next);
-        double wait = action.due - latent_clock();
-        if (wait > 0) std::this_thread::sleep_for(std::chrono::duration<double>(wait));
         action.run();
     }
 }

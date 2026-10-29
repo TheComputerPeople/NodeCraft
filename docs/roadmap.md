@@ -364,7 +364,7 @@ Status: complete (October 2026), with the deferrals below. The exit check is sam
 Design and steps: [node-authoring.md](node-authoring.md), with what each step built.
 
 - **Deferred:**
-  - Async functions in Rust, Go, C++, Lua, Ruby, PHP and GDScript: no standard future, or one that needs an executor or a framework.
+  - Async functions in Rust, Go, Lua, Ruby, PHP and GDScript: no standard future, or one that needs an executor or a framework. (C++'s std::future came after the phase.)
   - Code classes as parents of graph classes.
   - Generic functions in C++ (templates), Go, Lua (`---@generic`) and PHP (`@template`), and generic functions with more than two type parameters.
   - A package registry: packages come from folders and extensions.

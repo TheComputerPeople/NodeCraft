@@ -174,12 +174,13 @@ export async function fetchScore(player: string): Promise<number> {
 | Python | is an `async def`, or returns `Awaitable[T]` or `Coroutine[…, …, T]` |
 | C# | returns `Task` or `Task<T>` (not `async void` or `ValueTask`) |
 | Java | returns `CompletableFuture<T>` or `CompletionStage<T>` |
+| C++ | returns `std::future<T>` or `std::shared_future<T>` (in a header) |
 
 - **The node.** A clock in the title marks it. Its exec output is **Completed**, which runs when the function finishes, and its Return Value is what the future gives (`T`). It always has exec pins, even when marked pure.
 - **Order.** Calling it starts the function, and the chain after the node waits for Completed, while the rest of the graph goes on, as with Delay (a Sequence's next output runs). Completed runs from the latent queue, after the code that's running, so Unreal's ordering holds.
 - **Failure.** A function that fails (throws, rejects, raises) stops the run with its error, and its Completed doesn't run.
 - **Where.** In event graphs and the macros they use, as Delay: a function graph runs to its end at once, so a latent node there is a compile error.
-- **Other languages.** Rust's futures need an executor the project chooses, Go uses goroutines, and C++, Lua, Ruby and PHP have no standard future. GDScript's `await` will come with a Godot framework pack.
+- **Other languages.** Rust's futures need an executor the project chooses, Go uses goroutines, and Lua, Ruby and PHP have no standard future. GDScript's `await` will come with a Godot framework pack.
 
 ## Going to the code
 

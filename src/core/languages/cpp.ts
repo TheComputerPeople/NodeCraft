@@ -657,6 +657,17 @@ class CppEmitter {
         out.line(`${this.dispatcherRef(s)}.broadcast(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
         break;
       }
+      case 'await': {
+        // An async function (docs/node-authoring.md, gap 4): Completed runs with the future's value
+        // when it's ready, from the latent queue.
+        out.line(`vgraph::await_latent(${this.call(s.callee, s.args)}, [=, this](${s.resultSlot ? 'auto value' : ''}) {`);
+        out.indent();
+        if (s.resultSlot) out.line(`${this.slotNames.get(s.resultSlot)} = value;`);
+        this.statements(s.then);
+        out.dedent();
+        out.line('});');
+        break;
+      }
       case 'delay': {
         if (s.generation) {
           // Retriggerable: only the latest start's countdown runs Completed.

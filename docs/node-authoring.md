@@ -142,7 +142,7 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
 - **Not applicable:**
   - Rust's futures need an executor the project chooses.
   - Go uses goroutines rather than futures.
-  - C++, Lua, Ruby and PHP have no standard future.
+  - Lua, Ruby and PHP have no standard future. (C++ has one, std::future: see below.)
   - GDScript's `await` is Godot's own: it comes with a Godot framework pack.
 
 **Built (step 8): TypeScript, JavaScript, Python, C# and Java.**
@@ -163,6 +163,14 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - A shared graph (test/conformance/latent-code.ts) starts `fetchDouble(4)` from a Sequence's first output. It prints "started" from the second output, then 8 on Completed, in all five languages.
   - A failing function stops the run with its own error, and its Completed doesn't run.
   - Scanner tests cover each form and the reasons for what's still reported. A webview test checks the clock.
+
+**Built after the phase (from its deferrals): C++.**
+
+- **Scanning.** A function returning `std::future<T>` or `std::shared_future<T>` is latent, with `T` as its value.
+- **Runtime.** The C++ runtime's latent queue now keeps the futures it's waiting on (`vgraph::await_latent`). Each turn it moves the ready ones' Completed into the queue, and while any is pending it sleeps in short steps instead of until the next Delay.
+  - A deferred future (`std::launch::deferred`) never reports ready, so it counts as ready and runs when its Completed does.
+  - `get()` throws the function's exception, which stops the run.
+- **Tests.** The shared latent graph and a failing future, compiled and run.
 
 ## Gap 5: no way from a node to its definition
 

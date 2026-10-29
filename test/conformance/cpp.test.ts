@@ -19,6 +19,7 @@ import { parseDocument } from '../../src/core/serializer';
 import { doc, node, repoRoot, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
+import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-cpp-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -242,4 +243,64 @@ describe('C++ several outputs', () => {
       assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), SEVERAL_OUTPUTS_OUTPUT);
     });
   }
+});
+
+// Async functions (docs/node-authoring.md, gap 4): a function returning a std::future is a latent
+// node, whose Completed runs when the future is ready.
+describe('C++ async functions', () => {
+  const header = (result: string) => [
+    '#pragma once',
+    '#include <chrono>',
+    '#include <future>',
+    '#include <stdexcept>',
+    '#include <thread>',
+    '',
+    'namespace remote {',
+    '/// @blueprint',
+    'inline std::future<long long> fetch_double(long long value) {',
+    '    return std::async(std::launch::async, [value]() -> long long {',
+    '        std::this_thread::sleep_for(std::chrono::milliseconds(10));',
+    `        ${result};`,
+    '    });',
+    '}',
+    '}',
+    ''
+  ].join('\n');
+
+  async function run(name: string, text: string): Promise<{ outcome?: Awaited<ReturnType<typeof runGeneratedCode>>; skipped?: string; generated: string }> {
+    const dir = path.join(workDir, name);
+    fs.mkdirSync(path.join(dir, 'native'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'native/remote.h'), text);
+    const registry = new NodeRegistry();
+    const definitions = exposeFunctions(scanCpp(text), { language: 'cpp', path: 'native/remote.h', exposeAll: false }).definitions;
+    registry.registerMany(definitions);
+    const result = compileDocument(latentCodeGraph(definitions, 'cpp'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Fetching.vgraph', outputDir: '' } });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    const file = path.join(dir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    for (const companion of output.companionFiles ?? []) fs.writeFileSync(path.join(dir, companion.fileName), companion.text);
+    try {
+      return { outcome: await runGeneratedCode(builtinLanguagePacks().get('cpp')!.generator!.runner!, file, output.className, { cwd: dir, timeoutMs: 120000 }), generated: output.text };
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return { skipped: error.message, generated: output.text };
+      throw error;
+    }
+  }
+
+  test('a graph waits for a future and reads its value on Completed', async (t) => {
+    const { outcome, skipped, generated } = await run('latent', header('return value * 2'));
+    assert.match(generated, /vgraph::await_latent\(remote::fetch_double\(4(LL)?\), \[=, this\]\(auto value\) \{/);
+    if (!outcome) return t.skip(skipped);
+    assert.equal(outcome.stderr, '');
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), LATENT_CODE_OUTPUT);
+  });
+
+  test("a future that fails stops the run with its exception, and Completed doesn't run", async (t) => {
+    const { outcome, skipped } = await run('latent-fails', header('throw std::runtime_error("no double for " + std::to_string(value))'));
+    if (!outcome) return t.skip(skipped);
+    assert.notEqual(outcome.exitCode, 0);
+    assert.match(outcome.stderr, /no double for 4/);
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['started']);
+  });
 });
