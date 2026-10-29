@@ -106,7 +106,7 @@ double critChance(long long level);
 - When a function's signature changes, its nodes keep their old pins and show a warning until you choose **Refresh Node** in the node's menu, or **Refresh All Nodes** in the Command Palette. A renamed or moved function shows an error, and the node menu offers **Replace with …** when it can tell where the function went.
 - The setting `blueprintVisualScripting.exposeAllFunctions` exposes every public function, by each language's rule, without markers.
 
-The sample workspace has two marked functions in `sample/lib/combat.js`. The full design is in [docs/code-as-nodes.md](docs/code-as-nodes.md).
+sample/node-authoring has marked TypeScript and Python code, used from graphs in both. The full design is in [docs/code-as-nodes.md](docs/code-as-nodes.md).
 
 ## Custom node libraries
 
