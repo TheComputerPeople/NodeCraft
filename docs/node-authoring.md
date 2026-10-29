@@ -224,6 +224,24 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
 - **Left for later steps.** Pin display names and ExpandBoolAsExecs/ExpandEnumAsExecs come with the code tags (step 11): a graph function's pins already have names, and Branch and Switch already turn results into exec outputs.
 - **Tests.** Unit tests cover the nodes made from each kind of signature, the compile warnings, and the file keeping the fields. Webview tests cover Details, the compact title, the badge, the palette and the arrow.
 
+**Built (step 11): tags in code.**
+
+- **Tags.** `definitionFor` (src/core/importing/symbols.ts) reads `@compactTitle`, `@deprecated`, `@advanced` and `@pinName` beside `@keywords` in every language, since every scanner produces the same `DocComment`. Methods take them as functions do, and properties take `@keywords` and `@deprecated`.
+- **Markers.** Scanners read their language's own markers by line, and `markDeprecated` marks what's declared there:
+  - C#: `[Obsolete]`.
+  - C++: `[[deprecated]]`.
+  - Rust: `#[deprecated]`.
+  - Java: `@Deprecated`, taking Javadoc's `@deprecated` text as its message.
+  - Python: PEP 702's `@deprecated("…")`.
+  - Go: a `Deprecated:` paragraph, Go's convention.
+  - Doc comments: the `@deprecated` tag (JSDoc, PHPDoc, YARD, LuaLS, Godot).
+- **Fixed on the way.** In C#, documentation written before an attribute was lost (it was attached to the `[`). It now belongs to the member, as in C++ and Rust.
+- **`@execs`.** A function returning a bool gets True and False exec outputs (`FunctionImplementation.execs`). The call lowers to the call into a hidden bool slot, then an `if` on it, so every generator handles it with what it already writes.
+  - ExpandEnumAsExecs waits: a code function returning a graph enum comes through as a native type, so its values aren't known.
+- **Tests.**
+  - Unit: each tag, `@execs`, its lowering, and every language's marker.
+  - Conformance: `@execs` runs in TypeScript, Python and C#.
+
 ## Gap 7: little feedback while writing code
 
 **Today.** A marked function that can't be a node is reported in the output channel only. Nothing helps add a marker. `exposeAllFunctions` covers TypeScript, JavaScript and Python only.

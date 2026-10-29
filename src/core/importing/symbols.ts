@@ -35,6 +35,9 @@ export interface ScannedFunction {
   // An async function (docs/node-authoring.md, gap 4): `returns` is the value it gives when it
   // finishes, and its node is latent.
   latent?: boolean;
+  // Deprecated by the language's own marker ([Obsolete], #[deprecated], @Deprecated…), which the
+  // scanner reads; a @deprecated tag says so too (docs/node-authoring.md, gap 6).
+  deprecated?: { message?: string };
 }
 
 // A function that can't become a node, and why.
@@ -78,6 +81,8 @@ export interface ScannedProperty {
   // Read-only in the code (readonly, a getter without a setter, …): no Set node.
   readonly: boolean;
   doc: DocComment;
+  // As a function's.
+  deprecated?: { message?: string };
 }
 
 export interface ModuleScan {
@@ -139,18 +144,23 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
   // latent one runs there too, and its exec output, Completed, runs when it finishes.
   const pure = /^pure\b/i.test(tag(MARKER) ?? '') && !fn.outputs && !fn.latent;
   const category = tag('category');
-  const keywords = tag('keywords')?.split(/[\s,]+/).filter(Boolean);
-  const exec = (direction: 'input' | 'output'): PinDefinition[] => pure
+  const metadata = tagMetadata(fn.doc, fn.deprecated);
+  // Unreal's ExpandBoolAsExecs: a bool result becomes True and False exec outputs.
+  const execs = tag('execs') !== undefined && fn.returns?.id === 'bool' && !fn.returns.container && !fn.outputs && !fn.latent;
+  const exec = (direction: 'input' | 'output'): PinDefinition[] => pure && !execs
     ? []
+    : direction === 'output' && execs ? [{ id: 'true', name: 'True', kind: 'exec', direction }, { id: 'false', name: 'False', kind: 'exec', direction }]
     : direction === 'output' && fn.latent ? [{ id: 'completed', name: 'Completed', kind: 'exec', direction }] : [{ id: direction === 'input' ? 'execIn' : 'execOut', name: '', kind: 'exec', direction }];
   const inputs: PinDefinition[] = fn.params.map((p) => ({
-    id: p.name, name: words(p.name), kind: 'data', direction: 'input',
+    id: p.name, name: metadata.pinNames.get(p.name) ?? words(p.name), kind: 'data', direction: 'input',
     ...(p.type ? { type: p.type } : {}),
-    ...(p.defaultValue !== undefined ? { defaultValue: p.defaultValue } : {})
+    ...(p.defaultValue !== undefined ? { defaultValue: p.defaultValue } : {}),
+    ...(metadata.advanced.has(p.name) ? { advanced: true } : {})
   }));
-  const outputs: PinDefinition[] = fn.outputs
-    ? fn.outputs.map((o) => ({ id: o.name, name: o.name === 'returnValue' ? 'Return Value' : words(o.name), kind: 'data', direction: 'output', ...(o.type ? { type: o.type } : {}) }))
-    : fn.returns === null ? [] : [{ id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', ...(fn.returns ? { type: fn.returns } : {}) }];
+  const outputName = (id: string) => metadata.pinNames.get(id) ?? (id === 'returnValue' ? 'Return Value' : words(id));
+  const outputs: PinDefinition[] = execs ? [] : fn.outputs
+    ? fn.outputs.map((o) => ({ id: o.name, name: outputName(o.name), kind: 'data', direction: 'output', ...(o.type ? { type: o.type } : {}) }))
+    : fn.returns === null ? [] : [{ id: 'returnValue', name: outputName('returnValue'), kind: 'data', direction: 'output', ...(fn.returns ? { type: fn.returns } : {}) }];
   return {
     type: functionNodeType(options.language, options.path, fn.container ? `${fn.container}.${fn.name}` : fn.name),
     version: 1,
@@ -160,10 +170,52 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
     ...(fn.doc.description ? { description: fn.doc.description } : {}),
     inputs: [...exec('input'), ...inputs],
     outputs: [...exec('output'), ...outputs],
-    implementation: { kind: 'function', language: options.language, path: options.path, name: fn.name, ...(moduleOf(fn, options) ? { module: moduleOf(fn, options) } : {}), ...(fn.results ? { results: fn.results } : {}) },
-    ...(keywords?.length ? { keywords } : {}),
+    implementation: {
+      kind: 'function', language: options.language, path: options.path, name: fn.name, ...(moduleOf(fn, options) ? { module: moduleOf(fn, options) } : {}),
+      ...(fn.results ? { results: fn.results } : {}), ...(execs ? { execs: 'bool' as const } : {})
+    },
+    ...metadata.node,
     ...(fn.latent ? { latent: true } : {})
   };
+}
+
+// Unreal's metadata from documentation tags (docs/node-authoring.md, gap 6): @keywords,
+// @compactTitle, @deprecated (or the language's own marker, `deprecated`, or Go's "Deprecated:"
+// paragraph), @advanced pins and @pinName pin Name.
+function tagMetadata(doc: DocComment, deprecated: { message?: string } | undefined): { node: Pick<NodeDefinition, 'keywords' | 'compactTitle' | 'deprecated'>; advanced: Set<string>; pinNames: Map<string, string> } {
+  const tag = (name: string): string | undefined => doc.tags.find((t) => t.name === name)?.text.trim();
+  const keywords = tag('keywords')?.split(/[\s,]+/).filter(Boolean);
+  const compactTitle = tag('compactTitle');
+  // A marker without a message (@Deprecated) takes the documentation's (Javadoc's @deprecated).
+  const tagged = deprecationOf(doc);
+  const marked = deprecated?.message ? deprecated : tagged ?? deprecated;
+  const pinNames = new Map(doc.tags.filter((t) => t.name === 'pinName').map((t) => /^(\S+)\s+(.+)$/.exec(t.text.trim())).filter((m): m is RegExpExecArray => !!m).map((m) => [m[1], m[2].trim()]));
+  return {
+    node: { ...(keywords?.length ? { keywords } : {}), ...(compactTitle ? { compactTitle } : {}), ...(marked ? { deprecated: marked } : {}) },
+    advanced: new Set(doc.tags.filter((t) => t.name === 'advanced').flatMap((t) => t.text.split(/[\s,]+/)).filter(Boolean)),
+    pinNames
+  };
+}
+
+// Marks what's declared at each line deprecated: the scanners read their language's own markers
+// ([Obsolete], [[deprecated]], #[deprecated], @Deprecated, @deprecated(...)) by line.
+export function markDeprecated(scan: ModuleScan, lines: Map<number, { message?: string }>): ModuleScan {
+  if (!lines.size) return scan;
+  const mark = <T extends { line: number; deprecated?: { message?: string } }>(item: T): T => (lines.has(item.line) ? { ...item, deprecated: lines.get(item.line) } : item);
+  return {
+    ...scan,
+    functions: scan.functions.map(mark),
+    ...(scan.classes ? { classes: scan.classes.map((c) => ({ ...c, methods: c.methods.map(mark), properties: c.properties.map(mark), ...(c.init ? { init: mark(c.init) } : {}) })) } : {})
+  };
+}
+
+// A @deprecated tag (JSDoc, PHPDoc, YARD, LuaLS, Godot, Javadoc), or Go's "Deprecated:" paragraph.
+export function deprecationOf(doc: DocComment): { message?: string } | undefined {
+  const tag = doc.tags.find((t) => t.name === 'deprecated');
+  if (tag) return tag.text.trim() ? { message: tag.text.trim() } : {};
+  const paragraph = /(?:^|\n\s*\n)Deprecated:\s*([\s\S]*?)(?:\n\s*\n|$)/.exec(doc.description);
+  if (paragraph) return paragraph[1].trim() ? { message: paragraph[1].replace(/\s+/g, ' ').trim() } : {};
+  return undefined;
 }
 
 // The nodes of a class's marked members: Construct from its constructor, a node per method with a
@@ -193,17 +245,20 @@ function classDefinitions(cls: ScannedClass, options: ExposeOptions, lines: Map<
   for (const method of cls.methods.filter((m) => isMarked(m.doc))) {
     const base = definitionFor(method, options, `Project / ${simple}`);
     const exec = base.inputs.filter((p) => p.kind === 'exec');
-    definitions.push({ ...base, type: type(method.name), inputs: [...exec, target, ...base.inputs.filter((p) => p.kind === 'data')], implementation: { ...implementation('method', method.name), ...(method.results ? { results: method.results } : {}) } });
+    const own = base.implementation as FunctionImplementation;
+    definitions.push({ ...base, type: type(method.name), inputs: [...exec, target, ...base.inputs.filter((p) => p.kind === 'data')], implementation: { ...implementation('method', method.name), ...(own.results ? { results: own.results } : {}), ...(own.execs ? { execs: own.execs } : {}) } });
     lines.set(type(method.name), method.line);
   }
   for (const property of cls.properties.filter((p) => isMarked(p.doc))) {
     const tag = (name: string): string | undefined => property.doc.tags.find((t) => t.name === name)?.text.trim();
     const title = tag('displayName') || words(property.name);
     const category = tag('category');
+    const { keywords, deprecated } = tagMetadata(property.doc, property.deprecated).node;
     const shared = {
       version: 1,
       category: category ? category.split('|').map((c) => c.trim()).filter(Boolean).join(' / ') : `Project / ${simple}`,
-      ...(property.doc.description ? { description: property.doc.description } : {})
+      ...(property.doc.description ? { description: property.doc.description } : {}),
+      ...(keywords ? { keywords } : {}), ...(deprecated ? { deprecated } : {})
     };
     const pin = (id: string, direction: PinDefinition['direction']): PinDefinition => ({ id, name: title, kind: 'data', direction, ...(property.type ? { type: property.type } : {}) });
     definitions.push({ ...shared, type: type(`get:${property.name}`), displayName: `Get ${title}`, inputs: [target], outputs: [pin('returnValue', 'output')], implementation: implementation('get', property.name) });

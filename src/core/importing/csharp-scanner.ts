@@ -2,7 +2,7 @@
 // and XML documentation comments (docs/program-structure.md, "C# language pack"). Like the other
 // scanners it parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText, tupleOutputs } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, markDeprecated, parseDocText, tupleOutputs } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -191,6 +191,8 @@ export interface CSharpScan extends ModuleScan {
 export function scanCSharp(source: string): CSharpScan {
   const tokens = tokenizeCSharp(source);
   const result: CSharpScan = { functions: [], skipped: [], topLevelStatements: false };
+  // The lines of members marked [Obsolete].
+  const deprecatedLines = new Map<number, { message?: string }>();
   const text = (start: number, end: number) => (end > start ? source.slice(tokens[start].start, tokens[end - 1].end) : '');
   const at = (i: number, value: string) => tokens[i]?.text === value && tokens[i].kind !== 'string';
   const skipGroup = (i: number): number => {
@@ -302,13 +304,23 @@ export function scanCSharp(source: string): CSharpScan {
   // Members of a class, record or struct: static methods can become nodes, and a class's (`cls`)
   // constructors, instance methods, properties and fields.
   const classMembers = (i: number, end: number, className: string, accessible: boolean, generic: boolean, cls?: ScannedClass): void => {
+    // A member's attributes, and the documentation before them, which belongs to the member.
+    let attributes: string[] = [];
+    let attributeDoc: string[] | undefined;
     while (i < end) {
       if (at(i, '[')) {
+        attributeDoc = tokens[i].doc ?? attributeDoc;
+        attributes.push(text(i + 1, skipGroup(i) - 1));
         i = skipGroup(i);
         continue;
       }
       const first = i;
-      const doc = tokens[first].doc;
+      const doc = tokens[first].doc ?? attributeDoc;
+      // [Obsolete] or [Obsolete("message")] (docs/node-authoring.md, gap 6).
+      const obsolete = attributes.map((a) => /^\s*(?:System\s*\.\s*)?Obsolete(?:Attribute)?\b\s*(?:\(\s*@?"([^"]*)")?/.exec(a)).find(Boolean);
+      if (obsolete) deprecatedLines.set(tokens[first].line, obsolete[1] ? { message: obsolete[1] } : {});
+      attributes = [];
+      attributeDoc = undefined;
       const modifiers: string[] = [];
       while (i < end && tokens[i].kind === 'name' && MODIFIERS.has(tokens[i].text)) modifiers.push(tokens[i++].text);
       // Nested types aren't scanned.
@@ -487,7 +499,7 @@ export function scanCSharp(source: string): CSharpScan {
   };
 
   members(0, tokens.length, '', true);
-  return result;
+  return markDeprecated(result, deprecatedLines) as CSharpScan;
 }
 
 // ---- Documentation ------------------------------------------------------------------------------

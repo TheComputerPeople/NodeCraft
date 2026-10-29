@@ -161,12 +161,17 @@ function scanDef(lines: LogicalLine[], i: number, method: boolean): { name: stri
   if ('reason' in params) return skip(params.reason);
   if ('reason' in returns) return skip(returns.reason);
   if (yields(statements)) return skip('generator functions can\'t be nodes');
-  if (latent) return { name, line, doc, result: { name, line, params, returns: returns.type, doc, latent } };
+  // PEP 702's @deprecated("message") (warnings or typing_extensions; docs/node-authoring.md, gap 6).
+  const decorators: string[] = [];
+  for (let d = i - 1; d >= 0 && lines[d].indent === header.indent && lines[d].text.startsWith('@'); d--) decorators.push(lines[d].text);
+  const marker = decorators.map((d) => /^@(?:\w+\.)*deprecated\b\s*(?:\(\s*[rRbBuU]?(["'])(.*?)\1)?/.exec(d)).find(Boolean);
+  const deprecated = marker ? { deprecated: marker[2] ? { message: marker[2] } : {} } : {};
+  if (latent) return { name, line, doc, result: { name, line, params, returns: returns.type, doc, latent, ...deprecated } };
   // Several outputs (docs/node-authoring.md, gap 3): a tuple, named by @outputs.
   const tuple = parsed.returns !== undefined ? /^(?:tuple|Tuple)\[(.*)\]$/.exec(normalize(parsed.returns)) : null;
   const outputs = tuple ? tupleOutputs(doc, splitTop(tuple[1], ',').map((t) => mapPythonType(t))) : undefined;
-  if (outputs) return { name, line, doc, result: { name, line, params, returns: undefined, doc, outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name) } } };
-  return { name, line, doc, result: { name, line, params, returns: returns.type, doc } };
+  if (outputs) return { name, line, doc, result: { name, line, params, returns: undefined, doc, outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name) }, ...deprecated } };
+  return { name, line, doc, result: { name, line, params, returns: returns.type, doc, ...deprecated } };
 }
 
 // A class (docs/node-authoring.md, gap 2): its __init__, public methods, properties (@property,
@@ -219,7 +224,7 @@ function scanClass(lines: LogicalLine[], i: number, result: ModuleScan): Scanned
     else if (decorators.some((d) => new RegExp(`^@${memberName}\\.setter\\b`).test(d))) setters.add(memberName);
     else if ('reason' in def.result) skip(memberName, def.result.reason, def.doc);
     else if (decorators.some((d) => /^@(property|functools\.cached_property|cached_property)\b/.test(d))) {
-      getters.set(memberName, { name: memberName, line: def.line, ...(def.result.returns ? { type: def.result.returns } : {}), readonly: true, doc: def.doc });
+      getters.set(memberName, { name: memberName, line: def.line, ...(def.result.returns ? { type: def.result.returns } : {}), readonly: true, doc: def.doc, ...(def.result.deprecated ? { deprecated: def.result.deprecated } : {}) });
     } else if (memberName === '__init__') cls.init = { ...def.result, returns: null };
     else cls.methods.push(def.result);
   }

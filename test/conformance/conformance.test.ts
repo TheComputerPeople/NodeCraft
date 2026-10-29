@@ -894,6 +894,60 @@ describe('async functions from code', () => {
   });
 });
 
+// @execs (Unreal's ExpandBoolAsExecs; docs/node-authoring.md, gap 6): a bool result picks the
+// node's True or False exec output.
+describe('@execs from code', () => {
+  const MODULES: Record<string, { path: string; text: string }> = {
+    typescript: { path: 'lib/parity.ts', text: '/**\n * @blueprint\n * @execs\n */\nexport function isEven(n: number): boolean {\n  return n % 2 === 0;\n}\n' },
+    python: { path: 'lib/game/parity.py', text: 'def is_even(n: int) -> bool:\n    """@blueprint\n    @execs"""\n    return n % 2 == 0\n' },
+    csharp: { path: 'lib/Numbers.cs', text: 'namespace Game;\n\npublic static class Numbers\n{\n    /// @blueprint\n    /// @execs\n    public static bool IsEven(int n) => n % 2 == 0;\n}\n' }
+  };
+
+  for (const language of Object.keys(MODULES)) {
+    test(`${language}: True and False run as the result says`, async (t) => {
+      const module = MODULES[language];
+      const defs = exposeFunctions(languages.get(language)!.importer!.scan!(module.text), { language, path: module.path, module: language === 'python' ? 'game.parity' : undefined, exposeAll: false }).definitions;
+      const r = registry();
+      r.registerMany(defs);
+      const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+      const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}`, fromNode, fromPin, toNode, toPin });
+      // Start → Is Even(4) → True: Print "even" → Is Even(3) → False: Print "odd".
+      const document: GraphDocument = {
+        schemaVersion: 3, name: 'Parity', kind: 'class', language, variables: [],
+        graphs: [{
+          id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+          nodes: [
+            n('s', 'core:event.start'), n('a', defs[0].type, { 'pin:n': 4 }), n('p1', 'core:console.print', { 'pin:value': 'even' }), n('p2', 'core:console.print', { 'pin:value': 'wrong' }),
+            n('b', defs[0].type, { 'pin:n': 3 }), n('p3', 'core:console.print', { 'pin:value': 'wrong' }), n('p4', 'core:console.print', { 'pin:value': 'odd' })
+          ],
+          connections: [
+            w('s', 'execOut', 'a', 'execIn'), w('a', 'true', 'p1', 'execIn'), w('a', 'false', 'p2', 'execIn'), w('p1', 'execOut', 'b', 'execIn'),
+            w('b', 'true', 'p3', 'execIn'), w('b', 'false', 'p4', 'execIn')
+          ]
+        }]
+      };
+      const dir = path.join(workDir, `execs-${language}`);
+      fs.mkdirSync(path.join(dir, path.dirname(module.path)), { recursive: true });
+      fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
+      fs.writeFileSync(path.join(dir, module.path), module.text);
+      if (language === 'python') fs.writeFileSync(path.join(dir, path.dirname(module.path), '__init__.py'), '');
+      const result = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'parity.vgraph', outputDir: 'graphs', namespace: 'Game' } });
+      assert.deepEqual(result.diagnostics, []);
+      const file = path.join(dir, 'graphs', result.output!.fileName);
+      fs.writeFileSync(file, result.output!.text);
+      let outcome;
+      try {
+        const sources = language === 'csharp' ? [path.join(dir, module.path)] : undefined;
+        outcome = await runGeneratedCode(languages.get(language)!.generator!.runner!, file, result.output!.className, { cwd: path.join(dir, 'graphs'), importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)), sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), ['even', 'odd'], `stderr:\n${outcome.stderr}`);
+    });
+  }
+});
+
 // A function library made of graphs (docs/program-structure.md, "Functions"), called from a graph
 // in another folder: its generated file is imported like project code, and Simulate runs the
 // library's graphs.

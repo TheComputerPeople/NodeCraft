@@ -3,7 +3,7 @@
 // (nested ones too), with their parameters, types and documentation. Like the other scanners it
 // parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, markDeprecated, parseDocText } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -151,6 +151,8 @@ export function scanJava(source: string): ModuleScan {
   }
 
   const records = new Map<string, { name: string; type?: TypeRef }[]>();
+  // The lines of members marked @Deprecated (docs/node-authoring.md, gap 6).
+  const deprecatedLines = new Map<number, { message?: string }>();
 
   // The members of a type's body (or the file), between `from` and `to`. A class's (`cls`) public
   // constructors, instance methods and fields are read too (docs/node-authoring.md, gap 2).
@@ -163,6 +165,7 @@ export function scanJava(source: string): ModuleScan {
       for (;;) {
         const annotation = skipAnnotation(j);
         if (annotation !== undefined) {
+          if (/^@\s*(?:java\s*\.\s*lang\s*\.\s*)?Deprecated\b/.test(text(j, annotation))) deprecatedLines.set(tokens[first].line, {});
           j = annotation;
           continue;
         }
@@ -341,7 +344,7 @@ export function scanJava(source: string): ModuleScan {
   };
   result.functions = result.functions.map(withFields);
   for (const cls of result.classes ?? []) cls.methods = cls.methods.map(withFields);
-  return result;
+  return markDeprecated(result, deprecatedLines);
 }
 
 // What a method returns. A CompletableFuture or CompletionStage makes it async (docs/node-authoring.md,

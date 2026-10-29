@@ -3,7 +3,7 @@
 // inline modules inside it, with their parameters, types and documentation. Like the other scanners
 // it parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText, tupleOutputs } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, markDeprecated, parseDocText, tupleOutputs } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'lifetime' | 'punct';
 
@@ -130,6 +130,8 @@ const SKIPPED_ITEMS = new Set(['struct', 'enum', 'union', 'trait', 'impl', 'type
 export function scanRust(source: string): ModuleScan {
   const tokens = tokenizeRust(source);
   const result: ModuleScan = { functions: [], skipped: [] };
+  // The lines of items marked #[deprecated].
+  const deprecatedLines = new Map<number, { message?: string }>();
   const text = (start: number, end: number) => (end > start ? source.slice(tokens[start].start, tokens[end - 1].end) : '');
   const at = (i: number, value: string) => tokens[i]?.text === value && tokens[i].kind !== 'string' && tokens[i].kind !== 'char';
   const skipGroup = (i: number): number => {
@@ -179,11 +181,14 @@ export function scanRust(source: string): ModuleScan {
     let j = i + 3;
     while (j < close - 1) {
       let fieldDoc = tokens[j].doc;
+      let fieldDeprecation: { message?: string } | undefined;
       while (at(j, '#') && at(j + 1, '[')) {
         fieldDoc = tokens[j].doc ?? fieldDoc;
+        fieldDeprecation = deprecatedAttribute(text(j, skipGroup(j + 1))) ?? fieldDeprecation;
         j = skipGroup(j + 1);
       }
       const fieldFirst = j;
+      if (fieldDeprecation) deprecatedLines.set(tokens[fieldFirst].line, fieldDeprecation);
       const pub = at(j, 'pub');
       if (pub) j = at(j + 1, '(') ? skipGroup(j + 1) : j + 1;
       let k = j;
@@ -218,11 +223,14 @@ export function scanRust(source: string): ModuleScan {
     let k = j + 1;
     while (k < close - 1) {
       let doc = tokens[k].doc;
+      let deprecation: { message?: string } | undefined;
       while (at(k, '#') && at(k + 1, '[')) {
         doc = tokens[k].doc ?? doc;
+        deprecation = deprecatedAttribute(text(k, skipGroup(k + 1))) ?? deprecation;
         k = skipGroup(k + 1);
       }
       const first = k;
+      if (deprecation) deprecatedLines.set(tokens[first].line, deprecation);
       const pub = at(k, 'pub');
       if (pub) k = at(k + 1, '(') ? skipGroup(k + 1) : k + 1;
       const isAsync = at(k, 'async');
@@ -277,10 +285,12 @@ export function scanRust(source: string): ModuleScan {
   const items = (i: number, end: number, module: string): void => {
     let attributeDoc: string[] | undefined;
     let testOnly = false;
+    let deprecation: { message?: string } | undefined;
     while (i < end) {
-      // Attributes: #[…]; a #[cfg(test)] item is left out.
+      // Attributes: #[…]; a #[cfg(test)] item is left out, a #[deprecated] one marked.
       if (at(i, '#') && at(i + 1, '[')) {
         attributeDoc = tokens[i].doc ?? attributeDoc;
+        deprecation = deprecatedAttribute(text(i, skipGroup(i + 1))) ?? deprecation;
         if (/^#\[\s*cfg\s*\(\s*test\s*\)\s*\]$/.test(text(i, skipGroup(i + 1)))) testOnly = true;
         i = skipGroup(i + 1);
         continue;
@@ -292,6 +302,8 @@ export function scanRust(source: string): ModuleScan {
       const first = i;
       const doc = tokens[first].doc ?? attributeDoc;
       attributeDoc = undefined;
+      if (deprecation) deprecatedLines.set(tokens[first].line, deprecation);
+      deprecation = undefined;
       const skipTest = testOnly;
       testOnly = false;
       // Visibility: pub, pub(crate), pub(super), pub(in path).
@@ -408,7 +420,16 @@ export function scanRust(source: string): ModuleScan {
     cls.init = block.constructors.find((c) => isMarked(c.doc)) ?? block.constructors.find((c) => c.name === 'new') ?? cls.init;
   }
   if (structs.size) result.classes = [...structs.values()];
-  return result;
+  return markDeprecated(result, deprecatedLines);
+}
+
+// #[deprecated], #[deprecated = "message"] or #[deprecated(since = "…", note = "message")]
+// (docs/node-authoring.md, gap 6).
+function deprecatedAttribute(text: string): { message?: string } | undefined {
+  const match = /^#\s*\[\s*deprecated\b([\s\S]*)\]$/.exec(text.trim());
+  if (!match) return undefined;
+  const note = /(?:\bnote\s*=\s*|^\s*=\s*)"([^"]*)"/.exec(match[1]);
+  return note ? { message: note[1] } : {};
 }
 
 function parseDoc(lines: string[] | undefined): DocComment {

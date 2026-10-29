@@ -34,8 +34,27 @@ def apply_damage(health: float, amount: float = 10) -> float:
 | `@category A\|B` | `Category = "A\|B"` | Palette category; `\|` nests. Default: the module's file name, under "Project". |
 | `@displayName Text` | `meta = (DisplayName = "Text")` | Node title. Default: the function name in words, as Unreal shows it (`applyDamage` and `apply_damage` both become "Apply Damage"). |
 | `@keywords a b` | `meta = (Keywords = "a b")` | Extra words the action menu matches. |
+| `@compactTitle +` | `meta = (CompactNodeTitle = "+")` | Drawn without a title bar, the text large in the middle, as operators are. |
+| `@deprecated message` | `meta = (DeprecatedFunction, DeprecationMessage = "…")` | Left out of the action menu; nodes already placed show a warning with the message and compile with it. Each language's own marker counts too (see below). |
+| `@advanced a b` | `meta = (AdvancedDisplay = "a, b")` | Those inputs fold under the node's arrow until it's opened, or they're wired or set. |
+| `@pinName a Text` | `UPARAM(DisplayName = "Text")` | The pin's name on the node; `returnValue` (or an output's name) for outputs. |
+| `@execs` | `meta = (ExpandBoolAsExecs = "ReturnValue")` | A function returning a bool gets True and False exec outputs in place of Return Value, as if a Branch followed it. |
 
 The rest of the comment becomes the node's description (its tooltip). `@param name text` describes a pin.
+
+**Deprecation markers.** A function, method or property is deprecated by the `@deprecated` tag, or by its language's own marker:
+
+| Language | Marker | Message |
+|---|---|---|
+| TypeScript, JavaScript, PHP, Ruby, Lua, GDScript | `@deprecated` in the documentation (JSDoc, PHPDoc, YARD, LuaLS, Godot) | the tag's text |
+| C# | `[Obsolete]` or `[Obsolete("…")]` | its message |
+| C++ | `[[deprecated]]` or `[[deprecated("…")]]` | its message |
+| Rust | `#[deprecated]`, `#[deprecated = "…"]` or `#[deprecated(note = "…")]` | its note |
+| Java | `@Deprecated` | Javadoc's `@deprecated` text |
+| Python | PEP 702's `@deprecated("…")` (`warnings` or `typing_extensions`) | its message |
+| Go | a `Deprecated:` paragraph in the doc comment, before `@blueprint` | the paragraph |
+
+PHP 8.4's `#[\Deprecated]` attribute isn't read yet; use the docblock's `@deprecated`. `@execs` covers bool results; Unreal's ExpandEnumAsExecs waits until code functions can return a graph enum by its own type (they come through as native types).
 
 The setting `blueprintVisualScripting.exposeAllFunctions` exposes every exported TypeScript or JavaScript function and every public (not `_`-prefixed) top-level Python function, as callable nodes, for small projects where marking each one is a chore. Markers still choose `pure`, category and title.
 

@@ -3,7 +3,7 @@
 // with the @blueprint marker as in the other languages). Like the other scanners it parses only
 // declarations and skips bodies by matching brackets; classes, templates and macros aren't read.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText, tupleOutputs } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, markDeprecated, parseDocText, tupleOutputs } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -119,6 +119,8 @@ const TYPE_KEYWORDS = new Set(['class', 'struct', 'union', 'enum', 'typedef', 'u
 export function scanCpp(source: string): ModuleScan {
   const tokens = tokenizeCpp(source);
   const result: ModuleScan = { functions: [], skipped: [] };
+  // The lines of declarations marked [[deprecated]].
+  const deprecatedLines = new Map<number, { message?: string }>();
   const text = (start: number, end: number) => (end > start ? source.slice(tokens[start].start, tokens[end - 1].end) : '');
   const at = (i: number, value: string) => tokens[i]?.text === value && tokens[i].kind === 'punct' || (tokens[i]?.kind === 'name' && tokens[i].text === value);
   const skipGroup = (i: number): number => {
@@ -163,10 +165,12 @@ export function scanCpp(source: string): ModuleScan {
   const declarations = (i: number, end: number, namespace: string): void => {
     // Documentation before an attribute belongs to the declaration after it.
     let attributeDoc: string[] | undefined;
+    let deprecation: { message?: string } | undefined;
     while (i < end) {
-      // Attributes: [[nodiscard]] and the like.
+      // Attributes: [[nodiscard]] and the like; [[deprecated("…")]] marks the declaration.
       if (at(i, '[') && at(i + 1, '[')) {
         attributeDoc = tokens[i].doc ?? attributeDoc;
+        deprecation = deprecatedAttribute(text(i, skipGroup(i))) ?? deprecation;
         i = skipGroup(i);
         continue;
       }
@@ -193,6 +197,8 @@ export function scanCpp(source: string): ModuleScan {
       const first = i;
       const doc = tokens[first].doc ?? attributeDoc;
       attributeDoc = undefined;
+      if (deprecation) deprecatedLines.set(tokens[first].line, deprecation);
+      deprecation = undefined;
       if (at(i, 'template')) {
         const docComment = parseDoc(doc);
         const after = skipAngles(i + 1);
@@ -275,6 +281,7 @@ export function scanCpp(source: string): ModuleScan {
   const classMembers = (i: number, end: number, cls: ScannedClass, className: string, initialAccess: string): void => {
     let access = initialAccess;
     let attributeDoc: string[] | undefined;
+    let deprecation: { message?: string } | undefined;
     while (i < end) {
       if (at(i, ';')) {
         i++;
@@ -287,12 +294,15 @@ export function scanCpp(source: string): ModuleScan {
       }
       if (at(i, '[') && at(i + 1, '[')) {
         attributeDoc = tokens[i].doc ?? attributeDoc;
+        deprecation = deprecatedAttribute(text(i, skipGroup(i))) ?? deprecation;
         i = skipGroup(i);
         continue;
       }
       const first = i;
       const docComment = parseDoc(tokens[first].doc ?? attributeDoc);
       attributeDoc = undefined;
+      if (deprecation) deprecatedLines.set(tokens[first].line, deprecation);
+      deprecation = undefined;
       if (TYPE_KEYWORDS.has(tokens[i].text) || at(i, 'friend') || at(i, 'template') || at(i, 'static_assert') || at(i, '~')) {
         i = skipDeclaration(i);
         continue;
@@ -448,7 +458,13 @@ export function scanCpp(source: string): ModuleScan {
   };
 
   declarations(0, tokens.length, '');
-  return result;
+  return markDeprecated(result, deprecatedLines);
+}
+
+// [[deprecated]] or [[deprecated("message")]] (docs/node-authoring.md, gap 6).
+function deprecatedAttribute(text: string): { message?: string } | undefined {
+  const match = /\bdeprecated\b\s*(?:\(\s*"([^"]*)"\s*\))?/.exec(text);
+  return match ? (match[1] ? { message: match[1] } : {}) : undefined;
 }
 
 // An out parameter: its name, its type as written (without &), and as a pin type.
