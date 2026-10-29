@@ -2,7 +2,7 @@
 
 Phase 10 of the [roadmap](roadmap.md): the palette, and everything else the editor shows, in the context of the graph's language, the one picked in the toolbar's **Language** menu. Asked for on 2026-10-29, before generics in C++, Go, Lua and PHP. The user chose all four parts below, an audit of every node rather than a reported mismatch, the language's terms everywhere they're shown, and a phase of its own after Phase 9 was merged.
 
-A "Built" section after each design says what each step built.
+A "Built" section after each design says what each step built. The phase was completed on 2026-10-29: [roadmap.md](roadmap.md) has its status and deferrals.
 
 ## Today
 
@@ -169,6 +169,13 @@ The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts)
 - A webview test changes the Language menu from TypeScript to Python on a graph with a Make Array node and an `array<int>` variable. The palette, the node's title, its pin tooltip and the variable show List terms, and the saved graph is unchanged.
 - The palette's preview shows each language's code for Length.
 - The Python palette offers the Regex, Hash and JSON nodes, and the Rust palette offers none of them.
+
+**Built (step 10).** Each part has its test:
+
+- **The audit** runs in all 12 languages in the conformance suite (test/conformance/audit.test.ts). It finds nothing, and each language runs more than 300 cases. Its two self-checks catch a wrong snippet against Simulate and a wrong example output.
+- **Terms.** The browser test switches a TypeScript graph with a Make Array node, a Get node and an `array<int>` variable to Python. It sees Make List, `list[int]` on the pin and in My Blueprint, Python's words in the type picker, and Make Array found by search. The saved graph changes only its language.
+- **Preview.** Length is previewed in all 12 languages, each its own way (TypeScript and JavaScript share a snippet), and every node the palette offers has a preview but Sequence and End.
+- **Language-only nodes.** A browser test gives the editor the Python, Rust and Lua packs as the host describes them. Python's palette has "Python / Regex" (Matches, Replace, Find All) and "Python / Hash" (MD5, SHA-1, SHA-256). Rust's has neither, and Lua's has "Lua / Patterns" and no Regex. There's no To JSON (step 9).
 
 ## Steps
 

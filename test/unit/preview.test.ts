@@ -33,6 +33,13 @@ describe('code preview', () => {
     assert.equal(preview('core:array.length', 'typescript')!.code, preview('core:array.length', 'javascript')!.code);
   });
 
+  test('Length is previewed in each language, each its own way', () => {
+    const previews = languages.all().map((pack) => [pack.id, preview('core:array.length', pack.id)?.code]);
+    for (const [id, code] of previews) assert.ok(code, `${id}: ${code}`);
+    // TypeScript and JavaScript share a snippet; the other ten are each their own.
+    assert.equal(new Set(previews.map(([, code]) => code)).size, 11);
+  });
+
   test("any other node shows its own lines of generated code", () => {
     assert.deepEqual(preview('core:flow.branch', 'python'), { code: 'if condition:\n    pass', kind: 'generated' });
     assert.equal(preview('core:flow.branch', 'lua')!.code, 'if condition then\nend');

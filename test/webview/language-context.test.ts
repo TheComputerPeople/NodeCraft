@@ -5,6 +5,7 @@ import { after, afterEach, before, describe, test, TestContext } from 'node:test
 import assert from 'node:assert/strict';
 import { Browser } from 'playwright-core';
 import { GraphDocument, LanguageOption } from '../../src/core/model';
+import { builtinLanguagePacks } from '../../src/core/languages';
 import { LANGUAGE_TERMS } from '../../src/core/terms';
 import { EditorPage, launchBrowser, sampleDefinitions, sampleDocument } from './harness';
 
@@ -98,6 +99,30 @@ describe('language terms in the editor', () => {
 
     await e.page.selectOption('#language', 'typescript');
     assert.equal(await title(), 'Make Array');
+  });
+
+  // docs/language-context.md, part 4 and the exit check: the languages as the host describes them.
+  test("a language's own nodes are offered under its name, and only where it has them", async (t) => {
+    if (!browser) return t.skip(skipReason);
+    const packs = builtinLanguagePacks();
+    const option = (id: string): LanguageOption => {
+      const pack = packs.get(id)!;
+      return { id, displayName: pack.displayName, callable: pack.generator!.importLanguages, capabilities: pack.capabilities, snippetLanguages: pack.generator!.snippetLanguages, snippets: Object.keys(pack.generator!.snippets ?? {}), terms: pack.terms };
+    };
+    editor = await EditorPage.open(browser);
+    const e = editor;
+    const doc = document();
+    doc.language = 'python';
+    await e.send({ type: 'init', document: doc, definitions: sampleDefinitions(), saveDelay: 0, languages: ['python', 'rust', 'lua'].map(option) });
+    const section = (category: string) => e.page.$$eval('#categories section', (sections, wanted) => sections.filter((s) => s.querySelector('.category-title')?.textContent === wanted).flatMap((s) => [...s.querySelectorAll('.palette-node strong')].map((el) => el.textContent)), category);
+    assert.deepEqual(await section('Python / Regex'), ['Regex Matches', 'Regex Replace', 'Regex Find All']);
+    assert.deepEqual(await section('Python / Hash'), ['MD5', 'SHA-1', 'SHA-256']);
+    await e.page.selectOption('#language', 'rust');
+    const all = await e.page.$$eval('.category-title', (els) => els.map((el) => el.textContent ?? ''));
+    assert.ok(!all.some((c) => /Regex|Hash|Patterns/.test(c)), all.join(', '));
+    await e.page.selectOption('#language', 'lua');
+    assert.deepEqual(await section('Lua / Patterns'), ['Pattern Matches', 'Pattern Replace', 'Pattern Find All']);
+    assert.deepEqual(await section('Lua / Regex'), []);
   });
 
   // docs/language-context.md, part 3.

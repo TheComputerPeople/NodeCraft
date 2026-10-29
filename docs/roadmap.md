@@ -378,7 +378,19 @@ Before it: the palette offers only what the graph's language can call or compile
 - **Code preview**: the palette and the Add Node menu show the highlighted node's code in the language.
 - **Language-only nodes** from standard libraries: regular expressions (Lua's patterns in Lua), hashing and To JSON, in the languages that have them.
 
-Design and steps: [language-context.md](language-context.md).
+Status: complete (October 2026), with the deferrals below. The exit check is in the tests: the audit passes in all 12 languages, a browser test switches a TypeScript graph to Python and sees it in Python's terms with nothing saved but the language, Length is previewed in each language, and Python's palette offers Regex and Hash nodes under "Python / …" where Rust's offers none.
+
+- **What the audit found** (and fixed):
+  - Maps with integer keys printed in ascending order in Simulate, TypeScript and JavaScript (through a plain object), not in insertion order.
+  - Lua graphs with about 200 kinds of code node didn't load: Lua's limit of 200 locals.
+  - Ruby crashed sorting sets of booleans.
+- **Deferred:**
+  - To JSON: the languages' serializers disagree on numbers and can't write the generated code's own containers. One that's the same everywhere would be a universal node, built on the runtimes' Print JSON.
+  - Regex Split: each language's split treats groups and empty ends differently.
+  - Terms for packs from other extensions and declarative packs (`terms` in a declarative definition); they keep Unreal's words.
+  - Keyboard navigation of the Add Node menu, so its preview can follow the arrow keys as well as the mouse.
+
+Design and steps: [language-context.md](language-context.md), with what each step built.
 
 ### Phase 11: Code classes as parents
 
@@ -460,7 +472,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Variables | Container types (array/set/map), defaults edited in Details, Unreal's array/set/map functions | ✅ | — |
 | Search | Find in Blueprint (Ctrl+F) / Find in All Blueprints (Ctrl+Shift+F) | ✅ | — |
 | Palette | Favorites | ⬜ (per-user, needs settings storage) | later |
-| Palette | (Beyond Unreal, which has one language) The palette, node titles and pin types in the graph language's terms, with a preview of each node's code in it, and language-only standard library nodes | ⬜ | 10 |
+| Palette | (Beyond Unreal, which has one language) The palette, node titles and pin types in the graph language's terms, with a preview of each node's code in it, and language-only standard library nodes | ✅ (regex and hashing; To JSON deferred) | 10 |
 | Compile | Compile button, Compiler Results, error badges on nodes | ✅ | — |
 | Compile | F7 compiles | ✅ | — |
 | Structure | Functions: entry and return nodes, inputs and outputs, pure functions, local variables, recursion | ✅ | — |
