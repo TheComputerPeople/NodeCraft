@@ -35,5 +35,6 @@ export { declarativePack, loadDeclarativePack, checkDefinition, parseTemplate, r
 export type { DeclarativeDebugger, DeclarativePackDefinition, DeclarativeRunner, Template, TemplateValue } from '../core/declarative';
 
 // The conformance suite.
-export { runConformance, loadFixtureSet, programFiles, defaultFixtureSet, formatReport } from '../conformance/conformance';
-export type { ConformanceOptions, ConformanceReport, Fixture, FixtureResult, FixtureSet, ResultStatus } from '../conformance/conformance';
+export { runConformance, loadFixtureSet, programFiles, defaultFixtureSet, formatReport, runNodeExamples, simulateNodeExamples, loadNodeFiles } from '../conformance/conformance';
+export type { ConformanceOptions, ConformanceReport, Fixture, FixtureResult, FixtureSet, NodeTestOptions, ResultStatus } from '../conformance/conformance';
+export type { NodeExample } from '../core/model';

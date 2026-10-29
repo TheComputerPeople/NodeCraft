@@ -347,6 +347,25 @@ test('New Node writes a node file to start from; node files show their problems'
   }
 });
 
+test("Test Node Library runs a node file's examples in Simulate and in generated code", async () => {
+  const file = workspaceFile('lib/Halve.node.json');
+  const halve = {
+    type: 'test.halve', version: 1, displayName: 'Halve', category: 'Test',
+    inputs: [{ id: 'value', name: 'Value', kind: 'data', direction: 'input', type: { id: 'float' } }],
+    outputs: [{ id: 'result', name: 'Result', kind: 'data', direction: 'output', type: { id: 'float' } }],
+    implementation: { kind: 'code', languages: { typescript: 'return ${value} / 2;', javascript: 'return ${value} / 2;' } },
+    examples: [{ inputs: { value: 9 }, outputs: { result: 4.5 } }, { inputs: { value: 2 }, outputs: { result: 3 } }]
+  };
+  await vscode.workspace.fs.writeFile(file, new TextEncoder().encode(JSON.stringify(halve, null, 2)));
+  try {
+    const reports = await vscode.commands.executeCommand<{ pack: string; results: { fixture: string; status: string; message?: string }[] }[]>('blueprintVisualScripting.testNodeLibrary', file, ['typescript']);
+    assert.deepEqual(reports.map((r) => [r.pack, r.results.map((x) => x.status)]), [['simulate', ['failed']], ['typescript', ['failed']]]);
+    for (const report of reports) assert.match(report.results[0].message ?? '', /Example 2, inputs \{"value":2\}: expected \["3"\], printed \["1"\]/);
+  } finally {
+    await vscode.workspace.fs.delete(file);
+  }
+});
+
 test('the functions of a function library graph become nodes that other graphs import', async () => {
   const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
   const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });

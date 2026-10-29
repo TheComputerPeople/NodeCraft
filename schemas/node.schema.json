@@ -49,6 +49,27 @@
       },
       "description": "Extra words the action menu matches when searching."
     },
+    "examples": {
+      "type": "array",
+      "description": "Inputs and the outputs they give: Test Node Library runs each in Simulate and in each language, and compares the outputs.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object",
+            "description": "Values for the node's data inputs, by pin id."
+          },
+          "outputs": {
+            "type": "object",
+            "description": "The values its data outputs give, by pin id."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "compactTitle": {
       "type": "string",
       "description": "Drawn large on a node without a title bar, as + is (Unreal's CompactNodeTitle)."

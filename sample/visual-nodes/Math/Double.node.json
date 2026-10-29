@@ -36,6 +36,10 @@
       "type": { "id": "float" }
     }
   ],
+  "examples": [
+    { "inputs": { "value": 5 }, "outputs": { "result": 10 } },
+    { "description": "negative", "inputs": { "value": -1.5 }, "outputs": { "result": -3 } }
+  ],
   "implementation": {
     "kind": "code",
     "defaultLanguage": "javascript",

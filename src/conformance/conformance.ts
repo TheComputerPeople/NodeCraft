@@ -11,6 +11,7 @@ import { graphFileDefinitions } from '../core/graph-files';
 import { GenerateOptions, LanguagePack, LanguagePackRegistry } from '../core/language-pack';
 import { DEFAULT_LANGUAGE, builtinLanguagePacks } from '../core/languages';
 import { GraphDocument, NodeDefinition, RuntimeLogEvent } from '../core/model';
+import { exampleGraph, exampleMismatches } from '../core/node-examples';
 import { NodeRegistry, parseNodeDefinition } from '../core/registry';
 import { GraphRuntime } from '../core/runtime';
 import { parseDocument } from '../core/serializer';
@@ -222,6 +223,97 @@ function simulate(docs: { fileName: string; doc: GraphDocument }[], libraryNodes
   }
   runtime.run(docs[0].doc);
   return { output: events.filter((e) => e.kind === 'log').map((e) => e.message ?? ''), error: events.some((e) => e.kind === 'error'), failures: [] };
+}
+
+// ---- Node libraries (docs/node-authoring.md, gap 8) ---------------------------------------------
+
+export type NodeTestOptions = Pick<ConformanceOptions, 'workDir' | 'generate' | 'command' | 'timeoutMs' | 'onResult'>;
+
+// The node files of a file or folder (its *.node.json files, at any depth).
+export function loadNodeFiles(fileOrDir: string): NodeDefinition[] {
+  const files = fs.statSync(fileOrDir).isDirectory()
+    ? (fs.readdirSync(fileOrDir, { recursive: true }) as string[]).filter((f) => f.endsWith('.node.json')).sort().map((f) => path.join(fileOrDir, f))
+    : [fileOrDir];
+  return files.map((file) => parseNodeDefinition(fs.readFileSync(file, 'utf8'))).filter((d): d is NodeDefinition => !!d);
+}
+
+// Tests a node library in a language pack: each node's examples run in a graph of the pack's
+// language, and their outputs are compared with the examples'. A node without examples only has to
+// compile; one without a snippet for the pack isn't applicable.
+export async function runNodeExamples(pack: LanguagePack, nodes: NodeDefinition[], options: NodeTestOptions = {}): Promise<ConformanceReport> {
+  const ownWorkDir = !options.workDir;
+  const workDir = options.workDir ?? fs.mkdtempSync(path.join(os.tmpdir(), `vgraph-nodes-${pack.id}-`));
+  const results: FixtureResult[] = [];
+  try {
+    for (const [i, def] of nodes.entries()) {
+      let result: FixtureResult;
+      try {
+        result = await runNodeExample(pack, def, nodes, path.join(workDir, String(i)), options);
+      } catch (error) {
+        result = { fixture: def.type, status: 'failed', message: error instanceof Error ? error.message : String(error) };
+      }
+      results.push(result);
+      options.onResult?.(result);
+    }
+  } finally {
+    if (ownWorkDir) fs.rmSync(workDir, { recursive: true, force: true });
+  }
+  return report(pack.id, results);
+}
+
+async function runNodeExample(pack: LanguagePack, def: NodeDefinition, nodes: NodeDefinition[], dir: string, options: NodeTestOptions): Promise<FixtureResult> {
+  const generator = pack.generator;
+  const runner = generator?.runner;
+  if (!generator || !runner) return { fixture: def.type, status: 'skipped', message: `${pack.displayName} has no generator and runner.` };
+  const implementation = def.implementation;
+  if (implementation?.kind === 'code' && !generator.snippetLanguages.some((key) => implementation.languages[key] !== undefined) && generator.snippets?.[def.type] === undefined) {
+    return { fixture: def.type, status: 'not-applicable', message: `It has no ${generator.snippetLanguages.map((k) => `"${k}"`).join(' or ')} snippet.` };
+  }
+  const { document, expected } = exampleGraph(def, pack.id);
+  const languages = new LanguagePackRegistry([...builtinLanguagePacks().all().filter((p) => p.id !== pack.id), pack]);
+  const registry = new NodeRegistry();
+  registry.registerMany(nodes);
+  const result = compileDocument(document, { registry, languages, generate: { sourceFileName: 'NodeExamples.vgraph', outputDir: '', namespace: 'Conformance', ...options.generate } });
+  const errors = result.diagnostics.filter((d) => d.severity === 'error');
+  if (errors.length || !result.output) return { fixture: def.type, status: 'failed', message: `It doesn't compile: ${errors.map((d) => d.message).join('; ')}` };
+  if (!def.examples?.length) return { fixture: def.type, status: 'passed', message: 'It compiles; it has no examples to run.' };
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, result.output.fileName);
+  fs.writeFileSync(file, result.output.text);
+  for (const companion of result.output.companionFiles ?? []) fs.writeFileSync(path.join(dir, companion.fileName), companion.text);
+  let outcome;
+  try {
+    outcome = await runGeneratedCode(runner, file, result.output.className, { cwd: dir, importRoots: [dir], command: options.command, timeoutMs: options.timeoutMs ?? 300000 });
+  } catch (error) {
+    if (error instanceof ToolNotFoundError) return { fixture: def.type, status: 'skipped', message: error.message };
+    throw error;
+  }
+  const actual = outputLines(outcome.stdout);
+  const problems = exampleMismatches(def, expected, actual);
+  if (outcome.exitCode !== 0) problems.push(`The generated code exited with code ${outcome.exitCode}.\n${outcome.stderr}`);
+  return problems.length ? { fixture: def.type, status: 'failed', message: problems.join('\n'), expected: expected.flat(), actual } : { fixture: def.type, status: 'passed' };
+}
+
+// The same in Simulate, in a graph of `language` (its code nodes run as Simulate runs them).
+export function simulateNodeExamples(nodes: NodeDefinition[], language = DEFAULT_LANGUAGE): ConformanceReport {
+  const results = nodes.map((def): FixtureResult => {
+    if (!def.examples?.length) return { fixture: def.type, status: 'not-applicable', message: 'It has no examples.' };
+    const { document, expected } = exampleGraph(def, language);
+    const registry = new NodeRegistry();
+    registry.registerMany(nodes);
+    const events: RuntimeLogEvent[] = [];
+    new GraphRuntime(registry, (e) => events.push(e), builtinLanguagePacks()).run(document);
+    const actual = events.filter((e) => e.kind === 'log').map((e) => e.message ?? '');
+    const error = events.find((e) => e.kind === 'error');
+    const problems = [...(error ? [`Simulate stopped: ${error.message ?? ''}`] : []), ...exampleMismatches(def, expected, actual)];
+    return problems.length ? { fixture: def.type, status: 'failed', message: problems.join('\n'), expected: expected.flat(), actual } : { fixture: def.type, status: 'passed' };
+  });
+  return report('simulate', results);
+}
+
+function report(pack: string, results: FixtureResult[]): ConformanceReport {
+  const count = (status: ResultStatus) => results.filter((r) => r.status === status).length;
+  return { pack, results, passed: count('passed'), failed: count('failed'), notApplicable: count('not-applicable'), skipped: count('skipped') };
 }
 
 function describe(d: CompileDiagnostic, fileName: string): string {

@@ -304,6 +304,20 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - Unit: each problem, New Node's definition (valid against the schema, read by the registry, compiled in a graph), and its fallback.
   - Integration: the command writes the file, and VS Code shows the problems of a broken node file.
 
+**Built (step 14): examples, Test Node Library and `--nodes`.**
+
+- **Examples.** A node definition may list `examples`: an optional description, input values and the output values they give, by pin id, as JSON (the schema describes them). The sample Double node has two.
+- **The graph.** `exampleGraph` (src/core/node-examples.ts) calls the node once per example, with the inputs on its pins. Its exec pins, when it has them, are chained after Start. It prints each output the example lists. The expected lines are those outputs formatted as Print shows them (`formatValue`), and `exampleMismatches` says which example printed something else.
+- **Running.** `runNodeExamples(pack, nodes)` (src/conformance/conformance.ts) compiles and runs the graph with a pack's runner, as the conformance suite runs fixtures.
+  - A node without examples only has to compile.
+  - One with no snippet for the pack (and no implementation of its own in the pack) isn't applicable.
+  - `simulateNodeExamples` runs the same graphs in Simulate.
+- **Test Node Library** (Command Palette, or a node file's or folder's Explorer menu; workspace trust required) tests the active node file, or the folder's node files. It runs them in Simulate and in each language the workspace's graphs use, with the `runCommands` setting, and writes the reports to the output channel.
+- **The SDK.** `blueprint-conformance <pack> --nodes <file or folder>` does the same for one pack, built-in or not, and exits with 1 when an example fails. The SDK exports `runNodeExamples`, `simulateNodeExamples` and `loadNodeFiles`.
+- **Tests.**
+  - Conformance: the example graph, Simulate, TypeScript and Python (a wrong example, no examples, no snippet), and the CLI's exit codes.
+  - Integration: the command's reports.
+
 ## Gap 9: library graphs can't be packaged
 
 **Today.** A `*.vgraph-package.json` holds `*.node.json` files only, and extensions can register only those. Function and macro libraries, structs and enums can't be versioned or shipped. Unreal plugins carry Blueprint libraries.

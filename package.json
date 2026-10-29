@@ -27,7 +27,8 @@
   "activationEvents": [
     "onCustomEditor:blueprintVisualScripting.graphEditor",
     "onCommand:blueprintVisualScripting.createGraph",
-    "onCommand:blueprintVisualScripting.newNode"
+    "onCommand:blueprintVisualScripting.newNode",
+    "onCommand:blueprintVisualScripting.testNodeLibrary"
   ],
   "main": "./dist/extension/extension.js",
   "capabilities": {
@@ -60,6 +61,11 @@
       {
         "command": "blueprintVisualScripting.newNode",
         "title": "New Node",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.testNodeLibrary",
+        "title": "Test Node Library",
         "category": "Blueprint Visual Scripting"
       },
       {
@@ -217,6 +223,11 @@
         {
           "command": "blueprintVisualScripting.newNode",
           "when": "explorerResourceIsFolder",
+          "group": "blueprint@0"
+        },
+        {
+          "command": "blueprintVisualScripting.testNodeLibrary",
+          "when": "explorerResourceIsFolder || resourceFilename =~ /\\.node\\.json$/",
           "group": "blueprint@0"
         },
         {

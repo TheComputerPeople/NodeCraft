@@ -2,6 +2,10 @@
 //
 //   blueprint-conformance <pack> [--filter <text>] [--fixtures <dir>] [--concurrency <n>]
 //                                [--timeout <ms>] [--commonjs]
+//   blueprint-conformance <pack> --nodes <file or folder> [--timeout <ms>] [--commonjs]
+//
+// With --nodes, it tests a node library instead: each node's examples run in the pack's language
+// (docs/node-authoring.md, gap 8), and nodes without examples only have to compile.
 //
 // <pack> is a JavaScript module that exports a LanguagePack (as `pack`, as its default export, or
 // as its only export that looks like one), a declarative pack's definition (a .json file), or the
@@ -11,7 +15,7 @@ import * as path from 'node:path';
 import { declarativePack } from '../core/declarative';
 import { LanguagePack } from '../core/language-pack';
 import { builtinLanguagePacks } from '../core/languages';
-import { defaultFixtureSet, formatReport, loadFixtureSet, runConformance } from './conformance';
+import { defaultFixtureSet, formatReport, loadFixtureSet, loadNodeFiles, runConformance, runNodeExamples } from './conformance';
 
 function isPack(value: unknown): value is LanguagePack {
   return !!value && typeof value === 'object' && typeof (value as LanguagePack).id === 'string' && typeof (value as LanguagePack).mapType === 'function';
@@ -34,13 +38,22 @@ export async function main(argv: string[]): Promise<number> {
     return i >= 0 ? argv[i + 1] : undefined;
   };
   // The first argument that isn't an option or an option's value.
-  const valued = ['--filter', '--fixtures', '--concurrency', '--timeout'];
+  const valued = ['--filter', '--fixtures', '--concurrency', '--timeout', '--nodes'];
   const spec = argv.find((arg, i) => !arg.startsWith('--') && !valued.includes(argv[i - 1]));
   if (!spec) {
-    console.error('Usage: blueprint-conformance <pack module, definition .json or built-in id> [--filter <text>] [--fixtures <dir>] [--concurrency <n>] [--timeout <ms>] [--commonjs]');
+    console.error('Usage: blueprint-conformance <pack module, definition .json or built-in id> [--filter <text>] [--fixtures <dir>] [--concurrency <n>] [--timeout <ms>] [--commonjs] [--nodes <node file or folder>]');
     return 2;
   }
   const pack = loadPack(spec);
+  const nodes = option('--nodes');
+  if (nodes) {
+    const report = await runNodeExamples(pack, loadNodeFiles(path.resolve(nodes)), {
+      timeoutMs: option('--timeout') ? Number(option('--timeout')) : undefined,
+      generate: argv.includes('--commonjs') ? { moduleFormat: 'commonjs' } : undefined
+    });
+    console.log(formatReport(report));
+    return report.failed ? 1 : 0;
+  }
   const fixturesDir = option('--fixtures');
   const report = await runConformance(pack, {
     fixtures: fixturesDir ? loadFixtureSet(fixturesDir) : defaultFixtureSet(),

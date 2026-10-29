@@ -10,6 +10,9 @@ import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
 import { detectNewGraphLanguage } from './languages';
 import { NodeLibraries, workspaceSnippetLanguages } from './node-libraries';
 import { newNodeDefinition } from '../core/node-files';
+import { ConformanceReport, formatReport, runNodeExamples, simulateNodeExamples } from '../conformance/conformance';
+import { NodeDefinition } from '../core/model';
+import { parseNodeDefinition } from '../core/registry';
 import { isGeneratedFrom } from './placement';
 import { GraphLibraries } from './graph-libraries';
 import { DebugMarks } from './breakpoints';
@@ -195,6 +198,52 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(`${JSON.stringify(definition, null, 2)}\n`));
     await vscode.window.showTextDocument(target);
     return target;
+  }));
+  // Test Node Library (docs/node-authoring.md, gap 8): the examples of a node file's nodes, or a
+  // folder's, run in Simulate and in each language the workspace's graphs use; nodes without
+  // examples are compiled. The report goes to the output channel.
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.testNodeLibrary', async (target?: vscode.Uri, only?: string[]): Promise<ConformanceReport[] | undefined> => {
+    if (!vscode.workspace.isTrusted) {
+      void vscode.window.showWarningMessage('Testing a node library runs its code; trust the workspace first.');
+      return undefined;
+    }
+    const where = target ?? vscode.window.activeTextEditor?.document.uri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!where) return undefined;
+    const isFile = (await vscode.workspace.fs.stat(where)).type === vscode.FileType.File;
+    const files = isFile ? [where] : await vscode.workspace.findFiles(new vscode.RelativePattern(where, '**/*.node.json'), '**/node_modules/**', 500);
+    const nodes: NodeDefinition[] = [];
+    for (const file of files) {
+      try {
+        const def = parseNodeDefinition(new TextDecoder().decode(await vscode.workspace.fs.readFile(file)));
+        if (def) nodes.push(def);
+      } catch {
+        // A file that isn't a node shows its problems in its editor.
+      }
+    }
+    if (!nodes.length) {
+      void vscode.window.showInformationMessage(`No nodes in ${vscode.workspace.asRelativePath(where)}.`);
+      return undefined;
+    }
+    // `only`: the languages to test in, in place of the workspace's (for tests).
+    const used = only ? only.map((id) => ({ id })) : await workspaceSnippetLanguages(languages);
+    const packs = (used.length ? used.map((l) => languages.get(l.id)!) : [languages.get('typescript')!]).filter((p) => p?.generator?.runner);
+    const commands = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {});
+    const reports = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Testing the node library', cancellable: false }, async (progress) => {
+      const done: ConformanceReport[] = [simulateNodeExamples(nodes, packs[0]?.id)];
+      for (const pack of packs) {
+        progress.report({ message: pack.displayName });
+        done.push(await runNodeExamples(pack, nodes, { command: commands[pack.id], ...(pack.id === 'javascript' ? { generate: { moduleFormat: 'esm' } } : {}) }));
+      }
+      return done;
+    });
+    const channel = output();
+    channel.appendLine(`Test Node Library: ${vscode.workspace.asRelativePath(where)} (${nodes.length} node${nodes.length === 1 ? '' : 's'})`);
+    for (const report of reports) channel.appendLine(formatReport(report));
+    const failed = reports.reduce((n, r) => n + r.failed, 0);
+    const passed = reports.reduce((n, r) => n + r.passed, 0);
+    void (failed ? vscode.window.showWarningMessage(`Test Node Library: ${failed} failed, ${passed} passed.`, 'Show Output') : vscode.window.showInformationMessage(`Test Node Library: ${passed} passed.`, 'Show Output'))
+      .then((choice) => choice && channel.show());
+    return reports;
   }));
   return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans } };
 }

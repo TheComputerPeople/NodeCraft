@@ -57,6 +57,28 @@ Options:
 | `--concurrency <n>` | How many fixtures run at once (4) |
 | `--timeout <ms>` | The limit for each run |
 | `--commonjs` | Generates CommonJS (JavaScript packs) |
+| `--nodes <file or folder>` | Tests a node library instead (below) |
+
+### Node libraries
+
+```sh
+npx blueprint-conformance typescript --nodes ./nodes
+```
+
+With `--nodes`, the suite tests the `*.node.json` files of a file or folder in the pack's language, whether the pack is yours or a built-in one. A node may list `examples`, each with inputs and the outputs they give:
+
+```json
+"examples": [
+  { "inputs": { "value": 5 }, "outputs": { "result": 10 } },
+  { "description": "negative", "inputs": { "value": -1.5 }, "outputs": { "result": -3 } }
+]
+```
+
+For each node, the suite builds a graph that calls it once per example and prints each output, runs it, and compares what it prints with the outputs as Print shows them.
+
+- **No examples:** the node only has to compile.
+- **No snippet for the pack:** the node is not applicable.
+- **From code:** `runNodeExamples(pack, loadNodeFiles(dir))`. `simulateNodeExamples(nodes)` runs the examples in Simulate.
 
 From code:
 

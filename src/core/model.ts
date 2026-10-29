@@ -54,6 +54,16 @@ export interface NodeDefinition {
   compactTitle?: string;
   // Unreal's DeprecatedFunction: left out of the palette; its nodes show and compile with a warning.
   deprecated?: { message?: string };
+  // Inputs and the outputs they give, which Test Node Library runs in each language
+  // (src/core/node-examples.ts).
+  examples?: NodeExample[];
+}
+
+// One example of a node: its inputs' values, and the values its outputs give then (by pin id).
+export interface NodeExample {
+  description?: string;
+  inputs?: Record<string, unknown>;
+  outputs?: Record<string, unknown>;
 }
 
 // A language feature a graph can need (docs/language-breadth.md, "Capabilities, enforced").
