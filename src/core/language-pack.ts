@@ -233,6 +233,8 @@ export interface LanguageServerImport {
   // `(sum int, err error)`): each is an output (docs/node-authoring.md, gap 3). A last result of
   // this type isn't one; when it isn't nil, the run stops with it (Go's `error`).
   severalResults?: { error?: string };
+  // Only names other packages can use are nodes: Go's capitalized ones.
+  exportedNames?: 'capitalized';
 }
 
 export interface LanguagePack {

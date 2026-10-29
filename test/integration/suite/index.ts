@@ -303,6 +303,25 @@ test("Go to Definition opens a project function's code at its line, and a node f
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 });
 
+test('a marked function that cannot be a node warns in its file; Expose adds the marker', async () => {
+  const uri = workspaceFile('lib/feedback.ts');
+  const text = '/** @blueprint */\nexport function total(...values: number[]): number { return 0; }\n\nexport function plain(a: number): number {\n  return a;\n}\n';
+  await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(text));
+  await waitFor(() => vscode.languages.getDiagnostics(uri).some((d) => d.source === 'Blueprint'), 'the warning on total', 20000);
+  const [warning] = vscode.languages.getDiagnostics(uri).filter((d) => d.source === 'Blueprint');
+  assert.equal(warning.message, "Not a Blueprint node: rest parameters can't be pins");
+  assert.equal(warning.range.start.line, 1);
+
+  const document = await vscode.workspace.openTextDocument(uri);
+  const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>('vscode.executeCodeActionProvider', uri, new vscode.Range(3, 0, 3, 0));
+  const titles = actions.map((a) => a.title);
+  assert.ok(titles.includes('Expose as Blueprint node') && titles.includes('Expose as pure Blueprint node'), titles.join(', '));
+  assert.ok(await vscode.workspace.applyEdit(actions.find((a) => a.title === 'Expose as pure Blueprint node')!.edit!));
+  assert.ok(document.getText().includes('/** @blueprint pure */\nexport function plain(a: number): number {'), document.getText());
+  await document.save();
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+});
+
 test('the functions of a function library graph become nodes that other graphs import', async () => {
   const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
   const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });

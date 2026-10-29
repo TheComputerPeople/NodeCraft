@@ -259,6 +259,20 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - in a header (C++);
   - in the returned module (Lua).
 
+**Built (step 12).**
+
+- **Diagnostics.** `ProjectFunctions` (src/extension/project-functions.ts) shows each marked function that can't be a node as a warning on its line, from the scan it already makes. The output channel still lists them too.
+- **Quick fixes.** The same class is a code action provider for every file a scanner reads:
+  - `exposeCandidates` (src/core/importing/expose.ts) lists the unmarked declarations a scan found, cached by document version.
+  - `markerEdit` writes the marker in the language's style: into a `/** … */` block above (a one-line block becomes several lines), as a new `///`, `---`, `##` or `#` line after the existing ones and before any attributes or decorators, or into a Python docstring (a new one when there's none). A one-line Python def has no room, so it isn't offered.
+  - Lua fields (marked in `---@field`) and Go (read through its language server) get no quick fix.
+- **`exposeAllFunctions`** was already applied to every scanner; what was missing:
+  - Go now keeps lowercase names out (`exportedNames: 'capitalized'` on its language-server import), and reports a marked one.
+  - Unmarked functions a language keeps private aren't reported. The setting's description gives each language's rule.
+- **Tests.**
+  - Unit: in every scanned language, each candidate gets its marker and the scanner reads it back. Also covered: comments keeping their text, the pure marker, and exposeAll in eight languages, and Go's names.
+  - Integration: the warning in VS Code, and the quick fix applied.
+
 ## Gap 8: snippet nodes are written blind
 
 **Today.**

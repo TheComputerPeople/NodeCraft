@@ -45,6 +45,11 @@ export function scanSymbols(text: string, functions: SymbolFunction[], spec: Lan
     const doc = docAbove(lines, fn, spec.comments);
     const container = fn.containers.length ? fn.containers.join(spec.namespaceSeparator ?? '.') : undefined;
     const line = fn.line + 1;
+    // Go: a lowercase name isn't exported, so generated code in another package can't use it.
+    if (spec.exportedNames === 'capitalized' && !/^[A-Z]/.test(fn.name)) {
+      result.skipped.push({ name: fn.owner ? `${fn.owner.replace(/^\*/, '')}.${fn.name}` : fn.name, line, reason: "it isn't exported (capitalized), so generated code can't use it", marked: isMarked(doc), ...(container ? { container } : {}) });
+      continue;
+    }
     if (fn.owner && fn.field) {
       const type = fn.field.type ? typeFromText(fn.field.type, known) : undefined;
       classOf(fn.owner, line, container).properties.push({ name: fn.name, line, ...(type ? { type } : {}), readonly: false, doc });

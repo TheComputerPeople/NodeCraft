@@ -124,3 +124,19 @@ describe('several results through the language server', () => {
     assert.deepEqual(scanOne('func Bounds() (int, int)').skipped.map((s) => s.reason), ['its results need names: name them in the signature or with @outputs']);
   });
 });
+
+// Go: only capitalized names are exported, so only they are nodes (docs/node-authoring.md, gap 7).
+describe("Go's exported names", () => {
+  const GO: LanguageServerImport = { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], exportedNames: 'capitalized' };
+  const goSpelling = spelling({ bool: 'bool', int: 'int', float: 'float64', string: 'string' });
+
+  test('lowercase functions are left out, and reported only when marked', () => {
+    const source = 'package a\n\nfunc Open() int { return 1 }\n\n// @blueprint\nfunc hidden() int { return 2 }\n\nfunc helper() int { return 3 }\n';
+    const fn = (name: string, line: number) => ({ name, line, nameLine: line, containers: [], hover: `\`\`\`go\nfunc ${name}() int\n\`\`\`` });
+    const scan = scanSymbols(source, [fn('Open', 2), fn('hidden', 5), fn('helper', 7)], GO, goSpelling);
+    assert.deepEqual(scan.functions.map((f) => f.name), ['Open']);
+    const exposed = exposeFunctions(scan, { language: 'go', path: 'a/a.go', exposeAll: true });
+    assert.deepEqual(exposed.definitions.map((d) => d.displayName), ['Open']);
+    assert.deepEqual(exposed.skipped.map((s) => `${s.name}: ${s.reason}`), ["hidden: it isn't exported (capitalized), so generated code can't use it"]);
+  });
+});

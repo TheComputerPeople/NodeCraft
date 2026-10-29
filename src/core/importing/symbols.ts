@@ -134,9 +134,13 @@ export function exposeFunctions(scan: ModuleScan, options: ExposeOptions): Expos
     // Class members only when marked: exposing every member would flood the palette.
     ...(scan.classes ?? []).flatMap((cls) => classDefinitions(cls, options, lines))
   ];
-  const skipped = scan.skipped.filter((s) => s.marked || (options.exposeAll && !s.name.startsWith('_')));
+  // With exposeAll, an unmarked function its language keeps private (not exported, not public, not
+  // in the module's table) was never meant to be a node, so it isn't reported.
+  const skipped = scan.skipped.filter((s) => s.marked || (options.exposeAll && !s.name.startsWith('_') && !PRIVATE_REASON.test(s.reason)));
   return { definitions, skipped, lines };
 }
+
+const PRIVATE_REASON = /\bisn't (exported|pub\b|public|static\b)|\(private\)|not the table the module returns|doesn't end with `return`|belong to their file/i;
 
 function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCategory = `Project / ${fileStem(options.path)}`): NodeDefinition {
   const tag = (name: string): string | undefined => fn.doc.tags.find((t) => t.name === name)?.text.trim();

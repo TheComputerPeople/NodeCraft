@@ -212,7 +212,7 @@ export const goPack: LanguagePack = {
   mapType,
   generator: goGenerator,
   // Functions marked // @blueprint, found through gopls (Tier 2).
-  importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], objectsByPointer: true, severalResults: { error: 'error' } } }
+  importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], objectsByPointer: true, severalResults: { error: 'error' }, exportedNames: 'capitalized' } }
 };
 
 class GoEmitter {

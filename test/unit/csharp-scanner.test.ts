@@ -78,7 +78,7 @@ describe('C# scanner: exposure', () => {
           public static int Sum(params int[] values) => 0;
       }
       public static class Box<T> { public static void Put() {} }`), [
-      "Secret: it isn't public or internal, so generated code can't call it",
+      // Secret is private and unmarked: not meant to be a node, so not reported.
       "Fire: async void methods can't be awaited; return a Task",
       "Soon: ValueTask methods can't be nodes yet; return a Task",
       "First: generic methods can't be nodes yet",

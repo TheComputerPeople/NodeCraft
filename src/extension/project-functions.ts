@@ -3,6 +3,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { NO_SIGNATURE, SymbolFunction, scanSymbols } from '../core/importing/language-server';
+import { ExposeCandidate, docStyle, exposeCandidates, markerEdit } from '../core/importing/expose';
 import { ModuleScan, SkippedFunction, exposeFunctions } from '../core/importing/symbols';
 import { LanguagePack, LanguagePackRegistry, LanguageServerImport } from '../core/language-pack';
 import { NodeDefinition } from '../core/model';
@@ -32,8 +33,12 @@ interface FileFunctions {
   skipped: SkippedFunction[];
 }
 
-export class ProjectFunctions implements vscode.Disposable {
+export class ProjectFunctions implements vscode.Disposable, vscode.CodeActionProvider {
   private readonly files = new Map<string, FileFunctions>();
+  // Marked functions that can't be nodes, as warnings in their files (docs/node-authoring.md, gap 7).
+  private readonly diagnostics = vscode.languages.createDiagnosticCollection('blueprint-functions');
+  // The declarations each open document offers the Expose quick fixes on, by document version.
+  private readonly candidates = new Map<string, { version: number; candidates: ExposeCandidate[] }>();
   // The packs that read each file extension (C and C++ both read headers).
   private readonly packs = new Map<string, LanguagePack[]>();
   private readonly retries = new Map<string, number>();
@@ -54,6 +59,9 @@ export class ProjectFunctions implements vscode.Disposable {
     this.watchSources();
     this.subscriptions.push(
       { dispose: () => this.watcher?.dispose() },
+      this.diagnostics,
+      vscode.languages.registerCodeActionsProvider({ scheme: 'file' }, this, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
+      vscode.workspace.onDidCloseTextDocument((d) => this.candidates.delete(d.uri.toString())),
       // A pack registered or removed (through the API) may read other source files.
       languages.onDidChange(() => {
         this.watchSources();
@@ -226,6 +234,49 @@ export class ProjectFunctions implements vscode.Disposable {
     const files = [...this.files.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     this.registry.setSource(SOURCE, files.flatMap((f) => f.definitions));
     this.report(files);
+    this.diagnostics.clear();
+    for (const [key, file] of this.files) {
+      const problems = file.skipped.filter((s) => s.marked).map((s) => {
+        const line = Math.max(0, s.line - 1);
+        const diagnostic = new vscode.Diagnostic(new vscode.Range(line, 0, line, Number.MAX_SAFE_INTEGER), `Not a Blueprint node: ${s.reason}`, vscode.DiagnosticSeverity.Warning);
+        diagnostic.source = 'Blueprint';
+        diagnostic.code = 'not-a-node';
+        return diagnostic;
+      });
+      if (problems.length) this.diagnostics.set(vscode.Uri.parse(key), problems);
+    }
+  }
+
+  // Expose as Blueprint node, and Expose as pure Blueprint node, on a declaration that could be one
+  // (docs/node-authoring.md, gap 7): each adds the marker to its documentation comment.
+  provideCodeActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection): vscode.CodeAction[] {
+    const pack = this.packsFor(document.uri).find((p) => p.importer?.scan && docStyle(p.id));
+    if (!pack) return [];
+    const key = document.uri.toString();
+    let cached = this.candidates.get(key);
+    if (cached?.version !== document.version) {
+      let candidates: ExposeCandidate[] = [];
+      try {
+        candidates = exposeCandidates(pack.importer!.scan!(document.getText()), pack.id);
+      } catch {
+        // A file the scanner can't read offers nothing.
+      }
+      cached = { version: document.version, candidates };
+      this.candidates.set(key, cached);
+    }
+    const line = range.start.line + 1;
+    return cached.candidates.filter((c) => c.line === line).flatMap((candidate) => {
+      const markers = candidate.kind === 'function' || candidate.kind === 'method' ? [['@blueprint', 'Expose as Blueprint node'], ['@blueprint pure', 'Expose as pure Blueprint node']] : [['@blueprint', 'Expose as Blueprint node']];
+      return markers.flatMap(([marker, title]) => {
+        const change = markerEdit(document.getText(), candidate.line, marker, docStyle(pack.id)!);
+        if (!change) return [];
+        const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+        const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+        action.edit = new vscode.WorkspaceEdit();
+        action.edit.replace(document.uri, new vscode.Range(change.start, 0, change.end, 0), change.lines.map((l) => l + eol).join(''));
+        return [action];
+      });
+    });
   }
 
   // Tells the user, once per change, which marked functions couldn't become nodes and why.

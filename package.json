@@ -156,7 +156,7 @@
         "blueprintVisualScripting.exposeAllFunctions": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Show every exported TypeScript or JavaScript function, and every public top-level Python function, as a node. When off, only functions whose documentation comment contains `@blueprint` become nodes, as Unreal requires `BlueprintCallable`."
+          "markdownDescription": "Show every public function as a node, by each language's rule: exported (TypeScript, JavaScript), not `_`-prefixed (Python, GDScript, Ruby), `public static` (C#, Java, PHP), `pub` (Rust), capitalized (Go), in a header (C++), in the module's table (Lua). Class members still need `@blueprint`. When off, only declarations whose documentation comment contains `@blueprint` become nodes, as Unreal requires `BlueprintCallable`."
         },
         "blueprintVisualScripting.runCommands": {
           "type": "object",

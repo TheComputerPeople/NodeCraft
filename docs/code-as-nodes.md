@@ -56,7 +56,9 @@ The rest of the comment becomes the node's description (its tooltip). `@param na
 
 PHP 8.4's `#[\Deprecated]` attribute isn't read yet; use the docblock's `@deprecated`. `@execs` covers bool results; Unreal's ExpandEnumAsExecs waits until code functions can return a graph enum by its own type (they come through as native types).
 
-The setting `blueprintVisualScripting.exposeAllFunctions` exposes every exported TypeScript or JavaScript function and every public (not `_`-prefixed) top-level Python function, as callable nodes, for small projects where marking each one is a chore. Markers still choose `pure`, category and title.
+The setting `blueprintVisualScripting.exposeAllFunctions` exposes every public function as a callable node, for small projects where marking each one is a chore. Public is each language's rule: exported (TypeScript, JavaScript), not `_`-prefixed (Python, GDScript, Ruby), `public static` (C#, Java, PHP), `pub` (Rust), capitalized (Go), declared in a header (C++), in the module's table (Lua). Private functions aren't reported. Class members still need their marker. Markers still choose `pure`, category and title.
+
+**Feedback in the code.** A marked function that can't be a node gets a warning on its declaration, in the Problems panel too: "Not a Blueprint node: rest parameters can't be pins". On a function, method, constructor or property that could be one, the lightbulb offers **Expose as Blueprint node** and **Expose as pure Blueprint node**. Each adds the marker to the documentation comment in the language's style (`/** … */`, `///`, `---`, `##`, `#`, a Python docstring), creating it when there is none. Go's functions come from its language server, so they get the warnings but not the quick fixes.
 
 ## What becomes a node
 

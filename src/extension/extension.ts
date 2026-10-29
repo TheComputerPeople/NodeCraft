@@ -44,7 +44,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   // Declarative language packs in the workspace (docs/language-breadth.md, "Declarative packs").
   context.subscriptions.push(watchWorkspaceLanguagePacks(languages, output));
 
-  // The project's own functions, exposed as nodes (docs/code-as-nodes.md).
+  // The project's own functions, exposed as nodes (docs/code-as-nodes.md), with warnings and Expose
+  // quick fixes in their files.
   const projectFunctions = new ProjectFunctions(registry, languages, output);
   context.subscriptions.push(projectFunctions);
   // Function libraries made of graphs (docs/program-structure.md, "Functions").
