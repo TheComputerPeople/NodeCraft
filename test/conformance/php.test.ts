@@ -16,6 +16,7 @@ import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner'
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
+import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-php-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -203,4 +204,68 @@ describe('PHP several outputs', () => {
       assert.deepEqual(run.stdout.trim().split(/\r?\n/), SEVERAL_OUTPUTS_OUTPUT, run.stderr);
     });
   }
+});
+
+// Async functions (docs/node-authoring.md, gap 4): a function returning a Fiber is a latent node; the
+// latent queue resumes the Fiber until it ends, and Completed runs with what it returned.
+describe('PHP async functions', () => {
+  const remote = (result: string) => [
+    '<?php',
+    'namespace App\\Remote;',
+    '',
+    'final class Remote',
+    '{',
+    '    /**',
+    '     * @blueprint',
+    '     * @return \\Fiber<int>',
+    '     */',
+    '    public static function fetchDouble(int $value): \\Fiber',
+    '    {',
+    '        return new \\Fiber(function () use ($value) {',
+    '            $ready = hrtime(true) + 10000000;',
+    '            while (hrtime(true) < $ready) {',
+    '                \\Fiber::suspend();',
+    '            }',
+    `            ${result};`,
+    '        });',
+    '    }',
+    '}',
+    ''
+  ].join('\n');
+
+  async function run(name: string, code: string): Promise<{ run?: Awaited<ReturnType<typeof runGeneratedCode>>; skipped?: string; text: string }> {
+    const dir = path.join(workDir, name);
+    fs.mkdirSync(path.join(dir, 'src', 'Remote'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'src', 'Game'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'src', 'Remote', 'Remote.php'), code);
+    const definitions = exposeFunctions(scanPhp(code), { language: 'php', path: 'src/Remote/Remote.php', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(latentCodeGraph(definitions, 'php'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Fetching.vgraph', outputDir: 'src/Game' } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'src', 'Game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    for (const companion of result.output!.companionFiles ?? []) fs.writeFileSync(path.join(dir, 'src', 'Game', companion.fileName), companion.text);
+    try {
+      return { run: await runGeneratedCode(phpPack.generator!.runner!, file, result.output!.className, { cwd: dir, timeoutMs: 60000 }), text: result.output!.text };
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return { skipped: error.message, text: result.output!.text };
+      throw error;
+    }
+  }
+
+  test('a graph waits for a Fiber and reads its value on Completed', async (t) => {
+    const { run: outcome, skipped, text } = await run('latent', remote('return $value * 2'));
+    assert.match(text, /Vg::awaitLatent\(.*fetchDouble\(4\), function \(\$value\) \{/);
+    if (!outcome) return t.skip(skipped);
+    assert.deepEqual(outcome.stdout.trim().split(/\r?\n/), LATENT_CODE_OUTPUT, outcome.stderr);
+  });
+
+  test("an exception in the Fiber stops the run, and Completed doesn't run", async (t) => {
+    const { run: outcome, skipped } = await run('latent-fails', remote('throw new \\RuntimeException("no double for $value")'));
+    if (!outcome) return t.skip(skipped);
+    assert.notEqual(outcome.exitCode, 0);
+    assert.match(`${outcome.stdout}\n${outcome.stderr}`, /no double for 4/);
+    assert.equal(outcome.stdout.trim().split(/\r?\n/)[0], 'started');
+  });
 });

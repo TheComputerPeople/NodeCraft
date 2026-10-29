@@ -228,15 +228,44 @@ function vg.delay(seconds, action)
   latent.pending[#latent.pending + 1] = { due = os.clock() + math.max(0, seconds), order = latent.order, action = action }
 end
 
+-- An async function (---@async; docs/node-authoring.md, gap 4) runs as a coroutine: at once, until
+-- it first yields, then once on each latent turn until it returns. Its Completed then joins the
+-- queue with what it returned; an error in it stops the run.
+latent.waiting = {}
+
+local function step(entry)
+  local ok, value = coroutine.resume(entry.co)
+  if not ok then error(value, 0) end
+  if coroutine.status(entry.co) ~= "dead" then return false end
+  vg.delay(0, function() entry.completed(value) end)
+  return true
+end
+
+function vg.await_latent(call, completed)
+  local entry = { co = coroutine.create(call), completed = completed }
+  if not step(entry) then latent.waiting[#latent.waiting + 1] = entry end
+end
+
 function vg.run_latent_actions()
-  while #latent.pending > 0 do
-    table.sort(latent.pending, function(a, b)
-      if a.due ~= b.due then return a.due < b.due end
-      return a.order < b.order
-    end)
-    local next_action = table.remove(latent.pending, 1)
-    while os.clock() < next_action.due do end
-    next_action.action()
+  while #latent.pending > 0 or #latent.waiting > 0 do
+    local waiting = latent.waiting
+    latent.waiting = {}
+    for _, entry in ipairs(waiting) do
+      if not step(entry) then latent.waiting[#latent.waiting + 1] = entry end
+    end
+    if #latent.pending > 0 then
+      table.sort(latent.pending, function(a, b)
+        if a.due ~= b.due then return a.due < b.due end
+        return a.order < b.order
+      end)
+      local next_action = latent.pending[1]
+      if os.clock() >= next_action.due then
+        table.remove(latent.pending, 1)
+        next_action.action()
+      elseif #latent.waiting == 0 then
+        while os.clock() < next_action.due do end
+      end
+    end
   end
 end
 

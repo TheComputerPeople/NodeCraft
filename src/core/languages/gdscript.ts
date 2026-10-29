@@ -83,7 +83,13 @@ function launcher(file: { path: string }, context: RunContext | undefined): stri
     `const vg = preload("${GDSCRIPT_RUNTIME_FILE}")`,
     '',
     '',
-    'func _init() -> void:',
+    // Once the tree is the main loop (code may use Engine.get_main_loop()), the run starts, as a
+    // coroutine, so the latent queue can let Godot's main loop run (async functions).
+    'func _initialize() -> void:',
+    '\t_run()',
+    '',
+    '',
+    'func _run() -> void:',
     `\tvar type = load(${JSON.stringify(file.path.replace(/\\/g, '/'))})`,
     '\tvar args := OS.get_cmdline_user_args()',
     '\tif args.size() > 0 and args[0] == "--test":',
@@ -93,7 +99,7 @@ function launcher(file: { path: string }, context: RunContext | undefined): stri
     '\t\t\tvg.reset()',
     '\t\t\tvar object = type.new()',
     '\t\t\tobject.call(args[i + 1])',
-    '\t\t\tvg.run_latent_actions()',
+    '\t\t\tawait vg.run_latent_actions(self)',
     '\t\t\tif vg.failed():',
     '\t\t\t\tfailures += 1',
     '\t\t\t\tprint("FAIL " + args[i] + ": " + vg.failure())',
@@ -107,7 +113,7 @@ function launcher(file: { path: string }, context: RunContext | undefined): stri
     '\tvar object = type.new()',
     '\tobject.start()',
     ...(context?.mainMethod ? ['\tif not vg.failed():', `\t\tobject.${context.mainMethod}(Array(args))`] : []),
-    '\tvg.run_latent_actions()',
+    '\tawait vg.run_latent_actions(self)',
     '\tif vg.failed():',
     '\t\tprinterr("Error: " + vg.failure())',
     '\t\tquit(1)',
@@ -589,6 +595,21 @@ class GdscriptEmitter {
       case 'broadcast':
         out.line(`${this.dispatcherRef(s)}.broadcast([${s.args.map((a) => this.expr(a)).join(', ')}])`);
         break;
+      case 'await': {
+        // An async function (docs/node-authoring.md, gap 4): a coroutine, awaited by the runtime;
+        // Completed runs with its value from the latent queue.
+        const outer = this.failReturn;
+        out.line(`vg.await_latent(func(): return await ${this.call(s.callee, s.args)}, func(value):`);
+        out.indent();
+        if (s.resultSlot) out.line(`${this.slotRef(s.resultSlot)} = value`);
+        this.failReturn = 'return';
+        this.statements(s.then);
+        out.line('pass');
+        this.failReturn = outer;
+        out.dedent();
+        out.line(')');
+        break;
+      }
       case 'delay': {
         // The action is a lambda: it reads the object's members, never the method's locals.
         const outer = this.failReturn;

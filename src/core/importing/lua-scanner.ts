@@ -69,7 +69,9 @@ export function scanLua(source: string): ModuleScan {
         return { name: p, ...(type ? { type } : {}) };
       });
       const returnText = memberReturns[0] ? /^(\S+)/.exec(memberReturns[0].text)?.[1] : undefined;
-      if (declaration[2] === ':') cls.methods.push({ name, line, params: memberParams, returns: memberOutputs ? undefined : returnText ? mapLuaType(returnText) : null, doc, ...memberOutputs });
+      const memberAsync = isAsync(doc);
+      if (memberAsync && memberOutputs) return memberSkip(SEVERAL_ASYNC);
+      if (declaration[2] === ':') cls.methods.push({ name, line, params: memberParams, returns: memberOutputs ? undefined : returnText ? mapLuaType(returnText) : null, doc, ...memberOutputs, ...(memberAsync ? { latent: true } : {}) });
       else if (name === 'new' || returnText === cls.title) cls.init = { name, line, params: memberParams, returns: null, doc };
       else memberSkip('Functions of a class without self have no object; make it a module function instead.');
       return;
@@ -86,7 +88,8 @@ export function scanLua(source: string): ModuleScan {
       return { name: p, ...(type ? { type } : {}) };
     });
     const returnType = returns[0] ? /^(\S+)/.exec(returns[0].text)?.[1] : undefined;
-    functions.push({ name, line, params: scanned, returns: outputs ? undefined : returnType ? mapLuaType(returnType) : null, doc, ...outputs });
+    if (isAsync(doc) && outputs) return skip(SEVERAL_ASYNC);
+    functions.push({ name, line, params: scanned, returns: outputs ? undefined : returnType ? mapLuaType(returnType) : null, doc, ...outputs, ...(isAsync(doc) ? { latent: true } : {}) });
   });
   const reachable = [...classes.values()].filter((c) => c.reachable).map(({ reachable: _, ...c }) => c);
   return { functions, skipped, ...(reachable.length ? { classes: reachable } : {}) };
@@ -94,6 +97,14 @@ export function scanLua(source: string): ModuleScan {
 
 // The `---` comment lines just above a declaration, as a doc comment. LuaLS's annotations
 // (`---@param`) are its tags.
+// LuaLS's ---@async: the function runs as a coroutine (docs/node-authoring.md, gap 4), a latent
+// node whose value is what it returns.
+function isAsync(doc: DocComment): boolean {
+  return doc.tags.some((t) => t.name === 'async');
+}
+
+const SEVERAL_ASYNC = "It's async and returns several values; a latent node gives one.";
+
 const NAME_RETURNS = 'It returns several values without names: name each (`---@return int sum`) or list them with @outputs.';
 
 // Several values returned (docs/node-authoring.md, gap 3): a `---@return type name` each, named

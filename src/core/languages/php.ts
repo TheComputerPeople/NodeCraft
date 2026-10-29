@@ -586,6 +586,17 @@ class PhpEmitter {
       case 'broadcast':
         out.line(`${this.dispatcherRef(s)}->broadcast(${s.args.map((a) => this.expr(a)).join(', ')});`);
         break;
+      case 'await': {
+        // An async function (docs/node-authoring.md, gap 4): its Fiber, resumed by the latent queue;
+        // Completed runs with what it returns.
+        out.line(`Vg::awaitLatent(${this.call(s.callee, s.args)}, function ($value) {`);
+        out.indent();
+        if (s.resultSlot) out.line(`${this.slotRef(s.resultSlot)} = $value;`);
+        this.statements(s.then);
+        out.dedent();
+        out.line('});');
+        break;
+      }
       case 'delay': {
         // The action is a closure: it reads the object's members ($this), never the method's locals.
         if (s.generation) {

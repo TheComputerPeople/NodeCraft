@@ -15,6 +15,7 @@ import { NodeRegistry } from '../../src/core/registry';
 import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
+import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-gdscript-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -127,5 +128,46 @@ describe('GDScript code classes', () => {
       throw error;
     }
     assert.deepEqual(run.stdout.trim().split(/\r?\n/), CODE_CLASS_OUTPUT, run.stderr);
+  });
+});
+
+// Async functions (docs/node-authoring.md, gap 4): a function that awaits is a coroutine, and its
+// node is latent. Generated code awaits it in a lambda; the latent queue lets Godot's main loop run
+// frames until it finishes, then Completed runs with its value.
+describe('GDScript async functions', () => {
+  test('a graph waits for a coroutine and reads its value on Completed', async (t) => {
+    const game = path.join(workDir, 'latent');
+    fs.mkdirSync(path.join(game, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(game, 'scenes'), { recursive: true });
+    fs.writeFileSync(path.join(game, 'project.godot'), 'config_version=5\n');
+    const remote = [
+      'extends RefCounted',
+      '',
+      '## @blueprint',
+      'static func fetch_double(value: int) -> int:',
+      '\tvar tree := Engine.get_main_loop() as SceneTree',
+      '\tawait tree.process_frame',
+      '\tawait tree.process_frame',
+      '\treturn value * 2',
+      ''
+    ].join('\n');
+    fs.writeFileSync(path.join(game, 'lib', 'remote.gd'), remote);
+    const definitions = exposeFunctions(scanGdscript(remote), { language: 'gdscript', path: 'latent/lib/remote.gd', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(latentCodeGraph(definitions, 'gdscript'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Fetching.vgraph', outputDir: 'latent/scenes' } });
+    assert.deepEqual(result.diagnostics, []);
+    assert.match(result.output!.text, /vg\.await_latent\(func\(\): return await .*fetch_double\(4\), func\(value\):/);
+    const file = path.join(game, 'scenes', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    for (const companion of result.output!.companionFiles ?? []) fs.writeFileSync(path.join(game, 'scenes', companion.fileName), companion.text);
+    let run;
+    try {
+      run = await runGeneratedCode(gdscriptPack.generator!.runner!, file, result.output!.className, { cwd: game, projectDir: game, timeoutMs: 60000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.deepEqual(run.stdout.trim().split(/\r?\n/).filter((l) => !/^Godot Engine|^$/.test(l)), LATENT_CODE_OUTPUT, run.stderr);
   });
 });

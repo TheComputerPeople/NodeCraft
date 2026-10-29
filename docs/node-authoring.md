@@ -181,6 +181,19 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - A future waiting on a reactor (tokio) never progresses. A panic in the future stops the run.
 - **Tests.** The shared latent graph in both. Rust's uses a hand-written future that's pending for 10 ms, and a future that panics.
 
+**Built after the phase: Lua, PHP and GDScript** (decided 2026-10-29: Lua's coroutines, PHP's Fibers and GDScript's await; not Ruby).
+
+- **Lua.** A function marked `---@async` is latent; one that also returns several values is reported.
+  - Generated code wraps the call in a function, and the runtime's `vg.await_latent` runs it as a coroutine: at once until it first yields (as a JavaScript async function runs until its first await), then once per latent turn.
+  - When it returns, its Completed joins the queue with the value. An error stops the run.
+- **PHP.** A function returning a `Fiber` is latent, its value typed by a docblock `@return Fiber<int>`. `Vg::awaitLatent` starts the Fiber if it isn't started, resumes it once per latent turn until it terminates, then queues its Completed with `getReturn()`.
+- **GDScript.** A function whose body awaits is a coroutine, and latent.
+  - Generated code passes `func(): return await <call>` to `vg.await_latent`, which counts it as waiting until it finishes, then queues its Completed.
+  - While anything waits, the latent loop awaits the tree's `process_frame`, so Godot's main loop runs the frames that resume it.
+  - Run's launcher now starts from `_initialize()`, when the tree is the main loop, and runs as a coroutine.
+  - There's no failure test: GDScript has no exceptions, and the tests don't crash Godot on purpose.
+- **Tests.** The shared latent graph in each, and a failing coroutine or Fiber in Lua and PHP.
+
 ## Gap 5: no way from a node to its definition
 
 **Today.** Double-clicking a node opens a function or macro graph in the same file only (`render.ts`). Nothing opens a library function's graph, the code behind a project function, or a `*.node.json` file. Unreal opens a library function's graph, and a C++ node's source in the IDE.

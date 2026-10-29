@@ -16,6 +16,7 @@ import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/exten
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
+import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-lua-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -203,5 +204,62 @@ describe('Lua several outputs', () => {
       throw error;
     }
     assert.deepEqual(run.stdout.trim().split(/\r?\n/), SEVERAL_OUTPUTS_OUTPUT, run.stderr);
+  });
+});
+
+// Async functions (docs/node-authoring.md, gap 4): a ---@async function runs as a coroutine the
+// latent queue resumes; Completed runs with what it returns.
+describe('Lua async functions', () => {
+  const remote = (result: string) => [
+    'local M = {}',
+    '',
+    '---@blueprint',
+    '---@async',
+    '---@param value integer',
+    '---@return integer',
+    'function M.fetch_double(value)',
+    '  local ready = os.clock() + 0.01',
+    '  while os.clock() < ready do coroutine.yield() end',
+    `  ${result}`,
+    'end',
+    '',
+    'return M',
+    ''
+  ].join('\n');
+
+  async function run(name: string, code: string): Promise<{ run?: Awaited<ReturnType<typeof runGeneratedCode>>; skipped?: string; text: string }> {
+    const root = path.join(workDir, name);
+    fs.mkdirSync(path.join(root, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'game'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'lib', 'remote.lua'), code);
+    const definitions = exposeFunctions(scanLua(code), { language: 'lua', path: 'lib/remote.lua', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(latentCodeGraph(definitions, 'lua'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Fetching.vgraph', outputDir: 'game' } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(root, 'game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    for (const owned of luaPlacement({ generatedFiles: [`game/${result.output!.fileName}`], readFile: () => undefined, exists: () => false }).ownedFiles ?? []) fs.writeFileSync(path.join(root, owned.path), owned.text);
+    try {
+      return { run: await runGeneratedCode(luaPack.generator!.runner!, file, result.output!.className, { cwd: root, timeoutMs: 60000 }), text: result.output!.text };
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return { skipped: error.message, text: result.output!.text };
+      throw error;
+    }
+  }
+
+  test('a graph waits for a coroutine and reads its value on Completed', async (t) => {
+    const { run: outcome, skipped, text } = await run('latent', remote('return value * 2'));
+    assert.match(text, /vg\.await_latent\(function\(\) return remote\.fetch_double\(4\) end, function\(value\)/);
+    if (!outcome) return t.skip(skipped);
+    assert.deepEqual(outcome.stdout.trim().split(/\r?\n/), LATENT_CODE_OUTPUT, outcome.stderr);
+  });
+
+  test("an error in the coroutine stops the run, and Completed doesn't run", async (t) => {
+    const { run: outcome, skipped } = await run('latent-fails', remote('error("no double for " .. value)'));
+    if (!outcome) return t.skip(skipped);
+    assert.notEqual(outcome.exitCode, 0);
+    assert.match(outcome.stderr, /no double for 4/);
+    assert.deepEqual(outcome.stdout.trim().split(/\r?\n/), ['started']);
   });
 });

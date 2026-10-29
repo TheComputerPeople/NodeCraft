@@ -196,15 +196,50 @@ if (!class_exists(Vg::class, false)) {
             self::$pending[] = ['due' => hrtime(true) + (int) (max(0.0, (float) $seconds) * 1e9), 'order' => self::$order, 'action' => $action];
         }
 
+        // An async function's Fiber (docs/node-authoring.md, gap 4): started at once if it isn't, then
+        // resumed once on each latent turn until it ends; its Completed then joins the queue with
+        // what it returned. An exception in it stops the run.
+        private static array $waiting = [];
+
+        public static function awaitLatent(\Fiber $fiber, \Closure $completed): void
+        {
+            if (!$fiber->isStarted()) {
+                $fiber->start();
+            }
+            if ($fiber->isTerminated()) {
+                self::delay(0, fn () => $completed($fiber->getReturn()));
+            } else {
+                self::$waiting[] = [$fiber, $completed];
+            }
+        }
+
         public static function runLatentActions(): void
         {
-            while (self::$pending) {
-                usort(self::$pending, fn ($a, $b) => [$a['due'], $a['order']] <=> [$b['due'], $b['order']]);
-                $next = array_shift(self::$pending);
-                $wait = $next['due'] - hrtime(true);
-                if ($wait > 0) {
-                    usleep(intdiv($wait, 1000));
+            while (self::$pending || self::$waiting) {
+                $waiting = self::$waiting;
+                self::$waiting = [];
+                foreach ($waiting as [$fiber, $completed]) {
+                    if ($fiber->isSuspended()) {
+                        $fiber->resume();
+                    }
+                    if ($fiber->isTerminated()) {
+                        self::delay(0, fn () => $completed($fiber->getReturn()));
+                    } else {
+                        self::$waiting[] = [$fiber, $completed];
+                    }
                 }
+                if (!self::$pending) {
+                    usleep(1000);
+                    continue;
+                }
+                usort(self::$pending, fn ($a, $b) => [$a['due'], $a['order']] <=> [$b['due'], $b['order']]);
+                $wait = self::$pending[0]['due'] - hrtime(true);
+                if ($wait > 0) {
+                    // While fibers wait, resume them again soon.
+                    usleep(intdiv(self::$waiting ? min($wait, 1000000) : $wait, 1000));
+                    continue;
+                }
+                $next = array_shift(self::$pending);
                 ($next['action'])();
             }
         }
@@ -212,6 +247,7 @@ if (!class_exists(Vg::class, false)) {
         public static function reset(): void
         {
             self::$pending = [];
+            self::$waiting = [];
         }
 
         // Equal as the semantics compare: numbers by value (1 equals 1.0), anything else exactly.

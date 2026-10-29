@@ -22,13 +22,13 @@ extends RefCounted
 
 static func _state() -> Dictionary:
 	if not Engine.has_meta("vgraph_run"):
-		Engine.set_meta("vgraph_run", {"failed": false, "failure": "", "pending": [], "order": 0})
+		Engine.set_meta("vgraph_run", {"failed": false, "failure": "", "pending": [], "order": 0, "waiting": 0})
 	return Engine.get_meta("vgraph_run")
 
 
 # A fresh run (each test runs on its own).
 static func reset() -> void:
-	Engine.set_meta("vgraph_run", {"failed": false, "failure": "", "pending": [], "order": 0})
+	Engine.set_meta("vgraph_run", {"failed": false, "failure": "", "pending": [], "order": 0, "waiting": 0})
 
 
 # Stops the run with the message: generated code returns after a failed statement. Returns
@@ -140,15 +140,37 @@ static func delay(seconds: float, action: Callable) -> void:
 	state["pending"].append({"due": Time.get_ticks_usec() + int(maxf(0.0, seconds) * 1000000.0), "order": state["order"], "action": action})
 
 
-static func run_latent_actions() -> void:
-	var pending: Array = _state()["pending"]
-	while not pending.is_empty() and not failed():
-		pending.sort_custom(func(a, b): return a["due"] < b["due"] or (a["due"] == b["due"] and a["order"] < b["order"]))
-		var next: Dictionary = pending.pop_front()
-		var wait: int = next["due"] - Time.get_ticks_usec()
-		if wait > 0:
-			OS.delay_usec(wait)
-		next["action"].call()
+# An async function (a coroutine; docs/node-authoring.md, gap 4): call awaits it, and its Completed
+# joins the queue with the value when it finishes. Meanwhile the queue lets Godot's main loop run.
+static func await_latent(call: Callable, completed: Callable) -> void:
+	var state := _state()
+	state["waiting"] += 1
+	var finish := func():
+		var value = await call.call()
+		state["waiting"] -= 1
+		delay(0.0, completed.bind(value))
+	finish.call()
+
+
+# The latent actions in the order they fall due. While coroutines are waiting, frames of the tree
+# run (they resume them), so the caller awaits this.
+static func run_latent_actions(tree: SceneTree = null) -> void:
+	var state := _state()
+	var pending: Array = state["pending"]
+	while (not pending.is_empty() or state["waiting"] > 0) and not failed():
+		if not pending.is_empty():
+			pending.sort_custom(func(a, b): return a["due"] < b["due"] or (a["due"] == b["due"] and a["order"] < b["order"]))
+			var wait: int = pending[0]["due"] - Time.get_ticks_usec()
+			if wait <= 0:
+				var next: Dictionary = pending.pop_front()
+				next["action"].call()
+				continue
+			if state["waiting"] == 0:
+				OS.delay_usec(wait)
+				continue
+		if tree == null:
+			return
+		await tree.process_frame
 
 
 # ---- Values (docs/semantics.md) -------------------------------------------------------------------

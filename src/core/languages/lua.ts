@@ -600,6 +600,17 @@ class LuaEmitter {
       case 'broadcast':
         line(`${this.dispatcherRef(s)}:broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
         break;
+      case 'await': {
+        // An async function (docs/node-authoring.md, gap 4): a coroutine the latent queue resumes;
+        // Completed runs with what it returns.
+        line(`vg.await_latent(function() return ${this.call(s.callee, s.args)} end, function(value)`);
+        out.indent();
+        if (s.resultSlot) line(`${this.slotRef(s.resultSlot)} = value`);
+        this.statements(s.then);
+        out.dedent();
+        line('end)');
+        break;
+      }
       case 'delay': {
         if (s.generation) {
           // Retriggerable: only the latest start's countdown runs Completed.

@@ -177,13 +177,17 @@ export async function fetchScore(player: string): Promise<number> {
 | C++ | returns `std::future<T>` or `std::shared_future<T>` (in a header) |
 | Rust | is an `async fn`, or returns `impl Future<Output = T>` or `Pin<Box<dyn Future<Output = T>>>` |
 | Go (through gopls) | returns a channel, `<-chan T`: its value is the first the channel gives (`chan struct{}` gives none) |
+| Lua | is marked `---@async` (LuaLS): it runs as a coroutine, resumed on each latent turn until it returns |
+| PHP | returns a `Fiber` (PHP 8.1): resumed on each latent turn until it ends; its value is what it returns, typed by `@return Fiber<int>` |
+| GDScript | awaits (a Godot coroutine): generated code awaits it while Godot's main loop runs |
 
 - **The node.** A clock in the title marks it. Its exec output is **Completed**, which runs when the function finishes, and its Return Value is what the future gives (`T`). It always has exec pins, even when marked pure.
 - **Order.** Calling it starts the function, and the chain after the node waits for Completed, while the rest of the graph goes on, as with Delay (a Sequence's next output runs). Completed runs from the latent queue, after the code that's running, so Unreal's ordering holds.
 - **Failure.** A function that fails (throws, rejects, raises) stops the run with its error, and its Completed doesn't run.
 - **Where.** In event graphs and the macros they use, as Delay: a function graph runs to its end at once, so a latent node there is a compile error.
 - **Rust's executor.** Generated Rust polls futures with a small executor of its own, with no crates. A future that needs a reactor (tokio's I/O and timers) won't make progress there.
-- **Other languages.** Ruby has no standard future. Lua's coroutines, PHP's Fibers and GDScript's `await` are planned.
+- **Cooperative ones.** Lua's coroutines and PHP's Fibers run only when the latent queue resumes them: they wait by yielding (`coroutine.yield()`, `Fiber::suspend()`), not in the background.
+- **Ruby** has no standard future, and is left out.
 
 ## Going to the code
 

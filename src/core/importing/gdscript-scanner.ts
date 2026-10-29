@@ -6,6 +6,16 @@
 import { TypeRef } from '../types';
 import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
 
+// Whether the function declared at `index` awaits anywhere in its body (the lines indented under it).
+function awaits(lines: string[], index: number): boolean {
+  for (let i = index + 1; i < lines.length; i++) {
+    const text = lines[i];
+    if (text.trim() && !/^\s/.test(text)) return false;
+    if (/(^|[^\w"'])await\b/.test(text.replace(/#.*$/, ''))) return true;
+  }
+  return false;
+}
+
 export function scanGdscript(source: string): ModuleScan {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
   const functions: ScannedFunction[] = [];
@@ -47,9 +57,11 @@ export function scanGdscript(source: string): ModuleScan {
       return { name: paramName ?? p, ...(type ? { type } : {}), ...(defaultValue !== undefined ? { defaultValue } : {}) };
     });
     const returns = returnText ? mapGdscriptType(returnText) : undefined;
+    // A function that awaits is a coroutine (docs/node-authoring.md, gap 4): a latent node.
+    const latent = awaits(lines, index) ? { latent: true } : {};
     if (cls && !isStatic && name === '_init') cls.init = { name, line, params, returns: null, doc };
-    else if (cls && !isStatic) cls.methods.push({ name, line, params, returns, doc });
-    else functions.push({ name, line, params, returns, doc });
+    else if (cls && !isStatic) cls.methods.push({ name, line, params, returns, doc, ...latent });
+    else functions.push({ name, line, params, returns, doc, ...latent });
   });
   return { functions, skipped, ...(cls ? { classes: [cls] } : {}) };
 }

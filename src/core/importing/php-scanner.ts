@@ -79,8 +79,12 @@ export function scanPhp(source: string): ModuleScan {
           });
           // A namespace alone ends with \, so generated code calls a function, not a static method.
           const container = inClass ? qualify(classes[classes.length - 1].name) : namespace ? `${namespace}\\` : undefined;
-          const returns = returnText ? mapPhpType(returnText) : undefined;
-          const several = severalOutputs(doc, returns, references);
+          // A function returning a Fiber is async (docs/node-authoring.md, gap 4): a latent node, whose
+          // value is what the Fiber returns (typed by `@return Fiber<int>`, else any value).
+          const fiber = returnText && /^\\?Fiber$/.test(returnText.trim()) && !references.length;
+          const fiberValue = fiber ? /^\\?Fiber<\s*([^>]+)>/.exec(doc.tags.find((t) => t.name === 'return')?.text.trim() ?? '')?.[1] : undefined;
+          const returns = fiber ? (fiberValue ? mapPhpType(fiberValue) : undefined) : returnText ? mapPhpType(returnText) : undefined;
+          const several = fiber ? { latent: true } : severalOutputs(doc, returns, references);
           if (member && name === '__construct') member.init = { name, line: where, params: scanned, returns: null, doc };
           else if (member) member.methods.push({ name, line: where, params: scanned, returns, doc, ...several });
           else functions.push({ name, line: where, params: scanned, returns, doc, ...several, ...(container ? { container } : {}) });
