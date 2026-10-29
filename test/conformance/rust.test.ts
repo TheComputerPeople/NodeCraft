@@ -19,6 +19,7 @@ import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/exten
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
+import { GENERICS_OUTPUT, genericsGraph } from './generics';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-rust-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -260,5 +261,42 @@ describe('Rust several outputs', () => {
     }
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), SEVERAL_OUTPUTS_OUTPUT);
+  });
+});
+
+// Generic functions (docs/node-authoring.md, gap 10): <T> is a wildcard pin, inferred by rustc.
+describe('Rust generic functions', () => {
+  const LISTS = '/// @blueprint\npub fn first<T: Clone>(items: Vec<T>) -> T {\n    items[0].clone()\n}\n';
+
+  test('a type parameter takes the wired type', async (t) => {
+    const project = path.join(workDir, 'generics');
+    const files: Record<string, string> = {
+      'Cargo.toml': '[package]\nname = "generics"\nversion = "0.1.0"\nedition = "2021"\n\n[workspace]\n',
+      'src/main.rs': 'mod lists;\n\nfn main() {}\n',
+      'src/lists.rs': LISTS
+    };
+    for (const [name, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+      fs.writeFileSync(path.join(project, name), text);
+    }
+    const definitions = exposeFunctions(scanRust(LISTS), { language: 'rust', path: 'src/lists.rs', module: 'lists', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(genericsGraph(definitions, 'rust'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Firsts.vgraph', outputDir: 'src/graphs' } });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    const file = path.join(project, 'src/graphs', output.fileName);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, output.text);
+    const sources = rustRunSources(file, project, output.importedFiles ?? []);
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('rust')!.generator!.runner!, file, output.className, { cwd: project, sources: sources.generated, crate: sources.crate, timeoutMs: 300000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.stderr, '', output.text);
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), GENERICS_OUTPUT);
   });
 });

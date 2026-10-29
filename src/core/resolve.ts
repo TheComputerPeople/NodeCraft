@@ -72,7 +72,9 @@ export function createUnsplitResolver(registry: ResolveContext, doc: ResolverDoc
     const base = registry.get(node.type);
     if (isFunctionType(node.type)) {
       const stored = doc.importedFunctions?.[node.type];
-      return stored && (!base || signatureChanges(stored, base).length) ? stored : base;
+      const def = stored && (!base || signatureChanges(stored, base).length) ? stored : base;
+      // A generic function's wildcard pins take the types the node adopted (gap 10).
+      return def && resolveWildcards(def, node);
     }
     if (!base) return undefined;
     if (node.type === VARIABLE_GET || node.type === VARIABLE_SET) return variableDefinition(base, node, variables);

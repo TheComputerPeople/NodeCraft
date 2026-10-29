@@ -40,7 +40,7 @@ public final class Rules {
     public double instance() { return 1; }
 
     /** @blueprint */
-    public static <T> T first(ArrayList<T> items) { return items.get(0); }
+    public static <A, B, C> A first(ArrayList<A> items, B b, C c) { return items.get(0); }
 
     /** @blueprint */
     public static void log(String... parts) {}
@@ -89,7 +89,7 @@ describe('Java scanner', () => {
     // An instance method of a public class is a member node with a Target pin (docs/node-authoring.md, gap 2).
     assert.equal(skipped.instance, undefined);
     assert.deepEqual(scan.classes!.find((c) => c.name === 'game.combat.Rules')?.methods.map((m) => m.name), ['instance']);
-    assert.match(skipped.first, /generic/);
+    assert.match(skipped.first, /more than two type parameters/);
     assert.match(skipped.log, /varargs/);
     assert.match(skipped.read, /checked exceptions/);
   });

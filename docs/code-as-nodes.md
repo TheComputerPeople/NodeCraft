@@ -55,6 +55,17 @@ The rest of the comment becomes the node's description (its tooltip). `@param na
 | Python | PEP 702's `@deprecated("…")` (`warnings` or `typing_extensions`) | its message |
 | Go | a `Deprecated:` paragraph in the doc comment, before `@blueprint` | the paragraph |
 
+**Generic functions.** A generic function's type parameters are wildcard pins, gray until a wire is connected, as Unreal's wildcard nodes are. The first wire gives each its type, and generated code leaves the language to infer it.
+
+```ts
+/** @blueprint */
+export function first<T>(items: T[]): T {
+  return items[0];
+}
+```
+
+This covers TypeScript's `<T>`, JSDoc's `@template T`, Python's `def f[T]` and module TypeVars, C#'s and Java's generic methods, and Rust's `<T>` (bounds and lifetimes are ignored). A function may have two type parameters: there are two kinds of wildcard pin. A node whose wildcards have no wire doesn't compile, and says to connect one.
+
 **Graph types in code.** Code can use the structs and enums of the workspace's graph files through the types they generate (`Mood` from `Mood.vgraph`, imported from its generated file). A parameter or result of such a type gets the graph's struct or enum pin, so it connects to the graph's own nodes. The type has to be generated for the code's language. This is how `@execs` gets an enum's values.
 
 The setting `blueprintVisualScripting.exposeAllFunctions` exposes every public function as a callable node, for small projects where marking each one is a chore. Public is each language's rule: exported (TypeScript, JavaScript), not `_`-prefixed (Python, GDScript, Ruby), `public static` (C#, Java, PHP), `pub` (Rust), capitalized (Go), declared in a header (C++), in the module's table (Lua). Private functions aren't reported. Class members still need their marker. Markers still choose `pure`, category and title.
@@ -81,7 +92,7 @@ The setting `blueprintVisualScripting.exposeAllFunctions` exposes every public f
 
   `T | null`, `T | undefined`, `Optional[T]` and `T | None` are T, nullable. A `native` type connects only to the same type (or `any`) and passes through untouched.
 - **Async functions** are latent nodes: see [Async functions](#async-functions).
-- **Not exposed, with the reason shown in the output channel:** generators (async ones too), rest parameters (`...args`, `*args`, `**kwargs`), destructured parameters, generic functions, TypeScript overloads, and marked TypeScript or JavaScript functions that aren't exported. Python keyword-only parameters with defaults are left off the node, so they keep their defaults; one without a default makes the function unexposable.
+- **Not exposed, with the reason shown in the output channel:** generators (async ones too), rest parameters (`...args`, `*args`, `**kwargs`), destructured parameters, generic functions with more than two type parameters (and generic functions in C++, Go, Lua and PHP), TypeScript overloads, and marked TypeScript or JavaScript functions that aren't exported. Python keyword-only parameters with defaults are left off the node, so they keep their defaults; one without a default makes the function unexposable.
 
 ### How declarations are read
 

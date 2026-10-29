@@ -16,6 +16,7 @@ import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner'
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
+import { GENERICS_OUTPUT, genericsGraph } from './generics';
 import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-java-'));
@@ -306,5 +307,46 @@ describe('Java async functions', () => {
     assert.match(outcome.stderr, /IllegalStateException: no double for 4/);
     assert.doesNotMatch(outcome.stderr, /CompletionException/);
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['started']);
+  });
+});
+
+// Generic methods (docs/node-authoring.md, gap 10): <T> is a wildcard pin, inferred by javac.
+describe('Java generic methods', () => {
+  const LISTS = 'package game.lists;\n\nimport java.util.ArrayList;\n\npublic final class Lists {\n    /** @blueprint */\n    public static <T> T first(ArrayList<T> items) {\n        return items.get(0);\n    }\n}\n';
+
+  test('a type parameter takes the wired type', async (t) => {
+    const project = path.join(workDir, 'generics');
+    const files: Record<string, string> = {
+      'pom.xml': '<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>generics</artifactId><version>1</version></project>',
+      'src/main/java/game/lists/Lists.java': LISTS
+    };
+    for (const [name, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+      fs.writeFileSync(path.join(project, name), text);
+    }
+    const graphDir = path.join(project, 'src/main/java/game/graphs');
+    fs.mkdirSync(graphDir, { recursive: true });
+    const placement = javaProject(graphDir, project);
+    const definitions = exposeFunctions(scanJava(LISTS), { language: 'java', path: 'src/main/java/game/lists/Lists.java', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(genericsGraph(definitions, 'java'), {
+      registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Firsts.vgraph', outputDir: 'src/main/java/game/graphs', namespace: placement.package }
+    });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    const file = path.join(graphDir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('java')!.generator!.runner!, file, output.className, {
+        cwd: project, importRoots: placement.sourceRoots, sources: Object.keys(files).filter((f) => f.endsWith('.java')).map((f) => path.join(project, f)), timeoutMs: 300000
+      });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.stderr, '', output.text);
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), GENERICS_OUTPUT);
   });
 });

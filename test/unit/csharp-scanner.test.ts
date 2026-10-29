@@ -73,7 +73,7 @@ describe('C# scanner: exposure', () => {
           private static void Secret() {}
           public static async void Fire() {}
           public static ValueTask Soon() => default;
-          public static T First<T>(List<T> items) => items[0];
+          public static A First<A, B, C>(List<A> items, B b, C c) => items[0];
           public static void Swap(ref int a, ref int b) {}
           public static int Sum(params int[] values) => 0;
       }
@@ -81,7 +81,7 @@ describe('C# scanner: exposure', () => {
       // Secret is private and unmarked: not meant to be a node, so not reported.
       "Fire: async void methods can't be awaited; return a Task",
       "Soon: ValueTask methods can't be nodes yet; return a Task",
-      "First: generic methods can't be nodes yet",
+      "First: functions with more than two type parameters can't be nodes",
       "Swap: ref, in and params parameters can't be pins yet",
       "Sum: ref, in and params parameters can't be pins yet",
       "Put: methods of generic classes can't be nodes yet"

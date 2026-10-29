@@ -3,7 +3,7 @@
 // (nested ones too), with their parameters, types and documentation. Like the other scanners it
 // parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, markDeprecated, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, TOO_MANY_TYPE_PARAMETERS, isMarked, markDeprecated, parseDocText, substituteTypeParameters, typeParameterNames, wildcardType } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -153,6 +153,9 @@ export function scanJava(source: string): ModuleScan {
   const records = new Map<string, { name: string; type?: TypeRef }[]>();
   // The lines of members marked @Deprecated (docs/node-authoring.md, gap 6).
   const deprecatedLines = new Map<number, { message?: string }>();
+  // The type parameters of the method being read, renamed to wildcards in its types (gap 10).
+  let typeParameters: string[] = [];
+  const typeText = (from: number, to: number) => substituteTypeParameters(text(from, to), typeParameters);
 
   // The members of a type's body (or the file), between `from` and `to`. A class's (`cls`) public
   // constructors, instance methods and fields are read too (docs/node-authoring.md, gap 2).
@@ -227,6 +230,7 @@ export function scanJava(source: string): ModuleScan {
       let k = j;
       const generic = at(k, '<');
       if (generic) k = skipAngles(k);
+      typeParameters = generic ? typeParameterNames(text(j + 1, k - 1)) : [];
       const typeStart = k;
       while (k < to && !at(k, '(') && !at(k, '=') && !at(k, ';') && !at(k, '{')) k = at(k, '<') ? skipAngles(k) : at(k, '[') ? skipGroup(k) : k + 1;
       if (cls) {
@@ -259,10 +263,10 @@ export function scanJava(source: string): ModuleScan {
         // An instance method.
         if (at(k, '(') && k - typeStart >= 2 && tokens[k - 1].kind === 'name' && !modifiers.has('static')) {
           const name = tokens[k - 1].text;
-          const returnText = text(typeStart, k - 1);
+          const returnText = typeText(typeStart, k - 1);
           const close = skipGroup(k);
           if (!modifiers.has('public')) memberSkip(name, "it isn't public, so generated code can't call it");
-          else if (generic) memberSkip(name, "generic methods can't be nodes yet");
+          else if (typeParameters.length > 2) memberSkip(name, TOO_MANY_TYPE_PARAMETERS);
           else if (at(close, 'throws')) memberSkip(name, "methods that declare checked exceptions can't be nodes yet");
           else {
             const params = parseParams(k + 1, close - 1);
@@ -278,7 +282,7 @@ export function scanJava(source: string): ModuleScan {
         continue;
       }
       const name = tokens[k - 1].text;
-      const returnText = text(typeStart, k - 1);
+      const returnText = typeText(typeStart, k - 1);
       const close = skipGroup(k);
       const throwsClause = at(close, 'throws');
       const end = skipMember(close);
@@ -287,7 +291,7 @@ export function scanJava(source: string): ModuleScan {
       if (!container) {
         // Not in a type: nothing to scan.
       } else if (!modifiers.has('public') || !modifiers.has('static')) skip('it isn\'t public static, so generated code can\'t call it on its own');
-      else if (generic) skip('generic methods can\'t be nodes yet');
+      else if (typeParameters.length > 2) skip(TOO_MANY_TYPE_PARAMETERS);
       else if (throwsClause) skip('methods that declare checked exceptions can\'t be nodes yet');
       else {
         const params = parseParams(k + 1, close - 1);
@@ -330,7 +334,7 @@ export function scanJava(source: string): ModuleScan {
       }
       if (text(s, b).includes('...')) return { reason: 'varargs methods can\'t be nodes' };
       if (tokens[b - 1]?.kind !== 'name' || b - 1 <= s) return { reason: 'a parameter has no name, so it can\'t be a pin' };
-      params.push({ name: tokens[b - 1].text, type: mapJavaType(text(s, b - 1)) });
+      params.push({ name: tokens[b - 1].text, type: mapJavaType(typeText(s, b - 1)) });
     }
     return params;
   };
@@ -374,6 +378,11 @@ const SIMPLE: Record<string, TypeRef> = {
 export function mapJavaType(text: string): TypeRef {
   const t = text.replace(/\s+/g, ' ').replace(/\s*([<>,.[\]])\s*/g, '$1').replace(/,/g, ', ').trim();
   if (t in SIMPLE) return SIMPLE[t];
+  const wildcard = wildcardType(t);
+  if (wildcard) return wildcard;
+  // A generic method's list of its type parameter (docs/node-authoring.md, gap 10).
+  const wildcardList = /^(?:java\.util\.)?(?:Array)?List<(\w+)>$/.exec(t);
+  if (wildcardList && wildcardType(wildcardList[1])) return { ...wildcardType(wildcardList[1])!, container: 'array' };
   const list = /^(?:java\.util\.)?ArrayList<(Long|Double|Boolean|String)>$/.exec(t);
   if (list) return { id: { Long: 'int', Double: 'float', Boolean: 'bool', String: 'string' }[list[1]]!, container: 'array' };
   return { id: `native:${t}` };

@@ -360,6 +360,13 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   **Built (step 16).** The kind is gone from the model and the node schema, and architecture.md describes the graph-backed nodes that replaced it: function and macro libraries.
 - **Generic and wildcard code functions** stay out. Unreal rarely uses them, and they need type inference across the scanners.
 
+  **Built after the phase (from its deferrals).** The inference already existed: wildcard pins take the type of the first wire.
+  - **Scanning.** A scanner renames a function's type parameters to two placeholder names in its type texts (`substituteTypeParameters` in src/core/importing/symbols.ts). Every type mapper reads them as `wildcard` and `wildcard:value`, containers of them too. This covers TypeScript's `<T>`, JSDoc's `@template`, Python's PEP 695 `[T]` and the module's TypeVars, C#'s and Java's generic methods, and Rust's `<T>` (lifetimes aren't type parameters). More than two is reported.
+  - **Resolving.** Function nodes now take their adopted wildcard types in the resolver, as Make Array does.
+  - **Calling.** Each set of types a generic function's node takes is a separate import in the IR, with that node's concrete signature, so every generator converts as for any call. TypeScript and Python dedupe the import lines, and the other generators call by qualified name.
+  - **Left.** C++ templates, Go, Lua and PHP generics.
+  - **Tests.** A shared graph (test/conformance/generics.ts) calls `first` on an int array in TypeScript, JavaScript, Python (both forms), C#, Java and Rust.
+
 ## Summary
 
 | Gap | Recommendation | Size |

@@ -2,7 +2,7 @@
 // and XML documentation comments (docs/program-structure.md, "C# language pack"). Like the other
 // scanners it parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, markDeprecated, parseDocText, tupleOutputs } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, TOO_MANY_TYPE_PARAMETERS, isMarked, markDeprecated, parseDocText, substituteTypeParameters, tupleOutputs, typeParameterNames, wildcardType } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -193,6 +193,10 @@ export function scanCSharp(source: string): CSharpScan {
   const result: CSharpScan = { functions: [], skipped: [], topLevelStatements: false };
   // The lines of members marked [Obsolete].
   const deprecatedLines = new Map<number, { message?: string }>();
+  // The type parameters of the method being read, renamed to wildcards in its types
+  // (docs/node-authoring.md, gap 10).
+  let typeParameters: string[] = [];
+  const typeText = (from: number, to: number) => substituteTypeParameters(text(from, to), typeParameters);
   const text = (start: number, end: number) => (end > start ? source.slice(tokens[start].start, tokens[end - 1].end) : '');
   const at = (i: number, value: string) => tokens[i]?.text === value && tokens[i].kind !== 'string';
   const skipGroup = (i: number): number => {
@@ -368,7 +372,8 @@ export function scanCSharp(source: string): CSharpScan {
       const genericMethod = at(k - 1, '>');
       const nameIndex = genericMethod ? findGenericStart(k - 1) - 1 : k - 1;
       const name = tokens[nameIndex]?.text ?? '';
-      const returnText = text(i, nameIndex);
+      typeParameters = genericMethod ? typeParameterNames(text(findGenericStart(k - 1) + 1, k - 1)) : [];
+      const returnText = typeText(i, nameIndex);
       const close = skipGroup(k);
       const memberEnd = skipMember(close);
       // An instance method of a class.
@@ -378,7 +383,7 @@ export function scanCSharp(source: string): CSharpScan {
         const task = taskOf(returnText, modifiers);
         const returns = task && 'value' in task ? task.value : mapReturn(returnText);
         if (!access) instanceSkip(name, 'it isn\'t public or internal, so generated code can\'t call it');
-        else if (genericMethod) instanceSkip(name, 'generic methods can\'t be nodes yet');
+        else if (typeParameters.length > 2) instanceSkip(name, TOO_MANY_TYPE_PARAMETERS);
         else if (task && 'reason' in task) instanceSkip(name, task.reason);
         else if ('reason' in params) instanceSkip(name, params.reason);
         else if (task && outs.length) instanceSkip(name, 'async methods can\'t have out parameters');
@@ -395,7 +400,7 @@ export function scanCSharp(source: string): CSharpScan {
       const skip = (reason: string) => result.skipped.push({ name, line: tokens[first].line, reason, marked: isMarked(docComment), container: className });
       if (!access || !accessible) skip('it isn\'t public or internal, so generated code can\'t call it');
       else if (generic) skip('methods of generic classes can\'t be nodes yet');
-      else if (genericMethod) skip('generic methods can\'t be nodes yet');
+      else if (typeParameters.length > 2) skip(TOO_MANY_TYPE_PARAMETERS);
       else if (modifiers.includes('extern')) skip('extern methods can\'t be nodes');
       else {
         const outs: { name: string; type?: TypeRef }[] = [];
@@ -478,7 +483,7 @@ export function scanCSharp(source: string): CSharpScan {
       if (at(s, 'out') && outs) {
         const nameToken = tokens[b - 1];
         if (nameToken?.kind !== 'name' || b - s < 3) return { reason: 'its parameters couldn\'t be read' };
-        const type = mapCSharpType(text(s + 1, b - 1));
+        const type = mapCSharpType(typeText(s + 1, b - 1));
         outs.push({ name: nameToken.text.replace(/^@/, ''), ...(type ? { type } : {}) });
         continue;
       }
@@ -487,7 +492,7 @@ export function scanCSharp(source: string): CSharpScan {
       const declEnd = eq < 0 ? b : s + eq;
       const nameToken = tokens[declEnd - 1];
       if (!nameToken || nameToken.kind !== 'name' || declEnd - s < 2) return { reason: 'its parameters couldn\'t be read' };
-      const type = mapCSharpType(text(s, declEnd - 1));
+      const type = mapCSharpType(typeText(s, declEnd - 1));
       const param: ScannedParam = { name: nameToken.text.replace(/^@/, ''), ...(type ? { type } : {}) };
       if (eq >= 0) {
         const value = literal(tokens.slice(declEnd + 1, b));
@@ -536,6 +541,8 @@ function mapReturn(text: string): { type: TypeRef | null | undefined } | { reaso
 // canonical types (double is float, int is int); others are native.
 export function mapCSharpType(text: string): TypeRef | undefined {
   const t = normalize(text).replace(/^System\./, '').replace(/^global::/, '');
+  const wildcard = wildcardType(t);
+  if (wildcard) return wildcard;
   if (t.endsWith('?')) {
     const inner = mapCSharpType(t.slice(0, -1));
     return inner && !inner.nullable && !inner.id.startsWith('native:') ? { ...inner, nullable: true } : { id: `native:${t}` };

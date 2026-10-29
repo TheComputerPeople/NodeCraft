@@ -127,7 +127,7 @@ describe('TypeScript scanner: declarations', () => {
       export function* ids() {}
       export function sum(...values: number[]): number { return 0; }
       export function move({ x, y }: Point): void {}
-      export function first<T>(items: T[]): T { return items[0]; }
+      export function first<A, B, C>(items: A[], b: B, c: C): A { return items[0]; }
       export function nested(): Promise<Promise<string>> { return Promise.resolve(Promise.resolve('')); }
       export function pick(a: number): number;
       export function pick(a: string): string;
@@ -136,7 +136,7 @@ describe('TypeScript scanner: declarations', () => {
       "ids: generator functions can't be nodes",
       "sum: rest parameters can't be pins",
       "move: destructured parameters can't be pins",
-      "first: generic functions can't be nodes yet",
+      "first: functions with more than two type parameters can't be nodes",
       "nested: it returns a Promise of a Promise",
       "pick: overloaded functions can't be nodes yet"
     ]);

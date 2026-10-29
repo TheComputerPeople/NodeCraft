@@ -117,7 +117,7 @@ describe('Python scanner: declarations', () => {
       'def total(*values): pass',
       'def opts(**kw): pass',
       'def need(*, key): pass',
-      'def first[T](items: list[T]) -> T: pass',
+      'def first[A, B, C](items: list[A], b: B, c: C) -> A: pass',
       'def gen() -> Iterator[int]: pass'
     ].join('\n')), [
       "stream: generator functions can't be nodes",
@@ -125,7 +125,7 @@ describe('Python scanner: declarations', () => {
       "total: variadic parameters (*args, **kwargs) can't be pins",
       "opts: variadic parameters (*args, **kwargs) can't be pins",
       "need: keyword-only parameters without defaults can't be pins yet",
-      "first: generic functions can't be nodes yet",
+      "first: functions with more than two type parameters can't be nodes",
       "gen: generator functions can't be nodes"
     ]);
   });

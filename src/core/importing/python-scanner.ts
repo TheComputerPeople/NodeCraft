@@ -2,7 +2,7 @@
 // docstrings (docs/code-as-nodes.md, "How declarations are read"). It works on logical lines, so it
 // needs no Python interpreter.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, ScannedProperty, isMarked, parseDocText, tupleOutputs } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, ScannedProperty, TOO_MANY_TYPE_PARAMETERS, isMarked, parseDocText, substituteTypeParameters, tupleOutputs, typeParameterNames, wildcardType } from './symbols';
 
 interface LogicalLine {
   // Columns of leading whitespace (a tab counts as one).
@@ -108,14 +108,16 @@ function stringAt(source: string, i: number): { end: number; prefix: string; quo
 export function scanPython(source: string): ModuleScan {
   const lines = logicalLines(source);
   const result: ModuleScan = { functions: [], skipped: [] };
+  // Module-level TypeVars (T = TypeVar("T")): a function whose types use them is generic.
+  const typeVars = new Set(lines.filter((l) => l.indent === 0).map((l) => /^([A-Za-z_]\w*)\s*=\s*(?:typing\.|typing_extensions\.)?TypeVar\(/.exec(l.code)?.[1]).filter((n): n is string => !!n));
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].indent !== 0) continue;
     if (/^class\s/.test(lines[i].code)) {
-      const cls = scanClass(lines, i, result);
+      const cls = scanClass(lines, i, result, typeVars);
       if (cls) (result.classes ??= []).push(cls);
       continue;
     }
-    const def = scanDef(lines, i, false);
+    const def = scanDef(lines, i, false, typeVars);
     if (!def) continue;
     if ('reason' in def.result) result.skipped.push({ name: def.name, line: def.line, reason: def.result.reason, marked: isMarked(def.doc) });
     else result.functions.push(def.result);
@@ -135,7 +137,7 @@ export function scanPython(source: string): ModuleScan {
 
 // The `def` at lines[i]: the function, or why it can't be a node. A method's first parameter
 // (self) isn't a pin.
-function scanDef(lines: LogicalLine[], i: number, method: boolean): { name: string; line: number; doc: DocComment; result: ScannedFunction | { reason: string } } | undefined {
+function scanDef(lines: LogicalLine[], i: number, method: boolean, typeVars: ReadonlySet<string> = new Set()): { name: string; line: number; doc: DocComment; result: ScannedFunction | { reason: string } } | undefined {
   const header = lines[i];
   const match = /^(async\s+)?def\s+([A-Za-z_]\w*)\s*(\[)?/.exec(header.text);
   if (!match) return undefined;
@@ -146,8 +148,16 @@ function scanDef(lines: LogicalLine[], i: number, method: boolean): { name: stri
   const line = header.line;
   const doc = body.length ? docstring(body[0]) : NO_DOC;
   const skip = (reason: string) => ({ name, line, doc, result: { reason } });
-  const parsed = parseHeader(header.text, match[0].length);
-  if (match[3]) return skip('generic functions can\'t be nodes yet');
+  // Type parameters (PEP 695's [T], or module TypeVars it uses) are wildcard pins
+  // (docs/node-authoring.md, gap 10).
+  const close = match[3] ? matching(header.text, match[0].length - 1) : -1;
+  if (match[3] && close < 0) return skip('its parameters couldn\'t be read');
+  const own = match[3] ? typeParameterNames(header.text.slice(match[0].length, close)) : [];
+  const header695 = parseHeader(header.text, match[3] ? close + 1 : match[0].length);
+  const used = header695 ? [...typeVars].filter((v) => new RegExp(`(?<![\\w])${v}(?![\\w])`).test(`${header695.params} ${header695.returns ?? ''}`)) : [];
+  const typeParameters = [...own, ...used.filter((v) => !own.includes(v))];
+  if (typeParameters.length > 2) return skip(TOO_MANY_TYPE_PARAMETERS);
+  const parsed = header695 && { ...header695, params: substituteTypeParameters(header695.params, typeParameters), ...(header695.returns !== undefined ? { returns: substituteTypeParameters(header695.returns, typeParameters) } : {}) };
   if (!parsed) return skip('its parameters couldn\'t be read');
   const inline = parsed.rest ? [{ indent: header.indent + 1, line, text: parsed.rest, code: parsed.rest }] : [];
   const statements = [...inline, ...body];
@@ -176,7 +186,7 @@ function scanDef(lines: LogicalLine[], i: number, method: boolean): { name: stri
 
 // A class (docs/node-authoring.md, gap 2): its __init__, public methods, properties (@property,
 // writable with a setter) and annotated attributes, each documented by the string after it.
-function scanClass(lines: LogicalLine[], i: number, result: ModuleScan): ScannedClass | undefined {
+function scanClass(lines: LogicalLine[], i: number, result: ModuleScan, typeVars: ReadonlySet<string> = new Set()): ScannedClass | undefined {
   const header = lines[i];
   const match = /^class\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*(?:\((.*)\))?\s*:/.exec(header.text);
   if (!match) return undefined;
@@ -214,7 +224,7 @@ function scanClass(lines: LogicalLine[], i: number, result: ModuleScan): Scanned
       }
       continue;
     }
-    const def = scanDef(body, k, true);
+    const def = scanDef(body, k, true, typeVars);
     if (!def) continue;
     const decorators: string[] = [];
     for (let d = k - 1; d >= 0 && body[d].indent === indent && body[d].text.startsWith('@'); d--) decorators.push(body[d].text);
@@ -348,6 +358,8 @@ function mapReturn(text: string): { type: TypeRef | null | undefined } | { reaso
 // A Python type hint, as text, in canonical form (docs/code-as-nodes.md, "What becomes a node").
 export function mapPythonType(text: string): TypeRef | undefined {
   let t = normalize(text);
+  const wildcard = wildcardType(t);
+  if (wildcard) return wildcard;
   // Forward references are strings.
   if (/^(['"]).*\1$/.test(t)) t = normalize(t.slice(1, -1));
   const union = splitTop(t, '|').map((m) => m.trim());

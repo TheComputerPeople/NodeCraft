@@ -6,7 +6,7 @@ import { NodeRegistry } from '../registry';
 import { describeFunction, functionStatus, isFunctionType } from '../imported-functions';
 import { libraryChange, libraryChangeMessage } from '../node-packages';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from '../flow-control';
-import { hasWildcard } from '../containers';
+import { adoptedTypes, hasWildcard } from '../containers';
 import { NodeResolver, REROUTE, createResolver, createUnsplitResolver, isPure } from '../resolve';
 import { canConnect, formatType } from '../types';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
@@ -1288,7 +1288,11 @@ class Lowerer {
 
   // A function from the project's code, which the generated file imports.
   private importFor(info: GraphInfo, node: GraphNode, def: NodeDefinition): IrImport | undefined {
-    const existing = this.imports.get(def.type);
+    // A generic function (docs/node-authoring.md, gap 10) is imported once for each set of types its
+    // wildcard pins took, so each call has its own signature; the language infers the rest.
+    const adopted = adoptedTypes(node);
+    const id = Object.keys(adopted).length ? `${def.type}|${JSON.stringify(adopted)}` : def.type;
+    const existing = this.imports.get(id);
     if (existing) return existing;
     const implementation = def.implementation;
     if (implementation?.kind !== 'function') return undefined;
@@ -1304,7 +1308,7 @@ class Lowerer {
     }
     const target = language === implementation.language ? implementation : implementation.variants![language];
     const imported: IrImport = {
-      id: def.type,
+      id,
       name: target.name,
       language,
       path: target.path,
@@ -1319,7 +1323,7 @@ class Lowerer {
     const outputs = def.outputs.filter((p) => p.kind === 'data');
     // Several outputs, or (code with out parameters) one that isn't the returned value.
     if (outputs.length > 1 || implementation.results) imported.outputs = outputs.map((p) => ({ id: p.id, name: p.name, type: p.type }));
-    this.imports.set(def.type, imported);
+    this.imports.set(id, imported);
     return imported;
   }
 

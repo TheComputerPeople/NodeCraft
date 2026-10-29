@@ -3,7 +3,7 @@
 // inline modules inside it, with their parameters, types and documentation. Like the other scanners
 // it parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, markDeprecated, parseDocText, tupleOutputs } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, TOO_MANY_TYPE_PARAMETERS, isMarked, markDeprecated, parseDocText, substituteTypeParameters, tupleOutputs, typeParameterNames, wildcardType } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'lifetime' | 'punct';
 
@@ -132,6 +132,8 @@ export function scanRust(source: string): ModuleScan {
   const result: ModuleScan = { functions: [], skipped: [] };
   // The lines of items marked #[deprecated].
   const deprecatedLines = new Map<number, { message?: string }>();
+  // The type parameters of the function being read, renamed to wildcards in its types (gap 10).
+  let typeParameters: string[] = [];
   const text = (start: number, end: number) => (end > start ? source.slice(tokens[start].start, tokens[end - 1].end) : '');
   const at = (i: number, value: string) => tokens[i]?.text === value && tokens[i].kind !== 'string' && tokens[i].kind !== 'char';
   const skipGroup = (i: number): number => {
@@ -243,6 +245,7 @@ export function scanRust(source: string): ModuleScan {
       let open = k + 2;
       const generic = at(open, '<');
       if (generic) open = skipAngles(open);
+      typeParameters = generic ? typeParameterNames(text(k + 3, open - 1)) : [];
       const paramsClose = skipGroup(open);
       let r = paramsClose;
       let returnText = '';
@@ -250,7 +253,7 @@ export function scanRust(source: string): ModuleScan {
         r++;
         const from = r;
         while (r < close && !at(r, '{') && !at(r, ';') && !at(r, 'where')) r = at(r, '<') ? skipAngles(r) : at(r, '(') || at(r, '[') ? skipGroup(r) : r + 1;
-        returnText = text(from, r);
+        returnText = substituteTypeParameters(text(from, r), typeParameters);
       }
       const docComment = parseDoc(doc);
       const skip = (reason: string) => {
@@ -264,7 +267,7 @@ export function scanRust(source: string): ModuleScan {
       const afterSelf = method ? (at(p + 1, ',') ? p + 2 : p + 1) : open + 1;
       if (!pub) skip("it isn't pub, so generated code can't call it");
       else if (isAsync) skip("async functions can't be nodes yet");
-      else if (generic) skip("generic functions can't be nodes yet");
+      else if (typeParameters.length > 2) skip(TOO_MANY_TYPE_PARAMETERS);
       else if (method && at(open + 1, 'self')) skip('methods that take self by value would consume the object; take &self or &mut self');
       else {
         const params = parseParams(afterSelf, paramsClose - 1);
@@ -347,6 +350,7 @@ export function scanRust(source: string): ModuleScan {
       let k = i + 2;
       const generic = at(k, '<');
       if (generic) k = skipAngles(k);
+      typeParameters = generic ? typeParameterNames(text(i + 3, k - 1)) : [];
       if (!at(k, '(')) {
         i = skipItem(i);
         continue;
@@ -358,7 +362,7 @@ export function scanRust(source: string): ModuleScan {
         r++;
         const from = r;
         while (r < tokens.length && !at(r, '{') && !at(r, ';') && !at(r, 'where')) r = at(r, '<') ? skipAngles(r) : at(r, '(') || at(r, '[') ? skipGroup(r) : r + 1;
-        returnText = text(from, r);
+        returnText = substituteTypeParameters(text(from, r), typeParameters);
       }
       const itemEnd = skipItem(close);
       const docComment = parseDoc(doc);
@@ -369,7 +373,7 @@ export function scanRust(source: string): ModuleScan {
       else if (qualifiers.includes('async')) skip('async functions can\'t be nodes yet');
       else if (qualifiers.includes('unsafe')) skip('unsafe functions can\'t be nodes');
       else if (qualifiers.includes('extern')) skip('extern functions can\'t be nodes');
-      else if (generic) skip('generic functions can\'t be nodes yet');
+      else if (typeParameters.length > 2) skip(TOO_MANY_TYPE_PARAMETERS);
       else {
         const params = parseParams(k + 1, close - 1);
         const returns = mapReturn(returnText);
@@ -404,7 +408,7 @@ export function scanRust(source: string): ModuleScan {
       let s = a;
       if (at(s, 'mut')) s++;
       if (tokens[s]?.kind !== 'name' || !at(s + 1, ':')) return { reason: 'self and pattern parameters can\'t be pins' };
-      const mapped = mapParam(text(s + 2, b));
+      const mapped = mapParam(substituteTypeParameters(text(s + 2, b), typeParameters));
       if ('reason' in mapped) return mapped;
       params.push({ name: tokens[s].text, ...(mapped.type ? { type: mapped.type } : {}) });
     }
@@ -492,6 +496,8 @@ function mapParam(text: string): { type: TypeRef | undefined } | { reason: strin
 // map to them (f64 is float, i64 is int, Vec<T> is array); others are native.
 export function mapRustType(text: string): TypeRef | undefined {
   const t = normalize(text);
+  const wildcard = wildcardType(t);
+  if (wildcard) return wildcard;
   if (t in SIMPLE) return SIMPLE[t];
   const vec = /^(?:std::vec::)?Vec<(.*)>$/.exec(t);
   if (vec) {

@@ -366,7 +366,7 @@ Design and steps: [node-authoring.md](node-authoring.md), with what each step bu
 - **Deferred:**
   - Async functions in Rust, Go, C++, Lua, Ruby, PHP and GDScript: no standard future, or one that needs an executor or a framework.
   - Code classes as parents of graph classes.
-  - Generic and wildcard code functions.
+  - Generic functions in C++ (templates), Go, Lua (`---@generic`) and PHP (`@template`), and generic functions with more than two type parameters.
   - A package registry: packages come from folders and extensions.
 
 ### Phase 10: Release

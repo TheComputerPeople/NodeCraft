@@ -3,7 +3,7 @@
 // declarations and skips everything else by matching brackets, so it needs no compiler.
 import { TypeRef } from '../types';
 import { CodeResults } from '../model';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, ScannedProperty, SkippedFunction, isMarked, parseDocText, tupleOutputs } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, ScannedProperty, SkippedFunction, TOO_MANY_TYPE_PARAMETERS, isMarked, parseDocText, substituteTypeParameters, tupleOutputs, typeParameterNames, wildcardType } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'template' | 'regex' | 'punct';
 
@@ -172,6 +172,8 @@ class DeclarationParser {
   // Exported name → local function name, from export lists and module.exports.
   private readonly exportedLocals = new Map<string, string>();
   private readonly result: ModuleScan = { functions: [], skipped: [] };
+  // The type parameters of the function being read, renamed to wildcards in its types.
+  private typeParameters: string[] = [];
 
   constructor(private readonly tokens: Token[], private readonly source: string, private readonly javascript: boolean) {}
 
@@ -416,20 +418,25 @@ class DeclarationParser {
   // Reads `<T>(params): Type {body}` or `(params): Type =>`, starting at `<` or `(`.
   // `isAsync`: declared `async`, so it returns a Promise whatever its annotation says.
   private signature(i: number, doc: string | undefined, arrow = false, isAsync = false): { signature: Signature | { reason: string }; end: number; overload?: boolean; arrow?: boolean } {
-    const jsdoc = parseJsDoc(doc);
-    let generic = false;
+    // Type parameters are wildcard pins (docs/node-authoring.md, gap 10): TypeScript's <T>, or
+    // JSDoc's @template T.
+    const { doc: jsdoc, parameters: templates } = templated(parseJsDoc(doc));
+    let typeParameters: string[] = templates;
     if (this.at(i, '<')) {
-      generic = true;
-      i = this.skipAngles(i);
+      const end = this.skipAngles(i);
+      typeParameters = [...typeParameterNames(this.text(i + 1, end - 1)), ...templates];
+      i = end;
     }
     if (!this.at(i, '(')) return { signature: { reason: 'its parameters couldn\'t be read' }, end: i };
     const close = this.skipGroup(i) - 1;
+    this.typeParameters = typeParameters;
     const params = this.params(i + 1, close, jsdoc);
+    this.typeParameters = [];
     let j = close + 1;
     let returnText: string | undefined;
     if (this.at(j, ':')) {
       const end = this.skipType(j + 1);
-      returnText = this.text(j + 1, end);
+      returnText = substituteTypeParameters(this.text(j + 1, end), typeParameters);
       j = end;
     }
     const isArrow = this.at(j, '=>');
@@ -437,7 +444,7 @@ class DeclarationParser {
     // A declaration without a body is a TypeScript overload signature.
     if (!isArrow && !this.at(j, '{')) return { signature: { reason: '' }, end: this.at(j, ';') ? j + 1 : j, overload: true };
     const end = this.bodyEnd(j, isArrow);
-    if (generic) return { signature: { reason: 'generic functions can\'t be nodes yet' }, end, arrow: isArrow };
+    if (typeParameters.length > 2) return { signature: { reason: TOO_MANY_TYPE_PARAMETERS }, end, arrow: isArrow };
     // The declared return type (annotation, else @returns), else whether the body returns a value.
     if ('reason' in params) return { signature: params, end, arrow: isArrow };
     // Async (docs/node-authoring.md, gap 4): a latent node, whose value is what the Promise gives.
@@ -475,7 +482,7 @@ class DeclarationParser {
       let type: TypeRef | undefined;
       if (this.at(k, ':')) {
         const typeEnd = this.findDefault(k + 1, to);
-        const mapped = mapTypeText(this.text(k + 1, typeEnd));
+        const mapped = mapTypeText(substituteTypeParameters(this.text(k + 1, typeEnd), this.typeParameters));
         type = mapped;
         k = typeEnd;
       } else {
@@ -719,6 +726,14 @@ function parseJsDoc(comment: string | undefined): DocComment {
 }
 
 // A parameter's type from `@param {type} name` (JavaScript).
+// JSDoc's @template T (or K, V): the type parameters, renamed to wildcards in the tags' {types}.
+function templated(doc: DocComment): { doc: DocComment; parameters: string[] } {
+  const parameters = doc.tags.filter((t) => t.name === 'template').flatMap((t) => t.text.replace(/^\{[^}]*\}\s*/, '').split(/\s+-\s+/)[0].split(/[\s,]+/).filter((n) => /^[A-Za-z_$][\w$]*$/.test(n)));
+  if (!parameters.length) return { doc, parameters };
+  const tags = doc.tags.map((t) => (t.name === 'template' ? t : { ...t, text: t.text.replace(/^\{([^}]*)\}/, (_m, type: string) => `{${substituteTypeParameters(type, parameters)}}`) }));
+  return { doc: { ...doc, tags }, parameters };
+}
+
 function jsdocParam(doc: DocComment, name: string): { type?: TypeRef } {
   for (const tag of doc.tags) {
     if (tag.name !== 'param' && tag.name !== 'arg' && tag.name !== 'argument') continue;
@@ -806,6 +821,8 @@ function mapReturnText(text: string): { type: TypeRef | null | undefined } | { r
 // Only types the generated code can pass on exactly map to canonical types; others are native.
 export function mapTypeText(text: string): TypeRef | undefined {
   const t = normalize(text);
+  const wildcard = wildcardType(t);
+  if (wildcard) return wildcard;
   const members = splitTop(t, '|');
   if (members.length > 1) {
     const rest = members.filter((m) => m !== 'null');

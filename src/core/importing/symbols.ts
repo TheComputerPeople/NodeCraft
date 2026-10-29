@@ -204,6 +204,47 @@ function tagMetadata(doc: DocComment, deprecated: { message?: string } | undefin
   };
 }
 
+// Generic functions (docs/node-authoring.md, gap 10): a function's type parameters are wildcard
+// pins, which take the type of the first wire connected, as Unreal's wildcard nodes do; generated
+// code leaves the language to infer them. A scanner renames the type parameters in its type texts
+// to these names, which every type mapper reads as wildcards (containers of them too). There are
+// two wildcards, so a function may have two type parameters.
+const WILDCARD_NAMES: Record<string, string> = { VgWildcard: 'wildcard', VgWildcardValue: 'wildcard:value' };
+
+export function wildcardType(name: string): TypeRef | undefined {
+  const id = WILDCARD_NAMES[name];
+  return id ? { id } : undefined;
+}
+
+// The type parameter names of a declaration's `<…>` or `[…]` text (bounds and defaults dropped).
+export function typeParameterNames(text: string): string[] {
+  const names: string[] = [];
+  let depth = 0;
+  let from = 0;
+  const take = (part: string) => {
+    const name = /^\s*(?:const\s+|in\s+|out\s+)?([A-Za-z_$][\w$]*)/.exec(part)?.[1];
+    if (name) names.push(name);
+  };
+  for (let i = 0; i < text.length; i++) {
+    if ('<([{'.includes(text[i])) depth++;
+    else if ('>)]}'.includes(text[i])) depth--;
+    else if (text[i] === ',' && depth === 0) {
+      take(text.slice(from, i));
+      from = i + 1;
+    }
+  }
+  take(text.slice(from));
+  return names;
+}
+
+export const TOO_MANY_TYPE_PARAMETERS = "functions with more than two type parameters can't be nodes";
+
+// Renames the type parameters in a type's text to the wildcard names.
+export function substituteTypeParameters(text: string, parameters: readonly string[]): string {
+  const names = Object.keys(WILDCARD_NAMES);
+  return parameters.reduce((t, p, i) => (i < names.length ? t.replace(new RegExp(`(?<![\\w$])${p.replace(/\$/g, '\\$')}(?![\\w$])`, 'g'), names[i]) : t), text);
+}
+
 // Marks what's declared at each line deprecated: the scanners read their language's own markers
 // ([Obsolete], [[deprecated]], #[deprecated], @Deprecated, @deprecated(...)) by line.
 export function markDeprecated(scan: ModuleScan, lines: Map<number, { message?: string }>): ModuleScan {

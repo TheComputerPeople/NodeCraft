@@ -24,6 +24,7 @@ import { RUN_PROJECT_FILE, csharpRunProject } from '../../src/core/languages/csh
 import { ToolNotFoundError, runCommand, runGeneratedCode, writeScaffold } from '../../src/extension/runner';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
+import { GENERICS_OUTPUT, genericsGraph } from './generics';
 import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -1001,6 +1002,86 @@ describe('graph enums from code, and @execs on them', () => {
       assert.deepEqual(outputLines(outcome.stdout), ['sad', 'happy'], `stderr:\n${outcome.stderr}\n${result.output!.text}`);
     });
   }
+});
+
+// Generic functions from code (docs/node-authoring.md, gap 10): type parameters are wildcard pins,
+// and the language infers them from the arguments.
+describe('generic functions from code', () => {
+  const MODULES: Record<string, { path: string; module?: string; text: string }> = {
+    typescript: { path: 'lib/firsts.ts', text: '/** @blueprint */\nexport function first<T>(items: T[]): T {\n  return items[0];\n}\n' },
+    'javascript-esm': { path: 'lib/firsts.mjs', text: '/**\n * @blueprint\n * @template T\n * @param {T[]} items\n * @returns {T}\n */\nexport function first(items) {\n  return items[0];\n}\n' },
+    python: { path: 'lib/game/firsts.py', module: 'game.firsts', text: 'from typing import TypeVar\n\nT = TypeVar("T")\n\n\ndef first(items: list[T]) -> T:\n    """@blueprint"""\n    return items[0]\n' },
+    'python-695': { path: 'lib/game/firsts.py', module: 'game.firsts', text: 'def first[T](items: list[T]) -> T:\n    """@blueprint"""\n    return items[0]\n' },
+    csharp: { path: 'lib/Firsts.cs', text: 'using System.Collections.Generic;\n\nnamespace Game;\n\npublic static class Lists\n{\n    /// @blueprint\n    public static T First<T>(List<T> items) => items[0];\n}\n' }
+  };
+
+  for (const target of [
+    { label: 'TypeScript', language: 'typescript', key: 'typescript' },
+    { label: 'JavaScript (JSDoc @template)', language: 'javascript', key: 'javascript-esm' },
+    { label: 'Python (a TypeVar)', language: 'python', key: 'python' },
+    { label: 'Python (PEP 695)', language: 'python', key: 'python-695' },
+    { label: 'C#', language: 'csharp', key: 'csharp' }
+  ]) {
+    test(`${target.label}: a type parameter takes the wired type`, async (t) => {
+      const module = MODULES[target.key];
+      const defs = exposeFunctions(languages.get(target.language)!.importer!.scan!(module.text), { language: target.language, path: module.path, module: module.module, exposeAll: false }).definitions;
+      const r = registry();
+      r.registerMany(defs);
+      const dir = path.join(workDir, `generics-${target.key}`);
+      fs.mkdirSync(path.join(dir, path.dirname(module.path)), { recursive: true });
+      fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
+      fs.writeFileSync(path.join(dir, module.path), module.text);
+      if (target.language === 'python') fs.writeFileSync(path.join(dir, path.dirname(module.path), '__init__.py'), '');
+      const result = compileDocument(genericsGraph(defs, target.language), { registry: r, languages, generate: { sourceFileName: 'firsts.vgraph', outputDir: 'graphs', namespace: 'Game' } });
+      assert.deepEqual(result.diagnostics, []);
+      const file = path.join(dir, 'graphs', result.output!.fileName);
+      fs.writeFileSync(file, result.output!.text);
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? [path.join(dir, module.path)] : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, result.output!.className, { cwd: path.join(dir, 'graphs'), importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)), sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), GENERICS_OUTPUT, `stderr:\n${outcome.stderr}\n${result.output!.text}`);
+    });
+  }
+
+  test('TypeScript calling one type-checks under --strict', () => {
+    const module = MODULES.typescript;
+    const defs = exposeFunctions(languages.get('typescript')!.importer!.scan!(module.text), { language: 'typescript', path: module.path, exposeAll: false }).definitions;
+    const r = registry();
+    r.registerMany(defs);
+    const dir = path.join(workDir, 'generics-strict');
+    fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
+    fs.writeFileSync(path.join(dir, module.path), module.text);
+    const result = compileDocument(genericsGraph(defs, 'typescript'), { registry: r, languages, generate: { sourceFileName: 'firsts.vgraph', outputDir: 'graphs' } });
+    const file = path.join(dir, 'graphs', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], allowImportingTsExtensions: true },
+      files: [path.relative(dir, file)]
+    }));
+    const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+    const check = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+    assert.equal(check.status, 0, check.stdout + check.stderr);
+  });
+
+  test('a generic node left unwired is an error that says to connect it', () => {
+    const module = MODULES.typescript;
+    const defs = exposeFunctions(languages.get('typescript')!.importer!.scan!(module.text), { language: 'typescript', path: module.path, exposeAll: false }).definitions;
+    const r = registry();
+    r.registerMany(defs);
+    const document = genericsGraph(defs, 'typescript');
+    const node = document.graphs[0].nodes.find((x) => x.id === 'first')!;
+    delete node.properties.wildcards;
+    document.graphs[0].connections = document.graphs[0].connections.filter((c) => c.toNode !== 'first' || c.toPin !== 'items');
+    document.graphs[0].connections = document.graphs[0].connections.filter((c) => c.fromNode !== 'first' || c.fromPin !== 'returnValue');
+    const diagnostics = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'firsts.vgraph' } }).diagnostics;
+    assert.ok(diagnostics.some((d) => d.code === 'wildcard-unresolved' && d.nodeId === 'first'), JSON.stringify(diagnostics));
+  });
 });
 
 // A function library made of graphs (docs/program-structure.md, "Functions"), called from a graph

@@ -43,7 +43,7 @@ fn private_helper() {}
 pub async fn later() {}
 
 /// @blueprint
-pub fn twice<T: Clone>(value: T) -> (T, T) { (value.clone(), value) }
+pub fn twice<A: Clone, B, C>(value: A, b: B, c: C) -> (A, A) { (value.clone(), value) }
 
 pub struct Player { level: i64 }
 
@@ -84,10 +84,11 @@ describe('Rust scanner', () => {
   test('functions that can\'t be nodes are reported with the reason; methods and test code aren\'t free functions', () => {
     const skipped = Object.fromEntries(scan.skipped.map((s) => [s.name, s.reason]));
     assert.match(skipped.shout, /reference parameters/);
-    assert.match(skipped.label, /generic/);
+    // A lifetime isn't a type parameter: the reference is why.
+    assert.match(skipped.label, /reference parameters/);
     assert.match(skipped.private_helper, /isn't pub/);
     assert.match(skipped.later, /async/);
-    assert.match(skipped.twice, /generic/);
+    assert.match(skipped.twice, /more than two type parameters/);
     assert.equal(skipped.level, undefined);
     assert.equal(skipped.helper, undefined);
     assert.ok(!scan.functions.some((f) => f.name === 'level' || f.name === 'helper'));
