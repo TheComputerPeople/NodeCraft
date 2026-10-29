@@ -11,6 +11,7 @@ import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { graphFileDefinitions } from '../core/graph-files';
 import { duplicateTypes, generatedLanguages } from '../core/user-types';
+import { tagPackageDefinitions } from '../core/node-packages';
 import { csharpNamespace, goPackage, javaProject, phpNamespace, pythonModule } from './placement';
 
 const GLOB = '**/*.vgraph';
@@ -35,7 +36,9 @@ export class GraphLibraries implements vscode.Disposable {
   // Resolves after the first full scan.
   readonly ready = new Promise<void>((resolve) => (this.readyResolve = resolve));
 
-  constructor(private readonly registry: NodeRegistry, private readonly languages: LanguagePackRegistry) {
+  // `packages`: which graph package a file belongs to (src/extension/node-libraries.ts), and when
+  // that changes. A package's graphs' nodes carry its name and version.
+  constructor(private readonly registry: NodeRegistry, private readonly languages: LanguagePackRegistry, private readonly packages?: { packageOfGraph(uri: vscode.Uri): { name: string; version: string } | undefined; onDidChangeGraphPackages: vscode.Event<void> }) {
     const watcher = vscode.workspace.createFileSystemWatcher(GLOB);
     this.subscriptions.push(
       watcher,
@@ -45,7 +48,8 @@ export class GraphLibraries implements vscode.Disposable {
       watcher.onDidDelete((uri) => this.queue(uri)),
       vscode.workspace.onDidChangeWorkspaceFolders(() => void this.rescan()),
       // A pack registered or removed changes which libraries generate code, and their names.
-      languages.onDidChange(() => void this.rescan())
+      languages.onDidChange(() => void this.rescan()),
+      ...(packages ? [packages.onDidChangeGraphPackages(() => void this.rescan())] : [])
     );
     void this.rescan().then(() => this.readyResolve());
   }
@@ -127,7 +131,8 @@ export class GraphLibraries implements vscode.Disposable {
       return other ? [[language, other]] : [];
     }));
     const definitions = graphFileDefinitions(doc, { document: relative(root, uri.fsPath), ...own, ...(Object.keys(others).length ? { others } : {}) }, generator, (language) => this.languages.get(language)?.generator);
-    return definitions && { path: relative(root, uri.fsPath), definitions };
+    const pkg = this.packages?.packageOfGraph(uri);
+    return definitions && { path: relative(root, uri.fsPath), definitions: pkg ? tagPackageDefinitions(definitions, pkg) : definitions };
   }
 
   private publish(): void {

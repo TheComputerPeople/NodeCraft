@@ -4,8 +4,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { compileDocument } from '../../src/core/compiler';
 import { builtinLanguagePacks } from '../../src/core/languages';
-import { NodeDefinition } from '../../src/core/model';
-import { NodePackage, compareVersions, libraryChange, manifestProblems, refreshLibrary, resolvePackages, satisfies, syncLibraryVersions } from '../../src/core/node-packages';
+import { GraphDocument, NodeDefinition } from '../../src/core/model';
+import { NodePackage, compareVersions, libraryChange, manifestProblems, refreshLibrary, resolvePackages, satisfies, syncLibraryVersions, tagPackageDefinitions } from '../../src/core/node-packages';
 import { NodeRegistry } from '../../src/core/registry';
 import { doc, node, wire } from './helpers';
 
@@ -38,6 +38,22 @@ describe('versions and ranges', () => {
     assert.deepEqual(manifestProblems({ name: 'combat-nodes', version: '1.0.0', nodes: ['nodes/*.node.json'], dependencies: { 'math-nodes': '^2.0.0' } }), []);
     const problems = manifestProblems({ name: 'Combat Nodes', version: '1.0', nodes: 'x', dependencies: { a: 'soon' } });
     assert.equal(problems.length, 4, problems.join('\n'));
+  });
+
+  // Graph packages (docs/node-authoring.md, gap 9): graphs, nodes, or both.
+  test('a package lists graph files, node files or both', () => {
+    assert.deepEqual(manifestProblems({ name: 'combat-graphs', version: '1.0.0', graphs: ['*.vgraph'] }), []);
+    assert.deepEqual(manifestProblems({ name: 'combat', version: '1.0.0', nodes: ['*.node.json'], graphs: ['libs/*.vgraph'] }), []);
+    assert.deepEqual(manifestProblems({ name: 'combat', version: '1.0.0' }), ['A package must list its "nodes" (node definition files), its "graphs" (graph files), or both.']);
+    assert.deepEqual(manifestProblems({ name: 'combat', version: '1.0.0', graphs: 'x.vgraph' }), ['"graphs" must list the package\'s graph files.']);
+  });
+
+  test("a graph package's graphs' nodes carry its name and version, so graphs record it", () => {
+    const [half] = tagPackageDefinitions([definition('lib:blueprint-packages/combat/combat.vgraph#Half')], { name: 'combat', version: '2.1.0' });
+    assert.deepEqual(half.library, { name: 'combat', version: '2.1.0' });
+    const doc: GraphDocument = { schemaVersion: 3, name: 'G', kind: 'class', variables: [], graphs: [{ id: 'E', name: 'E', kind: 'event', comments: [], connections: [], nodes: [{ id: 'n', type: half.type, position: { x: 0, y: 0 }, properties: {} }] }] };
+    assert.ok(syncLibraryVersions(doc, (type) => (type === half.type ? half : undefined)));
+    assert.deepEqual(doc.metadata?.libraries, { combat: '2.1.0' });
   });
 });
 

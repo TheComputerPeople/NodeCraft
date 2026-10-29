@@ -23,6 +23,11 @@ export class NodeLibraries implements vscode.Disposable {
   // Every node file read, with its text, for those problems.
   private nodeFiles: { uri: vscode.Uri; text: string; def: NodeDefinition }[] = [];
   private languagesTimer: ReturnType<typeof setTimeout> | undefined;
+  // The package each graph file a manifest lists belongs to (docs/node-authoring.md, gap 9).
+  private graphPackages = new Map<string, { name: string; version: string }>();
+  private readonly graphPackagesChanged = new vscode.EventEmitter<void>();
+  // Fires when the graph files packages list, or their versions, change.
+  readonly onDidChangeGraphPackages = this.graphPackagesChanged.event;
   private readonly api = new Map<string, NodePackage>();
   private workspace: { packages: NodePackage[]; loose: NodeDefinition[]; manifestProblems: Map<string, string[]> } = { packages: [], loose: [], manifestProblems: new Map() };
   private readonly subscriptions: vscode.Disposable[] = [];
@@ -42,7 +47,7 @@ export class NodeLibraries implements vscode.Disposable {
       this.languagesTimer = setTimeout(() => void this.checkFiles(), 1000);
     };
     this.subscriptions.push(
-      this.problems, this.fileProblems, nodes, packages, graphs,
+      this.problems, this.fileProblems, this.graphPackagesChanged, nodes, packages, graphs,
       graphs.onDidCreate(checkLanguages), graphs.onDidChange(checkLanguages), graphs.onDidDelete(checkLanguages),
       nodes.onDidCreate(schedule), nodes.onDidChange(schedule), nodes.onDidDelete(schedule),
       packages.onDidCreate(schedule), packages.onDidChange(schedule), packages.onDidDelete(schedule),
@@ -80,6 +85,11 @@ export class NodeLibraries implements vscode.Disposable {
     return this.files.get(type);
   }
 
+  // The package a graph file belongs to, when a manifest lists it.
+  packageOfGraph(uri: vscode.Uri): { name: string; version: string } | undefined {
+    return this.graphPackages.get(uri.toString());
+  }
+
   private async reload(): Promise<void> {
     const current = ++this.generation;
     const files = new Map<string, vscode.Uri>();
@@ -101,6 +111,7 @@ export class NodeLibraries implements vscode.Disposable {
     const packages: NodePackage[] = [];
     const manifestProblemsByFile = new Map<string, string[]>();
     const claimed = new Set<string>();
+    const graphPackages = new Map<string, { name: string; version: string }>();
     for (const manifestUri of await vscode.workspace.findFiles(PACKAGE_GLOB, EXCLUDE, 200)) {
       let manifest: NodePackageManifest;
       try {
@@ -117,16 +128,21 @@ export class NodeLibraries implements vscode.Disposable {
       const folder = vscode.Uri.joinPath(manifestUri, '..');
       const nodes: NodeDefinition[] = [];
       const missing: string[] = [];
-      for (const entry of manifest.nodes) {
+      for (const entry of manifest.nodes ?? []) {
         const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, entry), EXCLUDE, 1000);
-        if (!files.length) missing.push(entry);
+        if (!files.length) missing.push(`"${entry}" matches no node definition file.`);
         for (const file of files) {
           claimed.add(file.toString());
           const def = await read(file);
           if (def) nodes.push(def);
         }
       }
-      if (missing.length) manifestProblemsByFile.set(manifestUri.toString(), missing.map((entry) => `"${entry}" matches no node definition file.`));
+      for (const entry of manifest.graphs ?? []) {
+        const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, entry), EXCLUDE, 1000);
+        if (!files.length) missing.push(`"${entry}" matches no graph file.`);
+        for (const file of files) graphPackages.set(file.toString(), { name: manifest.name, version: manifest.version });
+      }
+      if (missing.length) manifestProblemsByFile.set(manifestUri.toString(), missing);
       packages.push({
         name: manifest.name, version: manifest.version, nodes, origin: manifestUri.toString(), where: vscode.workspace.asRelativePath(manifestUri),
         ...(manifest.dependencies ? { dependencies: manifest.dependencies } : {}), ...(manifest.engines ? { engines: manifest.engines } : {})
@@ -144,7 +160,10 @@ export class NodeLibraries implements vscode.Disposable {
     this.files = files;
     this.nodeFiles = nodeFiles;
     this.workspace = { packages, loose, manifestProblems: manifestProblemsByFile };
+    const graphsChanged = JSON.stringify([...graphPackages]) !== JSON.stringify([...this.graphPackages]);
+    this.graphPackages = graphPackages;
     this.publish();
+    if (graphsChanged) this.graphPackagesChanged.fire();
   }
 
   private publish(): void {

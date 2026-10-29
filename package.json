@@ -28,7 +28,8 @@
     "onCustomEditor:blueprintVisualScripting.graphEditor",
     "onCommand:blueprintVisualScripting.createGraph",
     "onCommand:blueprintVisualScripting.newNode",
-    "onCommand:blueprintVisualScripting.testNodeLibrary"
+    "onCommand:blueprintVisualScripting.testNodeLibrary",
+    "onCommand:blueprintVisualScripting.addBlueprintPackage"
   ],
   "main": "./dist/extension/extension.js",
   "capabilities": {
@@ -66,6 +67,11 @@
       {
         "command": "blueprintVisualScripting.testNodeLibrary",
         "title": "Test Node Library",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.addBlueprintPackage",
+        "title": "Add Blueprint Package...",
         "category": "Blueprint Visual Scripting"
       },
       {

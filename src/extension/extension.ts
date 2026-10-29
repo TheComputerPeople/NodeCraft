@@ -9,6 +9,7 @@ import { CompileService } from './compile-service';
 import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
 import { detectNewGraphLanguage } from './languages';
 import { NodeLibraries, workspaceSnippetLanguages } from './node-libraries';
+import { addBlueprintPackage } from './blueprint-packages';
 import { newNodeDefinition } from '../core/node-files';
 import { ConformanceReport, formatReport, runNodeExamples, simulateNodeExamples } from '../conformance/conformance';
 import { NodeDefinition } from '../core/model';
@@ -26,7 +27,7 @@ import { watchWorkspaceLanguagePacks } from './workspace-packs';
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
 export interface ExtensionApi extends BlueprintVisualScriptingApi {
-  testing: { marks: DebugMarks; provider: GraphEditorProvider; outputPlans: OutputPlans };
+  testing: { marks: DebugMarks; provider: GraphEditorProvider; outputPlans: OutputPlans; registry: NodeRegistry };
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
@@ -53,7 +54,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   const projectFunctions = new ProjectFunctions(registry, languages, output);
   context.subscriptions.push(projectFunctions);
   // Function libraries made of graphs (docs/program-structure.md, "Functions").
-  const graphLibraries = new GraphLibraries(registry, languages);
+  const graphLibraries = new GraphLibraries(registry, languages, nodeLibraries);
   context.subscriptions.push(graphLibraries);
 
   // Compiling waits for the first scans, so functions that are merely still loading aren't reported missing.
@@ -199,6 +200,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     await vscode.window.showTextDocument(target);
     return target;
   }));
+  // Add Blueprint Package… (docs/node-authoring.md, gap 9): from a folder or an installed extension.
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.addBlueprintPackage', (source?: vscode.Uri) => addBlueprintPackage(languages, source)));
   // Test Node Library (docs/node-authoring.md, gap 8): the examples of a node file's nodes, or a
   // folder's, run in Simulate and in each language the workspace's graphs use; nodes without
   // examples are compiled. The report goes to the output channel.
@@ -245,7 +248,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       .then((choice) => choice && channel.show());
     return reports;
   }));
-  return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans } };
+  return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans, registry } };
 }
 
 export function deactivate(): void {}

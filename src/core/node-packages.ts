@@ -10,7 +10,10 @@ export interface NodePackageManifest {
   version: string;
   description?: string;
   // The node definition files it holds, relative to the manifest (globs allowed).
-  nodes: string[];
+  nodes?: string[];
+  // The graph files it holds (docs/node-authoring.md, gap 9): function and macro libraries,
+  // structures and enumerations, relative to the manifest (globs allowed).
+  graphs?: string[];
   // Package names with version ranges ("^1.2.0").
   dependencies?: Record<string, string>;
   // The extension API versions it works with: { "blueprint": "^1" }.
@@ -42,7 +45,10 @@ export function manifestProblems(value: unknown): string[] {
   const problems: string[] = [];
   if (typeof m.name !== 'string' || !/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(m.name)) problems.push('"name" must be a package name, such as "combat-nodes" or "@studio/combat-nodes".');
   if (typeof m.version !== 'string' || !parseVersion(m.version)) problems.push('"version" must be a semantic version, such as "1.2.0".');
-  if (!Array.isArray(m.nodes) || m.nodes.some((n) => typeof n !== 'string')) problems.push('"nodes" must list the package\'s node definition files.');
+  const list = (value: unknown) => Array.isArray(value) && value.every((n) => typeof n === 'string');
+  if (m.nodes !== undefined && !list(m.nodes)) problems.push('"nodes" must list the package\'s node definition files.');
+  if (m.graphs !== undefined && !list(m.graphs)) problems.push('"graphs" must list the package\'s graph files.');
+  if (m.nodes === undefined && m.graphs === undefined) problems.push('A package must list its "nodes" (node definition files), its "graphs" (graph files), or both.');
   for (const [name, range] of Object.entries(m.dependencies ?? {})) if (typeof range !== 'string' || !validRange(range)) problems.push(`The version range for "${name}" isn't valid: ${JSON.stringify(range)}.`);
   if (m.engines?.blueprint !== undefined && !validRange(m.engines.blueprint)) problems.push(`"engines.blueprint" isn't a valid version range: ${JSON.stringify(m.engines.blueprint)}.`);
   return problems;
@@ -115,6 +121,12 @@ export function libraryChangeMessage(change: { name: string; from: string; to: s
 // Records the version of each package the document's nodes use, when it has none yet, and drops
 // packages it no longer uses. A recorded version that differs stays until the nodes are refreshed
 // (`refreshLibrary`). Returns whether anything changed.
+// A graph package's graph files' definitions, tagged with the package as node files' are, so graphs
+// using them record its version and get Refresh Node on a new major version.
+export function tagPackageDefinitions(definitions: NodeDefinition[], pkg: { name: string; version: string }): NodeDefinition[] {
+  return definitions.map((d) => ({ ...d, library: { name: pkg.name, version: pkg.version } }));
+}
+
 export function syncLibraryVersions(doc: GraphDocument, definition: (type: string) => NodeDefinition | undefined): boolean {
   const before = recordedLibraries(doc);
   const next: Record<string, string> = {};

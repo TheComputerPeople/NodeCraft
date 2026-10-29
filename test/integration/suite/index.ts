@@ -366,6 +366,46 @@ test("Test Node Library runs a node file's examples in Simulate and in generated
   }
 });
 
+test('Add Blueprint Package copies a graph package into the workspace, generates it, and its nodes carry its version', async () => {
+  const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
+  const manifest = (version: string) => JSON.stringify({ name: 'combat-graphs', version, graphs: ['*.vgraph'] }, null, 2);
+  const library = {
+    schemaVersion: 3, name: 'Combat', kind: 'functionLibrary', language: 'typescript', variables: [],
+    graphs: [{
+      id: 'Half', name: 'Half', kind: 'function', comments: [],
+      signature: { inputs: [{ id: 'value', name: 'Value', kind: 'data', type: { id: 'float' } }], outputs: [{ id: 'result', name: 'Result', kind: 'data', type: { id: 'float' } }], pure: true },
+      nodes: [
+        { id: 'entry', type: 'core:function.entry', position: { x: 0, y: 0 }, properties: { graph: 'Half' } },
+        { id: 'div', type: 'core:math.divide', position: { x: 200, y: 0 }, properties: { 'pin:b': 2 } },
+        { id: 'ret', type: 'core:function.return', position: { x: 400, y: 0 }, properties: { graph: 'Half' } }
+      ],
+      connections: [
+        { id: 'c1', fromNode: 'entry', fromPin: 'execOut', toNode: 'ret', toPin: 'execIn' },
+        { id: 'c2', fromNode: 'entry', fromPin: 'value', toNode: 'div', toPin: 'a' },
+        { id: 'c3', fromNode: 'div', fromPin: 'returnValue', toNode: 'ret', toPin: 'result' }
+      ]
+    }]
+  };
+  await write('vendor/combat-graphs/combat.vgraph-package.json', manifest('1.0.0'));
+  await write('vendor/combat-graphs/combat.vgraph', JSON.stringify(library, null, 2));
+  const api = (vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi).testing;
+  const type = 'lib:blueprint-packages/combat-graphs/combat.vgraph#Half';
+
+  const target = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.addBlueprintPackage', workspaceFile('vendor/combat-graphs'));
+  assert.equal(target?.toString(), workspaceFile('blueprint-packages/combat-graphs').toString());
+  const added = JSON.parse(await readText(workspaceFile('blueprint-packages/combat-graphs/combat.vgraph'))) as { languages?: string[] };
+  assert.ok(added.languages?.includes('python'), `generated for the workspace's Python graphs too: ${JSON.stringify(added.languages)}`);
+  assert.ok(fs.existsSync(workspaceFile('blueprint-packages/combat-graphs/combat.vgraph.ts').fsPath), 'TypeScript generated');
+  assert.ok(fs.existsSync(workspaceFile('blueprint-packages/combat-graphs/combat_vgraph.py').fsPath), 'Python generated');
+  await waitFor(() => api.registry.get(type)?.library?.version === '1.0.0', 'the package version on its nodes', 20000);
+  assert.deepEqual(api.registry.get(type)?.library, { name: 'combat-graphs', version: '1.0.0' });
+
+  // A newer version replaces it, without asking.
+  await write('vendor/combat-graphs/combat.vgraph-package.json', manifest('2.0.0'));
+  await vscode.commands.executeCommand('blueprintVisualScripting.addBlueprintPackage', workspaceFile('vendor/combat-graphs'));
+  await waitFor(() => api.registry.get(type)?.library?.version === '2.0.0', 'the new version on its nodes', 20000);
+});
+
 test('the functions of a function library graph become nodes that other graphs import', async () => {
   const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
   const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
@@ -534,6 +574,7 @@ interface ExtensionInternals {
     } | undefined;
     goToDefinition(from: vscode.Uri, nodeType: string, site: DefinitionSite): Promise<void>;
   };
+  registry: { get(type: string): NodeDefinition | undefined };
 }
 
 // The public API, as another extension uses it (docs/language-breadth.md): a language pack and a

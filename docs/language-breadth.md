@@ -206,7 +206,7 @@ As built (`src/core/importing/language-server.ts`, and `symbolScan` in `src/exte
 
 A node library becomes a package with a manifest, building on `node-package.schema.json`:
 
-- **The manifest** (`*.vgraph-package.json`): `name`, `version` (semver), `nodes` (the `*.node.json` files it holds), and optional `dependencies` (package names with version ranges) and `engines` (`blueprint`: the API versions it works with). Loose `*.node.json` files outside any package keep working as today.
+- **The manifest** (`*.vgraph-package.json`): `name`, `version` (semver), `nodes` (the `*.node.json` files it holds) and/or `graphs` (the `.vgraph` libraries, structures and enumerations it holds; [node-authoring.md](node-authoring.md), gap 9), and optional `dependencies` (package names with version ranges) and `engines` (`blueprint`: the API versions it works with). Loose `*.node.json` files outside any package keep working as today.
 - **Resolution:** packages from the workspace and from `registerNodeLibrary` are resolved together. A missing dependency or one outside its range is a warning on the package (Problems panel), and its nodes still load. Two packages defining the same node type: the newer version wins, with a warning.
 - **Graphs remember versions:** a graph records the version of each package whose nodes it uses (`metadata.libraries`), as it already records imported functions' signatures. Opening a graph whose packages changed major version marks those nodes as changed, with Refresh Node, as code functions do.
 

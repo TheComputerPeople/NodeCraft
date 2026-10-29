@@ -330,6 +330,18 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - It then compiles the package's libraries for the workspace's languages.
   - Adding a newer version replaces the folder.
 
+**Built (step 15).**
+
+- **Manifests** may list `graphs` (relative paths or globs) beside `nodes`, or in place of them: a package holds node files, graph files, or both. The schema and `manifestProblems` require one of the two.
+- **Versions.** `NodeLibraries` (src/extension/node-libraries.ts) finds the graph files each manifest lists, and `GraphLibraries` tags their nodes with the package's name and version (`tagPackageDefinitions`). So graphs using a package's library functions, macros, structures or enumerations record its version (`metadata.libraries`) and get Refresh Node on a new major version, as for node files. Changing a manifest rescans the graph libraries.
+- **Add Blueprint Package…** (src/extension/blueprint-packages.ts) offers the packages installed extensions contribute, and a folder. Copying from a folder is how a package is shared until there's a registry.
+  - **Contributing.** An extension contributes packages in its `package.json`: `"contributes": { "blueprintPackages": [{ "path": "packages/combat" }] }`, each path a folder with a `*.vgraph-package.json`.
+  - **Copying.** It copies the package to `blueprint-packages/<name>/` (a scope's `@` dropped and `/` made `-`). A newer version replaces the folder at once. The same or an older version asks first.
+  - **Generating.** It adds the workspace's graph languages to each function library, structure and enumeration the package lists (`languages`), and compiles each, so graphs in every language can use them at once.
+- **Tests.**
+  - Unit: manifests with graphs, and the tagging recorded in a graph.
+  - Integration: a package added from a folder, generated in TypeScript and Python, its nodes carrying its version, then replaced by a newer one.
+
 ## Gap 10: smaller gaps
 
 - **Collapse to Function in Library…** moves the selection into a function library (an existing one with the graph's language, or a new one), as Collapse to Function does within a file. As in a library, the selection may not use Self, member variables or latent nodes.
