@@ -14,6 +14,65 @@ const replacement = () => input('replacement', 'Replacement', STRING, '');
 // PHP's patterns need delimiters: ~, escaped inside.
 const PHP_PATTERN = String.raw`'~' . str_replace('~', '\~', $pattern) . '~u'`;
 
+// A digest of the text's UTF-8 bytes, as lowercase hex, in each language that has it in its standard
+// library (not C++, Rust or Lua). TypeScript and JavaScript use Node's crypto module.
+interface Digest {
+  type: string;
+  displayName: string;
+  // Each library's name for it.
+  node: string;
+  python: string;
+  dotnet: string;
+  java: string;
+  go: { package: string; sum: string };
+  godot: string;
+  ruby: string;
+  php: string;
+  digits: number;
+  examples: [string, string][];
+  note?: string;
+}
+
+const DIGESTS: Digest[] = [
+  {
+    type: 'core:hash.md5', displayName: 'MD5', node: 'md5', python: 'md5', dotnet: 'MD5', java: 'MD5', go: { package: 'md5', sum: 'Sum' }, godot: 'md5_text', ruby: 'MD5', php: 'md5', digits: 32,
+    examples: [['hello', '5d41402abc4b2a76b9719d911017c592'], ['', 'd41d8cd98f00b204e9800998ecf8427e'], ['héllo', 'be50e8478cf24ff3595bc7307fb91b50']],
+    note: ' MD5 is broken for security: use it for checksums and cache keys, not passwords or signatures.'
+  },
+  {
+    type: 'core:hash.sha1', displayName: 'SHA-1', node: 'sha1', python: 'sha1', dotnet: 'SHA1', java: 'SHA-1', go: { package: 'sha1', sum: 'Sum' }, godot: 'sha1_text', ruby: 'SHA1', php: 'sha1', digits: 40,
+    examples: [['hello', 'aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d'], ['', 'da39a3ee5e6b4b0d3255bfef95601890afd80709'], ['héllo', '35b5ea45c5e41f78b46a937cc74d41dfea920890']],
+    note: ' SHA-1 is broken for security: use it for checksums, not passwords or signatures.'
+  },
+  {
+    type: 'core:hash.sha256', displayName: 'SHA-256', node: 'sha256', python: 'sha256', dotnet: 'SHA256', java: 'SHA-256', go: { package: 'sha256', sum: 'Sum256' }, godot: 'sha256_text', ruby: 'SHA256', php: 'sha256', digits: 64,
+    examples: [['hello', '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'], ['', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'], ['héllo', '3c48591d8d098a4538f5e013dfcf406e948eac4d3277b10bf614e295d6068179']]
+  }
+];
+
+const digestNode = (d: Digest): UtilityNode => ({
+  type: d.type, displayName: d.displayName, category: `${LANGUAGE_CATEGORY} / Hash`, result: STRING, keywords: ['hash', 'digest', 'checksum', d.displayName.toLowerCase(), d.node],
+  inputs: [text()],
+  description: `The text's ${d.displayName} digest (of its UTF-8 bytes), as ${d.digits} lowercase hex digits.${d.note ?? ''}`,
+  examples: d.examples.map(([input, digest]) => ({ inputs: { text: input }, outputs: { returnValue: digest } })),
+  code: {
+    javascript: `return globalThis.process.getBuiltinModule('node:crypto').createHash('${d.node}').update(text, 'utf8').digest('hex');`,
+    python: `import hashlib\nreturn hashlib.${d.python}(text.encode("utf-8")).hexdigest()`,
+    csharp: `return System.Convert.ToHexString(System.Security.Cryptography.${d.dotnet}.HashData(System.Text.Encoding.UTF8.GetBytes(text))).ToLowerInvariant();`,
+    java: [
+      'try {',
+      `    return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("${d.java}").digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8)));`,
+      '} catch (java.security.NoSuchAlgorithmException e) {',
+      '    throw new IllegalStateException(e);',
+      '}'
+    ].join('\n'),
+    go: `sum := ${d.go.package}.${d.go.sum}([]byte(text))\nreturn hex.EncodeToString(sum[:])`,
+    gdscript: `return text.${d.godot}()`,
+    ruby: `require "digest"\nreturn Digest::${d.ruby}.hexdigest(text)`,
+    php: `return hash('${d.php}', $text);`
+  }
+});
+
 export const LANGUAGE_UTILITIES: UtilityNode[] = [
   {
     type: 'core:regex.matches', displayName: 'Regex Matches', category: `${LANGUAGE_CATEGORY} / Regex`, result: BOOL, keywords: ['regex', 'regular expression', 'match', 'test', 'search', 'pattern'],
@@ -101,5 +160,6 @@ export const LANGUAGE_UTILITIES: UtilityNode[] = [
     description: "Every match of the Lua pattern in the text, in order, as string.gmatch gives them: the whole match, or the first capture when the pattern has captures.",
     examples: [{ inputs: { text: 'a1b22c333', pattern: '%d+' }, outputs: { returnValue: ['1', '22', '333'] } }],
     code: { lua: 'local found = {}\nfor each in string.gmatch(text, pattern) do found[#found + 1] = each end\nreturn vg.array_of(found)' }
-  }
+  },
+  ...DIGESTS.map(digestNode)
 ];

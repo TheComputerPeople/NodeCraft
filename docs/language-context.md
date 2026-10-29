@@ -134,7 +134,7 @@ The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts)
 | **Regex:** Matches, Replace, Find All (array of string) | TypeScript, JavaScript (RegExp), Python (`re`), C# (`Regex`), C++ (`<regex>`), Java (`java.util.regex`), Go (`regexp`), GDScript (`RegEx`), Ruby (`Regexp`), PHP (`preg_*`) | Rust, which has no regex in std; Lua |
 | **Lua patterns:** Match, Replace (`gsub`), Find All (`gmatch`) | Lua | the rest |
 | **Hash:** MD5, SHA-1, SHA-256 of a string, as hex | Python (`hashlib`), C# (`System.Security.Cryptography`), Java (`MessageDigest`), Go (`crypto/*`), GDScript (`HashingContext`), Ruby (`Digest`), PHP (`hash`), TypeScript and JavaScript under Node (`node:crypto`) | C++, Rust and Lua, which have no hashing in std |
-| **JSON:** To JSON (any value) | TypeScript, JavaScript, Python (`json`), C# (`System.Text.Json`), Go (`encoding/json`), GDScript (`JSON`), Ruby (`json`), PHP (`json_encode`) | C++, Rust, Java and Lua, which have no JSON in std |
+| **JSON:** To JSON (any value) | TypeScript, JavaScript, Python (`json`), C# (`System.Text.Json`), Go (`encoding/json`), GDScript (`JSON`), Ruby (`json`), PHP (`json_encode`) | C++, Rust, Java and Lua, which have no JSON in std | (left out when built: see below)
 
 - **Each pattern dialect is the language's own.** The node's description says so, as the code preview shows, and the Unreal-named universal nodes stay as they are.
 - **Parsing JSON** stays out: its value has no pin type, the reason the utility library left JSON out.
@@ -151,6 +151,17 @@ The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts)
   - Each node lists examples (digits found or not, an anchor, literal `$1\`, groups, no matches), and utility nodes can now carry them (`UtilityNode.examples`).
   - The audit makes a case of each example in each language, with the example's inputs, and checks its outputs instead of Simulate's.
   - A self-check gives Python's Find All `re.findall` (which returns groups) and expects that example's finding.
+
+**Built (step 9: Hash; To JSON left out).**
+
+- **MD5, SHA-1 and SHA-256** (category "Language / Hash"): a string's digest, of its UTF-8 bytes, as lowercase hex.
+  - The languages: Python's `hashlib`, .NET's `HashData`, Java's `MessageDigest` and `HexFormat`, Go's `crypto/*` and `encoding/hex` (Go's generated code now imports those when used), Godot's `md5_text`, `sha1_text` and `sha256_text`, Ruby's `Digest`, PHP's `hash`.
+  - TypeScript and JavaScript use Node's `crypto` through `process.getBuiltinModule` (Node 20.16 or 22.3 and later), since a snippet can't add an import.
+  - Not in C++, Rust or Lua, which have no hashing in their standard libraries.
+  - MD5's and SHA-1's descriptions say they're broken for security. Their examples ("hello", the empty string, "héllo") are checked in each language by the audit.
+- **To JSON was left out.**
+  - The languages' serializers disagree on numbers (Python writes `2.0` where JavaScript writes `2`), and they can't write the containers generated code uses: Go's `VgMap`, PHP's `VgList`, Ruby's and GDScript's sets.
+  - A To JSON that's the same everywhere would be the runtimes' own JSON writer, the one Print uses for containers, with strings quoted. That makes it a universal node, not a language-only one, so it's recorded as deferred.
 
 ## Exit check
 
