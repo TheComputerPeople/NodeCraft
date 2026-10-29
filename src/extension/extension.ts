@@ -9,7 +9,7 @@ import { CompileService } from './compile-service';
 import { GraphEditorProvider, GRAPH_VIEW_TYPE } from './editor-provider';
 import { detectNewGraphLanguage } from './languages';
 import { NodeLibraries, workspaceSnippetLanguages } from './node-libraries';
-import { addBlueprintPackage } from './blueprint-packages';
+import { NpmSource, addBlueprintPackage } from './blueprint-packages';
 import { newNodeDefinition } from '../core/node-files';
 import { ConformanceReport, formatReport, runNodeExamples, simulateNodeExamples } from '../conformance/conformance';
 import { NodeDefinition } from '../core/model';
@@ -201,7 +201,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     return target;
   }));
   // Add Blueprint Package… (docs/node-authoring.md, gap 9): from a folder or an installed extension.
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.addBlueprintPackage', (source?: vscode.Uri) => addBlueprintPackage(languages, source)));
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.addBlueprintPackage', (source?: vscode.Uri | NpmSource) => addBlueprintPackage(languages, source)));
   // Test Node Library (docs/node-authoring.md, gap 8): the examples of a node file's nodes, or a
   // folder's, run in Simulate and in each language the workspace's graphs use; nodes without
   // examples are compiled. The report goes to the output channel.

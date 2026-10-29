@@ -248,7 +248,7 @@ Status: complete (October 2026), with the deferrals below.
   - Probing with `cargo metadata` or CMake's File API (placement reads files).
   - Under Run, Rust project modules that need the crate's dependencies.
   - In the declarative format: object references, inheritance, interfaces, dispatchers and latent actions. In the C pack: containers, structs and enums.
-  - Node packages from a registry: they come from the workspace and from extensions.
+  - Node packages from a registry: they come from the workspace and from extensions. (Packages from npm came after Phase 9.)
 
 Design: [language-breadth.md](language-breadth.md). Java was deferred at first (no JDK here), then added with Go once their toolchains were installed (steps 14 to 18); C is the declarative pack and the exit check's separate extension. Steps, one commit each (large steps may take several):
 
@@ -367,7 +367,6 @@ Design and steps: [node-authoring.md](node-authoring.md), with what each step bu
   - Async functions in Ruby (left out, by decision). C++'s std::future, Go's channels, a Rust executor, Lua's coroutines, PHP's Fibers and GDScript's await came after the phase.
   - Code classes as parents of graph classes.
   - Generic functions in C++ (templates), Go, Lua (`---@generic`) and PHP (`@template`), and generic functions with more than two type parameters.
-  - A package registry: packages come from folders and extensions.
 
 ### Phase 10: Release
 
@@ -458,7 +457,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ✅ (graph functions and macros in Details; code through tags and each language's deprecation marker) | — |
 | Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | ✅ (also F12 and Shift+F12; node files open at their type) | — |
 | Library | Standard math, string, utility and file nodes, with containers' functions; more of Unreal's (Lerp, Map Range, trigonometry, string and set functions, array functions as new arrays) and everyday utilities (text, maps, time, encoding, UUIDs) | ✅ (array functions return new arrays where Unreal's change theirs) | — |
-| Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace and extensions, not a registry) | 6 |
+| Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace, extensions and npm, or a private npm registry) | 6 |
 | Library | Blueprint Function Libraries usable from graphs in each of several languages; plugins that carry library graphs | ✅ (a library is generated for each of its languages; packages carry graphs, added with Add Blueprint Package) | — |
 | Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Rust has no inheritance or interfaces, Go no inheritance) | 6, 8 |
 | Languages | (Beyond Unreal) Workspaces with graphs in several languages: a new graph takes its folder's language, structs and enums can be shared between languages, and another language's code is reached through project functions | ✅ (generated cross-language bindings deferred) | 7 |

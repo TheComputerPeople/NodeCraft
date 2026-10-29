@@ -369,13 +369,25 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
 
 - **Manifests** may list `graphs` (relative paths or globs) beside `nodes`, or in place of them: a package holds node files, graph files, or both. The schema and `manifestProblems` require one of the two.
 - **Versions.** `NodeLibraries` (src/extension/node-libraries.ts) finds the graph files each manifest lists, and `GraphLibraries` tags their nodes with the package's name and version (`tagPackageDefinitions`). So graphs using a package's library functions, macros, structures or enumerations record its version (`metadata.libraries`) and get Refresh Node on a new major version, as for node files. Changing a manifest rescans the graph libraries.
-- **Add Blueprint Package…** (src/extension/blueprint-packages.ts) offers the packages installed extensions contribute, and a folder. Copying from a folder is how a package is shared until there's a registry.
+- **Add Blueprint Package…** (src/extension/blueprint-packages.ts) offers the packages installed extensions contribute, and a folder (and, since the phase, npm: below).
   - **Contributing.** An extension contributes packages in its `package.json`: `"contributes": { "blueprintPackages": [{ "path": "packages/combat" }] }`, each path a folder with a `*.vgraph-package.json`.
   - **Copying.** It copies the package to `blueprint-packages/<name>/` (a scope's `@` dropped and `/` made `-`). A newer version replaces the folder at once. The same or an older version asks first.
   - **Generating.** It adds the workspace's graph languages to each function library, structure and enumeration the package lists (`languages`), and compiles each, so graphs in every language can use them at once.
 - **Tests.**
   - Unit: manifests with graphs, and the tagging recorded in a graph.
   - Integration: a package added from a folder, generated in TypeScript and Python, its nodes carrying its version, then replaced by a newer one.
+
+**Built after the phase: packages from npm** (decided 2026-10-29: npm is the registry, rather than one of our own).
+
+- **Publishing.** A Blueprint package is an npm package whose `package.json` has:
+  - a `blueprint` field, the folder (relative to the package) holding its `*.vgraph-package.json`;
+  - the keyword `blueprint-package`, so search finds it.
+
+  It's published with `npm publish` as any package. The manifest keeps the Blueprint name and version (normally the npm ones).
+- **Adding.** Add Blueprint Package… offers **From npm…**: it searches the registry for the text typed (with the keyword), lists what it finds, takes the chosen package's latest version, downloads and unpacks its tarball, and adds its `blueprint` folder as for a local folder. The download is removed afterwards. The command also takes `{ "npm": "<name>", "version": "<version>" }`, to add one without asking.
+- **Registries.** npm's own, unless the workspace's `.npmrc` names another: `registry=`, or `@scope:registry=` for a scope's packages. A registry's `//host/path/:_authToken=` is sent as a bearer token, `${ENV}` read from the environment. So a studio's packages can live on a private registry (GitHub Packages, Verdaccio, Artifactory).
+- **Code.** src/extension/npm-registry.ts: the .npmrc reading, npm's search and package documents, and a small tar reader (ustar, with pax headers' long paths), so nothing is installed and no `npm` command is needed. An entry that would land outside the download folder is skipped.
+- **Tests.** Unit: .npmrc scopes and tokens, the tar reader, and search, versions and downloads against a local HTTP registry. Integration: a scoped package added through a workspace `.npmrc` naming a local registry, with its token, and generated.
 
 ## Gap 10: smaller gaps
 

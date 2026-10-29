@@ -18,6 +18,7 @@
     "../src/extension/webview-html.ts",
     "../src/extension/runner.ts",
     "../src/extension/placement.ts",
+    "../src/extension/npm-registry.ts",
     "../src/extension/simulate-session.ts",
     "../src/extension/simulate-worker.ts"
   ]

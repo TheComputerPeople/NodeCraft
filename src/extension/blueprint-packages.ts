@@ -1,14 +1,19 @@
 // Add Blueprint Package… (docs/node-authoring.md, gap 9): copies a package of graphs and nodes into
 // the workspace's blueprint-packages folder, as an Unreal plugin's content sits in the project's
 // Plugins folder, and generates its libraries, structures and enumerations for the languages the
-// workspace's graphs use. From a folder, or from an installed extension that contributes
-// `blueprintPackages` (a list of { "path": "<folder with a *.vgraph-package.json>" }).
+// workspace's graphs use. From a folder, from an installed extension that contributes
+// `blueprintPackages` (a list of { "path": "<folder with a *.vgraph-package.json>" }), or from npm
+// (src/extension/npm-registry.ts).
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { LanguagePackRegistry } from '../core/language-pack';
 import { GraphDocument } from '../core/model';
 import { NodePackageManifest, compareVersions, manifestProblems } from '../core/node-packages';
 import { parseDocument, serializeDocument } from '../core/serializer';
 import { workspaceSnippetLanguages } from './node-libraries';
+import { downloadPackage, packageVersion, registryFor, searchPackages } from './npm-registry';
 
 export const PACKAGES_FOLDER = 'blueprint-packages';
 
@@ -40,21 +45,79 @@ async function readManifest(uri: vscode.Uri): Promise<NodePackageManifest> {
   return JSON.parse(new TextDecoder().decode(await vscode.workspace.fs.readFile(uri))) as NodePackageManifest;
 }
 
+// A package on npm, by name (its latest version unless one is given).
+export interface NpmSource {
+  npm: string;
+  version?: string;
+}
+
+// The workspace's .npmrc, which may name another registry and its token.
+async function workspaceNpmrc(workspaceFolder: vscode.Uri): Promise<string> {
+  return vscode.workspace.fs.readFile(vscode.Uri.joinPath(workspaceFolder, '.npmrc')).then((b) => new TextDecoder().decode(b), () => '');
+}
+
+// Downloads an npm package into `dir`; its Blueprint folder.
+async function fromNpm(workspaceFolder: vscode.Uri, source: NpmSource, dir: string): Promise<vscode.Uri> {
+  const registry = registryFor(source.npm, await workspaceNpmrc(workspaceFolder));
+  const found = await packageVersion(registry, source.npm, source.version);
+  await downloadPackage(registry, found.tarball, dir);
+  return vscode.Uri.file(path.resolve(dir, found.blueprint));
+}
+
+// Asks for a search on npm, and which package it found.
+async function pickFromNpm(workspaceFolder: vscode.Uri): Promise<NpmSource | undefined> {
+  const text = await vscode.window.showInputBox({ prompt: 'Search npm for Blueprint packages', placeHolder: 'combat' });
+  if (text === undefined) return undefined;
+  const registry = registryFor('', await workspaceNpmrc(workspaceFolder));
+  const found = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Searching npm' }, () => searchPackages(registry, text));
+  if (!found.length) {
+    void vscode.window.showInformationMessage(`No Blueprint packages on npm match "${text}".`);
+    return undefined;
+  }
+  const picked = await vscode.window.showQuickPick(found.map((p) => ({ label: p.name, description: p.version, detail: p.description, name: p.name })), { placeHolder: 'Which package?' });
+  return picked && { npm: picked.name };
+}
+
 // Adds the package in `source` (asked for when absent) and returns where it went.
-export async function addBlueprintPackage(languages: LanguagePackRegistry, source?: vscode.Uri): Promise<vscode.Uri | undefined> {
+export async function addBlueprintPackage(languages: LanguagePackRegistry, source?: vscode.Uri | NpmSource): Promise<vscode.Uri | undefined> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
   if (!workspaceFolder) {
     void vscode.window.showErrorMessage('Open a folder first: a Blueprint package is added to the workspace.');
     return undefined;
   }
-  let folder = source;
-  if (!folder) {
+  let npm = source && !(source instanceof vscode.Uri) ? source : undefined;
+  let folder = source instanceof vscode.Uri ? source : undefined;
+  if (!source) {
     const fromFolder: Offered = { label: '$(folder) From a folder…' };
-    const picked = await vscode.window.showQuickPick([...contributedPackages(), fromFolder], { placeHolder: 'Which package?' });
+    const fromNpmItem: Offered = { label: '$(package) From npm…' };
+    const picked = await vscode.window.showQuickPick([...contributedPackages(), fromNpmItem, fromFolder], { placeHolder: 'Which package?' });
     if (!picked) return undefined;
-    folder = picked.folder ?? (await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, openLabel: 'Add Package' }))?.[0];
-    if (!folder) return undefined;
+    if (picked === fromNpmItem) {
+      npm = await pickFromNpm(workspaceFolder);
+      if (!npm) return undefined;
+    } else {
+      folder = picked.folder ?? (await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, openLabel: 'Add Package' }))?.[0];
+      if (!folder) return undefined;
+    }
   }
+  if (!npm) return folder && install(languages, workspaceFolder, folder);
+  // The download is copied into the workspace, then removed.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'blueprint-package-'));
+  try {
+    try {
+      folder = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Downloading ${npm.npm}` }, () => fromNpm(workspaceFolder, npm!, dir));
+    } catch (error) {
+      void vscode.window.showErrorMessage(`Couldn't add ${npm.npm}: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
+    return await install(languages, workspaceFolder, folder);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// Copies the package in `folder` into the workspace and generates it.
+async function install(languages: LanguagePackRegistry, workspaceFolder: vscode.Uri, folder: vscode.Uri): Promise<vscode.Uri | undefined> {
   const manifestUri = await findManifest(folder);
   if (!manifestUri) {
     void vscode.window.showErrorMessage(`${folder.fsPath} has no *.vgraph-package.json.`);

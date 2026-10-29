@@ -3,6 +3,7 @@
 import * as assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as http from 'node:http';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { LanguagePack } from '../../../src/core/language-pack';
@@ -11,6 +12,7 @@ import type { DefinitionSite } from '../../../src/core/navigation';
 import { builtinLanguagePacks } from '../../../src/core/languages';
 import { javascriptPack } from '../../../src/core/languages/javascript';
 import { detectNewGraphLanguage } from '../../../src/extension/languages';
+import { tarball } from '../../tar';
 
 const EXTENSION_ID = 'local.blueprint-visual-scripting';
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
@@ -404,6 +406,59 @@ test('Add Blueprint Package copies a graph package into the workspace, generates
   await write('vendor/combat-graphs/combat.vgraph-package.json', manifest('2.0.0'));
   await vscode.commands.executeCommand('blueprintVisualScripting.addBlueprintPackage', workspaceFile('vendor/combat-graphs'));
   await waitFor(() => api.registry.get(type)?.library?.version === '2.0.0', 'the new version on its nodes', 20000);
+});
+
+test("Add Blueprint Package installs from the registry the workspace's .npmrc names", async () => {
+  const library = {
+    schemaVersion: 3, name: 'Brawl', kind: 'functionLibrary', language: 'typescript', variables: [],
+    graphs: [{
+      id: 'Twice', name: 'Twice', kind: 'function', comments: [],
+      signature: { inputs: [{ id: 'value', name: 'Value', kind: 'data', type: { id: 'float' } }], outputs: [{ id: 'result', name: 'Result', kind: 'data', type: { id: 'float' } }], pure: true },
+      nodes: [
+        { id: 'entry', type: 'core:function.entry', position: { x: 0, y: 0 }, properties: { graph: 'Twice' } },
+        { id: 'mul', type: 'core:math.multiply', position: { x: 200, y: 0 }, properties: { 'pin:b': 2 } },
+        { id: 'ret', type: 'core:function.return', position: { x: 400, y: 0 }, properties: { graph: 'Twice' } }
+      ],
+      connections: [
+        { id: 'c1', fromNode: 'entry', fromPin: 'execOut', toNode: 'ret', toPin: 'execIn' },
+        { id: 'c2', fromNode: 'entry', fromPin: 'value', toNode: 'mul', toPin: 'a' },
+        { id: 'c3', fromNode: 'mul', fromPin: 'returnValue', toNode: 'ret', toPin: 'result' }
+      ]
+    }]
+  };
+  const archive = tarball({
+    'package.json': JSON.stringify({ name: '@studio/brawl', version: '1.2.0', blueprint: 'graphs', keywords: ['blueprint-package'] }),
+    'graphs/brawl.vgraph-package.json': JSON.stringify({ name: '@studio/brawl', version: '1.2.0', graphs: ['*.vgraph'] }),
+    'graphs/brawl.vgraph': JSON.stringify(library, null, 2)
+  });
+  const authorizations: (string | undefined)[] = [];
+  const server = http.createServer((request, response) => {
+    authorizations.push(request.headers.authorization);
+    const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+    if (request.url === '/@studio%2fbrawl') {
+      response.end(JSON.stringify({ name: '@studio/brawl', 'dist-tags': { latest: '1.2.0' }, versions: { '1.2.0': { name: '@studio/brawl', version: '1.2.0', blueprint: 'graphs', dist: { tarball: `${base}brawl-1.2.0.tgz` } } } }));
+    } else if (request.url === '/brawl-1.2.0.tgz') {
+      response.end(archive);
+    } else {
+      response.statusCode = 404;
+      response.end();
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as { port: number }).port;
+  const npmrc = workspaceFile('.npmrc');
+  await vscode.workspace.fs.writeFile(npmrc, new TextEncoder().encode(`@studio:registry=http://127.0.0.1:${port}/\n//127.0.0.1:${port}/:_authToken=team-token\n`));
+  try {
+    const target = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.addBlueprintPackage', { npm: '@studio/brawl' });
+    assert.equal(target?.toString(), workspaceFile('blueprint-packages/studio-brawl').toString());
+    assert.ok(fs.existsSync(workspaceFile('blueprint-packages/studio-brawl/brawl.vgraph-package.json').fsPath), 'the Blueprint folder was added');
+    assert.ok(!fs.existsSync(workspaceFile('blueprint-packages/studio-brawl/package.json').fsPath), "the npm package's own files weren't");
+    assert.ok(fs.existsSync(workspaceFile('blueprint-packages/studio-brawl/brawl.vgraph.ts').fsPath), 'TypeScript generated');
+    assert.ok(authorizations.length >= 2 && authorizations.every((a) => a === 'Bearer team-token'), `the token was sent: ${JSON.stringify(authorizations)}`);
+  } finally {
+    server.close();
+    await vscode.workspace.fs.delete(npmrc);
+  }
 });
 
 test('the functions of a function library graph become nodes that other graphs import', async () => {
