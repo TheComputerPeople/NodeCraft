@@ -47,6 +47,7 @@ The rest of the comment becomes the node's description (its tooltip). `@param na
 | Language | Marker | Message |
 |---|---|---|
 | TypeScript, JavaScript, PHP, Ruby, Lua, GDScript | `@deprecated` in the documentation (JSDoc, PHPDoc, YARD, LuaLS, Godot) | the tag's text |
+| PHP 8.4 | `#[\Deprecated]` or `#[\Deprecated(message: "…")]` | its message |
 | C# | `[Obsolete]` or `[Obsolete("…")]` | its message |
 | C++ | `[[deprecated]]` or `[[deprecated("…")]]` | its message |
 | Rust | `#[deprecated]`, `#[deprecated = "…"]` or `#[deprecated(note = "…")]` | its note |
@@ -54,7 +55,7 @@ The rest of the comment becomes the node's description (its tooltip). `@param na
 | Python | PEP 702's `@deprecated("…")` (`warnings` or `typing_extensions`) | its message |
 | Go | a `Deprecated:` paragraph in the doc comment, before `@blueprint` | the paragraph |
 
-PHP 8.4's `#[\Deprecated]` attribute isn't read yet; use the docblock's `@deprecated`. `@execs` covers bool results; Unreal's ExpandEnumAsExecs waits until code functions can return a graph enum by its own type (they come through as native types).
+`@execs` covers bool results; Unreal's ExpandEnumAsExecs waits until code functions can return a graph enum by its own type (they come through as native types).
 
 The setting `blueprintVisualScripting.exposeAllFunctions` exposes every public function as a callable node, for small projects where marking each one is a chore. Public is each language's rule: exported (TypeScript, JavaScript), not `_`-prefixed (Python, GDScript, Ruby), `public static` (C#, Java, PHP), `pub` (Rust), capitalized (Go), declared in a header (C++), in the module's table (Lua). Private functions aren't reported. Class members still need their marker. Markers still choose `pure`, category and title.
 

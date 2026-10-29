@@ -235,6 +235,7 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - Python: PEP 702's `@deprecated("…")`.
   - Go: a `Deprecated:` paragraph, Go's convention.
   - Doc comments: the `@deprecated` tag (JSDoc, PHPDoc, YARD, LuaLS, Godot).
+  - PHP 8.4: `#[\Deprecated]`, with its message (added after the phase, from its deferrals).
 - **Fixed on the way.** In C#, documentation written before an attribute was lost (it was attached to the `[`). It now belongs to the member, as in C++ and Rust.
 - **`@execs`.** A function returning a bool gets True and False exec outputs (`FunctionImplementation.execs`). The call lowers to the call into a hidden bool slot, then an `if` on it, so every generator handles it with what it already writes.
   - ExpandEnumAsExecs waits: a code function returning a graph enum comes through as a native type, so its values aren't known.

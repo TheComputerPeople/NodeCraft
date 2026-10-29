@@ -171,4 +171,27 @@ describe("each language's deprecation markers", () => {
     assert.deepEqual(deprecated(expose(scanRuby('module A\n  # @blueprint\n  # @deprecated Use twice.\n  def self.dbl(x)\n    x * 2\n  end\nend\n'), 'ruby', 'a.rb')), { Dbl: { message: 'Use twice.' } });
     assert.deepEqual(deprecated(expose(scanPhp('<?php\n/**\n * @blueprint\n * @deprecated Use twice.\n */\nfunction dbl(int $x): int { return $x * 2; }\n'), 'php', 'a.php')), { Dbl: { message: 'Use twice.' } });
   });
+
+  test("PHP 8.4: #[\\Deprecated], with or without a message, on functions, methods and properties", () => {
+    const defs = expose(scanPhp([
+      '<?php',
+      '/** @blueprint */',
+      '#[\\Deprecated(message: "Use twice.", since: "2.0")]',
+      'function dbl(int $x): int { return $x * 2; }',
+      '/** @blueprint */',
+      '#[Deprecated]',
+      'function triple(int $x): int { return $x * 3; }',
+      'class Player',
+      '{',
+      '    /** @blueprint */',
+      '    #[\\Deprecated("Use health.")]',
+      '    public int $hp = 3;',
+      '    /** @blueprint */',
+      '    #[\\Deprecated]',
+      '    public function heal(): void {}',
+      '}',
+      ''
+    ].join('\n')), 'php', 'a.php');
+    assert.deepEqual(deprecated(defs), { Dbl: { message: 'Use twice.' }, Triple: {}, 'Get Hp': { message: 'Use health.' }, 'Set Hp': { message: 'Use health.' }, Heal: {} });
+  });
 });

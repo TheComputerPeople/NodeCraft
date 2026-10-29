@@ -4,7 +4,7 @@
 // \App\Util\Scores::triple); a function's is its namespace followed by \ (\App\Util\triple). A class's
 // public constructor, instance methods and properties are its members (docs/node-authoring.md, gap 2).
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText, tupleOutputs } from './symbols';
+import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, markDeprecated, parseDocText, tupleOutputs } from './symbols';
 
 export function scanPhp(source: string): ModuleScan {
   const text = source.replace(/\r\n?/g, '\n');
@@ -95,10 +95,24 @@ export function scanPhp(source: string): ModuleScan {
       }
     }
   });
-  return { functions, skipped, ...(scannedClasses.length ? { classes: scannedClasses } : {}) };
+  return markDeprecated({ functions, skipped, ...(scannedClasses.length ? { classes: scannedClasses } : {}) }, deprecatedLines(lines));
 }
 
 // The docblock (`/** ... */`) just above a declaration, attributes (#[...]) between them skipped.
+// PHP 8.4's #[\Deprecated] or #[\Deprecated("message")] / #[\Deprecated(message: "…")] on the
+// lines above a declaration (docs/node-authoring.md, gap 6), by the declaration's 1-based line.
+function deprecatedLines(lines: string[]): Map<number, { message?: string }> {
+  const found = new Map<number, { message?: string }>();
+  lines.forEach((line, index) => {
+    if (/^\s*#\[/.test(line) || index === 0) return;
+    for (let i = index - 1; i >= 0 && /^\s*#\[/.test(lines[i]); i--) {
+      const match = /#\[\s*\\?Deprecated\b\s*(?:\(\s*(?:message\s*:\s*)?(["'])(.*?)\1)?/.exec(lines[i]);
+      if (match) found.set(index + 1, match[2] ? { message: match[2] } : {});
+    }
+  });
+  return found;
+}
+
 function docAbove(lines: string[], index: number): DocComment {
   let i = index - 1;
   while (i >= 0 && /^\s*#\[/.test(lines[i])) i--;
