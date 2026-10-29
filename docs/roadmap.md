@@ -365,10 +365,23 @@ Design and steps: [node-authoring.md](node-authoring.md), with what each step bu
 
 - **Deferred:**
   - Async functions in Ruby (left out, by decision). C++'s std::future, Go's channels, a Rust executor, Lua's coroutines, PHP's Fibers and GDScript's await came after the phase.
-  - Code classes as parents of graph classes.
+  - Code classes as parents of graph classes: Phase 10.
   - Generic functions in C++ (templates), Go, Lua (`---@generic`) and PHP (`@template`), and generic functions with more than two type parameters.
 
-### Phase 10: Release
+### Phase 10: Code classes as parents
+
+Goal: a graph class can extend a class written in code, as a Blueprint extends a C++ class. Decided 2026-10-29 as its own phase, after Phase 9 is merged, rather than as Phase 9's deferred work.
+
+Before it: graph classes extend other graph classes (Parent Class, overrides, Parent calls, virtual calls), and code classes' constructors, methods and properties are nodes with a Target pin (Phase 9).
+
+- **Choosing the parent.** Class Settings' Parent Class lists the workspace's code classes in the graph's language, beside its graph classes.
+- **Inherited members.** The parent's exposed methods and properties are Self's, without a Target wire; its overridable methods can be overridden as events or functions, with Parent calls.
+- **Generated code** extends the code class and imports it, in each language with inheritance. Rust and Go, which have none, report it (or embed, if the design finds that sound).
+- **Run and debugging** across the boundary: stepping from the graph into the parent's code and back.
+
+Design and steps: written when the phase starts.
+
+### Phase 11: Release
 
 Marketplace packaging waits until the platform is complete and robust (decided 2026-10-28).
 
@@ -444,7 +457,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | For Each Loop (with Break) | ✅ | — |
 | Structure | Structs, enums, Make/Break, Set Members, Switch on Enum, the structure and enumeration editors | ✅ (sets and map keys of structs or enums later) | — |
 | Structure | Object references: Construct, Self, Is Valid, Target pins on variables, functions, events and dispatchers | ✅ | — |
-| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents later) | — |
+| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents in Phase 10) | 10 |
 | Structure | Blueprint Interfaces (implemented in Class Settings, interface calls), Cast To class or interface | ✅ (pure Cast later) | — |
 | Structure | Access (Public, Protected, Private) for variables and functions | ✅ | — |
 | Structure | Entry points: Main with command-line arguments; framework packs' events; Test Case events with Assert nodes and Run Tests | ✅ (C# tests run through Run's project, not xUnit) | — |
@@ -452,7 +465,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python, C#, C++ headers, Rust, Java, Lua, GDScript, Ruby, PHP; Go and other languages through their language server) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
-| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes deferred) | — |
+| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes in Phase 10) | 10 |
 | Interop | Out parameters and several return values from code; latent (async) functions | ✅ (several outputs in every language but GDScript, which has none; async functions in TypeScript, JavaScript, Python, C# and Java, the languages with a standard future) | — |
 | Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ✅ (graph functions and macros in Details; code through tags and each language's deprecation marker) | — |
 | Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | ✅ (also F12 and Shift+F12; node files open at their type) | — |
