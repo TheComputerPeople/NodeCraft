@@ -11,9 +11,8 @@ import { Access, Graph, GraphDocument, GraphNode, GraphSignature, GraphVariable 
 import { parseKeywords } from '../core/metadata';
 import { ContainerKind, TypeRef } from '../core/types';
 import { defaultValue } from '../core/values';
-import { formatType } from '../core/types';
 import { addNode, addPin } from './actions';
-import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText, updateClassHierarchy, languageCapabilities } from './document';
+import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText, updateClassHierarchy, languageCapabilities, languageTerms, shownType } from './document';
 import { dom, escapeHtml, setStatus } from './dom';
 import { renderMyBlueprint } from './my-blueprint';
 import { render } from './render';
@@ -102,7 +101,7 @@ export function renderInspector(): void {
     const list = document.createElement('dl');
     list.className = 'details-pins';
     for (const pin of pins) {
-      list.insertAdjacentHTML('beforeend', `<dt>${escapeHtml(pin.name || pin.id)}</dt><dd>${pin.direction === 'input' ? 'Input' : 'Output'} · ${escapeHtml(formatType(pin.type))}</dd>`);
+      list.insertAdjacentHTML('beforeend', `<dt>${escapeHtml(pin.name || pin.id)}</dt><dd>${pin.direction === 'input' ? 'Input' : 'Output'} · ${escapeHtml(shownType(pin.type))}</dd>`);
     }
     wrapper.appendChild(list);
   }
@@ -487,7 +486,7 @@ export function typePicker<T extends TypeRef | 'exec'>(type: T, label: string, a
 // The built-in types, then the workspace's structs and enums in the document's language (but not a
 // structure itself, which can't contain itself).
 export function typeOptions(exclude?: string): { id: string; label: string }[] {
-  return [...VARIABLE_TYPES, ...workspaceTypes().filter((t) => t.id !== exclude).map((t) => ({ id: t.id, label: t.name }))];
+  return [...basicTypes(), ...workspaceTypes().filter((t) => t.id !== exclude).map((t) => ({ id: t.id, label: t.name }))];
 }
 
 export function workspaceTypes(): UserType[] {
@@ -505,17 +504,25 @@ const VARIABLE_TYPES: { id: string; label: string }[] = [
   { id: 'string', label: 'String' },
   { id: 'any', label: 'Any' }
 ];
-const CONTAINERS: { id: '' | ContainerKind; label: string }[] = [
-  { id: '', label: 'Single' },
-  { id: 'array', label: 'Array' },
-  { id: 'set', label: 'Set' },
-  { id: 'map', label: 'Map' }
-];
 
-// The containers the graph's language has (and the one a type already uses, so it still shows).
+// The basic types, in the graph language's terms when it has them (Python's int, float, str).
+function basicTypes(): { id: string; label: string }[] {
+  const terms = languageTerms();
+  return terms ? VARIABLE_TYPES.map((t) => ({ id: t.id, label: shownType({ id: t.id }) })) : VARIABLE_TYPES;
+}
+
+// The containers the graph's language has (and the one a type already uses, so it still shows), by
+// its names for them.
 function containerOptions(current?: ContainerKind): { id: '' | ContainerKind; label: string }[] {
   const capabilities = languageCapabilities();
-  return CONTAINERS.filter((c) => !c.id || c.id === current || supports(capabilities, c.id));
+  const terms = languageTerms();
+  const containers: { id: '' | ContainerKind; label: string }[] = [
+    { id: '', label: 'Single' },
+    { id: 'array', label: terms?.array ?? 'Array' },
+    { id: 'set', label: terms?.set ?? 'Set' },
+    { id: 'map', label: terms?.map ?? 'Map' }
+  ];
+  return containers.filter((c) => !c.id || c.id === current || supports(capabilities, c.id));
 }
 
 function field(label: string, control: HTMLElement): HTMLElement {
@@ -556,7 +563,7 @@ function renderVariableDetails(variableId: string): boolean {
 
   const wrapper = document.createElement('div');
   wrapper.className = 'details';
-  wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(variable.name)}</div><div class="muted inspector-type">${found?.graph ? `Local variable of ${escapeHtml(found.graph.name)}` : 'Variable'} · ${escapeHtml(formatType(variable.type))}</div>`;
+  wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(variable.name)}</div><div class="muted inspector-type">${found?.graph ? `Local variable of ${escapeHtml(found.graph.name)}` : 'Variable'} · ${escapeHtml(shownType(variable.type))}</div>`;
   const fields = document.createElement('div');
   fields.className = 'details-fields';
 

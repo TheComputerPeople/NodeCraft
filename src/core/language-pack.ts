@@ -6,6 +6,7 @@ import { IrProgram } from './compiler/ir';
 import { NodeLine } from './compiler/writer';
 import { ModuleScan } from './importing/symbols';
 import { OutputPlan, PlacementContext } from './output-plan';
+import type { LanguageTerms } from './terms';
 import { TypeRef } from './types';
 
 // Which Blueprint concepts generated code in the language can express (not which keywords the
@@ -253,6 +254,9 @@ export interface LanguagePack {
   capabilities: LanguageCapabilities;
   // The language's spelling of a canonical type.
   mapType(type: TypeRef): string;
+  // Its words for containers and types, as the editor shows them (src/core/terms.ts); Unreal's
+  // when absent.
+  terms?: LanguageTerms;
   simulator?: CodeSimulator;
   generator?: CodeGenerator;
   importer?: SymbolImporter;

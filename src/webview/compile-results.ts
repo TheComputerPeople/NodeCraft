@@ -4,9 +4,10 @@ import { setTypeLanguages } from '../core/blueprint-edits';
 import { CompileDiagnostic } from '../core/compiler/diagnostics';
 import { definitionFor } from '../core/editing';
 import { CompileReport } from '../core/model';
-import { lookupDefinition, markDirty } from './document';
+import { applyTerms, lookupDefinition, markDirty } from './document';
+import { renderMyBlueprint } from './my-blueprint';
 import { dom, setStatus } from './dom';
-import { renderPalette } from './panels';
+import { renderInspector, renderPalette } from './panels';
 import { render } from './render';
 import { selectNode } from './selection';
 import { state } from './state';
@@ -115,8 +116,13 @@ export function setLanguage(language: string): void {
   // A shared struct or enum doesn't list its own language among its others.
   if (state.document.languages) setTypeLanguages(state.document, state.document.languages);
   markDirty();
-  // The palette offers the project functions this language can call.
+  // The palette offers the project functions this language can call, and everything shown takes
+  // its terms (docs/language-context.md, part 2).
+  applyTerms();
   renderPalette();
+  renderMyBlueprint();
+  renderInspector();
+  render();
 }
 
 function count(n: number, noun: string): string {

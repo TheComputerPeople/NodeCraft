@@ -6,6 +6,7 @@ import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { scanCSharp } from '../importing/csharp-scanner';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression } from '../language-pack';
+import { LANGUAGE_TERMS } from '../terms';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 import { TypeRef, parseTypeId } from '../types';
 
@@ -434,6 +435,7 @@ export const csharpPack: LanguagePack = {
   workspaceMarkers: ['**/*.csproj', '**/*.sln', '**/*.slnx'],
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.csharp,
   generator: csharpGenerator,
   importer: { extensions: ['.cs'], scan: scanCSharp }
 };

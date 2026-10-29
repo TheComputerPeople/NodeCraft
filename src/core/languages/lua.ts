@@ -8,6 +8,7 @@ import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import { scanLua } from '../importing/lua-scanner';
 import { OutputPlan, PlacementContext } from '../output-plan';
+import { LANGUAGE_TERMS } from '../terms';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
 import { LUA_RUNTIME_FILE, LUA_RUNTIME_MODULE, luaRuntime } from './lua-runtime';
@@ -174,6 +175,7 @@ export const luaPack: LanguagePack = {
   workspaceMarkers: ['**/.luarc.json', '**/*.rockspec', '**/.luacheckrc'],
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.lua,
   generator: luaGenerator,
   // Module functions marked ---@blueprint (LuaLS annotations give their types).
   importer: { extensions: ['.lua'], scan: scanLua }

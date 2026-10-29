@@ -8,6 +8,7 @@ import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import { scanRuby } from '../importing/ruby-scanner';
+import { LANGUAGE_TERMS } from '../terms';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
 import { RUBY_RUNTIME_FILE, rubyRuntime } from './ruby-runtime';
@@ -136,6 +137,7 @@ export const rubyPack: LanguagePack = {
   workspaceMarkers: ['**/Gemfile', '**/*.gemspec'],
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.ruby,
   generator: rubyGenerator,
   // Module methods and top-level methods marked @blueprint in YARD comments.
   importer: { extensions: ['.rb'], scan: scanRuby }

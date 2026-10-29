@@ -2,6 +2,7 @@ import type { LanguageCapabilities } from './language-pack';
 import type { CompileDiagnostic } from './compiler/diagnostics';
 import type { DefinitionSite } from './navigation';
 import type { SearchHit } from './search';
+import type { LanguageTerms } from './terms';
 import type { TypeRef } from './types';
 import type { EnumInfo, Enumerator, StructInfo } from './user-types';
 import type { Dispatcher } from './events';
@@ -364,6 +365,8 @@ export interface LanguageOption {
   snippets?: string[];
   // What it can express; the editor hides the rest.
   capabilities?: LanguageCapabilities;
+  // Its words for containers and types (src/core/terms.ts), for the editor to show.
+  terms?: LanguageTerms;
 }
 
 // A Find in All Blueprints hit: a search hit plus the file it is in.

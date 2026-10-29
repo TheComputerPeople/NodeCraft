@@ -1,7 +1,6 @@
 import { canAddPin, definitionFor } from '../core/editing';
 import { deprecationMessage } from '../core/metadata';
 import { GraphConnection, GraphNode, NodeDefinition, PinDefinition } from '../core/model';
-import { formatType } from '../core/types';
 import { SEQUENCE } from '../core/resolve';
 import { addPin, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { breakpointOn } from './breakpoints';
@@ -9,7 +8,7 @@ import { pausedNodeId } from './debugger';
 import { hideHoverValue, isWatched, showHoverValue, watchedValue } from './values';
 import { renderComments } from './comments';
 import { nodeDiagnostics } from './compile-results';
-import { functionProblem, libraryProblem, lookupDefinition, markDirty, pinDef } from './document';
+import { functionProblem, libraryProblem, lookupDefinition, markDirty, pinDef, shownType } from './document';
 import { dom } from './dom';
 import { goToDefinition, siteOf } from './navigation';
 import { enumSelect, renderInspector, workspaceTypes } from './panels';
@@ -207,7 +206,7 @@ function renderPin(node: GraphNode, pin: PinDefinition, showLabel: boolean): HTM
   handle.dataset.direction = pin.direction;
   if (pin.type?.container) handle.dataset.container = pin.type.container;
   handle.style.setProperty('--pin-color', pinColor(pin));
-  handle.title = pin.kind === 'exec' ? 'Execution pin' : `${pin.name || pin.id} (${formatType(pin.type)})`;
+  handle.title = pin.kind === 'exec' ? 'Execution pin' : `${pin.name || pin.id} (${shownType(pin.type)})`;
   handle.addEventListener('mousedown', (e) => onPinMouseDown(node, pin, e));
   handle.addEventListener('dragstart', (e) => e.preventDefault());
   // Hovering a pin highlights its wires, as in Unreal.

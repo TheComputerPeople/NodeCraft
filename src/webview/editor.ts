@@ -3,7 +3,7 @@ import { HostMessage, RuntimeLogEvent } from '../core/model';
 import { addNode, compatibleEntriesForDraft, completeConnection, copySelection, deleteSelected, duplicateSelected, finishCollapseToLibrary, finishRewire, moveSelection, pasteText, pinMenuItems, refreshFunctionNodes } from './actions';
 import { deleteSelectedComments, finishCommentDrag, isDraggingComment, placeComment, selectedCommentIds, startCommentRename, updateCommentDrag, wrapSelectionInComment } from './comments';
 import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, setLanguage, showCompileResult } from './compile-results';
-import { applySettings, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
+import { applySettings, applyTerms, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
 import { dom, eventElement, nodeElement, setStatus } from './dom';
 import { postToHost } from './host';
 import './layout';
@@ -12,7 +12,7 @@ import { AlignEdge, alignSelection, straightenConnections } from './align';
 import { showDebugState } from './debugger';
 import { receiveValues, setWatches } from './values';
 import { clearBreakpoints, pruneBreakpoints, setBreakpoints, toggleSelectedBreakpoints } from './breakpoints';
-import { finishVariableDrag, removeVariable, startRename, updateVariableDrag } from './my-blueprint';
+import { finishVariableDrag, removeVariable, renderMyBlueprint, startRename, updateVariableDrag } from './my-blueprint';
 import { findReferences, goToDefinition } from './navigation';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showNodeContextMenu } from './menus';
 import { renderPalette } from './panels';
@@ -88,8 +88,10 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       break;
     case 'languages':
       state.languages = message.languages ?? [];
+      applyTerms();
       renderLanguagePicker();
       renderPalette();
+      renderMyBlueprint();
       render();
       break;
     case 'debugValues':

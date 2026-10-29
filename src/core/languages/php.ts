@@ -9,6 +9,7 @@ import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import { scanPhp } from '../importing/php-scanner';
+import { LANGUAGE_TERMS } from '../terms';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
 import { PHP_RUNTIME_FILE, phpRuntime } from './php-runtime';
@@ -144,6 +145,7 @@ export const phpPack: LanguagePack = {
   workspaceMarkers: ['**/composer.json'],
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.php,
   generator: phpGenerator,
   // Functions and public static methods marked @blueprint in docblocks.
   importer: { extensions: ['.php'], scan: scanPhp }

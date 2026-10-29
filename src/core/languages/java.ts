@@ -8,6 +8,7 @@ import { CodeWriter } from '../compiler/writer';
 import { scanJava } from '../importing/java-scanner';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import type { ClassInfo, InterfaceInfo } from '../objects';
+import { LANGUAGE_TERMS } from '../terms';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 
@@ -469,6 +470,7 @@ export const javaPack: LanguagePack = {
   workspaceMarkers: ['**/pom.xml', '**/build.gradle', '**/build.gradle.kts'],
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.java,
   generator: javaGenerator,
   // public static methods marked @blueprint in a Javadoc comment, called by their qualified class.
   importer: { extensions: ['.java'], scan: scanJava }

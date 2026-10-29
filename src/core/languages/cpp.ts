@@ -7,6 +7,7 @@ import { relativeSpecifier } from '../compiler/module-paths';
 import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import { OutputPlan, PlacementContext } from '../output-plan';
 import type { ClassInfo, InterfaceInfo } from '../objects';
+import { LANGUAGE_TERMS } from '../terms';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 import { scanCpp } from '../importing/cpp-scanner';
@@ -194,6 +195,7 @@ export const cppPack: LanguagePack = {
   workspaceMarkers: ['**/CMakeLists.txt', '**/*.vcxproj', '**/meson.build'],
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.cpp,
   generator: cppGenerator,
   // Functions marked @blueprint in headers: generated code includes the header to call them.
   importer: { extensions: ['.h', '.hpp', '.hh', '.hxx'], scan: scanCpp }

@@ -7,6 +7,7 @@ import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import { OutputPlan, PlacementContext } from '../output-plan';
 import type { InterfaceInfo } from '../objects';
+import { LANGUAGE_TERMS } from '../terms';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 import { GO_RUNTIME_FILE, goRuntime } from './go-runtime';
@@ -210,6 +211,7 @@ export const goPack: LanguagePack = {
   // No inheritance: embedding has no virtual calls, as Rust has none.
   capabilities: { staticTyping: true, classes: true, inheritance: false, interfaces: true, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.go,
   generator: goGenerator,
   // Functions marked // @blueprint, found through gopls (Tier 2).
   importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], objectsByPointer: true, severalResults: { error: 'error' }, exportedNames: 'capitalized', asyncChannels: true } }

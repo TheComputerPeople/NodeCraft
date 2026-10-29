@@ -8,9 +8,8 @@ import { MACRO_INSTANCE } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, UNBIND_ALL, UNBIND_EVENT, documentDispatchers } from '../core/events';
 import { GraphKind, GraphVariable } from '../core/model';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
-import { formatType } from '../core/types';
 import { addNode } from './actions';
-import { documentAncestors, documentInterfaceFunctions, lookupDefinition, markDirty, languageCapabilities } from './document';
+import { documentAncestors, documentInterfaceFunctions, lookupDefinition, markDirty, languageCapabilities, shownType } from './document';
 import { dom, eventElement, setStatus } from './dom';
 import { MenuItem, showFloatingMenu } from './floating-menu';
 import { newConnectionId } from './host';
@@ -164,7 +163,7 @@ function variableItem(variable: GraphVariable): HTMLElement {
   item.prepend(dot);
   const type = document.createElement('span');
   type.className = 'mb-type';
-  type.textContent = formatType(variable.type);
+  type.textContent = shownType(variable.type);
   item.appendChild(type);
   item.addEventListener('mousedown', (e) => {
     if (e.button !== 0 || eventElement(e)?.closest('input')) return;

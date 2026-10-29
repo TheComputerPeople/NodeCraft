@@ -329,7 +329,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   private languageOptions(): LanguageOption[] {
     return this.languages.all().filter((p) => p.generator).map((p) => ({
       id: p.id, displayName: p.displayName, callable: p.generator!.importLanguages, capabilities: p.capabilities,
-      snippetLanguages: p.generator!.snippetLanguages, snippets: Object.keys(p.generator!.snippets ?? {})
+      snippetLanguages: p.generator!.snippetLanguages, snippets: Object.keys(p.generator!.snippets ?? {}),
+      ...(p.terms ? { terms: p.terms } : {})
     }));
   }
 

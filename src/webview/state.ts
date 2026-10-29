@@ -71,6 +71,9 @@ export interface EditorState {
   document: GraphDocument | null;
   // The graph on the canvas: one of document.graphs, or null when there is no document.
   graph: Graph | null;
+  // The definitions as the host sent them, and in the graph language's terms (src/core/terms.ts),
+  // which is what the editor shows and looks up.
+  sourceDefinitions: NodeDefinition[];
   definitions: NodeDefinition[];
   defByType: Map<string, NodeDefinition>;
   selectedNodeIds: Set<string>;
@@ -129,6 +132,7 @@ export interface EditorState {
 export const state: EditorState = {
   document: null,
   graph: null,
+  sourceDefinitions: [],
   definitions: [],
   defByType: new Map(),
   selectedNodeIds: new Set(),

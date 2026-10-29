@@ -8,6 +8,7 @@ import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import { OutputPlan, PlacementContext } from '../output-plan';
 import type { ClassInfo } from '../objects';
+import { LANGUAGE_TERMS } from '../terms';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 import { scanRust } from '../importing/rust-scanner';
@@ -238,6 +239,7 @@ export const rustPack: LanguagePack = {
   // No inheritance; interfaces (traits) arrive later.
   capabilities: { staticTyping: true, classes: true, inheritance: false, interfaces: false, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.rust,
   generator: rustGenerator,
   // pub functions marked /// @blueprint, called through their module in the crate.
   importer: { extensions: ['.rs'], scan: scanRust }

@@ -6,6 +6,7 @@ import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claim
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression } from '../language-pack';
+import { LANGUAGE_TERMS } from '../terms';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType, isUserTypeId } from '../user-types';
 
@@ -313,6 +314,7 @@ export const pythonPack: LanguagePack = {
   workspaceMarkers: ['**/pyproject.toml', '**/setup.py', '**/setup.cfg', '**/requirements.txt', '**/Pipfile'],
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.python,
   generator: pythonGenerator,
   importer: { extensions: ['.py'], scan: scanPython }
 };

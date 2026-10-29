@@ -68,15 +68,17 @@ The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts)
   |---|---|---|---|---|---|---|---|
   | TypeScript, JavaScript | Array | Set | Map | string | integer | number | boolean |
   | Python | List | Set | Dict | str | int | float | bool |
-  | C# | List | HashSet | Dictionary | string | long | double | bool |
-  | C++ | Vector | Set | Map | string | int64 | double | bool |
-  | Rust | Vec | HashSet | HashMap | String | i64 | f64 | bool |
+  | C# | List | HashSet | Dictionary | string | int | double | bool |
+  | C++ | Vector | Set | Map | std::string | long long | double | bool |
+  | Rust | Vec | Set | Map | String | i64 | f64 | bool |
   | Java | List | Set | Map | String | long | double | boolean |
-  | Go | Slice | Set | Map | string | int64 | float64 | bool |
-  | Lua | Table (list) | Table (set) | Table | string | integer | number | boolean |
+  | Go | Slice | Set | Map | string | int | float64 | bool |
+  | Lua | List | Set | Table | string | integer | number | boolean |
   | GDScript | Array | Set | Dictionary | String | int | float | bool |
   | Ruby | Array | Set | Hash | String | Integer | Float | Boolean |
-  | PHP | Array (list) | Set | Array (map) | string | int | float | bool |
+  | PHP | List | Set | Map | string | int | float | bool |
+
+  (As built: the basic types are each generator's own, and the container names follow the types generated code uses, such as Rust's `vgraph::Map` and PHP's `VgList`.)
 
   These are the words, not the generated types. Each pack's generator already knows its types. Where it differs, the table follows what the generator emits (a C++ `std::vector`, a Go slice).
 - **Type names.** A pin's type is shown in the language's own text, from the generator: Python `list[int]`, C# `List<long>`, Rust `Vec<i64>`, TypeScript `number[]`. Each generator gains `typeText(type)`, built from what it uses for declarations. Pins, tooltips, Details, My Blueprint and the type picker show it; the picker's entries are the language's words (List, Dict).
@@ -84,6 +86,24 @@ The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts)
 - **Everywhere shown.** The palette, the Add Node menu, node titles on the canvas, pin tooltips, the type picker, Details and My Blueprint all use the terms. A Python graph shows a "Make List" node with a `list[int]` output.
 - **Search finds both.** A node's search text includes its Unreal name, so "make array" still finds Make List.
 - **Saved graphs don't change.** Node types, pin ids and type ids are the same; only what's drawn follows the language. Changing the Language menu redraws the canvas in the new terms.
+
+**Built (steps 5 and 6, in one commit).** The terms are data the webview applies itself, so the core and the editor were one change.
+
+- **Terms** (src/core/terms.ts):
+  - `LanguageTerms`: the container names, and a `TypeSpelling` with each basic type and templates for containers (`list[{T}]`, `dict[{K}, {V}]`, `{T} | None`). Java also boxes element types (`ArrayList<Long>`).
+  - Each built-in pack declares `terms` (`LANGUAGE_TERMS`); a pack without them, such as a declarative one, keeps Unreal's.
+  - `typeText(type, spelling)` writes a type. Without a spelling it gives exactly what `formatType` gives, which the tests check for every kind of type.
+- **Node names.**
+  - `localizeDefinition` puts a built-in node in the terms: names from `NAME_TEMPLATES` (Make {Array}, Set {Array} Elem, Make {Map} From {Array}s and eight more), and categories whose part is Array, Set or Map.
+  - The Unreal name joins the node's keywords, so search finds both. Only `core:` nodes change: project functions and node libraries keep the names their authors gave.
+  - Only container words change. Scalar words in names stay Unreal's ("Random Float in Range", not "Random F64 in Range"), and pins show the language's scalar types.
+- **The editor.**
+  - The webview keeps the definitions as the host sent them (`sourceDefinitions`), and `applyTerms` puts them in the graph language's terms. It runs when the definitions, the document's language, or the languages change. Since the palette, the Add Node menu, node titles and Details all read the definitions, they follow it.
+  - Pin tooltips, Details, My Blueprint and the type picker write types through `shownType`. The type picker lists the language's basic types (Python's int, float, str, bool) and its container names (Single, List, Set, Dict).
+  - The host sends each language's `terms` with its capabilities (`LanguageOption.terms`).
+- **Tests.**
+  - Unit (test/unit/terms.test.ts): Unreal's terms change nothing. Every template gives a node's own name. Each language's spelling, and its basic types match its generator's `mapType` (TypeScript's and JavaScript's int is "integer", so the picker tells it from float). Verbs aren't containers.
+  - Browser (test/webview/language-context.test.ts): switching a graph from TypeScript to Python changes the palette (Make List, Make Dict From Lists, Utilities / List), a node's title, a pin's tooltip (`list[int]`), My Blueprint and the type picker. A search for "make array" finds Make List. The saved graph changes only its language, and switching back restores Unreal's names.
 
 ## Part 3: code preview
 
@@ -124,7 +144,7 @@ One commit each; large steps may take several.
 3. Fixing what the audit finds by compiling and building.
 4. The audit's runs against Simulate, and fixing what they find. (Steps 2 to 4 were one commit.)
 5. Terms: `terms` in packs, `typeText` in generators, the name templates (src/core/terms.ts), the 12 languages' terms.
-6. Terms in the webview: palette, Add Node menu, node titles, pins, the type picker, Details, My Blueprint; search by both names.
+6. Terms in the webview: palette, Add Node menu, node titles, pins, the type picker, Details, My Blueprint; search by both names. (Steps 5 and 6 were one commit.)
 7. Code preview: `previewNode`, the palette's pane and the menu's.
 8. Language-only nodes: Regex and Lua patterns.
 9. Language-only nodes: Hash and JSON.

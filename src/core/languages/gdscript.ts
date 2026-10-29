@@ -11,6 +11,7 @@ import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import { scanGdscript } from '../importing/gdscript-scanner';
 import { OutputPlan, PlacementContext } from '../output-plan';
+import { LANGUAGE_TERMS } from '../terms';
 import { TypeRef, parseTypeId } from '../types';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
 import { GDSCRIPT_RUNTIME_FILE, gdscriptRuntime } from './gdscript-runtime';
@@ -192,6 +193,7 @@ export const gdscriptPack: LanguagePack = {
   // No exceptions: failures are recorded and checked (vg.fail).
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.gdscript,
   generator: gdscriptGenerator,
   // Static functions marked ## @blueprint.
   importer: { extensions: ['.gd'], scan: scanGdscript }

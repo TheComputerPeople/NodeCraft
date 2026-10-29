@@ -10,7 +10,8 @@ import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/function
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, UNBIND_ALL, UNBIND_EVENT, customEvents, documentDispatchers, eventName } from '../core/events';
 import { INTERFACE_CALL, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, PARENT_START, ancestors, canAccess, classTypeId, declaredClass, implementedInterfaces, interfaceById, subclassTest, codeClassBases } from '../core/objects';
-import { setClassHierarchy } from '../core/types';
+import { LanguageTerms, localizeDefinition, typeText } from '../core/terms';
+import { TypeRef, setClassHierarchy } from '../core/types';
 import { listUserTypes } from '../core/user-types';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
 import { primaryGraph } from '../core/serializer';
@@ -174,11 +175,31 @@ export function pinDef(nodeId: string, pinId: string): PinDefinition | undefined
 }
 
 export function setDefinitions(definitions: NodeDefinition[]): void {
+  state.sourceDefinitions = definitions;
+  applyTerms();
+  renderPalette();
+}
+
+// The graph language's terms (docs/language-context.md, part 2), or none for Unreal's.
+export function languageTerms(): LanguageTerms | undefined {
+  const id = state.document?.language || DEFAULT_LANGUAGE;
+  return state.languages.find((l) => l.id === id)?.terms;
+}
+
+// A type as the graph's language writes it.
+export function shownType(type: TypeRef | undefined): string {
+  return typeText(type, languageTerms()?.types);
+}
+
+// Puts the definitions in the graph language's terms; called when they, the language or the
+// languages change. Callers redraw.
+export function applyTerms(): void {
+  const terms = languageTerms();
+  const definitions = terms ? state.sourceDefinitions.map((d) => localizeDefinition(d, terms)) : state.sourceDefinitions;
   state.definitions = definitions;
   // A node of a former type (NodeDefinition.aliases) finds its definition, and takes its type when saved.
   state.defByType = new Map(definitions.flatMap((d) => [[d.type, d] as const, ...(d.aliases ?? []).map((alias) => [alias, d] as const)]));
   updateClassHierarchy();
-  renderPalette();
 }
 
 // An object of a subclass wires where its parent class is expected (src/core/objects.ts).
@@ -217,8 +238,10 @@ export function applySettings(message: HostMessage): void {
 // Shows `doc`, staying on the same graph when it still exists (e.g. after an undo).
 export function loadDocument(doc: GraphDocument, preserveView = false): void {
   const previousGraphId = state.graph?.id;
+  const language = state.document?.language;
   state.document = copyDocument(doc);
-  updateClassHierarchy();
+  if (state.document.language !== language) applyTerms();
+  else updateClassHierarchy();
   state.graph = state.document.graphs.find((g) => g.id === previousGraphId) ?? primaryGraph(state.document) ?? null;
   dom.graphName.textContent = state.graph ? `${state.document.name} › ${state.graph.name}` : state.document.name;
   // A structure or enumeration has no graphs: its fields or values are edited instead.

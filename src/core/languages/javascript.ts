@@ -1,6 +1,7 @@
 // JavaScript and TypeScript packs. They share a simulator, because the extension host is a
 // JavaScript runtime and can execute JavaScript snippets directly.
 import { CodeSimulator, LanguagePack } from '../language-pack';
+import { LANGUAGE_TERMS } from '../terms';
 import { TypeRef, parseTypeId } from '../types';
 import { scanTypeScript } from '../importing/typescript-scanner';
 import { typescriptGenerator } from './typescript-codegen';
@@ -56,6 +57,7 @@ export const typescriptPack: LanguagePack = {
   workspaceMarkers: ['**/tsconfig.json'],
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.typescript,
   simulator: javascriptSimulator,
   generator: typescriptGenerator({ typed: true, mapType }),
   importer: { extensions: ['.ts', '.mts', '.cts'], scan: (source) => scanTypeScript(source) }
@@ -68,6 +70,7 @@ export const javascriptPack: LanguagePack = {
   workspaceMarkers: ['**/package.json', '**/jsconfig.json'],
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: false, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
+  terms: LANGUAGE_TERMS.javascript,
   simulator: javascriptSimulator,
   generator: typescriptGenerator({ typed: false, mapType }),
   importer: { extensions: ['.js', '.mjs', '.cjs'], scan: (source) => scanTypeScript(source, true) }
