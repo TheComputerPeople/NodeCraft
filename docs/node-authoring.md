@@ -1,8 +1,8 @@
-# Node authoring (Phase 9 design)
+# Node authoring (Phase 9)
 
 Phase 9 of the [roadmap](roadmap.md): making nodes, Unreal's way. In Unreal you make nodes in two ways. You write C++ (`UFUNCTION(BlueprintCallable)` in a function library or on a class, `UPROPERTY(BlueprintReadWrite)`), or you build Blueprint Function Libraries and Macro Libraries out of other nodes. This phase reviews how each of our paths compares and closes the gaps.
 
-Reviewed 2026-10-28, after the built-in utility library grew to 94 nodes. Each gap below says what happens today, checked against the code, and what to build.
+Reviewed 2026-10-28, after the built-in utility library grew to 94 nodes. Each gap below says what happened then, checked against the code, and what to build. A "Built" section after each design says what each step built. The phase was completed on 2026-10-29: [roadmap.md](roadmap.md) has its status and deferrals.
 
 ## How nodes are made today
 
@@ -351,6 +351,8 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - The new function goes into the library, which is saved (and so compiled); its library node takes the selection's place, wired as Collapse to Function wires its call.
   - A selection that uses the blueprint's own variables, functions, macros, custom events, dispatchers or Self (or a member node without a Target wire) can't move, and the status bar says so. Delay is refused by the library's function graph, as in any function.
 - **The `subgraph` implementation kind** is in the model and schema but nothing implements it, and architecture.md still proposes `*.vfunc` files. Function libraries are that design, so the kind is removed and the doc updated.
+
+  **Built (step 16).** The kind is gone from the model and the node schema, and architecture.md describes the graph-backed nodes that replaced it: function and macro libraries.
 - **Generic and wildcard code functions** stay out. Unreal rarely uses them, and they need type inference across the scanners.
 
 ## Summary
@@ -378,6 +380,20 @@ A sample workspace with TypeScript and Python graphs uses every path:
 - **A graph package** added with Add Blueprint Package.
 
 It runs from Run in both languages, and Go to Definition reaches each source. Each language's interop test (`test/conformance/<language>.test.ts`) also covers code classes and several outputs, and async in the languages that have it.
+
+**Built (step 16).** The workspace is sample/node-authoring; its package's source, as shared, is sample/packages/drills.
+
+- **What's in it.**
+  - `lib/dojo.ts` and `game/dojo.py`: a Trainee class with a constructor, a `health` property, `train`, `split` (two outputs) and an async `rest`.
+  - `libs/Scoring.vgraph`: a function library generated for both languages.
+  - `nodes/Clamp01.node.json`: a snippet node with three examples.
+  - `blueprint-packages/drills`: the package as Add Blueprint Package leaves it, generated for Python too.
+  - `graphs/DojoTs.vgraph` and `graphs/DojoPy.vgraph`: the same graph in each language, using all of them.
+- **The test** (test/conformance/node-authoring.test.ts) builds the nodes as the extension does: it scans the code, reads the libraries for both languages, tags the package's, and reads the node file.
+  - It compiles the libraries in both languages, then runs each graph, which prints 8, 0, 8, 420, 1, 800 and 42.
+  - It checks that every node has a definition to go to (the code's line, the library's graph, the node file).
+  - It checks that the package's version is recorded, and that the node library's examples pass in both languages.
+- **In VS Code.** Running, Go to Definition, the quick fixes, New Node, Test Node Library and Add Blueprint Package are each covered by the integration suite (steps 9 and 12 to 15).
 
 ## Steps
 

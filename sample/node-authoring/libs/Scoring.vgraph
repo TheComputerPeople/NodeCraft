@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 3,
+  "name": "Scoring",
+  "kind": "functionLibrary",
+  "language": "typescript",
+  "languages": [
+    "python"
+  ],
+  "variables": [],
+  "graphs": [
+    {
+      "id": "Bonus",
+      "name": "Bonus",
+      "kind": "function",
+      "signature": {
+        "inputs": [
+          {
+            "id": "points",
+            "name": "Points",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "score",
+            "name": "Score",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ],
+        "pure": true,
+        "category": "Scoring"
+      },
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Bonus"
+          }
+        },
+        {
+          "id": "times",
+          "type": "core:math.multiply",
+          "position": {
+            "x": 220,
+            "y": 40
+          },
+          "properties": {
+            "pin:b": 10
+          }
+        },
+        {
+          "id": "ret",
+          "type": "core:function.return",
+          "position": {
+            "x": 440,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Bonus"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "entry.execOut->ret.execIn",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "ret",
+          "toPin": "execIn"
+        },
+        {
+          "id": "entry.points->times.a",
+          "fromNode": "entry",
+          "fromPin": "points",
+          "toNode": "times",
+          "toPin": "a"
+        },
+        {
+          "id": "times.returnValue->ret.score",
+          "fromNode": "times",
+          "fromPin": "returnValue",
+          "toNode": "ret",
+          "toPin": "score"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

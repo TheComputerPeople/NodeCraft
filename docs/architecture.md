@@ -34,11 +34,11 @@ Migration: `parseDocument` upgrades older schemas in memory (`src/core/migration
 A user-authored library node can be backed by:
 
 - `code`: target-language source templates or generated source.
-- `subgraph`: a separate visual graph used as the implementation.
 - `native`: extension/runtime code.
-- `function`: a function in the project's own code, read by the language pack's importer (`src/core/importing/`) and imported by generated code. The extension scans and watches the workspace for them (`src/extension/project-functions.ts`).
+- `function`: a function in the project's own code, read by the language pack's importer (`src/core/importing/`) and imported by generated code. The extension scans and watches the workspace for them (`src/extension/project-functions.ts`). A function library's graphs are nodes of this kind too, called through the library's generated file (`source` names the graph, for Simulate and Go to Definition).
+- `macro`: a macro library's macro, expanded where it's used.
 
-A production implementation should make subgraph-backed functions first-class assets, e.g. `*.vfunc`, and automatically expose their inputs/outputs as a node signature.
+Graph-backed nodes are function and macro libraries (`.vgraph` files of kind `functionLibrary` or `macroLibrary`; [program-structure.md](program-structure.md)), whose signatures become the nodes' pins. They replaced the early `subgraph` kind, which nothing implemented ([node-authoring.md](node-authoring.md), gap 10).
 
 ## Compiler pipeline
 

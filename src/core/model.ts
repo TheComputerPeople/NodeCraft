@@ -72,7 +72,6 @@ export type Capability = 'classes' | 'inheritance' | 'interfaces' | 'async' | 'd
 export type NodeImplementation =
   | { kind: 'native'; operation: string }
   | { kind: 'code'; languages: Record<string, string>; defaultLanguage?: string }
-  | { kind: 'subgraph'; graph: string }
   | FunctionImplementation
   | MacroImplementation
   // A struct's Make, Break and Set Members, and an enum's Switch on, == and != (src/core/user-types.ts).

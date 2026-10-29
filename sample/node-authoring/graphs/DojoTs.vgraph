@@ -1,0 +1,383 @@
+{
+  "schemaVersion": 3,
+  "name": "DojoTs",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "construct",
+          "type": "fn:typescript:lib/dojo.ts#Trainee:new",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {
+            "pin:start": 5
+          }
+        },
+        {
+          "id": "train",
+          "type": "fn:typescript:lib/dojo.ts#Trainee:train",
+          "position": {
+            "x": 420,
+            "y": 0
+          },
+          "properties": {
+            "pin:hours": 3
+          }
+        },
+        {
+          "id": "p1",
+          "type": "core:console.print",
+          "position": {
+            "x": 640,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "split",
+          "type": "fn:typescript:lib/dojo.ts#Trainee:split",
+          "position": {
+            "x": 840,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "p2",
+          "type": "core:console.print",
+          "position": {
+            "x": 1060,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "p3",
+          "type": "core:console.print",
+          "position": {
+            "x": 1260,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "set",
+          "type": "fn:typescript:lib/dojo.ts#Trainee:set:health",
+          "position": {
+            "x": 1460,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": 42
+          }
+        },
+        {
+          "id": "get",
+          "type": "fn:typescript:lib/dojo.ts#Trainee:get:health",
+          "position": {
+            "x": 1460,
+            "y": 220
+          },
+          "properties": {}
+        },
+        {
+          "id": "bonus",
+          "type": "lib:libs/Scoring.vgraph#Bonus",
+          "position": {
+            "x": 1660,
+            "y": 220
+          },
+          "properties": {}
+        },
+        {
+          "id": "p4",
+          "type": "core:console.print",
+          "position": {
+            "x": 1680,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "clamp",
+          "type": "user.dojo.clamp01",
+          "position": {
+            "x": 1880,
+            "y": 220
+          },
+          "properties": {
+            "pin:value": 1.5
+          }
+        },
+        {
+          "id": "p5",
+          "type": "core:console.print",
+          "position": {
+            "x": 1880,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "laps",
+          "type": "lib:blueprint-packages/drills/Drills.vgraph#Laps",
+          "position": {
+            "x": 2080,
+            "y": 220
+          },
+          "properties": {
+            "pin:count": 2
+          }
+        },
+        {
+          "id": "p6",
+          "type": "core:console.print",
+          "position": {
+            "x": 2080,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "rest",
+          "type": "fn:typescript:lib/dojo.ts#Trainee:rest",
+          "position": {
+            "x": 2280,
+            "y": 0
+          },
+          "properties": {
+            "pin:seconds": 0.01
+          }
+        },
+        {
+          "id": "p7",
+          "type": "core:console.print",
+          "position": {
+            "x": 2500,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "start.execOut->construct.execIn",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "construct",
+          "toPin": "execIn"
+        },
+        {
+          "id": "construct.execOut->train.execIn",
+          "fromNode": "construct",
+          "fromPin": "execOut",
+          "toNode": "train",
+          "toPin": "execIn"
+        },
+        {
+          "id": "train.execOut->p1.execIn",
+          "fromNode": "train",
+          "fromPin": "execOut",
+          "toNode": "p1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p1.execOut->split.execIn",
+          "fromNode": "p1",
+          "fromPin": "execOut",
+          "toNode": "split",
+          "toPin": "execIn"
+        },
+        {
+          "id": "split.execOut->p2.execIn",
+          "fromNode": "split",
+          "fromPin": "execOut",
+          "toNode": "p2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p2.execOut->p3.execIn",
+          "fromNode": "p2",
+          "fromPin": "execOut",
+          "toNode": "p3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p3.execOut->set.execIn",
+          "fromNode": "p3",
+          "fromPin": "execOut",
+          "toNode": "set",
+          "toPin": "execIn"
+        },
+        {
+          "id": "set.execOut->p4.execIn",
+          "fromNode": "set",
+          "fromPin": "execOut",
+          "toNode": "p4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p4.execOut->p5.execIn",
+          "fromNode": "p4",
+          "fromPin": "execOut",
+          "toNode": "p5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p5.execOut->p6.execIn",
+          "fromNode": "p5",
+          "fromPin": "execOut",
+          "toNode": "p6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p6.execOut->rest.execIn",
+          "fromNode": "p6",
+          "fromPin": "execOut",
+          "toNode": "rest",
+          "toPin": "execIn"
+        },
+        {
+          "id": "rest.completed->p7.execIn",
+          "fromNode": "rest",
+          "fromPin": "completed",
+          "toNode": "p7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "construct.returnValue->train.target",
+          "fromNode": "construct",
+          "fromPin": "returnValue",
+          "toNode": "train",
+          "toPin": "target"
+        },
+        {
+          "id": "construct.returnValue->split.target",
+          "fromNode": "construct",
+          "fromPin": "returnValue",
+          "toNode": "split",
+          "toPin": "target"
+        },
+        {
+          "id": "construct.returnValue->set.target",
+          "fromNode": "construct",
+          "fromPin": "returnValue",
+          "toNode": "set",
+          "toPin": "target"
+        },
+        {
+          "id": "construct.returnValue->get.target",
+          "fromNode": "construct",
+          "fromPin": "returnValue",
+          "toNode": "get",
+          "toPin": "target"
+        },
+        {
+          "id": "construct.returnValue->rest.target",
+          "fromNode": "construct",
+          "fromPin": "returnValue",
+          "toNode": "rest",
+          "toPin": "target"
+        },
+        {
+          "id": "train.returnValue->p1.value",
+          "fromNode": "train",
+          "fromPin": "returnValue",
+          "toNode": "p1",
+          "toPin": "value"
+        },
+        {
+          "id": "split.tens->p2.value",
+          "fromNode": "split",
+          "fromPin": "tens",
+          "toNode": "p2",
+          "toPin": "value"
+        },
+        {
+          "id": "split.units->p3.value",
+          "fromNode": "split",
+          "fromPin": "units",
+          "toNode": "p3",
+          "toPin": "value"
+        },
+        {
+          "id": "get.returnValue->bonus.points",
+          "fromNode": "get",
+          "fromPin": "returnValue",
+          "toNode": "bonus",
+          "toPin": "points"
+        },
+        {
+          "id": "bonus.score->p4.value",
+          "fromNode": "bonus",
+          "fromPin": "score",
+          "toNode": "p4",
+          "toPin": "value"
+        },
+        {
+          "id": "clamp.result->p5.value",
+          "fromNode": "clamp",
+          "fromPin": "result",
+          "toNode": "p5",
+          "toPin": "value"
+        },
+        {
+          "id": "laps.distance->p6.value",
+          "fromNode": "laps",
+          "fromPin": "distance",
+          "toNode": "p6",
+          "toPin": "value"
+        },
+        {
+          "id": "rest.returnValue->p7.value",
+          "fromNode": "rest",
+          "fromPin": "returnValue",
+          "toNode": "p7",
+          "toPin": "value"
+        }
+      ],
+      "comments": [
+        {
+          "id": "about",
+          "text": "Phase 9 exit check: a code class (Construct, a method, Get and Set, several outputs, an async method), a function library, a snippet node and a graph package.",
+          "position": {
+            "x": -20,
+            "y": -120
+          },
+          "size": {
+            "width": 2200,
+            "height": 640
+          }
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "expectedOutput": [
+      "8",
+      "0",
+      "8",
+      "420",
+      "1",
+      "800",
+      "42"
+    ]
+  }
+}

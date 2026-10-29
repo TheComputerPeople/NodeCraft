@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 3,
+  "name": "Drills",
+  "kind": "functionLibrary",
+  "language": "typescript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "Laps",
+      "name": "Laps",
+      "kind": "function",
+      "signature": {
+        "inputs": [
+          {
+            "id": "count",
+            "name": "Count",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "distance",
+            "name": "Distance",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ],
+        "pure": true,
+        "category": "Drills"
+      },
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Laps"
+          }
+        },
+        {
+          "id": "times",
+          "type": "core:math.multiply",
+          "position": {
+            "x": 220,
+            "y": 40
+          },
+          "properties": {
+            "pin:b": 400
+          }
+        },
+        {
+          "id": "ret",
+          "type": "core:function.return",
+          "position": {
+            "x": 440,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Laps"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "entry.execOut->ret.execIn",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "ret",
+          "toPin": "execIn"
+        },
+        {
+          "id": "entry.count->times.a",
+          "fromNode": "entry",
+          "fromPin": "count",
+          "toNode": "times",
+          "toPin": "a"
+        },
+        {
+          "id": "times.returnValue->ret.distance",
+          "fromNode": "times",
+          "fromPin": "returnValue",
+          "toNode": "ret",
+          "toPin": "distance"
+        }
+      ],
+      "comments": []
+    }
+  ]
+}

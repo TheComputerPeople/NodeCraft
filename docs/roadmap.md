@@ -331,7 +331,7 @@ Status: complete (October 2026).
 
 Goal: make nodes the ways Unreal does, from code and from other nodes, with nothing missing that Unreal's function libraries, member functions and properties offer. Decided 2026-10-28, after the utility library grew to 94 nodes: review how users make nodes, then build it as a phase.
 
-Today: functions marked `@blueprint` in all 12 languages, Blueprint Function and Macro Libraries, Collapse to Function and Macro, and `*.node.json` snippet nodes in versioned packages.
+Before it: functions marked `@blueprint` in all 12 languages, Blueprint Function and Macro Libraries, Collapse to Function and Macro, and `*.node.json` snippet nodes in versioned packages.
 
 Gaps (the review, with a design for each: [node-authoring.md](node-authoring.md)):
 
@@ -345,9 +345,32 @@ Gaps (the review, with a design for each: [node-authoring.md](node-authoring.md)
 
 Exit: a TypeScript and Python workspace that uses every path (a library for both languages, code classes through Target pins with several outputs and an async function, a tested node library, an added graph package), running from Run in both languages; each language's interop test covers code classes and several outputs.
 
-Status: designed; the recommendations await a decision.
+Status: complete (October 2026), with the deferrals below. The exit check is sample/node-authoring, a TypeScript and Python workspace:
 
-Design and steps: [node-authoring.md](node-authoring.md).
+- **What it uses.**
+  - A code class in each language: Construct, a method, Get and Set, several outputs, and an async method as a latent node.
+  - A function library generated for both languages.
+  - A snippet node with examples.
+  - A graph package as Add Blueprint Package leaves it.
+- **The conformance test.** It builds the workspace's nodes as the extension does. Its graphs run in both languages and print the same output. Every node reaches its definition, the package's version is recorded, and the node library's examples pass in both languages.
+- **The integration suite.** It covers each part in VS Code:
+  - Go to Definition and Find References;
+  - the warnings and Expose quick fixes;
+  - New Node and node file problems;
+  - Test Node Library;
+  - Add Blueprint Package.
+- **Interop tests.** Each language's covers code classes, several outputs (all but GDScript, which has none) and, where the language has a standard future, async functions.
+
+Design and steps: [node-authoring.md](node-authoring.md), with what each step built.
+
+- **Deferred:**
+  - Async functions in Rust, Go, C++, Lua, Ruby, PHP and GDScript: no standard future, or one that needs an executor or a framework.
+  - ExpandEnumAsExecs: code functions return graph enums as native types.
+  - Code classes as parents of graph classes.
+  - Generic and wildcard code functions.
+  - PHP 8.4's `#[\Deprecated]` attribute.
+  - Quick fixes for Go (read through its language server) and Lua fields.
+  - A package registry: packages come from folders and extensions.
 
 ### Phase 10: Release
 
@@ -439,7 +462,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | ✅ (also F12 and Shift+F12; node files open at their type) | — |
 | Library | Standard math, string, utility and file nodes, with containers' functions; more of Unreal's (Lerp, Map Range, trigonometry, string and set functions, array functions as new arrays) and everyday utilities (text, maps, time, encoding, UUIDs) | ✅ (array functions return new arrays where Unreal's change theirs) | — |
 | Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace and extensions, not a registry) | 6 |
-| Library | Blueprint Function Libraries usable from graphs in each of several languages; plugins that carry library graphs | 🟡 (one language per library; packages hold node files only) | 9 |
+| Library | Blueprint Function Libraries usable from graphs in each of several languages; plugins that carry library graphs | ✅ (a library is generated for each of its languages; packages carry graphs, added with Add Blueprint Package) | — |
 | Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Rust has no inheritance or interfaces, Go no inheritance) | 6, 8 |
 | Languages | (Beyond Unreal) Workspaces with graphs in several languages: a new graph takes its folder's language, structs and enums can be shared between languages, and another language's code is reached through project functions | ✅ (generated cross-language bindings deferred) | 7 |
 | Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |

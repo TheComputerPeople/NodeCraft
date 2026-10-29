@@ -1,0 +1,26 @@
+{
+  "type": "user.dojo.clamp01",
+  "version": 1,
+  "displayName": "Clamp 0-1",
+  "category": "Dojo",
+  "description": "The value, kept between 0 and 1.",
+  "keywords": ["saturate", "limit"],
+  "inputs": [
+    { "id": "value", "name": "Value", "kind": "data", "direction": "input", "type": { "id": "float" } }
+  ],
+  "outputs": [
+    { "id": "result", "name": "Result", "kind": "data", "direction": "output", "type": { "id": "float" } }
+  ],
+  "examples": [
+    { "inputs": { "value": 1.5 }, "outputs": { "result": 1 } },
+    { "inputs": { "value": -2 }, "outputs": { "result": 0 } },
+    { "description": "in range", "inputs": { "value": 0.25 }, "outputs": { "result": 0.25 } }
+  ],
+  "implementation": {
+    "kind": "code",
+    "languages": {
+      "typescript": "return Math.min(1, Math.max(0, ${value}));",
+      "python": "return min(1.0, max(0.0, ${value}))"
+    }
+  }
+}
