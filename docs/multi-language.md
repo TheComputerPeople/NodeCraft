@@ -66,7 +66,7 @@ So a type that both sides of a project need, such as a request that a TypeScript
 - **C ABI and FFI.** Every language can reach C, but each differently (P/Invoke, ctypes, cgo, JNI or Panama, N-API), with native builds per platform and only C's types. Not recommended.
 - **WebAssembly components.** Typed interfaces across languages, but toolchain support differs by language and is still changing, and it would add a build step to every pack. Not recommended now.
 
-**Recommendation: don't build bindings in this phase.** Document the project-function pattern, with an example. Revisit the process boundary after the release (Phase 11) if users ask for it; shared types (gap 2) are the first part of it either way.
+**Recommendation: don't build bindings in this phase.** Document the project-function pattern, with an example. Revisit the process boundary after the release (Phase 12) if users ask for it; shared types (gap 2) are the first part of it either way.
 
 **Built (step 6).** [examples/multi-language](../examples/multi-language/README.md) is the pattern as a project: a Python pricing service in `api/`, and a TypeScript graph in `web/` that calls it through `priceOf`, a project function that runs the service and reads its JSON answer. The conformance tests compile the graph and check it matches its committed generated file, then run it (with Python installed) and check it prints the total.
 

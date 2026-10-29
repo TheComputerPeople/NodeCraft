@@ -364,12 +364,25 @@ Status: complete (October 2026), with the deferrals below. The exit check is sam
 Design and steps: [node-authoring.md](node-authoring.md), with what each step built.
 
 - **Deferred:**
-  - Code classes as parents of graph classes: Phase 10.
+  - Code classes as parents of graph classes: Phase 11.
   - Generic functions in C++ (templates), Go, Lua (`---@generic`) and PHP (`@template`), and generic functions with more than two type parameters.
 
-### Phase 10: Code classes as parents
+### Phase 10: Language context
 
-Goal: a graph class can extend a class written in code, as a Blueprint extends a C++ class. Decided 2026-10-29 as its own phase, after Phase 9 is merged, rather than as Phase 9's deferred work.
+Goal: the palette, and everything else the editor shows, in the context of the language picked in the toolbar's Language menu. Asked for on 2026-10-29, before generics in C++, Go, Lua and PHP; Phase 9 was merged first.
+
+Before it: the palette offers only what the graph's language can call or compile (project functions it can import, code nodes with its snippet, nodes whose features it has), and changing the Language menu redraws it.
+
+- **An audit of every node in every language**: each node the palette offers compiles, builds with the language's toolchain and prints what Simulate prints, or is fixed or left out of that language. It stays as a conformance test.
+- **The language's terms** everywhere the editor shows types: a Python graph's palette offers Make List under Utilities / List, and its pins are `list[int]`. Saved graphs don't change, and search finds Unreal's names too.
+- **Code preview**: the palette and the Add Node menu show the highlighted node's code in the language.
+- **Language-only nodes** from standard libraries: regular expressions (Lua's patterns in Lua), hashing and To JSON, in the languages that have them.
+
+Design and steps: [language-context.md](language-context.md).
+
+### Phase 11: Code classes as parents
+
+Goal: a graph class can extend a class written in code, as a Blueprint extends a C++ class. Decided 2026-10-29 as its own phase, after Phase 9 is merged, rather than as Phase 9's deferred work (then numbered 10; Language context came first).
 
 Before it: graph classes extend other graph classes (Parent Class, overrides, Parent calls, virtual calls), and code classes' constructors, methods and properties are nodes with a Target pin (Phase 9).
 
@@ -380,7 +393,7 @@ Before it: graph classes extend other graph classes (Parent Class, overrides, Pa
 
 Design and steps: written when the phase starts.
 
-### Phase 11: Release
+### Phase 12: Release
 
 Marketplace packaging waits until the platform is complete and robust (decided 2026-10-28).
 
@@ -447,6 +460,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Variables | Container types (array/set/map), defaults edited in Details, Unreal's array/set/map functions | ✅ | — |
 | Search | Find in Blueprint (Ctrl+F) / Find in All Blueprints (Ctrl+Shift+F) | ✅ | — |
 | Palette | Favorites | ⬜ (per-user, needs settings storage) | later |
+| Palette | (Beyond Unreal, which has one language) The palette, node titles and pin types in the graph language's terms, with a preview of each node's code in it, and language-only standard library nodes | ⬜ | 10 |
 | Compile | Compile button, Compiler Results, error badges on nodes | ✅ | — |
 | Compile | F7 compiles | ✅ | — |
 | Structure | Functions: entry and return nodes, inputs and outputs, pure functions, local variables, recursion | ✅ | — |
@@ -456,7 +470,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | For Each Loop (with Break) | ✅ | — |
 | Structure | Structs, enums, Make/Break, Set Members, Switch on Enum, the structure and enumeration editors | ✅ (sets and map keys of structs or enums later) | — |
 | Structure | Object references: Construct, Self, Is Valid, Target pins on variables, functions, events and dispatchers | ✅ | — |
-| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents in Phase 10) | 10 |
+| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents in Phase 11) | 11 |
 | Structure | Blueprint Interfaces (implemented in Class Settings, interface calls), Cast To class or interface | ✅ (pure Cast later) | — |
 | Structure | Access (Public, Protected, Private) for variables and functions | ✅ | — |
 | Structure | Entry points: Main with command-line arguments; framework packs' events; Test Case events with Assert nodes and Run Tests | ✅ (C# tests run through Run's project, not xUnit) | — |
@@ -464,7 +478,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python, C#, C++ headers, Rust, Java, Lua, GDScript, Ruby, PHP; Go and other languages through their language server) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
-| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes in Phase 10) | 10 |
+| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes in Phase 11) | 11 |
 | Interop | Out parameters and several return values from code; latent (async) functions | ✅ (several outputs in every language but GDScript, which has none; async functions in all twelve: futures, promises and tasks; Go's channels, Lua's coroutines, PHP's Fibers, GDScript's await and Ruby's threads) | — |
 | Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ✅ (graph functions and macros in Details; code through tags and each language's deprecation marker) | — |
 | Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | ✅ (also F12 and Shift+F12; node files open at their type) | — |

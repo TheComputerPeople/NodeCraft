@@ -1,0 +1,110 @@
+# Language context (Phase 10)
+
+Phase 10 of the [roadmap](roadmap.md): the palette, and everything else the editor shows, in the context of the graph's language, the one picked in the toolbar's **Language** menu. Asked for on 2026-10-29, before generics in C++, Go, Lua and PHP. The user chose all four parts below, an audit of every node rather than a reported mismatch, the language's terms everywhere they're shown, and a phase of its own after Phase 9 was merged.
+
+A "Built" section after each design says what each step built.
+
+## Today
+
+Changing the Language menu sets the document's language and redraws the palette (`setLanguage` in src/webview/compile-results.ts). The palette (`paletteEntries` in src/webview/document.ts) then offers:
+
+- project functions the language can call (`callable`: TypeScript also calls JavaScript);
+- code nodes with a snippet in the language (`implementsCode`), and macros of libraries in it;
+- nodes whose features the language has (`nodeRequirements` against the pack's capabilities: no Delay without async, no Make Set without sets);
+- graph types (structs, enums, classes, interfaces) of the language (`listUserTypes`).
+
+The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts). What's missing:
+
+1. **Nothing checks that what's offered works.** A node with a snippet for the language, and the capabilities it needs, is offered. Nothing compiles each one in each language, so a snippet that doesn't build, or gives another answer than Simulate, is found only when a graph uses it.
+2. **Everything is named in Unreal's terms.** A Python graph offers "Make Array" under "Utilities / Array", and its pins are `array<int>`. A Python user thinks in lists and dicts, a C# user in `List<long>` and `Dictionary`.
+3. **Nothing shows what a node becomes.** To know that Length is `len(items)` in Python and `items.size()` in C++, you compile a graph and read the code.
+4. **Only universal nodes are built in.** The utility library left out regular expressions, hashing and JSON because not every language has them. Most do, though, and a Python user expects `re`.
+
+## Part 1: audit every node in every language
+
+**Design.**
+
+- **One graph per language, every node in it.** A test builds, for each of the 12 languages, a class graph with every built-in node the palette would offer in that language. Each node goes in its own function graph: its data inputs are the function's parameters (its exec pins wired through), and its data outputs go to the Return node, or to Print for impure nodes. Latent nodes go in the event graph, each from its own custom event.
+- **Compile.** Each language compiles its graph: a compile error on a node is a mismatch.
+- **Build.** The generated file is built, or checked, with the language's toolchain:
+  - `tsc --noEmit`, `node --check`;
+  - `python -m py_compile` plus a run;
+  - `dotnet build`, `g++ -fsyntax-only`, `cargo check`, `javac`, `go vet`;
+  - `luac -p`, Godot's `--check-only`, `ruby -c`, `php -l`.
+
+  An error is mapped to its node through the generator's `nodeLines`.
+- **Run against Simulate.** Each node also runs once, with sample inputs for its pin types, in each language and in Simulate (the semantics' oracle). The outputs printed must be the same. The run leaves out nodes that read the console, touch files, or give a different value each time (random, time, UUIDs): those are only built.
+- **What a mismatch becomes.** Each is either fixed (the snippet or generator), or the node is left out of that language: the language loses the snippet, or the node declares what it needs. The doc records each one found.
+- **Kept.** The audit becomes a conformance test, so a new node, or a new pack through the SDK's conformance suite, gets the same check.
+
+## Part 2: the language's terms
+
+**Design.**
+
+- **Terms in the pack.** A language pack may declare `terms`: its words for the containers and the four basic types, each as a title and a lowercase noun.
+
+  | Language | array | set | map | string | int | float | bool |
+  |---|---|---|---|---|---|---|---|
+  | TypeScript, JavaScript | Array | Set | Map | string | integer | number | boolean |
+  | Python | List | Set | Dict | str | int | float | bool |
+  | C# | List | HashSet | Dictionary | string | long | double | bool |
+  | C++ | Vector | Set | Map | string | int64 | double | bool |
+  | Rust | Vec | HashSet | HashMap | String | i64 | f64 | bool |
+  | Java | List | Set | Map | String | long | double | boolean |
+  | Go | Slice | Set | Map | string | int64 | float64 | bool |
+  | Lua | Table (list) | Table (set) | Table | string | integer | number | boolean |
+  | GDScript | Array | Set | Dictionary | String | int | float | bool |
+  | Ruby | Array | Set | Hash | String | Integer | Float | Boolean |
+  | PHP | Array (list) | Set | Array (map) | string | int | float | bool |
+
+  These are the words, not the generated types. Each pack's generator already knows its types. Where it differs, the table follows what the generator emits (a C++ `std::vector`, a Go slice).
+- **Type names.** A pin's type is shown in the language's own text, from the generator: Python `list[int]`, C# `List<long>`, Rust `Vec<i64>`, TypeScript `number[]`. Each generator gains `typeText(type)`, built from what it uses for declarations. Pins, tooltips, Details, My Blueprint and the type picker show it; the picker's entries are the language's words (List, Dict).
+- **Node names.** Names and categories that name a type are templates in one table in core (src/core/terms.ts): `core:array.make` is "Make {Array}" under "Utilities / {Array}", and String To Int is "{String} To {Int}". Without terms, the templates give today's names. "Set Variable" and "Map Range" aren't in the table: there, Set and Map are verbs.
+- **Everywhere shown.** The palette, the Add Node menu, node titles on the canvas, pin tooltips, the type picker, Details and My Blueprint all use the terms. A Python graph shows a "Make List" node with a `list[int]` output.
+- **Search finds both.** A node's search text includes its Unreal name, so "make array" still finds Make List.
+- **Saved graphs don't change.** Node types, pin ids and type ids are the same; only what's drawn follows the language. Changing the Language menu redraws the canvas in the new terms.
+
+## Part 3: code preview
+
+**Design.**
+
+- **Where.** The palette and the Add Node menu show the highlighted entry's code in the graph's language, in a small pane below the list (the palette) or beside it (the menu). Hovering or moving the selection with the arrow keys changes it.
+- **How.** The webview asks the host (`previewNode`, with the node type, preset properties and language). The host compiles the same one-node function graph as the audit, with pins named after the node's own, and returns the node's lines (through `nodeLines`). So Length shows `len(array)` in Python and `array.size()` in C++. Answers are cached for each type and language, and cleared when definitions change.
+- **When it can't.** Project functions show their call. A node the language can't compile isn't offered at all (Part 1). A language without a generator (a declarative pack still loading) shows nothing.
+
+## Part 4: language-only nodes
+
+**Design.** Nodes only some languages have, from their standard libraries, under a category named for the language (the Python palette's "Python" category). They're code nodes with snippets only for those languages, so the palette's existing filter offers them only there. They're built in and documented as language-specific.
+
+| Nodes | Languages (the standard library used) | Not in |
+|---|---|---|
+| **Regex:** Matches, Replace, Find All (array of string), Split | TypeScript, JavaScript (RegExp), Python (`re`), C# (`Regex`), C++ (`<regex>`), Java (`java.util.regex`), Go (`regexp`), GDScript (`RegEx`), Ruby (`Regexp`), PHP (`preg_*`) | Rust, which has no regex in std; Lua |
+| **Lua patterns:** Match, Replace (`gsub`), Find All (`gmatch`) | Lua | the rest |
+| **Hash:** MD5, SHA-1, SHA-256 of a string, as hex | Python (`hashlib`), C# (`System.Security.Cryptography`), Java (`MessageDigest`), Go (`crypto/*`), GDScript (`HashingContext`), Ruby (`Digest`), PHP (`hash`), TypeScript and JavaScript under Node (`node:crypto`) | C++, Rust and Lua, which have no hashing in std |
+| **JSON:** To JSON (any value) | TypeScript, JavaScript, Python (`json`), C# (`System.Text.Json`), Go (`encoding/json`), GDScript (`JSON`), Ruby (`json`), PHP (`json_encode`) | C++, Rust, Java and Lua, which have no JSON in std |
+
+- **Each pattern dialect is the language's own.** The node's description says so, as the code preview shows, and the Unreal-named universal nodes stay as they are.
+- **Parsing JSON** stays out: its value has no pin type, the reason the utility library left JSON out.
+- **Tests.** The audit (Part 1) covers them: each runs in its languages, with outputs checked against an expected value instead of Simulate's.
+
+## Exit check
+
+- The audit passes: every node the palette offers in each of the 12 languages compiles, builds and, where it can run, prints what Simulate prints.
+- A webview test changes the Language menu from TypeScript to Python on a graph with a Make Array node and an `array<int>` variable. The palette, the node's title, its pin tooltip and the variable show List terms, and the saved graph is unchanged.
+- The palette's preview shows each language's code for Length.
+- The Python palette offers the Regex, Hash and JSON nodes, and the Rust palette offers none of them.
+
+## Steps
+
+One commit each; large steps may take several.
+
+1. This design, and the roadmap.
+2. The audit: the one-node graphs, compiling and building in every language, mapped to nodes; the mismatches recorded.
+3. Fixing what the audit finds by compiling and building.
+4. The audit's runs against Simulate, and fixing what they find.
+5. Terms: `terms` in packs, `typeText` in generators, the name templates (src/core/terms.ts), the 12 languages' terms.
+6. Terms in the webview: palette, Add Node menu, node titles, pins, the type picker, Details, My Blueprint; search by both names.
+7. Code preview: `previewNode`, the palette's pane and the menu's.
+8. Language-only nodes: Regex and Lua patterns.
+9. Language-only nodes: Hash and JSON.
+10. The exit check, docs, the parity checklist and status.
