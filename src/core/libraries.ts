@@ -7,6 +7,7 @@
 import { functionNodeType } from './importing/symbols';
 import { MACRO_INSTANCE, MacroLookup, expandMacros, macroInstanceDefinition, macroLookup } from './macros';
 import { FunctionVariant, GraphDocument, NodeDefinition, PinDefinition } from './model';
+import { signatureMetadata } from './metadata';
 
 // Where one language generates a library.
 export interface LibraryOutput {
@@ -52,7 +53,8 @@ export function libraryDefinitions(doc: GraphDocument, location: LibraryLocation
     const signature = graph.signature ?? { inputs: [], outputs: [] };
     const exec = (direction: PinDefinition['direction']): PinDefinition[] => signature.pure ? [] : [{ id: direction === 'input' ? 'execIn' : 'execOut', name: '', kind: 'exec', direction }];
     const data = (direction: PinDefinition['direction']) => (pin: (typeof signature.inputs)[number]): PinDefinition => ({
-      id: pin.id, name: pin.name, kind: 'data', direction, ...(pin.type ? { type: pin.type } : {}), ...(pin.defaultValue !== undefined ? { defaultValue: pin.defaultValue } : {})
+      id: pin.id, name: pin.name, kind: 'data', direction, ...(pin.type ? { type: pin.type } : {}), ...(pin.defaultValue !== undefined ? { defaultValue: pin.defaultValue } : {}),
+      ...(pin.advanced && direction === 'input' ? { advanced: true } : {})
     });
     return [{
       type: libraryNodeType(location.documentPath, graph.id),
@@ -60,6 +62,7 @@ export function libraryDefinitions(doc: GraphDocument, location: LibraryLocation
       displayName: graph.name,
       category: signature.category || doc.name,
       ...(signature.description ? { description: signature.description } : {}),
+      ...signatureMetadata(signature),
       inputs: [...exec('input'), ...signature.inputs.filter((p) => p.kind === 'data').map(data('input'))],
       outputs: [...exec('output'), ...signature.outputs.filter((p) => p.kind === 'data').map(data('output'))],
       implementation: {

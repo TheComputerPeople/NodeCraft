@@ -213,6 +213,17 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
 - **Deprecated nodes** leave the palette, get a warning badge with the message, and compile with a warning, as in Unreal.
 - **Advanced pins** fold under an arrow at the bottom of the node. They show when they have a wire or a value.
 
+**Built (step 10): graph functions and macros.**
+
+- **Where it's kept.** A function's or macro's signature has `keywords`, `compactTitle` and `deprecated` (with an optional `message`), and an input pin has `advanced`. Details edits them: Keywords, Compact Node Title, Deprecated and its Deprecation Message, and an Advanced View box on each data input. Both schemas describe them (a node file can set them too).
+- **Which nodes.** `signatureMetadata` (src/core/metadata.ts) copies them onto every node made from a signature: call nodes, macro instances, library functions and macros, and other classes' and interfaces' functions. The definitions carry `keywords`, `compactTitle` and `deprecated`, and their pins `advanced`.
+- **Drawing.**
+  - A Compact Node Title draws the node without a title bar, its text large in the middle, as operators are drawn (and the palette finds it by that text too).
+  - A deprecated node shows a warning badge with its message at once, its title struck through. It leaves the palette (nodes already placed keep working), and compiles with a `deprecated` warning, a macro's from its instance before expansion.
+  - Advanced inputs show when the node's arrow is open (the node's `showAdvanced` property, saved with the graph), or when they have a wire or a value set.
+- **Left for later steps.** Pin display names and ExpandBoolAsExecs/ExpandEnumAsExecs come with the code tags (step 11): a graph function's pins already have names, and Branch and Switch already turn results into exec outputs.
+- **Tests.** Unit tests cover the nodes made from each kind of signature, the compile warnings, and the file keeping the fields. Webview tests cover Details, the compact title, the badge, the palette and the arrow.
+
 ## Gap 7: little feedback while writing code
 
 **Today.** A marked function that can't be a node is reported in the output channel only. Nothing helps add a marker. `exposeAllFunctions` covers TypeScript, JavaScript and Python only.

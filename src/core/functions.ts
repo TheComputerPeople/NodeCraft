@@ -2,6 +2,7 @@
 // call nodes elsewhere. Their pins come from the function's signature, so editing the signature
 // updates every node that uses it, as in Unreal.
 import { Graph, GraphNode, GraphPin, NodeDefinition, PinDefinition } from './model';
+import { signatureMetadata } from './metadata';
 
 export const FUNCTION_ENTRY = 'core:function.entry';
 export const FUNCTION_RETURN = 'core:function.return';
@@ -36,7 +37,8 @@ export function functionGraph(node: GraphNode, graphs: readonly Graph[] | undefi
 }
 
 const data = (pin: GraphPin, direction: PinDefinition['direction']): PinDefinition => ({
-  id: pin.id, name: pin.name, kind: 'data', direction, ...(pin.type ? { type: pin.type } : {}), ...(pin.defaultValue !== undefined ? { defaultValue: pin.defaultValue } : {})
+  id: pin.id, name: pin.name, kind: 'data', direction, ...(pin.type ? { type: pin.type } : {}), ...(pin.defaultValue !== undefined ? { defaultValue: pin.defaultValue } : {}),
+  ...(pin.advanced && direction === 'input' ? { advanced: true } : {})
 });
 
 // Entry, Return and call nodes with the pins of their function's signature.
@@ -56,6 +58,7 @@ export function functionNodeDefinition(base: NodeDefinition, node: GraphNode, gr
     displayName: graph?.name ?? 'Missing function',
     category: graph?.signature?.category || 'Functions',
     ...(graph?.signature?.description ? { description: graph.signature.description } : {}),
+    ...signatureMetadata(graph?.signature),
     inputs: [...exec, ...inputs.map((p) => data(p, 'input'))],
     outputs: [...(signature.pure ? [] : [{ id: 'execOut', name: '', kind: 'exec' as const, direction: 'output' as const }]), ...outputs.map((p) => data(p, 'output'))]
   };

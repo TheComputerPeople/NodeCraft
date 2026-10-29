@@ -44,7 +44,7 @@ Unreal's standard macros, as built-in nodes with Unreal's pins:
 
 ## Functions
 
-- A **function graph** has one entry node (exec out, plus an output pin per input) and any number of **Return Nodes** (exec in, plus an input pin per output), as in Unreal. The signature is edited in Details: inputs, outputs, pure, description, category, and local variables.
+- A **function graph** has one entry node (exec out, plus an output pin per input) and any number of **Return Nodes** (exec in, plus an input pin per output), as in Unreal. The signature is edited in Details: inputs, outputs, pure, description, category, and local variables, with Unreal's metadata: Keywords (more words the action menu finds it by), Compact Node Title (drawn large, as operators are), Deprecated with a message (left out of the palette, and its nodes warn), and Advanced View on an input (folded under the node's arrow until opened, wired or set). Macros take the same metadata.
 - Placing a function: drag it from My Blueprint, or pick it from the action menu (its category). The call node takes the function's name and pins; renaming the function or changing its signature updates every call node (wires on removed pins are dropped, as Refresh Node does).
 - Reaching the end of a function without a Return Node returns the outputs' defaults. Recursion works.
 - **Local variables** start at their default on every call.

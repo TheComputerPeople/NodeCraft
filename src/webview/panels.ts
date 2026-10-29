@@ -7,7 +7,8 @@ import { FUNCTION_ENTRY } from '../core/functions';
 import { MACRO_INPUTS, MACRO_OUTPUTS } from '../core/macros';
 import { definitionFor } from '../core/editing';
 import { SWITCH_INT, SWITCH_STRING, switchIntCases, switchStringCases } from '../core/flow-control';
-import { Access, Graph, GraphDocument, GraphNode, GraphVariable } from '../core/model';
+import { Access, Graph, GraphDocument, GraphNode, GraphSignature, GraphVariable } from '../core/model';
+import { parseKeywords } from '../core/metadata';
 import { ContainerKind, TypeRef } from '../core/types';
 import { defaultValue } from '../core/values';
 import { formatType } from '../core/types';
@@ -307,6 +308,43 @@ function renderFunctionDetails(graph: Graph): void {
   });
   fields.appendChild(field('Category', category));
 
+  // Unreal's metadata (docs/node-authoring.md, gap 6).
+  const text = (label: string, value: string | undefined, apply: (sig: GraphSignature, value: string) => void): void => {
+    const input = document.createElement('input');
+    input.value = value ?? '';
+    input.setAttribute('aria-label', label);
+    input.addEventListener('change', () => {
+      apply((graph.signature ??= { inputs: [], outputs: [] }), input.value.trim());
+      refresh();
+    });
+    fields.appendChild(field(label, input));
+  };
+  text('Keywords', signature.keywords?.join(' '), (sig, value) => {
+    const keywords = parseKeywords(value);
+    if (keywords.length) sig.keywords = keywords;
+    else delete sig.keywords;
+  });
+  text('Compact Node Title', signature.compactTitle, (sig, value) => {
+    if (value) sig.compactTitle = value;
+    else delete sig.compactTitle;
+  });
+  const deprecated = document.createElement('input');
+  deprecated.type = 'checkbox';
+  deprecated.checked = !!signature.deprecated;
+  deprecated.setAttribute('aria-label', 'Deprecated');
+  deprecated.addEventListener('change', () => {
+    const sig = (graph.signature ??= { inputs: [], outputs: [] });
+    if (deprecated.checked) sig.deprecated = {};
+    else delete sig.deprecated;
+    refresh();
+  });
+  fields.appendChild(field('Deprecated', deprecated));
+  if (signature.deprecated) {
+    text('Deprecation Message', signature.deprecated.message, (sig, value) => {
+      if (sig.deprecated) sig.deprecated = value ? { message: value } : {};
+    });
+  }
+
   const pure = document.createElement('input');
   pure.type = 'checkbox';
   pure.checked = !!signature.pure;
@@ -353,7 +391,22 @@ function renderFunctionDetails(graph: Graph): void {
         removeSignaturePin(doc, graph.id, side, pin.id);
         refresh();
       });
-      row.append(pinName, type, remove);
+      row.append(pinName, type);
+      // Unreal's Advanced View: the input folds under the node's arrow.
+      if (side === 'inputs' && pin.kind === 'data') {
+        const advanced = document.createElement('input');
+        advanced.type = 'checkbox';
+        advanced.checked = !!pin.advanced;
+        advanced.title = 'Advanced View: shown under the node\'s arrow';
+        advanced.setAttribute('aria-label', `${pin.name} Advanced View`);
+        advanced.addEventListener('change', () => {
+          if (advanced.checked) pin.advanced = true;
+          else delete pin.advanced;
+          refresh();
+        });
+        row.append(advanced);
+      }
+      row.append(remove);
       fields.appendChild(row);
     }
     const add = document.createElement('button');

@@ -5,6 +5,7 @@
 // Construct node's definition, so the compiler, Simulate and the editor learn them from the node
 // registry, as structs travel with Make (src/core/user-types.ts).
 import { customEvents, delegateType, documentDispatchers, eventInputs, eventName } from './events';
+import { FunctionMetadata, signatureMetadata } from './metadata';
 import { Access, GraphDocument, GraphNode, GraphPin, NodeDefinition, PinDefinition } from './model';
 import { TypeRef } from './types';
 import { TypeSource } from './user-types';
@@ -28,7 +29,7 @@ export interface ClassInfo {
   // The interfaces ("interface:<Name>") it implements.
   interfaces?: string[];
   // In the order generated code names them (see each language's class member names).
-  functions: (ClassMember & { inputs: GraphPin[]; outputs: GraphPin[]; pure: boolean })[];
+  functions: (ClassMember & FunctionMetadata & { inputs: GraphPin[]; outputs: GraphPin[]; pure: boolean })[];
   events: (ClassMember & { inputs: GraphPin[] })[];
   variables: (ClassMember & { type: TypeRef })[];
   dispatchers: (ClassMember & { inputs: GraphPin[] })[];
@@ -47,7 +48,8 @@ export function declaredClass(doc: GraphDocument, source?: TypeSource): ClassInf
     ...(doc.interfaces?.length ? { interfaces: doc.interfaces } : {}),
     functions: doc.graphs.filter((g) => g.kind === 'function').map((g) => ({
       id: g.id, name: g.name, inputs: g.signature?.inputs ?? [], outputs: g.signature?.outputs ?? [], pure: !!g.signature?.pure,
-      ...(g.signature?.access && g.signature.access !== 'public' ? { access: g.signature.access } : {})
+      ...(g.signature?.access && g.signature.access !== 'public' ? { access: g.signature.access } : {}),
+      ...signatureMetadata(g.signature)
     })),
     events: customEvents(doc.graphs).map(({ node }) => ({ id: eventName(node), name: eventName(node), inputs: eventInputs(node) })),
     variables: doc.variables.map((v) => ({ id: v.id, name: v.name, type: v.type, ...(v.access && v.access !== 'public' ? { access: v.access } : {}) })),
@@ -75,11 +77,16 @@ export function declaredInterface(doc: GraphDocument, source?: TypeSource): Inte
   if (doc.kind !== 'interface') return undefined;
   return {
     kind: 'interface', id: interfaceTypeId(doc.name), name: doc.name, ...(doc.language ? { language: doc.language } : {}), ...(source ? { source } : {}),
-    functions: doc.graphs.filter((g) => g.kind === 'function').map((g) => ({ id: g.id, name: g.name, inputs: g.signature?.inputs ?? [], outputs: g.signature?.outputs ?? [], pure: !!g.signature?.pure }))
+    functions: doc.graphs.filter((g) => g.kind === 'function').map((g) => ({ id: g.id, name: g.name, inputs: g.signature?.inputs ?? [], outputs: g.signature?.outputs ?? [], pure: !!g.signature?.pure, ...signatureMetadata(g.signature) }))
   };
 }
 
 // ---- Nodes ------------------------------------------------------------------------------------
+
+// A class or interface function's metadata, for its call nodes (src/core/metadata.ts).
+function metadataOf(fn: FunctionMetadata): FunctionMetadata {
+  return { ...(fn.keywords ? { keywords: fn.keywords } : {}), ...(fn.compactTitle ? { compactTitle: fn.compactTitle } : {}), ...(fn.deprecated ? { deprecated: fn.deprecated } : {}) };
+}
 
 export const SELF = 'core:object.self';
 export const IS_VALID = 'core:object.is-valid';
@@ -171,7 +178,8 @@ export function nodeClass(node: GraphNode, own: ClassInfo | undefined, definitio
 }
 
 const data = (pin: GraphPin, direction: PinDefinition['direction']): PinDefinition => ({
-  id: pin.id, name: pin.name, kind: 'data', direction, ...(pin.type ? { type: pin.type } : {}), ...(pin.defaultValue !== undefined ? { defaultValue: pin.defaultValue } : {})
+  id: pin.id, name: pin.name, kind: 'data', direction, ...(pin.type ? { type: pin.type } : {}), ...(pin.defaultValue !== undefined ? { defaultValue: pin.defaultValue } : {}),
+  ...(pin.advanced && direction === 'input' ? { advanced: true } : {})
 });
 
 // Self, and the member nodes, with the pins of the member they use on the Target object.
@@ -184,7 +192,7 @@ export function objectNodeDefinition(base: NodeDefinition, node: GraphNode, own:
     if (!iface || !fn) return { ...base, displayName: `Missing interface function`, inputs: [execIn, target], outputs: [execOut] };
     const ins = fn.inputs.filter((p) => p.kind === 'data').map((p) => data(p, 'input'));
     const outs = fn.outputs.filter((p) => p.kind === 'data').map((p) => data(p, 'output'));
-    return { ...base, displayName: fn.name, category: iface.name, description: `${iface.name}'s ${fn.name}, on an object that implements it.`, inputs: [...(fn.pure ? [] : [execIn]), target, ...ins], outputs: [...(fn.pure ? [] : [execOut]), ...outs] };
+    return { ...base, displayName: fn.name, category: iface.name, description: `${iface.name}'s ${fn.name}, on an object that implements it.`, ...metadataOf(fn), inputs: [...(fn.pure ? [] : [execIn]), target, ...ins], outputs: [...(fn.pure ? [] : [execOut]), ...outs] };
   }
   if (node.type === PARENT_CALL) {
     const name = String(node.properties.function ?? PARENT_START);
@@ -216,7 +224,7 @@ export function objectNodeDefinition(base: NodeDefinition, node: GraphNode, own:
       if (!fn) return missing('function');
       const ins = fn.inputs.filter((p) => p.kind === 'data').map((p) => data(p, 'input'));
       const outs = fn.outputs.filter((p) => p.kind === 'data').map((p) => data(p, 'output'));
-      return { ...base, displayName: fn.name, category, inputs: [...(fn.pure ? [] : [execIn]), target, ...ins], outputs: [...(fn.pure ? [] : [execOut]), ...outs] };
+      return { ...base, displayName: fn.name, category, ...metadataOf(fn), inputs: [...(fn.pure ? [] : [execIn]), target, ...ins], outputs: [...(fn.pure ? [] : [execOut]), ...outs] };
     }
     case OBJECT_EVENT: {
       const event = type.events.find((e) => e.id === node.properties.event);

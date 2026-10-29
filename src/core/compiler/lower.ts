@@ -1,6 +1,7 @@
 // Turns a graph document into Visual IR, reporting everything that stops it from compiling.
 // The rules implemented here are those of docs/semantics.md.
 import { Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition } from '../model';
+import { deprecationMessage } from '../metadata';
 import { NodeRegistry } from '../registry';
 import { describeFunction, functionStatus, isFunctionType } from '../imported-functions';
 import { libraryChange, libraryChangeMessage } from '../node-packages';
@@ -13,7 +14,7 @@ import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, I
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
 import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest, codeClassBases, codeClasses } from '../objects';
-import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
+import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup, userTypeProblems } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
 import { TEST_CASE, assertEqualMessage, assertTrueMessage, testName } from '../tests';
@@ -594,6 +595,11 @@ class Lowerer {
   // A graph with the macros it uses expanded in place (src/core/macros.ts), and its split struct pins
   // turned into Make and Break nodes (src/core/user-types.ts).
   private analyzeExpanded(graph: Graph): GraphInfo {
+    // A deprecated macro's instances are gone once expanded, so they warn here.
+    for (const node of graph.nodes) {
+      const def = node.type === MACRO_INSTANCE || node.type.startsWith('macro:') ? this.resolve(node) : undefined;
+      if (def?.deprecated) this.warning('deprecated', deprecationMessage(def), graph.id, node.id);
+    }
     const expansion = expandMacros(graph, this.macros);
     for (const problem of expansion.problems) this.error('macro-invalid', problem.message, graph.id, problem.nodeId);
     for (const [id, name] of expansion.macros) this.macroNames.set(JSON.stringify([graph.id, id]), name);
@@ -627,6 +633,8 @@ class Lowerer {
       if (def) info.definitions.set(node.id, def);
       // A missing macro library is reported where the macro is expanded.
       else if (!isFunctionType(node.type) && !node.type.startsWith('macro:')) this.error('unknown-node-type', `Unknown node type "${node.type}". Its node library may be missing.`, graph.id, node.id);
+      // As in Unreal, a deprecated node still compiles, with a warning.
+      if (def?.deprecated) this.warning('deprecated', deprecationMessage(def), graph.id, node.id);
       // Unreal: "The type of … is undetermined. Connect something to it."
       if (def && node.type !== REROUTE && [...def.inputs, ...def.outputs].some((p) => hasWildcard(p.type))) {
         this.error('wildcard-unresolved', `"${def.displayName}" doesn't know its type yet. Connect a wire to one of its gray pins.`, graph.id, node.id);

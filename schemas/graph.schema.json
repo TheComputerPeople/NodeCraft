@@ -418,7 +418,11 @@
         "type": {
           "$ref": "#/$defs/typeRef"
         },
-        "defaultValue": {}
+        "defaultValue": {},
+        "advanced": {
+          "type": "boolean",
+          "description": "An input shown under the node's arrow (Unreal's Advanced View)."
+        }
       }
     },
     "graph": {
@@ -467,6 +471,26 @@
             },
             "pure": {
               "type": "boolean"
+            },
+            "keywords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "More words the action menu finds the function or macro by (Unreal's Keywords)."
+            },
+            "compactTitle": {
+              "type": "string",
+              "description": "Drawn large on a node without a title bar (Unreal's Compact Node Title)."
+            },
+            "deprecated": {
+              "type": "object",
+              "description": "Left out of the action menu; its nodes show and compile with a warning (Unreal's Deprecated).",
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              }
             }
           }
         },

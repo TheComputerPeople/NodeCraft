@@ -1,5 +1,6 @@
 import { canAddPin, definitionFor } from '../core/editing';
-import { GraphConnection, GraphNode, PinDefinition } from '../core/model';
+import { deprecationMessage } from '../core/metadata';
+import { GraphConnection, GraphNode, NodeDefinition, PinDefinition } from '../core/model';
 import { formatType } from '../core/types';
 import { SEQUENCE } from '../core/resolve';
 import { addPin, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
@@ -35,7 +36,9 @@ function renderNode(node: GraphNode): HTMLElement {
   const def = definitionFor(node, lookupDefinition);
   const kind = nodeKind(def);
   const el = document.createElement('div');
-  el.className = 'node' + (state.selectedNodeIds.has(node.id) ? ' selected' : '') + (state.executedNodeIds.has(node.id) ? ' executing' : '') + (def.compact ? ' compact' : '');
+  // A Compact Node Title draws the node as operators are drawn.
+  const compact = def.compact || !!def.compactTitle;
+  el.className = 'node' + (state.selectedNodeIds.has(node.id) ? ' selected' : '') + (state.executedNodeIds.has(node.id) ? ' executing' : '') + (compact ? ' compact' : '') + (def.deprecated ? ' deprecated' : '');
   el.dataset.node = node.id;
   el.dataset.kind = kind;
   el.draggable = false;
@@ -66,7 +69,9 @@ function renderNode(node: GraphNode): HTMLElement {
   // whose code changed or is gone (shown at once, without compiling).
   const problem = functionProblem(node);
   const library = libraryProblem(node);
-  const diagnostics = [...nodeDiagnostics(node.id), ...(problem ? [problem] : []), ...(library ? [library] : [])];
+  // A deprecated node warns at once, as in Unreal, not only after compiling.
+  const deprecated = def.deprecated ? [{ severity: 'warning' as const, message: deprecationMessage(def) }] : [];
+  const diagnostics = [...nodeDiagnostics(node.id), ...(problem ? [problem] : []), ...(library ? [library] : []), ...deprecated];
   const severity = diagnostics.some((d) => d.severity === 'error') ? 'error' : diagnostics.length ? 'warning' : undefined;
   if (severity) {
     el.classList.add(`has-${severity}`);
@@ -88,13 +93,13 @@ function renderNode(node: GraphNode): HTMLElement {
     body.appendChild(grip);
     def.outputs.forEach((pin) => body.appendChild(renderPin(node, pin, false)));
     el.appendChild(body);
-  } else if (def.compact) {
+  } else if (compact) {
     // Compact nodes (variable getters, conversions, operators): inputs stacked left of the title,
     // outputs right of it, no title bar.
     const body = document.createElement('div');
     body.className = 'compact-body';
     // Operators (+, <, AND, …) show their symbol large, as Unreal does.
-    if (def.type.startsWith('core:math.')) el.classList.add('operator');
+    if (def.type.startsWith('core:math.') || def.compactTitle) el.classList.add('operator');
     const column = (pins: PinDefinition[]): void => {
       if (!pins.length) return;
       const pinsEl = document.createElement('div');
@@ -102,13 +107,14 @@ function renderNode(node: GraphNode): HTMLElement {
       pins.forEach((pin) => pinsEl.appendChild(renderPin(node, pin, false)));
       body.appendChild(pinsEl);
     };
-    column(def.inputs);
+    column(shownInputs(node, def));
     const title = document.createElement('span');
     title.className = 'node-title';
-    title.textContent = def.displayName;
+    title.textContent = def.compactTitle ?? def.displayName;
     body.appendChild(title);
     column(def.outputs);
     el.appendChild(body);
+    advancedArrow(el, node, def);
   } else {
     const header = document.createElement('div');
     header.className = 'node-header';
@@ -126,10 +132,11 @@ function renderNode(node: GraphNode): HTMLElement {
     left.className = 'pin-column left';
     const right = document.createElement('div');
     right.className = 'pin-column right';
-    def.inputs.forEach((pin) => left.appendChild(renderPin(node, pin, true)));
+    shownInputs(node, def).forEach((pin) => left.appendChild(renderPin(node, pin, true)));
     def.outputs.forEach((pin) => right.appendChild(renderPin(node, pin, true)));
     body.append(left, right);
     el.appendChild(body);
+    advancedArrow(el, node, def);
     // Unreal's "Add pin +" on nodes whose outputs can grow.
     if (canAddPin(node)) {
       const add = document.createElement('button');
@@ -152,6 +159,32 @@ function renderNode(node: GraphNode): HTMLElement {
     goToDefinition(node.id);
   });
   return el;
+}
+
+// Unreal's Advanced View: advanced inputs show when the node's arrow is open, or when they're wired
+// or set, so nothing a node uses is hidden.
+function shownInputs(node: GraphNode, def: NodeDefinition): PinDefinition[] {
+  if (node.properties.showAdvanced === true) return def.inputs;
+  return def.inputs.filter((pin) => !pin.advanced || isConnected(node.id, pin.id) || node.properties[`pin:${pin.id}`] !== undefined);
+}
+
+// The arrow at the bottom of a node with advanced inputs, which shows or hides them.
+function advancedArrow(el: HTMLElement, node: GraphNode, def: NodeDefinition): void {
+  if (!def.inputs.some((pin) => pin.advanced)) return;
+  const open = node.properties.showAdvanced === true;
+  const arrow = document.createElement('button');
+  arrow.className = 'node-advanced';
+  arrow.textContent = open ? '▴' : '▾';
+  arrow.title = open ? 'Hide advanced pins' : 'Show advanced pins';
+  arrow.setAttribute('aria-expanded', String(open));
+  arrow.addEventListener('mousedown', (e) => e.stopPropagation());
+  arrow.addEventListener('click', () => {
+    if (open) delete node.properties.showAdvanced;
+    else node.properties.showAdvanced = true;
+    markDirty();
+    render();
+  });
+  el.appendChild(arrow);
 }
 
 function isConnected(nodeId: string, pinId: string): boolean {

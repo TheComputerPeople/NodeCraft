@@ -123,7 +123,8 @@ export function paletteEntries(): PaletteEntry[] {
     }
   }
   const capabilities = languageCapabilities();
-  return entries.filter((e) => !missingCapabilities(nodeRequirements(e.definition), capabilities).length);
+  // Deprecated functions and macros leave the palette, as in Unreal; their nodes still work.
+  return entries.filter((e) => !e.definition.deprecated && !missingCapabilities(nodeRequirements(e.definition), capabilities).length);
 }
 
 function callable(definition: NodeDefinition): boolean {
@@ -139,7 +140,7 @@ function callable(definition: NodeDefinition): boolean {
 
 // Text an entry matches in searches: its name, category, description and keywords.
 export function searchText(definition: NodeDefinition): string {
-  return [definition.displayName, definition.category, definition.description ?? '', ...(definition.keywords ?? [])].join(' ').toLowerCase();
+  return [definition.displayName, definition.category, definition.description ?? '', ...(definition.keywords ?? []), definition.compactTitle ?? ''].join(' ').toLowerCase();
 }
 
 // A project function node whose code changed (a warning until it is refreshed) or is gone (an

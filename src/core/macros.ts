@@ -3,6 +3,7 @@
 // it is used, as in Unreal: before compiling and before Simulate, each instance node is replaced by
 // a copy of the macro's nodes, so every use has its own state (Do Once…).
 import { Graph, GraphConnection, GraphDocument, GraphNode, GraphPin, NodeDefinition, PinDefinition } from './model';
+import { signatureMetadata } from './metadata';
 import { storedDefault } from './values';
 
 export const MACRO_INPUTS = 'core:macro.inputs';
@@ -48,7 +49,8 @@ export function signaturePin(pin: GraphPin, direction: PinDefinition['direction'
   return {
     id: pin.id, name: pin.name, kind: pin.kind, direction,
     ...(pin.kind === 'data' && pin.type ? { type: pin.type } : {}),
-    ...(pin.kind === 'data' && pin.defaultValue !== undefined ? { defaultValue: pin.defaultValue } : {})
+    ...(pin.kind === 'data' && pin.defaultValue !== undefined ? { defaultValue: pin.defaultValue } : {}),
+    ...(pin.kind === 'data' && pin.advanced && direction === 'input' ? { advanced: true } : {})
   };
 }
 
@@ -68,6 +70,7 @@ export function macroInstanceDefinition(base: NodeDefinition, graph: Graph | und
     displayName: graph?.name ?? 'Missing macro',
     category: signature.category || 'Macros',
     ...(signature.description ? { description: signature.description } : {}),
+    ...signatureMetadata(signature),
     inputs: signature.inputs.map((p) => signaturePin(p, 'input')),
     outputs: signature.outputs.map((p) => signaturePin(p, 'output'))
   };

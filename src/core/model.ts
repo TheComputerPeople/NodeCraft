@@ -21,6 +21,8 @@ export interface PinDefinition {
   defaultValue?: unknown;
   // A pin of a split struct pin: the struct pin and the field it stands for (src/core/user-types.ts).
   split?: { pin: string; field: string };
+  // Unreal's AdvancedDisplay: folded under the node's arrow until opened, wired or set.
+  advanced?: boolean;
 }
 
 export interface NodeDefinition {
@@ -48,6 +50,10 @@ export interface NodeDefinition {
   // A latent node (docs/program-structure.md, "Latent actions"; Delay, or an async function from
   // code): drawn with a clock, and its Completed output runs later, from the latent queue.
   latent?: boolean;
+  // Unreal's CompactNodeTitle: drawn without a title bar, this text large in the middle (as + is).
+  compactTitle?: string;
+  // Unreal's DeprecatedFunction: left out of the palette; its nodes show and compile with a warning.
+  deprecated?: { message?: string };
 }
 
 // A language feature a graph can need (docs/language-breadth.md, "Capabilities, enforced").
@@ -189,6 +195,8 @@ export interface GraphPin {
   kind: PinKind;
   type?: TypeRef;
   defaultValue?: unknown;
+  // An input shown under the node's arrow (Unreal's Advanced View).
+  advanced?: boolean;
 }
 
 export interface GraphSignature {
@@ -201,6 +209,11 @@ export interface GraphSignature {
   category?: string;
   // A class function's Access Specifier (public when absent).
   access?: Access;
+  // Unreal's metadata (src/core/metadata.ts): more words the action menu finds it by, a compact
+  // title, and whether it's deprecated (with a message saying what to use instead).
+  keywords?: string[];
+  compactTitle?: string;
+  deprecated?: { message?: string };
 }
 
 // Event graphs hold entry points; function and macro graphs have a signature.
