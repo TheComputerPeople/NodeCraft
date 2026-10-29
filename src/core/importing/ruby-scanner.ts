@@ -96,8 +96,12 @@ export function scanRuby(source: string): ModuleScan {
     // named by @outputs.
     const tuple = returnType ? /^Array\((.*)\)$/.exec(returnType.trim()) : null;
     const outputs = tuple ? tupleOutputs(doc, tuple[1].split(',').map((t) => mapRubyType(t) ?? undefined)) : undefined;
-    const several = outputs ? { outputs, results: { kind: 'tuple' as const, names: outputs.map((o) => o.name) } } : {};
-    const scannedFunction: ScannedFunction = { name, line, params: scanned, returns: outputs ? undefined : returnType ? mapRubyType(returnType) : returns ? undefined : null, doc, ...several, ...(container ? { container } : {}) };
+    // A method returning a Thread is async (docs/node-authoring.md, gap 4): a latent node, whose value
+    // is the thread's (typed by `@return [Thread<Integer>]`, else any value).
+    const thread = returnType ? /^Thread(?:<(.+)>)?$/.exec(returnType.trim()) : null;
+    const several = outputs ? { outputs, results: { kind: 'tuple' as const, names: outputs.map((o) => o.name) } } : thread ? { latent: true } : {};
+    const returnsType = outputs ? undefined : thread ? (thread[1] ? mapRubyType(thread[1]) : undefined) : returnType ? mapRubyType(returnType) : returns ? undefined : null;
+    const scannedFunction: ScannedFunction = { name, line, params: scanned, returns: returnsType, doc, ...several, ...(container ? { container } : {}) };
     if (member && name === 'initialize') scope.cls!.init = { ...scannedFunction, returns: null };
     else if (member) scope.cls!.methods.push({ name, line, params: scanned, returns: scannedFunction.returns, doc, ...several });
     else functions.push(scannedFunction);

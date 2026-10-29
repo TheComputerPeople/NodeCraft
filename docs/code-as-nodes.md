@@ -180,6 +180,7 @@ export async function fetchScore(player: string): Promise<number> {
 | Lua | is marked `---@async` (LuaLS): it runs as a coroutine, resumed on each latent turn until it returns |
 | PHP | returns a `Fiber` (PHP 8.1): resumed on each latent turn until it ends; its value is what it returns, typed by `@return Fiber<int>` |
 | GDScript | awaits (a Godot coroutine): generated code awaits it while Godot's main loop runs |
+| Ruby | returns a `Thread`, typed by YARD's `@return [Thread<Integer>]`: its value is the thread's |
 
 - **The node.** A clock in the title marks it. Its exec output is **Completed**, which runs when the function finishes, and its Return Value is what the future gives (`T`). It always has exec pins, even when marked pure.
 - **Order.** Calling it starts the function, and the chain after the node waits for Completed, while the rest of the graph goes on, as with Delay (a Sequence's next output runs). Completed runs from the latent queue, after the code that's running, so Unreal's ordering holds.
@@ -187,7 +188,7 @@ export async function fetchScore(player: string): Promise<number> {
 - **Where.** In event graphs and the macros they use, as Delay: a function graph runs to its end at once, so a latent node there is a compile error.
 - **Rust's executor.** Generated Rust polls futures with a small executor of its own, with no crates. A future that needs a reactor (tokio's I/O and timers) won't make progress there.
 - **Cooperative ones.** Lua's coroutines and PHP's Fibers run only when the latent queue resumes them: they wait by yielding (`coroutine.yield()`, `Fiber::suspend()`), not in the background.
-- **Ruby** has no standard future, and is left out.
+- **Ruby's threads** run in the background, as futures do elsewhere. Ruby has no standard future, and a Thread is the closest: the latent queue looks at it each turn, and once it has finished, `Thread#value` gives its value or raises its exception.
 
 ## Going to the code
 

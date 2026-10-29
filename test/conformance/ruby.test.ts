@@ -16,6 +16,7 @@ import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner'
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
+import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-ruby-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -172,5 +173,60 @@ describe('Ruby several outputs', () => {
       throw error;
     }
     assert.deepEqual(run.stdout.trim().split(/\r?\n/), SEVERAL_OUTPUTS_OUTPUT, run.stderr);
+  });
+});
+
+// Async functions (docs/node-authoring.md, gap 4): a method returning a Thread is a latent node; the
+// latent queue waits for the thread, and Completed runs with its value.
+describe('Ruby async functions', () => {
+  const remote = (result: string) => [
+    'module Remote',
+    '  # @blueprint',
+    '  # @param [Integer] value',
+    '  # @return [Thread<Integer>]',
+    '  def self.fetch_double(value)',
+    '    Thread.new do',
+    '      sleep(0.01)',
+    `      ${result}`,
+    '    end',
+    '  end',
+    'end',
+    ''
+  ].join('\n');
+
+  async function run(name: string, code: string): Promise<{ run?: Awaited<ReturnType<typeof runGeneratedCode>>; skipped?: string; text: string }> {
+    const dir = path.join(workDir, name);
+    fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'game'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'lib', 'remote.rb'), code);
+    const definitions = exposeFunctions(scanRuby(code), { language: 'ruby', path: 'lib/remote.rb', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(latentCodeGraph(definitions, 'ruby'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Fetching.vgraph', outputDir: 'game' } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    for (const companion of result.output!.companionFiles ?? []) fs.writeFileSync(path.join(dir, 'game', companion.fileName), companion.text);
+    try {
+      return { run: await runGeneratedCode(rubyPack.generator!.runner!, file, result.output!.className, { cwd: dir, timeoutMs: 60000 }), text: result.output!.text };
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return { skipped: error.message, text: result.output!.text };
+      throw error;
+    }
+  }
+
+  test('a graph waits for a Thread and reads its value on Completed', async (t) => {
+    const { run: outcome, skipped, text } = await run('latent', remote('value * 2'));
+    assert.match(text, /Vg\.await_latent\(.*fetch_double\(4\)\) do \|vg_value\|/);
+    if (!outcome) return t.skip(skipped);
+    assert.deepEqual(outcome.stdout.trim().split(/\r?\n/), LATENT_CODE_OUTPUT, outcome.stderr);
+  });
+
+  test("an exception in the Thread stops the run, and Completed doesn't run", async (t) => {
+    const { run: outcome, skipped } = await run('latent-fails', remote('raise "no double for #{value}"'));
+    if (!outcome) return t.skip(skipped);
+    assert.notEqual(outcome.exitCode, 0);
+    assert.match(`${outcome.stdout}\n${outcome.stderr}`, /no double for 4/);
+    assert.deepEqual(outcome.stdout.trim().split(/\r?\n/), ['started']);
   });
 });

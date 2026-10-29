@@ -194,6 +194,13 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - There's no failure test: GDScript has no exceptions, and the tests don't crash Godot on purpose.
 - **Tests.** The shared latent graph in each, and a failing coroutine or Fiber in Lua and PHP.
 
+**Built after the phase: Ruby** (asked for on 2026-10-29, after first being left out; with threads, the design offered then).
+
+- **Scanning.** A method whose YARD `@return` is `[Thread]` is latent; `[Thread<Integer>]` types its value, and a bare `Thread` gives any value.
+- **Running.** Generated code passes the Thread to `Vg.await_latent` with a block for Completed. The latent loop looks at waiting threads each turn (sleeping at most a millisecond while any wait). When one has finished, `Thread#value` gives its value, and its Completed joins the queue.
+- **Failure.** `Thread#value` raises the thread's exception in the main thread, which stops the run. `report_on_exception` is turned off, so the error is reported once.
+- **Tests.** The scanner's types; the shared latent graph, and a thread that raises.
+
 ## Gap 5: no way from a node to its definition
 
 **Today.** Double-clicking a node opens a function or macro graph in the same file only (`render.ts`). Nothing opens a library function's graph, the code behind a project function, or a `*.node.json` file. Unreal opens a library function's graph, and a C++ node's source in the IDE.

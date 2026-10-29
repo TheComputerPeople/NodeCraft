@@ -364,7 +364,6 @@ Status: complete (October 2026), with the deferrals below. The exit check is sam
 Design and steps: [node-authoring.md](node-authoring.md), with what each step built.
 
 - **Deferred:**
-  - Async functions in Ruby (left out, by decision). C++'s std::future, Go's channels, a Rust executor, Lua's coroutines, PHP's Fibers and GDScript's await came after the phase.
   - Code classes as parents of graph classes: Phase 10.
   - Generic functions in C++ (templates), Go, Lua (`---@generic`) and PHP (`@template`), and generic functions with more than two type parameters.
 
@@ -466,7 +465,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python, C#, C++ headers, Rust, Java, Lua, GDScript, Ruby, PHP; Go and other languages through their language server) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
 | Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes in Phase 10) | 10 |
-| Interop | Out parameters and several return values from code; latent (async) functions | ✅ (several outputs in every language but GDScript, which has none; async functions in TypeScript, JavaScript, Python, C# and Java, the languages with a standard future) | — |
+| Interop | Out parameters and several return values from code; latent (async) functions | ✅ (several outputs in every language but GDScript, which has none; async functions in all twelve: futures, promises and tasks; Go's channels, Lua's coroutines, PHP's Fibers, GDScript's await and Ruby's threads) | — |
 | Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ✅ (graph functions and macros in Details; code through tags and each language's deprecation marker) | — |
 | Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | ✅ (also F12 and Shift+F12; node files open at their type) | — |
 | Library | Standard math, string, utility and file nodes, with containers' functions; more of Unreal's (Lerp, Map Range, trigonometry, string and set functions, array functions as new arrays) and everyday utilities (text, maps, time, encoding, UUIDs) | ✅ (array functions return new arrays where Unreal's change theirs) | — |

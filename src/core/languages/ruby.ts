@@ -519,6 +519,16 @@ class RubyEmitter {
       case 'callBlock':
         out.line(`${this.blockNames.get(s.block)}()`);
         break;
+      case 'await':
+        // An async method (docs/node-authoring.md, gap 4): its Thread, watched by the latent queue;
+        // Completed runs with the thread's value.
+        out.line(`Vg.await_latent(${this.call(s.callee, s.args)}) do |vg_value|`);
+        out.indent();
+        if (s.resultSlot) out.line(`${this.slotRef(s.resultSlot)} = vg_value`);
+        this.statements(s.then);
+        out.dedent();
+        out.line('end');
+        break;
       case 'callFunction': {
         const call = this.functionCall(s.function, s.args);
         if (s.results.length) this.results(s.results, call);

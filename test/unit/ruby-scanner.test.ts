@@ -126,4 +126,30 @@ describe('Ruby classes', () => {
     assert.deepEqual(cls.properties.map((p) => [p.name, p.readonly]), [['count', true], ['label', false]]);
     assert.deepEqual(scan.skipped.filter((s) => s.marked).map((s) => [s.name, s.reason]), [['secret', "it isn't public"]]);
   });
+
+  // An async method (docs/node-authoring.md, gap 4): a returned Thread makes a latent node.
+  test('methods returning a Thread are latent, valued by its type', () => {
+    const scan = scanRuby([
+      'module Remote',
+      '  # @blueprint',
+      '  # @return [Thread<Integer>]',
+      '  def self.fetch_count',
+      '    Thread.new { 3 }',
+      '  end',
+      '',
+      '  # @blueprint',
+      '  # @return [Thread]',
+      '  def self.warm_up',
+      '    Thread.new { nil }',
+      '  end',
+      'end',
+      ''
+    ].join('\n'));
+    const fns = Object.fromEntries(scan.functions.map((f) => [f.name, f]));
+    assert.deepEqual([fns.fetch_count.latent, fns.fetch_count.returns], [true, { id: 'int' }]);
+    assert.deepEqual([fns.warm_up.latent, fns.warm_up.returns], [true, undefined]);
+    const node = exposeFunctions(scan, { language: 'ruby', path: 'lib/remote.rb', exposeAll: false }).definitions.find((d) => d.displayName === 'Fetch Count')!;
+    assert.equal(node.latent, true);
+    assert.deepEqual(node.outputs.map((p) => p.id), ['completed', 'returnValue']);
+  });
 });

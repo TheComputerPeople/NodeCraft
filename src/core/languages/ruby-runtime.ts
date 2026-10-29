@@ -53,18 +53,40 @@ module Vg
     @pending << { due: now + [0.0, seconds.to_f].max, order: @order, action: action }
   end
 
+  # An async method's Thread (docs/node-authoring.md, gap 4): once it has finished, its Completed
+  # joins the queue with the thread's value. An exception in it stops the run.
+  @waiting ||= []
+
+  def self.await_latent(thread, &completed)
+    thread.report_on_exception = false
+    @waiting << [thread, completed]
+  end
+
   def self.run_latent_actions
-    until @pending.empty?
+    until @pending.empty? && @waiting.empty?
+      finished, @waiting = @waiting.partition { |thread, _| !thread.alive? }
+      finished.each do |thread, completed|
+        value = thread.value
+        delay(0) { completed.call(value) }
+      end
+      if @pending.empty?
+        sleep(0.001)
+        next
+      end
       @pending.sort_by! { |entry| [entry[:due], entry[:order]] }
-      entry = @pending.shift
-      wait = entry[:due] - now
-      sleep(wait) if wait > 0
-      entry[:action].call
+      wait = @pending.first[:due] - now
+      if wait > 0
+        # While threads run, look at them again soon.
+        sleep(@waiting.empty? ? wait : [wait, 0.001].min)
+        next
+      end
+      @pending.shift[:action].call
     end
   end
 
   def self.reset
     @pending.clear
+    @waiting.clear
   end
 
   # ---- Values (docs/semantics.md) ----------------------------------------------------------------
