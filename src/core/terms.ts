@@ -3,6 +3,7 @@
 // Saved graphs don't change: node types, pin ids and type ids are the same in every language.
 import { NodeDefinition } from './model';
 import { TypeRef, parseTypeId } from './types';
+import { LANGUAGE_CATEGORY } from './utilities-language';
 
 // How a language writes types: each basic type, and templates for containers ({T} the element, {K}
 // and {V} a map's key and value) and for a type that may be empty.
@@ -74,12 +75,13 @@ function fill(template: string, terms: LanguageTerms): string {
 }
 
 // A built-in node's definition in the language's terms. Its Unreal name stays a keyword, so a
-// search for it still finds the node.
-export function localizeDefinition(definition: NodeDefinition, terms: LanguageTerms): NodeDefinition {
+// search for it still finds the node. A language-only node's category starts with the language's
+// name (`languageName`; src/core/utilities-language.ts).
+export function localizeDefinition(definition: NodeDefinition, terms: LanguageTerms, languageName?: string): NodeDefinition {
   if (!definition.type.startsWith('core:')) return definition;
   const template = NAME_TEMPLATES[definition.type];
   const displayName = template ? fill(template, terms) : definition.displayName;
-  const category = definition.category.split(' / ').map((part) => (part === 'Array' || part === 'Set' || part === 'Map' ? fill(`{${part}}`, terms) : part)).join(' / ');
+  const category = definition.category.split(' / ').map((part, i) => (part === 'Array' || part === 'Set' || part === 'Map' ? fill(`{${part}}`, terms) : i === 0 && part === LANGUAGE_CATEGORY && languageName ? languageName : part)).join(' / ');
   if (displayName === definition.displayName && category === definition.category) return definition;
   const keywords = displayName === definition.displayName ? definition.keywords : [...(definition.keywords ?? []), definition.displayName];
   return { ...definition, displayName, category, ...(keywords ? { keywords } : {}) };

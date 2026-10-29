@@ -7,6 +7,7 @@
 import { NodeDefinition } from './model';
 import { ARRAY_UTILITIES, MAP_UTILITIES, SET_UTILITIES } from './utilities-containers';
 import { MATH_UTILITIES } from './utilities-math';
+import { LANGUAGE_UTILITIES } from './utilities-language';
 import { STRING_UTILITIES, TEXT_UTILITIES } from './utilities-strings';
 import { ENCODING_UTILITIES, SYSTEM_UTILITIES } from './utilities-system';
 import { ARRAY, BOOL, FLOAT, FLOATS, INT, input, MAP, output, Snippets, STRING, text, UtilityNode } from './utility-kit';
@@ -1707,7 +1708,7 @@ return $drive . ($joined === '' ? '.' : $joined);`
 };
 
 export function utilityDefinitions(): NodeDefinition[] {
-  return [...NODES, ...MATH_UTILITIES, ...STRING_UTILITIES, ...TEXT_UTILITIES, ...SET_UTILITIES, ...ARRAY_UTILITIES, ...MAP_UTILITIES, ...SYSTEM_UTILITIES, ...ENCODING_UTILITIES].map((node) => ({
+  return [...NODES, ...MATH_UTILITIES, ...STRING_UTILITIES, ...TEXT_UTILITIES, ...SET_UTILITIES, ...ARRAY_UTILITIES, ...MAP_UTILITIES, ...SYSTEM_UTILITIES, ...ENCODING_UTILITIES, ...LANGUAGE_UTILITIES].map((node) => ({
     type: node.type,
     version: 1,
     displayName: node.displayName,
@@ -1717,6 +1718,7 @@ export function utilityDefinitions(): NodeDefinition[] {
     inputs: node.inputs,
     outputs: [output(node.result)],
     implementation: { kind: 'code', languages: { ...node.code, ...(LUA[node.type] ? { lua: LUA[node.type] } : {}), ...(GDSCRIPT[node.type] ? { gdscript: GDSCRIPT[node.type] } : {}), ...(RUBY[node.type] ? { ruby: RUBY[node.type] } : {}), ...(PHP[node.type] ? { php: PHP[node.type] } : {}) } },
-    ...(node.compact ? { compact: true } : {})
+    ...(node.compact ? { compact: true } : {}),
+    ...(node.examples ? { examples: node.examples } : {})
   }));
 }

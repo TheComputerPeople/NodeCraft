@@ -15,6 +15,7 @@ import { builtinLanguagePacks } from '../core/languages';
 import { GraphConnection, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent, TypeRef, GraphVariable } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { GraphRuntime } from '../core/runtime';
+import { formatValue, fromStored } from '../core/values';
 import { ToolNotFoundError, runGeneratedCode } from '../extension/runner';
 import { outputLines } from './conformance';
 
@@ -85,6 +86,9 @@ export interface AuditCase {
   value?: Scalar;
   // Whether it runs, or is only built.
   run: boolean;
+  // A node with examples: which one this case is. Its outputs are what it's checked against, instead
+  // of Simulate's (a language-only node may have nothing Simulate can run).
+  example?: number;
   // How the report names it, e.g. "core:array.sort<string>".
   label: string;
 }
@@ -126,6 +130,10 @@ export function auditCases(definitions: NodeDefinition[], pack: LanguagePack): A
     if (!implementsCode(definition, generator.snippetLanguages, Object.keys(generator.snippets ?? {}))) continue;
     if (missingCapabilities(nodeRequirements(definition), pack.capabilities).length) continue;
     const run = !BUILD_ONLY.has(definition.type);
+    if (definition.examples?.length) {
+      definition.examples.forEach((_example, example) => cases.push({ index: cases.length, definition, run, example, label: `${definition.type}#${example + 1}` }));
+      continue;
+    }
     const { element, value } = wildcards(definition);
     const add = (e?: Scalar, v?: Scalar) => {
       const types = [e, v].filter(Boolean).join(', ');
@@ -150,6 +158,7 @@ function concrete(type: TypeRef, c: AuditCase): TypeRef {
 }
 
 function sample(c: AuditCase, pin: PinDefinition, type: TypeRef): unknown {
+  if (c.example !== undefined) return c.definition.examples![c.example].inputs?.[pin.id] ?? pin.defaultValue ?? SAMPLE[type.id as Scalar];
   const own = BY_NODE[c.definition.type]?.[pin.id];
   if (own !== undefined) return own;
   const scalar = type.id as Scalar;
@@ -254,6 +263,12 @@ function registryOf(definitions: NodeDefinition[]): NodeRegistry {
   return registry;
 }
 
+// What an example case should print: each of its outputs, as Print shows it.
+export function exampleLines(c: AuditCase): string[] {
+  const outputs = c.definition.examples![c.example!].outputs ?? {};
+  return c.definition.outputs.filter((p) => p.kind === 'data').map((p) => formatValue(fromStored(outputs[p.id], p.type)));
+}
+
 // Each case's lines, from the markers.
 export function caseSegments(lines: string[]): Map<number, string[]> {
   const segments = new Map<number, string[]>();
@@ -301,7 +316,7 @@ export async function auditPack(pack: LanguagePack, definitions: NodeDefinition[
   const find = (index: number, kind: AuditFindingKind, message: string, more: Partial<AuditFinding> = {}) => report.findings.push({ case: label.get(index) ?? String(index), kind, message, ...more });
 
   // Cases Simulate can't run with their samples aren't run in the language either.
-  for (const c of all.filter((x) => x.run)) {
+  for (const c of all.filter((x) => x.run && x.example === undefined)) {
     const alone = simulateAudit(auditGraph([c], 'typescript'), definitions);
     if (alone.error) {
       c.run = false;
@@ -365,8 +380,9 @@ export async function auditPack(pack: LanguagePack, definitions: NodeDefinition[
         continue;
       }
       // Every case ran: each one's lines against Simulate's.
-      const expected = simulateAudit(auditGraph(cases, pack.id), definitions);
+      const expected = simulateAudit(auditGraph(cases.filter((c) => c.example === undefined), pack.id), definitions);
       const want = caseSegments(expected.lines);
+      for (const c of cases.filter((x) => x.example !== undefined)) want.set(c.index, exampleLines(c));
       const got = caseSegments(actual);
       for (const c of cases.filter((x) => x.run)) {
         if (!want.has(c.index) || !got.has(c.index)) {
@@ -375,7 +391,7 @@ export async function auditPack(pack: LanguagePack, definitions: NodeDefinition[
         }
         const e = want.get(c.index) ?? [];
         const a = got.get(c.index) ?? [];
-        if (!sameLines(e, a)) find(c.index, 'output', 'It printed something else than Simulate.', { expected: e, actual: a });
+        if (!sameLines(e, a)) find(c.index, 'output', c.example === undefined ? 'It printed something else than Simulate.' : "It printed something else than its example's outputs.", { expected: e, actual: a });
       }
       return { ...report, ran: cases.filter((x) => x.run).length };
     }

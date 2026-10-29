@@ -29,4 +29,15 @@ describe('node audit', { concurrency: 4 }, () => {
     if (report.skipped) return t.skip(report.skipped);
     assert.deepEqual(report.findings.map((f) => [f.case, f.kind]), [['core:string.reverse', 'output']]);
   });
+
+  test("a node's example that doesn't hold in a language is found", async (t) => {
+    const python = builtinLanguagePacks().get('python')!;
+    const definitions = builtinNodeDefinitions().map((d): NodeDefinition => (d.type === 'core:regex.find-all' && d.implementation?.kind === 'code'
+      ? { ...d, implementation: { ...d.implementation, languages: { ...d.implementation.languages, python: 'import re\nreturn re.findall(pattern, text)' } } }
+      : d));
+    const report = await auditPack(python, definitions, { filter: 'core:regex.' });
+    if (report.skipped) return t.skip(report.skipped);
+    // findall gives the groups, not the whole match, when the pattern has groups.
+    assert.deepEqual(report.findings.map((f) => [f.case, f.kind, f.actual]), [['core:regex.find-all#2', 'output', ['[["x","1"],["y","2"]]']]]);
+  });
 });

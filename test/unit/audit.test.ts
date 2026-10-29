@@ -2,7 +2,7 @@
 // and how it reads what the languages print; and the map order it found Simulate getting wrong.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { auditCases, auditGraph, caseOfNode, caseSegments, errorLines, sameLines } from '../../src/conformance/audit';
+import { auditCases, auditGraph, caseOfNode, caseSegments, errorLines, exampleLines, sameLines } from '../../src/conformance/audit';
 import { builtinNodeDefinitions } from '../../src/core/builtins';
 import { compileDocument } from '../../src/core/compiler';
 import { builtinLanguagePacks } from '../../src/core/languages';
@@ -20,6 +20,15 @@ describe('node audit', () => {
     // Random and file nodes are built, not run.
     assert.equal(cases.find((c) => c.label === 'core:utilities.new-uuid')?.run, false);
     assert.equal(cases.find((c) => c.label === 'core:string.reverse')?.run, true);
+  });
+
+  test("a node with examples is a case for each, in the languages it has a snippet for", () => {
+    const cases = (language: string) => auditCases(builtinNodeDefinitions(), languages.get(language)!).filter((c) => c.example !== undefined).map((c) => c.label);
+    assert.deepEqual(cases('python').filter((l) => l.startsWith('core:regex.matches')), ['core:regex.matches#1', 'core:regex.matches#2', 'core:regex.matches#3']);
+    assert.ok(!cases('rust').some((l) => l.startsWith('core:regex.')), 'Rust has no regex in its standard library');
+    assert.ok(cases('lua').every((l) => l.startsWith('core:lua.')) && cases('lua').length > 0, 'Lua has its own patterns');
+    const replace = auditCases(builtinNodeDefinitions(), languages.get('python')!).find((c) => c.label === 'core:regex.replace#1')!;
+    assert.deepEqual(exampleLines(replace), ['a#b#c#']);
   });
 
   test("a language's cases leave out the nodes it can't compile", () => {

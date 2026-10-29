@@ -7,6 +7,7 @@ import { builtinNodeDefinitions } from '../../src/core/builtins';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { parseDocument } from '../../src/core/serializer';
 import { utilityDefinitions } from '../../src/core/utilities';
+import { LANGUAGE_UTILITIES } from '../../src/core/utilities-language';
 import { readRepoFile, run } from './helpers';
 
 describe('utility nodes', () => {
@@ -15,14 +16,17 @@ describe('utility nodes', () => {
     for (const definition of utilityDefinitions()) assert.ok(builtin.has(definition.type), definition.type);
   });
 
-  test('are valid and implemented in every graph language', () => {
+  test('are valid and implemented in every graph language, but language-only nodes', () => {
     const ajv = new Ajv2020({ strict: false });
     const validate = ajv.compile(JSON.parse(readRepoFile('schemas/node.schema.json')));
     const languages = new Set(builtinLanguagePacks().all().flatMap((p) => p.generator!.snippetLanguages.slice(-1)));
+    // Language-only nodes (docs/language-context.md, part 4) are in the languages that have them.
+    const languageOnly = new Set(LANGUAGE_UTILITIES.map((n) => n.type));
     for (const definition of utilityDefinitions()) {
       assert.ok(validate(definition), `${definition.type}: ${ajv.errorsText(validate.errors)}`);
       const snippets = definition.implementation?.kind === 'code' ? definition.implementation.languages : {};
-      for (const language of languages) assert.ok(snippets[language], `${definition.type} has no ${language}`);
+      if (languageOnly.has(definition.type)) assert.ok(Object.keys(snippets).length && definition.examples?.length, definition.type);
+      else for (const language of languages) assert.ok(snippets[language], `${definition.type} has no ${language}`);
     }
   });
 

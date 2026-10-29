@@ -131,7 +131,7 @@ The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts)
 
 | Nodes | Languages (the standard library used) | Not in |
 |---|---|---|
-| **Regex:** Matches, Replace, Find All (array of string), Split | TypeScript, JavaScript (RegExp), Python (`re`), C# (`Regex`), C++ (`<regex>`), Java (`java.util.regex`), Go (`regexp`), GDScript (`RegEx`), Ruby (`Regexp`), PHP (`preg_*`) | Rust, which has no regex in std; Lua |
+| **Regex:** Matches, Replace, Find All (array of string) | TypeScript, JavaScript (RegExp), Python (`re`), C# (`Regex`), C++ (`<regex>`), Java (`java.util.regex`), Go (`regexp`), GDScript (`RegEx`), Ruby (`Regexp`), PHP (`preg_*`) | Rust, which has no regex in std; Lua |
 | **Lua patterns:** Match, Replace (`gsub`), Find All (`gmatch`) | Lua | the rest |
 | **Hash:** MD5, SHA-1, SHA-256 of a string, as hex | Python (`hashlib`), C# (`System.Security.Cryptography`), Java (`MessageDigest`), Go (`crypto/*`), GDScript (`HashingContext`), Ruby (`Digest`), PHP (`hash`), TypeScript and JavaScript under Node (`node:crypto`) | C++, Rust and Lua, which have no hashing in std |
 | **JSON:** To JSON (any value) | TypeScript, JavaScript, Python (`json`), C# (`System.Text.Json`), Go (`encoding/json`), GDScript (`JSON`), Ruby (`json`), PHP (`json_encode`) | C++, Rust, Java and Lua, which have no JSON in std |
@@ -139,6 +139,18 @@ The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts)
 - **Each pattern dialect is the language's own.** The node's description says so, as the code preview shows, and the Unreal-named universal nodes stay as they are.
 - **Parsing JSON** stays out: its value has no pin type, the reason the utility library left JSON out.
 - **Tests.** The audit (Part 1) covers them: each runs in its languages, with outputs checked against an expected value instead of Simulate's.
+
+**Built (step 8: Regex and Lua patterns).**
+
+- **Nodes** (src/core/utilities-language.ts):
+  - **Regex Matches** (found anywhere), **Regex Replace** (every match; the replacement is put in as written, with no group references, so `$1` means "$1" in every language) and **Regex Find All** (each whole match, groups or not), in TypeScript, JavaScript, Python, C#, C++, Java, Go, GDScript, Ruby and PHP. PHP's pattern gets `~` delimiters, escaped inside.
+  - **Pattern Matches**, **Pattern Replace** and **Pattern Find All** in Lua, through `string.find`, `string.gsub` and `string.gmatch`. Find All gives what `gmatch` gives: the first capture when the pattern has captures.
+  - **Split** was left out: each language's split treats capture groups and empty ends differently, and Parse Into Array already splits on a literal delimiter.
+- **Category.** It's stored as "Language / Regex" (`LANGUAGE_CATEGORY`), and `localizeDefinition` puts the graph language's name first: "Python / Regex", "Lua / Patterns". The palette's existing filter (`implementsCode`) offers each node only in its languages, so Rust's palette has none.
+- **Examples are the tests.**
+  - Each node lists examples (digits found or not, an anchor, literal `$1\`, groups, no matches), and utility nodes can now carry them (`UtilityNode.examples`).
+  - The audit makes a case of each example in each language, with the example's inputs, and checks its outputs instead of Simulate's.
+  - A self-check gives Python's Find All `re.findall` (which returns groups) and expects that example's finding.
 
 ## Exit check
 

@@ -1,5 +1,5 @@
 // What the utility node files (utilities*.ts) share: the shape of a utility node and its pins.
-import { PinDefinition, TypeRef } from './model';
+import { NodeExample, PinDefinition, TypeRef } from './model';
 
 export type Snippets = Record<string, string>;
 
@@ -14,6 +14,8 @@ export interface UtilityNode {
   code: Snippets;
   // Drawn as a compact node with the name in the middle, as Unreal draws operators.
   compact?: boolean;
+  // Inputs and the outputs they give (src/core/node-examples.ts).
+  examples?: NodeExample[];
 }
 
 export const input = (id: string, name: string, type: TypeRef, defaultValue?: unknown): PinDefinition => ({ id, name, kind: 'data', direction: 'input', type, ...(defaultValue !== undefined ? { defaultValue } : {}) });

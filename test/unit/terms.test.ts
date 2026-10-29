@@ -59,6 +59,10 @@ describe('language terms', () => {
     // A category only: the name stays.
     const length = builtinNodeDefinitions().find((d) => d.type === 'core:map.length')!;
     assert.deepEqual([localizeDefinition(length, LANGUAGE_TERMS.ruby).displayName, localizeDefinition(length, LANGUAGE_TERMS.ruby).category], ['Length', 'Utilities / Hash']);
+    // A language-only node is under the language's name.
+    const regex = builtinNodeDefinitions().find((d) => d.type === 'core:regex.matches')!;
+    assert.equal(localizeDefinition(regex, LANGUAGE_TERMS.python, 'Python').category, 'Python / Regex');
+    assert.equal(regex.category, 'Language / Regex', 'without a language');
     // Set and Map as verbs aren't containers.
     for (const type of ['core:variable.set', 'core:math.map-range-clamped']) {
       const definition = builtinNodeDefinitions().find((d) => d.type === type)!;

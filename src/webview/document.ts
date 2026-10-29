@@ -10,7 +10,7 @@ import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/function
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, UNBIND_ALL, UNBIND_EVENT, customEvents, documentDispatchers, eventName } from '../core/events';
 import { INTERFACE_CALL, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, PARENT_START, ancestors, canAccess, classTypeId, declaredClass, implementedInterfaces, interfaceById, subclassTest, codeClassBases } from '../core/objects';
-import { LanguageTerms, localizeDefinition, typeText } from '../core/terms';
+import { DEFAULT_TERMS, LanguageTerms, localizeDefinition, typeText } from '../core/terms';
 import { TypeRef, setClassHierarchy } from '../core/types';
 import { listUserTypes } from '../core/user-types';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
@@ -196,8 +196,10 @@ export function shownType(type: TypeRef | undefined): string {
 // Puts the definitions in the graph language's terms; called when they, the language or the
 // languages change. Callers redraw.
 export function applyTerms(): void {
-  const terms = languageTerms();
-  const definitions = terms ? state.sourceDefinitions.map((d) => localizeDefinition(d, terms)) : state.sourceDefinitions;
+  const id = state.document?.language || DEFAULT_LANGUAGE;
+  const language = state.languages.find((l) => l.id === id);
+  const terms = language?.terms ?? DEFAULT_TERMS;
+  const definitions = state.sourceDefinitions.map((d) => localizeDefinition(d, terms, language?.displayName));
   state.definitions = definitions;
   // A node of a former type (NodeDefinition.aliases) finds its definition, and takes its type when saved.
   state.defByType = new Map(definitions.flatMap((d) => [[d.type, d] as const, ...(d.aliases ?? []).map((alias) => [alias, d] as const)]));
