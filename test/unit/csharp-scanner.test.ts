@@ -71,16 +71,16 @@ describe('C# scanner: exposure', () => {
     assert.deepEqual(skipped(`
       public static class S {
           private static void Secret() {}
-          public static async Task Load() {}
-          public static Task<int> Later() => Task.FromResult(1);
+          public static async void Fire() {}
+          public static ValueTask Soon() => default;
           public static T First<T>(List<T> items) => items[0];
           public static void Swap(ref int a, ref int b) {}
           public static int Sum(params int[] values) => 0;
       }
       public static class Box<T> { public static void Put() {} }`), [
       "Secret: it isn't public or internal, so generated code can't call it",
-      "Load: async methods become latent nodes with Phase 4's latent actions",
-      "Later: async methods become latent nodes with Phase 4's latent actions",
+      "Fire: async void methods can't be awaited; return a Task",
+      "Soon: ValueTask methods can't be nodes yet; return a Task",
       "First: generic methods can't be nodes yet",
       "Swap: ref, in and params parameters can't be pins yet",
       "Sum: ref, in and params parameters can't be pins yet",
@@ -225,5 +225,40 @@ describe('C# several outputs', () => {
     assert.deepEqual(outputs('Range'), ['low', 'high']);
     assert.deepEqual(outputs('Pair'), ['first', 'second']);
     assert.deepEqual(outputs('Unnamed'), ['returnValue']);
+  });
+});
+
+// Async methods (docs/node-authoring.md, gap 4): a Task or Task<T> is a latent node whose value is T.
+describe('C# async methods', () => {
+  test('Task and Task<T> methods are latent, with Completed and the task value', () => {
+    const found = nodes(`
+      public static class Remote {
+          /// @blueprint
+          public static async Task<int> Load(string key) { await Task.Delay(1); return 1; }
+          /// @blueprint
+          public static Task Save() => Task.CompletedTask;
+          /// @blueprint
+          public static System.Threading.Tasks.Task<double> Later() => Task.FromResult(1.0);
+          /// @blueprint
+          public static async Task<int> TryLoad(out int code) { code = 0; return 1; }
+      }
+      public class Store {
+          /// @blueprint
+          public async Task<bool> Fetch(string key) { await Task.Delay(1); return true; }
+      }`);
+    const shape = (name: string) => {
+      const def = found.find((d) => d.displayName === name)!;
+      return [def.latent, def.outputs.map((p) => `${p.id}${p.type ? `:${p.type.id}` : ''}`)];
+    };
+    assert.deepEqual(shape('Load'), [true, ['completed', 'returnValue:int']]);
+    assert.deepEqual(shape('Save'), [true, ['completed']]);
+    assert.deepEqual(shape('Later'), [true, ['completed', 'returnValue:float']]);
+    assert.deepEqual(shape('Fetch'), [true, ['completed', 'returnValue:bool']]);
+    assert.ok(!found.some((d) => d.displayName === 'Try Load'));
+    assert.deepEqual(skipped(`
+      public static class R {
+          /// @blueprint
+          public static async Task<int> TryLoad(out int code) { code = 0; return 1; }
+      }`), ["TryLoad: async methods can't have out parameters"]);
   });
 });

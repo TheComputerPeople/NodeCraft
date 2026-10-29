@@ -363,13 +363,15 @@ export function scanCSharp(source: string): CSharpScan {
       if (cls && !modifiers.includes('static') && /^[A-Za-z_]\w*$/.test(name) && returnText !== '') {
         const outs: { name: string; type?: TypeRef }[] = [];
         const params = parseParams(k + 1, close - 1, outs);
-        const returns = mapReturn(returnText);
+        const task = taskOf(returnText, modifiers);
+        const returns = task && 'value' in task ? task.value : mapReturn(returnText);
         if (!access) instanceSkip(name, 'it isn\'t public or internal, so generated code can\'t call it');
         else if (genericMethod) instanceSkip(name, 'generic methods can\'t be nodes yet');
-        else if (modifiers.includes('async') || /^(Task|ValueTask)\b|^System\.Threading\.Tasks\./.test(returnText)) instanceSkip(name, 'async methods become latent nodes with Phase 4\'s latent actions');
+        else if (task && 'reason' in task) instanceSkip(name, task.reason);
         else if ('reason' in params) instanceSkip(name, params.reason);
+        else if (task && outs.length) instanceSkip(name, 'async methods can\'t have out parameters');
         else if ('reason' in returns) instanceSkip(name, returns.reason);
-        else cls.methods.push(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: memberDoc }, outs, returnText));
+        else cls.methods.push(task ? { name, line: tokens[first].line, params, returns: returns.type, doc: memberDoc, latent: true } : withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: memberDoc }, outs, returnText));
         i = memberEnd;
         continue;
       }
@@ -382,20 +384,34 @@ export function scanCSharp(source: string): CSharpScan {
       if (!access || !accessible) skip('it isn\'t public or internal, so generated code can\'t call it');
       else if (generic) skip('methods of generic classes can\'t be nodes yet');
       else if (genericMethod) skip('generic methods can\'t be nodes yet');
-      else if (modifiers.includes('async') || /^(Task|ValueTask)\b|^System\.Threading\.Tasks\./.test(returnText)) skip('async methods become latent nodes with Phase 4\'s latent actions');
       else if (modifiers.includes('extern')) skip('extern methods can\'t be nodes');
       else {
         const outs: { name: string; type?: TypeRef }[] = [];
         const params = parseParams(k + 1, close - 1, outs);
-        if ('reason' in params) skip(params.reason);
+        const task = taskOf(returnText, modifiers);
+        if (task && 'reason' in task) skip(task.reason);
+        else if ('reason' in params) skip(params.reason);
+        else if (task && outs.length) skip('async methods can\'t have out parameters');
         else {
-          const returns = mapReturn(returnText);
+          const returns = task ? task.value : mapReturn(returnText);
           if ('reason' in returns) skip(returns.reason);
+          else if (task) result.functions.push({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, container: className, latent: true });
           else result.functions.push(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, container: className }, outs, returnText));
         }
       }
       i = memberEnd;
     }
+  };
+
+  // Async (docs/node-authoring.md, gap 4): a method returning a Task (or Task<T>, whose T is its
+  // value) is a latent node. Undefined when it isn't async.
+  const taskOf = (returnText: string, modifiers: string[]): { value: ReturnType<typeof mapReturn> } | { reason: string } | undefined => {
+    const t = returnText.replace(/\s+/g, ' ').replace(/\s*([<>,.])\s*/g, '$1').trim();
+    const task = /^(?:System\.Threading\.Tasks\.)?Task(?:<(.*)>)?$/.exec(t);
+    if (task) return { value: task[1] !== undefined ? mapReturn(task[1]) : { type: null } };
+    if (/^(?:System\.Threading\.Tasks\.)?ValueTask\b/.test(t)) return { reason: 'ValueTask methods can\'t be nodes yet; return a Task' };
+    if (modifiers.includes('async')) return { reason: 'async void methods can\'t be awaited; return a Task' };
+    return undefined;
   };
 
   // Several outputs (docs/node-authoring.md, gap 3): out parameters (after the returned value, if

@@ -17,16 +17,12 @@ export function latentDefinitions(): NodeDefinition[] {
     {
       type: DELAY, version: 1, displayName: 'Delay', category: 'Flow', color: COLOR, keywords: ['delay', 'wait', 'sleep', 'timer', 'latent'],
       description: 'Runs Completed after Duration seconds. While it is waiting, running it again does nothing.',
-      inputs: [execIn, duration], outputs: [completed], implementation: { kind: 'native', operation: 'delay' }
+      inputs: [execIn, duration], outputs: [completed], implementation: { kind: 'native', operation: 'delay' }, latent: true
     },
     {
       type: RETRIGGERABLE_DELAY, version: 1, displayName: 'Retriggerable Delay', category: 'Flow', color: COLOR, keywords: ['delay', 'retrigger', 'debounce', 'wait', 'latent'],
       description: 'Runs Completed after Duration seconds. Running it again while it is waiting starts the countdown over.',
-      inputs: [execIn, duration], outputs: [completed], implementation: { kind: 'native', operation: 'retriggerable-delay' }
+      inputs: [execIn, duration], outputs: [completed], implementation: { kind: 'native', operation: 'retriggerable-delay' }, latent: true
     }
   ];
-}
-
-export function isLatentType(type: string): boolean {
-  return type === DELAY || type === RETRIGGERABLE_DELAY;
 }

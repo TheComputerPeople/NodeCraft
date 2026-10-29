@@ -123,27 +123,27 @@ describe('TypeScript scanner: declarations', () => {
 
   test('functions that cannot be nodes are reported with the reason', () => {
     assert.deepEqual(skipped(`
-      export async function load(): Promise<void> {}
+      export async function* stream() {}
       export function* ids() {}
       export function sum(...values: number[]): number { return 0; }
       export function move({ x, y }: Point): void {}
       export function first<T>(items: T[]): T { return items[0]; }
-      export function fetchIt(): Promise<string> { return Promise.resolve(''); }
+      export function nested(): Promise<Promise<string>> { return Promise.resolve(Promise.resolve('')); }
       export function pick(a: number): number;
       export function pick(a: string): string;
       export function pick(a: any): any { return a; }`), [
-      "load: async functions become latent nodes with Phase 4's latent actions",
+      "stream: generator functions can't be nodes",
       "ids: generator functions can't be nodes",
       "sum: rest parameters can't be pins",
       "move: destructured parameters can't be pins",
       "first: generic functions can't be nodes yet",
-      "fetchIt: it returns a Promise; asynchronous functions become latent nodes with Phase 4's latent actions",
+      "nested: it returns a Promise of a Promise",
       "pick: overloaded functions can't be nodes yet"
     ]);
   });
 
   test('reasons are only reported for marked functions unless everything is exposed', () => {
-    const scan = scanTypeScript('export async function a() {}\n/** @blueprint */\nexport async function b() {}');
+    const scan = scanTypeScript('export function* a() {}\n/** @blueprint */\nexport function* b() {}');
     assert.deepEqual(exposeFunctions(scan, TS).skipped.map((s) => s.name), ['b']);
   });
 
@@ -340,5 +340,45 @@ describe('TypeScript classes', () => {
     assert.equal(heal.category, 'Project / Player');
     assert.deepEqual(heal.inputs.find((p) => p.id === 'target')?.type, { id: 'native:Player' });
     assert.deepEqual(heal.implementation?.kind === 'function' && heal.implementation.member, { kind: 'method', name: 'heal', type: 'native:Player', base: 'native:Entity' });
+  });
+});
+
+// Async functions (docs/node-authoring.md, gap 4): latent nodes whose value is what the Promise gives.
+describe('TypeScript scanner: async functions', () => {
+  test('async functions and Promise returns are latent, with Completed and the promised value', () => {
+    const found = nodes(`
+      export async function load(id: number): Promise<string> { return ''; }
+      export function later(): Promise<number> { return Promise.resolve(1); }
+      export async function save(): Promise<void> {}
+      export const wait = async (ms: number) => { await new Promise((r) => setTimeout(r, ms)); };
+      export const give = async () => { return 1; };
+      export class Store {
+        /** @blueprint */
+        async fetch(key: string): Promise<boolean> { return true; }
+      }`, { exposeAll: true });
+    const shape = (name: string) => {
+      const def = found.find((d) => d.displayName === name)!;
+      return [def.latent, def.outputs.map((p) => `${p.id}${p.type ? `:${p.type.id}` : ''}`)];
+    };
+    assert.deepEqual(shape('Load'), [true, ['completed', 'returnValue:string']]);
+    assert.deepEqual(shape('Later'), [true, ['completed', 'returnValue:float']]);
+    assert.deepEqual(shape('Save'), [true, ['completed']]);
+    assert.deepEqual(shape('Wait'), [true, ['completed']]);
+    assert.deepEqual(shape('Give'), [true, ['completed', 'returnValue']]);
+    assert.deepEqual(shape('Fetch'), [true, ['completed', 'returnValue:bool']]);
+    assert.ok(found.find((d) => d.displayName === 'Fetch')!.inputs.some((p) => p.id === 'target'));
+  });
+
+  test('a latent node has exec pins even when marked pure; JSDoc @returns {Promise<T>} counts', () => {
+    const [def] = nodes(`
+      /**
+       * @blueprint pure
+       * @param {number} n
+       * @returns {Promise<number>}
+       */
+      export function slow(n) { return Promise.resolve(n); }`, { language: 'javascript', path: 'lib/slow.js' });
+    assert.equal(def.latent, true);
+    assert.deepEqual(def.inputs.map((p) => p.id), ['execIn', 'n']);
+    assert.deepEqual(def.outputs.map((p) => p.id), ['completed', 'returnValue']);
   });
 });

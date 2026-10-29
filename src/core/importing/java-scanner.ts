@@ -264,7 +264,7 @@ export function scanJava(source: string): ModuleScan {
           else {
             const params = parseParams(k + 1, close - 1);
             if ('reason' in params) memberSkip(name, params.reason);
-            else cls.methods.push({ name, line: tokens[first].line, params, returns: returnText === 'void' ? null : mapJavaType(returnText), doc: memberDoc });
+            else cls.methods.push({ name, line: tokens[first].line, params, ...returnsOf(returnText), doc: memberDoc });
           }
           j = skipMember(close);
           continue;
@@ -290,8 +290,7 @@ export function scanJava(source: string): ModuleScan {
         const params = parseParams(k + 1, close - 1);
         if ('reason' in params) skip(params.reason);
         else {
-          const returns = returnText === 'void' ? null : mapJavaType(returnText);
-          result.functions.push({ name, line: tokens[first].line, params, returns, doc: docComment, container: qualified(container) });
+          result.functions.push({ name, line: tokens[first].line, params, ...returnsOf(returnText), doc: docComment, container: qualified(container) });
         }
       }
       j = end;
@@ -336,13 +335,23 @@ export function scanJava(source: string): ModuleScan {
   members(i, tokens.length, '');
   // A function returning a record of the file gives its components as outputs (docs/node-authoring.md, gap 3).
   const withFields = (fn: ScannedFunction): ScannedFunction => {
-    const fields = fn.returns ? records.get(fn.returns.id.replace(/^native:/, '')) : undefined;
+    const fields = fn.returns && !fn.latent ? records.get(fn.returns.id.replace(/^native:/, '')) : undefined;
     if (!fields || fields.length < 2) return fn;
     return { ...fn, returns: undefined, outputs: fields, results: { kind: 'fields', names: fields.map((f) => f.name) } };
   };
   result.functions = result.functions.map(withFields);
   for (const cls of result.classes ?? []) cls.methods = cls.methods.map(withFields);
   return result;
+}
+
+// What a method returns. A CompletableFuture or CompletionStage makes it async (docs/node-authoring.md,
+// gap 4): a latent node, whose value is the future's.
+function returnsOf(returnText: string): Pick<ScannedFunction, 'returns' | 'latent'> {
+  const future = /^(?:java\.util\.concurrent\.)?(?:CompletableFuture|CompletionStage)\s*<([\s\S]*)>$/.exec(returnText.trim());
+  // Its value is boxed: a Long is a long, as generated code unboxes it.
+  const boxed: Record<string, string> = { Long: 'long', Double: 'double', Boolean: 'boolean' };
+  if (future) return { returns: future[1].trim() === 'Void' ? null : mapJavaType(boxed[future[1].trim()] ?? future[1]), latent: true };
+  return { returns: returnText === 'void' ? null : mapJavaType(returnText) };
 }
 
 function parseDoc(lines: string[] | undefined): DocComment {

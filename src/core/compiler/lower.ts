@@ -16,7 +16,6 @@ import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredC
 import { MACRO_INPUTS, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup, userTypeProblems } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
-import { isLatentType } from '../latent';
 import { TEST_CASE, assertEqualMessage, assertTrueMessage, testName } from '../tests';
 import { toIdentifier } from './names';
 
@@ -341,7 +340,7 @@ class Lowerer {
     for (const node of graph.nodes) {
       if (node.type.startsWith('core:event.')) this.error('event-in-function', 'Events belong in event graphs, not in functions.', graph.id, node.id);
       // As in Unreal: a function runs to its end at once, so it can't wait.
-      if (isLatentType(node.type)) this.error('latent-in-function', 'Delay belongs in event graphs: a function can\'t wait.', graph.id, node.id);
+      if (info.definitions.get(node.id)?.latent) this.error('latent-in-function', `${info.definitions.get(node.id)!.displayName} belongs in event graphs: a function can't wait.`, graph.id, node.id);
       if (info.definitions.get(node.id)?.implementation?.kind === 'event' && !node.type.startsWith('core:event.')) this.error('event-in-function', 'Events belong in event graphs, not in functions.', graph.id, node.id);
     }
     const signature = graph.signature ?? { inputs: [], outputs: [] };
@@ -707,7 +706,7 @@ class Lowerer {
     const state = new Map<string, 'visiting' | 'done'>();
     const visit = (nodeId: string): void => {
       state.set(nodeId, 'visiting');
-      const latent = isLatentType(info.nodes.get(nodeId)?.type ?? '');
+      const latent = !!info.definitions.get(nodeId)?.latent;
       for (const [pin, targets] of info.execTargets.get(nodeId) ?? []) {
         if (latent && pin === 'completed') continue;
         for (const target of targets) {
@@ -914,6 +913,18 @@ class Lowerer {
     if (!callee) return next(execOut);
     const output = def.outputs.find((p) => p.kind === 'data');
     const args = dataInputs(def).map((p) => this.inputExpr(info, node, def, p.id));
+    // An async function: Completed runs when it finishes, from no event's method, as a Delay's does.
+    if (def.latent) {
+      const event = this.currentEvent;
+      this.currentEvent = undefined;
+      let then: IrStatement[];
+      try {
+        then = next('completed');
+      } finally {
+        this.currentEvent = event;
+      }
+      return [{ kind: 'await', callee, args, ...(output ? { resultSlot: this.slot(info, node, def, output.id) } : {}), then, source }];
+    }
     // An imported function with several outputs (a graph library's) fills a slot per output.
     if (callee.kind === 'import' && this.imports.get(callee.id)?.outputs) {
       const results = def.outputs.filter((p) => p.kind === 'data').map((p) => ({ output: p.id, slot: this.slot(info, node, def, p.id) }));

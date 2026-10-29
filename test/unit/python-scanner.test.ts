@@ -112,22 +112,20 @@ describe('Python scanner: declarations', () => {
 
   test('functions that cannot be nodes are reported with the reason', () => {
     assert.deepEqual(skipped([
-      'async def load(): pass',
+      'async def stream():\n    yield 1',
       'def ids():\n    yield 1',
       'def total(*values): pass',
       'def opts(**kw): pass',
       'def need(*, key): pass',
       'def first[T](items: list[T]) -> T: pass',
-      'def later() -> Awaitable[int]: pass',
       'def gen() -> Iterator[int]: pass'
     ].join('\n')), [
-      "load: async functions become latent nodes with Phase 4's latent actions",
+      "stream: generator functions can't be nodes",
       "ids: generator functions can't be nodes",
       "total: variadic parameters (*args, **kwargs) can't be pins",
       "opts: variadic parameters (*args, **kwargs) can't be pins",
       "need: keyword-only parameters without defaults can't be pins yet",
       "first: generic functions can't be nodes yet",
-      "later: async functions become latent nodes with Phase 4's latent actions",
       "gen: generator functions can't be nodes"
     ]);
   });
@@ -288,5 +286,28 @@ describe('Python classes', () => {
   test('marked members become nodes with a Target', () => {
     const { definitions } = exposeFunctions(scanPython(source), { language: 'python', path: 'game/player.py', module: 'game.player', exposeAll: false });
     assert.deepEqual(definitions.map((d) => d.type.slice(d.type.indexOf('#') + 1)), ['Player:new', 'Player:heal', 'Player:get:health', 'Player:set:health', 'Player:get:alive', 'Player:get:label', 'Player:set:label']);
+  });
+});
+
+// Async functions (docs/node-authoring.md, gap 4): `async def`, or a def returning an Awaitable or
+// Coroutine, is a latent node whose value is what it gives when awaited.
+describe('Python scanner: async functions', () => {
+  test('async def and awaitables are latent, with Completed and the awaited value', () => {
+    const scan = scanPython([
+      'async def load(key: str) -> int: pass',
+      'async def save(): pass',
+      'async def give():\n    return 1',
+      'def later() -> Awaitable[float]: pass',
+      'def task() -> Coroutine[Any, Any, str]: pass',
+      'class Store:',
+      '    async def fetch(self, key: str) -> bool:',
+      '        """@blueprint"""',
+      '        return True'
+    ].join('\n'));
+    const fns = Object.fromEntries(scan.functions.map((f) => [f.name, [f.latent, f.returns]]));
+    assert.deepEqual(fns, {
+      load: [true, { id: 'int' }], save: [true, null], give: [true, undefined], later: [true, { id: 'float' }], task: [true, { id: 'string' }]
+    });
+    assert.deepEqual(scan.classes![0].methods.map((m) => [m.name, m.latent, m.returns]), [['fetch', true, { id: 'bool' }]]);
   });
 });

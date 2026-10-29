@@ -44,6 +44,9 @@ export interface NodeDefinition {
   // Node types that used to mean this node: graphs that still use one get this node, and are
   // saved with its type (a function library's functions were "fn:" nodes of its generated file).
   aliases?: string[];
+  // A latent node (docs/program-structure.md, "Latent actions"; Delay, or an async function from
+  // code): drawn with a clock, and its Completed output runs later, from the latent queue.
+  latent?: boolean;
 }
 
 // A language feature a graph can need (docs/language-breadth.md, "Capabilities, enforced").

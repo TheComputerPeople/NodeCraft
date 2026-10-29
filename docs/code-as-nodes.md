@@ -58,7 +58,8 @@ The setting `blueprintVisualScripting.exposeAllFunctions` exposes every exported
 | `native:<name>` | any other type, by its text | any other type, by its text |
 
   `T | null`, `T | undefined`, `Optional[T]` and `T | None` are T, nullable. A `native` type connects only to the same type (or `any`) and passes through untouched.
-- **Not exposed, with the reason shown in the output channel:** `async` functions and functions returning a `Promise` or `Awaitable` (they become latent nodes with Phase 4's latent actions), generators, rest parameters (`...args`, `*args`, `**kwargs`), destructured parameters, generic functions, TypeScript overloads, and marked TypeScript or JavaScript functions that aren't exported. Python keyword-only parameters with defaults are left off the node, so they keep their defaults; one without a default makes the function unexposable.
+- **Async functions** are latent nodes: see [Async functions](#async-functions).
+- **Not exposed, with the reason shown in the output channel:** generators (async ones too), rest parameters (`...args`, `*args`, `**kwargs`), destructured parameters, generic functions, TypeScript overloads, and marked TypeScript or JavaScript functions that aren't exported. Python keyword-only parameters with defaults are left off the node, so they keep their defaults; one without a default makes the function unexposable.
 
 ### How declarations are read
 
@@ -87,7 +88,7 @@ A class's members become nodes too, each when its own documentation comment is m
   - GDScript: a script with a `class_name`. Its non-static functions are methods, `_init` its constructor, and its `var`s properties. Its static functions stay functions.
   - Ruby: a class's `initialize`, public instance methods, and `attr_accessor` / `attr_reader` attributes (typed by `@return [Type]` above them). Methods after `private` or `protected` aren't public.
   - PHP: a class's `__construct`, public instance methods and public properties (`readonly` ones read-only).
-  - Private members (and `_`-named ones in Python), static members and async methods are reported instead.
+  - Private members (and `_`-named ones in Python) and static members are reported instead. Async methods are latent nodes, as async functions are.
 - **Types.** Objects travel on pins of the class's `native:` type, as functions returning the class already make them. A subclass's object connects where its base class is expected, when the subclass has a marked member (its nodes record the base). The default category is "Project / <Class>".
 - **Generated code.** It imports the class and writes `new Player(…)` (`Player(…)` in Python), `target.heal(…)`, `target.health` and `target.health = …`. C# and Java pass such objects as `object`/`Object`, so they cast the Target to the class. C++ passes them in a `std::any`, as the object and as each class it extends (`vgraph::code_new<Player, Entity>(…)`), and `vgraph::code_object<Player>(target)` finds the object as the class it needs. Rust passes them as a `vgraph::Value` holding the object (`vgraph::code_new`), borrowed for each use (`vgraph::code_object::<Counter>(&target).borrow_mut().add(…)`). Go passes them as `any` and asserts the Target to the struct's pointer. An empty Target stops the run with the language's own null error (C++ and Rust: "Accessed None"), as Unreal stops on "Accessed None".
 - **Languages.** All twelve. Lua, GDScript, Ruby and PHP are dynamic, so their objects need no help: generated code writes `Counter.new(…)`, `target:add(…)` (Lua), the preloaded script's `.new(…)` (GDScript), and `new \App\Counter(…)`, `$target->add(…)` (PHP).
@@ -121,6 +122,31 @@ def divide(a: int, b: int) -> tuple[int, int]:
 - **Exec pins.** The node always has them, even when marked `@blueprint pure`, since the function runs once for all its outputs.
 - **Generated code** reads each output from what the function gives back: it destructures the object, tuple or array, reads a record's accessors, or passes new variables for the out parameters and copies each to its output.
 - **Not exposed:** C# `ref`, `in` and `params` parameters, PHP variadics, and a tuple with no names in the code and no `@outputs` (which stays one value of its native type, or, for Lua and Go, is reported).
+
+## Async functions
+
+A function that returns its language's future is a **latent node**, as Unreal's latent functions are ([node-authoring.md](node-authoring.md), gap 4):
+
+```ts
+/** @blueprint */
+export async function fetchScore(player: string): Promise<number> {
+  const response = await fetch(`https://example.com/score/${player}`);
+  return Number(await response.text());
+}
+```
+
+| Language | Latent when it |
+|---|---|
+| TypeScript, JavaScript | is `async`, or returns a `Promise<T>` (or JSDoc's `@returns {Promise<T>}`) |
+| Python | is an `async def`, or returns `Awaitable[T]` or `Coroutine[…, …, T]` |
+| C# | returns `Task` or `Task<T>` (not `async void` or `ValueTask`) |
+| Java | returns `CompletableFuture<T>` or `CompletionStage<T>` |
+
+- **The node.** A clock in the title marks it. Its exec output is **Completed**, which runs when the function finishes, and its Return Value is what the future gives (`T`). It always has exec pins, even when marked pure.
+- **Order.** Calling it starts the function, and the chain after the node waits for Completed, while the rest of the graph goes on, as with Delay (a Sequence's next output runs). Completed runs from the latent queue, after the code that's running, so Unreal's ordering holds.
+- **Failure.** A function that fails (throws, rejects, raises) stops the run with its error, and its Completed doesn't run.
+- **Where.** In event graphs and the macros they use, as Delay: a function graph runs to its end at once, so a latent node there is a compile error.
+- **Other languages.** Rust's futures need an executor the project chooses, Go uses goroutines, and C++, Lua, Ruby and PHP have no standard future. GDScript's `await` will come with a Godot framework pack.
 
 ## Node identity
 

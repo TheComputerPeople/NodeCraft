@@ -151,3 +151,28 @@ describe('Java classes', () => {
     ]);
   });
 });
+
+// Async methods (docs/node-authoring.md, gap 4): a CompletableFuture or CompletionStage is a latent
+// node, whose value is the future's (unboxed).
+describe('Java async methods', () => {
+  test('futures are latent, with Completed and the unboxed value; a record in a future stays one value', () => {
+    const scan = scanJava([
+      'package game;',
+      'import java.util.concurrent.*;',
+      'public final class Remote {',
+      '    public record Pair(long a, long b) {}',
+      '    /** @blueprint */',
+      '    public static CompletableFuture<Long> load(String key) { return null; }',
+      '    /** @blueprint */',
+      '    public static CompletionStage<Void> save() { return null; }',
+      '    /** @blueprint */',
+      '    public static java.util.concurrent.CompletableFuture<Pair> pair() { return null; }',
+      '}',
+      ''
+    ].join('\n'));
+    const fns = Object.fromEntries(scan.functions.map((f) => [f.name, [f.latent, f.returns, f.outputs]]));
+    assert.deepEqual(fns.load, [true, { id: 'int' }, undefined]);
+    assert.deepEqual(fns.save, [true, null, undefined]);
+    assert.deepEqual(fns.pair, [true, { id: 'native:Pair' }, undefined]);
+  });
+});

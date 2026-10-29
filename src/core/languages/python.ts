@@ -33,9 +33,11 @@ function mapType(type: TypeRef): string {
 // ("Values") exactly as Simulate does, so output matches the other targets.
 const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent', string[]> = {
   latent: [
-    'def _delay(seconds: float, action: Any, *args: Any) -> None:',
+    'def _latent_queue() -> Any:',
     '    # Latent actions of every class run from one queue, in the order they fall due, once start()',
-    '    # has returned: _run_latent_actions() runs them.',
+    '    # has returned: _run_latent_actions() runs them. Async functions run meanwhile on an asyncio',
+    '    # event loop, and each one\'s Completed joins the queue when it finishes.',
+    '    import asyncio',
     '    import heapq',
     '    import sys',
     '    import time',
@@ -45,26 +47,59 @@ const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent', string[]> = {
     '        queue = types.ModuleType("_blueprint_latent")',
     '        queue.pending = []',
     '        queue.order = 0',
+    '        queue.waiting = []',
+    '',
+    '        async def drive() -> None:',
+    '            running = 0',
+    '            finished = asyncio.Event()',
+    '',
+    '            def done(task: Any, then: Any) -> None:',
+    '                nonlocal running',
+    '                running -= 1',
+    '                queue.order += 1',
+    '                # Its value (or its error) is taken when Completed runs.',
+    '                heapq.heappush(queue.pending, (time.monotonic(), queue.order, lambda: then(task.result()), ()))',
+    '                finished.set()',
+    '',
+    '            while queue.pending or queue.waiting or running:',
+    '                while queue.waiting:',
+    '                    awaitable, then = queue.waiting.pop(0)',
+    '                    running += 1',
+    '                    asyncio.ensure_future(awaitable).add_done_callback(lambda task, then=then: done(task, then))',
+    '                if queue.pending and queue.pending[0][0] <= time.monotonic():',
+    '                    _, _, then, then_args = heapq.heappop(queue.pending)',
+    '                    then(*then_args)',
+    '                    continue',
+    '                finished.clear()',
+    '                try:',
+    '                    await asyncio.wait_for(finished.wait(), queue.pending[0][0] - time.monotonic() if queue.pending else None)',
+    '                except asyncio.TimeoutError:',
+    '                    pass',
     '',
     '        def run() -> None:',
-    '            while queue.pending:',
-    '                due, _, then, then_args = heapq.heappop(queue.pending)',
-    '                wait = due - time.monotonic()',
-    '                if wait > 0:',
-    '                    time.sleep(wait)',
-    '                then(*then_args)',
+    '            if queue.pending or queue.waiting:',
+    '                asyncio.run(drive())',
     '',
     '        queue.run = run',
     '        sys.modules["_blueprint_latent"] = queue',
+    '    return queue',
+    '',
+    '',
+    'def _delay(seconds: float, action: Any, *args: Any) -> None:',
+    '    import heapq',
+    '    import time',
+    '    queue = _latent_queue()',
     '    queue.order += 1',
     '    heapq.heappush(queue.pending, (time.monotonic() + max(0.0, seconds), queue.order, action, args))',
     '',
     '',
+    '# An async function\'s awaitable: `then` runs with its value when it finishes.',
+    'def _await_latent(awaitable: Any, then: Any) -> None:',
+    '    _latent_queue().waiting.append((awaitable, then))',
+    '',
+    '',
     'def _run_latent_actions() -> None:',
-    '    import sys',
-    '    queue: Any = sys.modules.get("_blueprint_latent")',
-    '    if queue is not None:',
-    '        queue.run()'
+    '    _latent_queue().run()'
   ],
   format: [
     'def _format_value(value: Any) -> str:',
@@ -215,7 +250,7 @@ const DISPATCHER_CLASS = [
 const CLASS_STYLES: ClassMemberStyles = { functions: 'snake', variables: 'keep', dispatchers: 'keep', hiddenPrefix: '_' };
 
 // Names fixed in every generated module, which functions must not take.
-const MODULE_NAMES = ['_EventDispatcher', 'annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text', '_delay', '_run_latent_actions'];
+const MODULE_NAMES = ['_EventDispatcher', 'annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text', '_delay', '_run_latent_actions', '_latent_queue', '_await_latent'];
 
 // The names a function library's functions are defined as (snake_case, unique in the module). The
 // library's own generated module and every module that imports it use these.
@@ -285,6 +320,7 @@ export const pythonPack: LanguagePack = {
 class PythonEmitter {
   // The class's tests and their methods (claimed in emit).
   private tests: { name: string; method: string }[] = [];
+  private latents = 0;
   private readonly out = new CodeWriter('    ');
   // One scope for the class's members; in a library, for the module's functions.
   private readonly names: NameScope;
@@ -785,6 +821,22 @@ class PythonEmitter {
       case 'broadcast':
         out.line(`${this.dispatcherRef(s)}.broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
         break;
+      case 'await': {
+        // An async function (docs/node-authoring.md, gap 4): Completed runs with its value when it
+        // finishes, from the latent queue.
+        this.helpersUsed.add('latent');
+        this.usesAny = true;
+        const callback = `_completed_${++this.latents}`;
+        out.line(`def ${callback}(value: Any) -> None:`);
+        out.indent();
+        if (s.resultSlot) out.line(`${this.slotRef(s.resultSlot)} = value`);
+        else if (!s.then.length) out.line('pass');
+        this.statements(s.then);
+        out.dedent();
+        out.line();
+        out.line(`_await_latent(${this.call(s.callee, s.args)}, ${callback})`);
+        break;
+      }
       case 'delay': {
         this.helpersUsed.add('latent');
         this.usesAny = true;

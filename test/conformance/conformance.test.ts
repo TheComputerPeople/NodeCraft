@@ -23,6 +23,7 @@ import { RUN_PROJECT_FILE, csharpRunProject } from '../../src/core/languages/csh
 import { ToolNotFoundError, runCommand, runGeneratedCode, writeScaffold } from '../../src/extension/runner';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
+import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 const languages = builtinLanguagePacks();
@@ -682,6 +683,214 @@ describe('several outputs from code', () => {
     const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
     const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+});
+
+// Async functions from the project's code as latent nodes (docs/node-authoring.md, gap 4): each
+// language's future, its value on Completed, which runs after the code that started it.
+describe('async functions from code', () => {
+  const MODULES: Record<string, { path: string; text: string }> = {
+    typescript: {
+      path: 'lib/fetch.ts',
+      text: [
+        '/** @blueprint */',
+        'export async function fetchDouble(value: number): Promise<number> {',
+        '  await new Promise((resolve) => setTimeout(resolve, 10));',
+        '  return value * 2;',
+        '}',
+        ''
+      ].join('\n')
+    },
+    'javascript-esm': {
+      path: 'lib/fetch.mjs',
+      text: [
+        '/**',
+        ' * @blueprint',
+        ' * @param {number} value',
+        ' * @returns {Promise<number>}',
+        ' */',
+        'export function fetchDouble(value) {',
+        '  return new Promise((resolve) => setTimeout(() => resolve(value * 2), 10));',
+        '}',
+        ''
+      ].join('\n')
+    },
+    'javascript-commonjs': {
+      path: 'lib/fetch.cjs',
+      text: [
+        '/**',
+        ' * @blueprint',
+        ' * @param {number} value',
+        ' * @returns {Promise<number>}',
+        ' */',
+        'async function fetchDouble(value) {',
+        '  return value * 2;',
+        '}',
+        'module.exports = { fetchDouble };',
+        ''
+      ].join('\n')
+    },
+    python: {
+      path: 'lib/game/fetch.py',
+      text: [
+        'import asyncio',
+        '',
+        '',
+        'async def fetch_double(value: int) -> int:',
+        '    """@blueprint"""',
+        '    await asyncio.sleep(0.01)',
+        '    return value * 2',
+        ''
+      ].join('\n')
+    },
+    csharp: {
+      path: 'lib/Fetch.cs',
+      text: [
+        'using System.Threading.Tasks;',
+        '',
+        'namespace Game;',
+        '',
+        'public static class Remote',
+        '{',
+        '    /// @blueprint',
+        '    public static async Task<int> FetchDouble(int value)',
+        '    {',
+        '        await Task.Delay(10);',
+        '        return value * 2;',
+        '    }',
+        '}',
+        ''
+      ].join('\n')
+    },
+    // Each fails once it has waited.
+    'typescript-fails': {
+      path: 'lib/fetch.ts',
+      text: [
+        '/** @blueprint */',
+        'export async function fetchDouble(value: number): Promise<number> {',
+        '  await new Promise((resolve) => setTimeout(resolve, 10));',
+        '  throw new Error(`no double for ${value}`);',
+        '}',
+        ''
+      ].join('\n')
+    },
+    'python-fails': {
+      path: 'lib/game/fetch.py',
+      text: [
+        'import asyncio',
+        '',
+        '',
+        'async def fetch_double(value: int) -> int:',
+        '    """@blueprint"""',
+        '    await asyncio.sleep(0.01)',
+        '    raise ValueError(f"no double for {value}")',
+        ''
+      ].join('\n')
+    },
+    'csharp-fails': {
+      path: 'lib/Fetch.cs',
+      text: [
+        'using System;',
+        'using System.Threading.Tasks;',
+        '',
+        'namespace Game;',
+        '',
+        'public static class Remote',
+        '{',
+        '    /// @blueprint',
+        '    public static async Task<int> FetchDouble(int value)',
+        '    {',
+        '        await Task.Delay(10);',
+        '        throw new InvalidOperationException($"no double for {value}");',
+        '    }',
+        '}',
+        ''
+      ].join('\n')
+    }
+  };
+
+  function build(language: string, key: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; importRoots?: string[]; text: string } {
+    const importer = languages.get(language)!.importer!;
+    const module = MODULES[key];
+    const defs = exposeFunctions(importer.scan!(module.text), { language, path: module.path, module: language === 'python' ? 'game.fetch' : undefined, exposeAll: false }).definitions;
+    const r = registry();
+    r.registerMany(defs);
+    const dir = path.join(workDir, `latent-${key}`);
+    fs.mkdirSync(path.join(dir, path.dirname(module.path)), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
+    fs.writeFileSync(path.join(dir, module.path), module.text);
+    if (language === 'python') fs.writeFileSync(path.join(dir, path.dirname(module.path), '__init__.py'), '');
+    const result = compileDocument(latentCodeGraph(defs, language), { registry: r, languages, generate: { sourceFileName: 'fetching.vgraph', outputDir: 'graphs', namespace: 'Game', ...generate } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'graphs', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    return { file, className: result.output!.className, dir, importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)), text: result.output!.text };
+  }
+
+  for (const target of [
+    { label: 'TypeScript (an async function)', language: 'typescript', key: 'typescript', code: /fetchDouble\(4\)\.then\(\(vgValue\) => \{/ },
+    { label: 'JavaScript (ES modules, a Promise)', language: 'javascript', key: 'javascript-esm', moduleFormat: 'esm' as const },
+    { label: 'JavaScript (CommonJS, an async function)', language: 'javascript', key: 'javascript-commonjs', moduleFormat: 'commonjs' as const },
+    { label: 'Python (async def)', language: 'python', key: 'python', code: /_await_latent\(fetch_double\(4\), _completed_1\)/ },
+    { label: 'C# (a Task)', language: 'csharp', key: 'csharp', code: /AwaitLatent\(vgTask1, \(\) =>/ }
+  ]) {
+    test(`${target.label} runs Completed when it finishes`, async (t) => {
+      const { file, className, dir, importRoots, text } = build(target.language, target.key, { moduleFormat: target.moduleFormat });
+      if (target.code) assert.match(text, target.code);
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? [path.join(dir, MODULES[target.key].path)] : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), LATENT_CODE_OUTPUT, `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  for (const target of [
+    { label: 'TypeScript', language: 'typescript', key: 'typescript-fails' },
+    { label: 'Python', language: 'python', key: 'python-fails' },
+    { label: 'C#', language: 'csharp', key: 'csharp-fails' }
+  ]) {
+    test(`${target.label}: a failure stops the run with its error, and Completed doesn't run`, async (t) => {
+      const { file, className, dir, importRoots } = build(target.language, target.key);
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? [path.join(dir, MODULES[target.key].path)] : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.notEqual(outcome.exitCode, 0);
+      assert.match(outcome.stderr, /no double for 4/);
+      assert.deepEqual(outputLines(outcome.stdout), ['started']);
+    });
+  }
+
+  test('TypeScript calling one type-checks under --strict', () => {
+    const { file, dir } = build('typescript', 'typescript');
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], allowImportingTsExtensions: true },
+      files: [path.relative(dir, file)]
+    }));
+    const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+    const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+
+  test('a latent node in a function graph is an error, as Delay is', () => {
+    const importer = languages.get('typescript')!.importer!;
+    const defs = exposeFunctions(importer.scan!(MODULES.typescript.text), { language: 'typescript', path: MODULES.typescript.path, exposeAll: false }).definitions;
+    const r = registry();
+    r.registerMany(defs);
+    const document = latentCodeGraph(defs, 'typescript');
+    const graph = document.graphs[0];
+    document.graphs.push({ ...graph, id: 'Work', name: 'Work', kind: 'function', nodes: [{ id: 'entry', type: 'core:function.entry', position: { x: 0, y: 0 }, properties: {} }, { ...graph.nodes.find((n) => n.id === 'f')!, id: 'f2' }], connections: [{ id: 'c', fromNode: 'entry', fromPin: 'execOut', toNode: 'f2', toPin: 'execIn' }] });
+    const diagnostics = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'fetching.vgraph' } }).diagnostics;
+    assert.ok(diagnostics.some((d) => d.code === 'latent-in-function' && d.nodeId === 'f2'), JSON.stringify(diagnostics));
   });
 });
 

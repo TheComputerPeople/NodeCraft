@@ -806,6 +806,17 @@ class TypeScriptEmitter {
         }
         break;
       }
+      case 'await': {
+        // An async function (docs/node-authoring.md, gap 4): Completed runs when its promise
+        // settles, after the code that's running. A rejection is unhandled, so it stops the run.
+        out.line(`${this.call(s.callee, s.args)}.then((${s.resultSlot ? 'vgValue' : ''}) => {`);
+        out.indent();
+        if (s.resultSlot) out.line(`${this.slotRef(s.resultSlot)} = vgValue;`);
+        this.statements(s.then);
+        out.dedent();
+        out.line('});');
+        break;
+      }
       case 'delay': {
         // Node.js runs timers in the order they fall due, and waits for them before exiting.
         const ms = `${this.operand(s.duration)} * 1000`;

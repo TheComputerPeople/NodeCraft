@@ -145,6 +145,25 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - C++, Lua, Ruby and PHP have no standard future.
   - GDScript's `await` is Godot's own: it comes with a Godot framework pack.
 
+**Built (step 8): TypeScript, JavaScript, Python, C# and Java.**
+
+- **Scanning.**
+  - TypeScript and JavaScript: an `async` function or method, or one returning `Promise<T>` (annotated, or JSDoc's `@returns {Promise<T>}`).
+  - Python: an `async def`, or a def returning `Awaitable[T]` or `Coroutine[…, …, T]`.
+  - C#: a method returning `Task` or `Task<T>`. `async void` and `ValueTask` are reported, with a hint to return a Task, as are async methods with `out` parameters.
+  - Java: a method returning `CompletableFuture<T>` or `CompletionStage<T>`, its boxed `T` unboxed (`Long` is an int).
+  - The awaited type is the Return Value. `ScannedFunction.latent` marks the function.
+- **Nodes.** `NodeDefinition.latent` marks a latent node: Delay and Retriggerable Delay now have it too. The editor draws a clock in its title. A latent node always has exec pins, even when marked pure. Its exec output is **Completed**. As with Delay, a latent node in a function graph is a compile error, and its Completed doesn't count toward exec loops.
+- **Generated code.** A new IR statement, `await`, calls the function, and the code after it goes on. When the future finishes, its value goes into the output's slot and Completed's chain runs, from the latent queue:
+  - TypeScript and JavaScript: `.then(…)`. A rejection is unhandled, so Node.js stops the run with it.
+  - Python: the latent queue now runs on an `asyncio` event loop, which drives the coroutines beside the Delays. Each finished coroutine's Completed joins the queue.
+  - C# and Java: the queue keeps the tasks or futures it's waiting for. It waits on them and the next Delay together, then queues each finished one's Completed. `GetAwaiter().GetResult()` and `latentResult` read the value, or throw the function's own exception (not .NET's AggregateException or Java's CompletionException).
+- **Fixed on the way (step 7).** A class method's node now keeps how its code gives several outputs. Member calls in C#, C++ and PHP now pass the out-parameter variables.
+- **Tests.**
+  - A shared graph (test/conformance/latent-code.ts) starts `fetchDouble(4)` from a Sequence's first output. It prints "started" from the second output, then 8 on Completed, in all five languages.
+  - A failing function stops the run with its own error, and its Completed doesn't run.
+  - Scanner tests cover each form and the reasons for what's still reported. A webview test checks the clock.
+
 ## Gap 5: no way from a node to its definition
 
 **Today.** Double-clicking a node opens a function or macro graph in the same file only (`render.ts`). Nothing opens a library function's graph, the code behind a project function, or a `*.node.json` file. Unreal opens a library function's graph, and a C++ node's source in the IDE.

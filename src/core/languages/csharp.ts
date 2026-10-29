@@ -22,21 +22,29 @@ const RESERVED = new Set([
 
 // Helper methods emitted into the generated class on demand. They implement docs/semantics.md
 // ("Values") exactly as Simulate does, so output matches the other targets.
-const HELPER_NAMES = ['FormatValue', 'FormatNumber', 'ToNumber', 'ToBoolean', 'As', 'ToJson', 'JsonString', 'EnumName', 'Delay', 'LatentQueue', 'LatentClock', 'RunLatentActions'];
+const HELPER_NAMES = ['FormatValue', 'FormatNumber', 'ToNumber', 'ToBoolean', 'As', 'ToJson', 'JsonString', 'EnumName', 'Delay', 'LatentQueue', 'LatentClock', 'RunLatentActions', 'LatentWaiting', 'AwaitLatent'];
 const HELPERS: Record<'format' | 'number' | 'boolean' | 'as' | 'latent', string[]> = {
   latent: [
     '// Latent actions of every class run from one queue (kept in the AppDomain), in the order they',
-    '// fall due, once Start() has returned: RunLatentActions() runs them.',
+    '// fall due, once Start() has returned: RunLatentActions() runs them. Async functions\' tasks wait',
+    '// beside it, and each one\'s Completed joins the queue when its task finishes.',
     'private static List<(double Due, long Order, Action Run)> LatentQueue()',
     '{',
     '    if (AppDomain.CurrentDomain.GetData("blueprint.latent") is not List<(double Due, long Order, Action Run)> queue)',
     '    {',
     '        queue = new List<(double Due, long Order, Action Run)>();',
     '        AppDomain.CurrentDomain.SetData("blueprint.latent", queue);',
+    '        AppDomain.CurrentDomain.SetData("blueprint.latent.waiting", new List<(System.Threading.Tasks.Task Task, Action Then)>());',
     '        AppDomain.CurrentDomain.SetData("blueprint.latent.clock", System.Diagnostics.Stopwatch.StartNew());',
     '        AppDomain.CurrentDomain.SetData("blueprint.latent.run", (Action)RunLatentActions);',
     '    }',
     '    return queue;',
+    '}',
+    '',
+    'private static List<(System.Threading.Tasks.Task Task, Action Then)> LatentWaiting()',
+    '{',
+    '    LatentQueue();',
+    '    return (List<(System.Threading.Tasks.Task Task, Action Then)>)AppDomain.CurrentDomain.GetData("blueprint.latent.waiting")!;',
     '}',
     '',
     'private static double LatentClock() => ((System.Diagnostics.Stopwatch)AppDomain.CurrentDomain.GetData("blueprint.latent.clock")!).Elapsed.TotalSeconds;',
@@ -47,15 +55,34 @@ const HELPERS: Record<'format' | 'number' | 'boolean' | 'as' | 'latent', string[
     '    queue.Add((LatentClock() + Math.Max(0, seconds), queue.Count == 0 ? 0 : queue.Max(e => e.Order) + 1, then));',
     '}',
     '',
+    '// An async function\'s task: `then` runs when it finishes, and reads its result (or throws its error).',
+    'private static void AwaitLatent(System.Threading.Tasks.Task task, Action then) => LatentWaiting().Add((task, then));',
+    '',
     'public static void RunLatentActions()',
     '{',
     '    var queue = LatentQueue();',
-    '    while (queue.Count > 0)',
+    '    var waiting = LatentWaiting();',
+    '    while (queue.Count > 0 || waiting.Count > 0)',
     '    {',
+    '        foreach (var finished in waiting.Where(w => w.Task.IsCompleted).ToList())',
+    '        {',
+    '            waiting.Remove(finished);',
+    '            queue.Add((LatentClock(), queue.Count == 0 ? 0 : queue.Max(e => e.Order) + 1, finished.Then));',
+    '        }',
+    '        if (queue.Count == 0)',
+    '        {',
+    '            System.Threading.Tasks.Task.WaitAny(waiting.Select(w => w.Task).ToArray());',
+    '            continue;',
+    '        }',
     '        var next = queue.OrderBy(e => e.Due).ThenBy(e => e.Order).First();',
-    '        queue.Remove(next);',
     '        var wait = next.Due - LatentClock();',
-    '        if (wait > 0) System.Threading.Thread.Sleep(TimeSpan.FromSeconds(wait));',
+    '        if (wait > 0)',
+    '        {',
+    '            if (waiting.Count > 0) System.Threading.Tasks.Task.WaitAny(waiting.Select(w => w.Task).ToArray(), TimeSpan.FromSeconds(wait));',
+    '            else System.Threading.Thread.Sleep(TimeSpan.FromSeconds(wait));',
+    '            if (next.Due > LatentClock()) continue;',
+    '        }',
+    '        queue.Remove(next);',
     '        next.Run();',
     '    }',
     '}'
@@ -802,6 +829,21 @@ class CSharpEmitter {
         out.line(`foreach (var handler in ${this.dispatcherRef(s)}.Handlers) handler(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')});`);
         break;
       }
+      case 'await': {
+        // An async function (docs/node-authoring.md, gap 4): Completed runs when its task finishes,
+        // from the latent queue; GetResult gives its value, or throws its error.
+        this.helpersUsed.add('latent');
+        const task = `vgTask${++this.temps}`;
+        out.line(`var ${task} = ${this.call(s.callee, s.args)};`);
+        out.line(`AwaitLatent(${task}, () =>`);
+        out.line('{');
+        out.indent();
+        out.line(s.resultSlot ? `${this.slotNames.get(s.resultSlot)} = ${task}.GetAwaiter().GetResult();` : `${task}.GetAwaiter().GetResult();`);
+        this.statements(s.then);
+        out.dedent();
+        out.line('});');
+        break;
+      }
       case 'delay': {
         this.helpersUsed.add('latent');
         if (s.generation) {
@@ -1035,7 +1077,7 @@ class CSharpEmitter {
     if (member.kind === 'construct') return `new ${qualified}(${list})`;
     const [target, ...rest] = args;
     const object = `((${qualified})${this.operand(target)})`;
-    const values = rest.map((a, i) => this.coerce(a, signature?.params[i + 1]?.type)).join(', ');
+    const values = [...rest.map((a, i) => this.coerce(a, signature?.params[i + 1]?.type)), ...extra].join(', ');
     return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
 

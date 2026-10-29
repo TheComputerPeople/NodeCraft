@@ -152,6 +152,8 @@ interface Signature {
   // Several outputs (docs/node-authoring.md, gap 3).
   outputs?: { name: string; type?: TypeRef }[];
   results?: CodeResults;
+  // Async (gap 4): `returns` is what its Promise gives.
+  latent?: boolean;
 }
 
 // Modifiers before a class member's name.
@@ -239,7 +241,7 @@ class DeclarationParser {
       const nameIndex = generator ? k + 2 : k + 1;
       const nameToken = this.tokens[nameIndex];
       if (nameToken?.kind !== 'name') return undefined;
-      const parsed = this.signature(nameIndex + 1, doc);
+      const parsed = this.signature(nameIndex + 1, doc, false, isAsync);
       const name = nameToken.text;
       // TypeScript overloads: signatures without a body, then the implementation. The first
       // declaration carries the documentation.
@@ -249,7 +251,7 @@ class DeclarationParser {
       } else {
         this.locals.set(name, {
           name, line: this.tokens[i].line, doc,
-          signature: isAsync ? { reason: ASYNC_REASON } : generator ? { reason: 'generator functions can\'t be nodes' } : parsed.signature
+          signature: generator ? { reason: 'generator functions can\'t be nodes' } : parsed.signature
         });
       }
       if (exported) this.exportedLocals.set(name, name);
@@ -270,10 +272,10 @@ class DeclarationParser {
         const generator = this.at(j + 1, '*');
         let p = generator ? j + 2 : j + 1;
         if (this.tokens[p]?.kind === 'name') p++;
-        const s = this.signature(p, doc);
+        const s = this.signature(p, doc, false, valueAsync);
         parsed = { signature: generator ? { reason: 'generator functions can\'t be nodes' } : s.signature, end: s.end };
       } else if (this.at(j, '(') || this.at(j, '<')) {
-        const s = this.signature(j, doc, true);
+        const s = this.signature(j, doc, true, valueAsync);
         if (!s.arrow) return undefined;
         parsed = s;
       } else if (this.tokens[j]?.kind === 'name' && this.at(j + 1, '=>')) {
@@ -282,9 +284,9 @@ class DeclarationParser {
         const declared = jsdocReturns(jsdoc);
         parsed = declared && 'reason' in declared
           ? { signature: declared, end: j + 2 }
-          : { signature: { params: [{ name: this.tokens[j].text, ...jsdocParam(jsdoc, this.tokens[j].text) }], returns: declared ? declared.type : undefined, jsdoc }, end: j + 2 };
+          : { signature: { params: [{ name: this.tokens[j].text, ...jsdocParam(jsdoc, this.tokens[j].text) }], returns: declared ? declared.type : undefined, jsdoc, ...(valueAsync ? { latent: true } : {}) }, end: j + 2 };
       } else return undefined;
-      const fn: LocalFunction = { name: nameToken.text, line: this.tokens[i].line, doc, signature: valueAsync ? { reason: ASYNC_REASON } : parsed.signature };
+      const fn: LocalFunction = { name: nameToken.text, line: this.tokens[i].line, doc, signature: parsed.signature };
       this.locals.set(fn.name, fn);
       if (exported) this.exportedLocals.set(fn.name, fn.name);
       return parsed.end;
@@ -356,20 +358,19 @@ class DeclarationParser {
         if (isMarked(jsdoc)) cls.skipped.push({ name: `${cls.scan.name}.${name}`, line, reason, marked: true });
       };
       if (this.at(p + 1, '(') || this.at(p + 1, '<')) {
-        const parsed = this.signature(p + 1, first.doc);
+        const parsed = this.signature(p + 1, first.doc, false, modifiers.has('async'));
         m = Math.max(parsed.end, p + 2);
         // An overload or abstract method has no body; the implementation (if any) follows.
         if (parsed.overload) continue;
         const signature = parsed.signature;
         if (hidden) skip("it isn't public");
         else if (modifiers.has('static')) skip('static methods of a class have no object; make it a module function instead');
-        else if (modifiers.has('async')) skip(ASYNC_REASON);
         else if (generator) skip("generator functions can't be nodes");
         else if ('reason' in signature) skip(signature.reason || "its parameters couldn't be read");
         else if (modifiers.has('get')) getters.set(name, { name, line, ...(signature.returns ? { type: signature.returns } : {}), readonly: true, doc: jsdoc });
         else if (modifiers.has('set')) setters.add(name);
         else if (name === 'constructor') cls.scan.init = { name, line, params: signature.params, returns: null, doc: jsdoc };
-        else cls.scan.methods.push({ name, line, params: signature.params, returns: signature.returns, doc: jsdoc, ...(signature.outputs && signature.results ? { outputs: signature.outputs, results: signature.results } : {}) });
+        else cls.scan.methods.push({ name, line, params: signature.params, returns: signature.returns, doc: jsdoc, ...(signature.outputs && signature.results ? { outputs: signature.outputs, results: signature.results } : {}), ...(signature.latent ? { latent: true } : {}) });
         continue;
       }
       // A field: `name?: Type = value;`.
@@ -413,7 +414,8 @@ class DeclarationParser {
   }
 
   // Reads `<T>(params): Type {body}` or `(params): Type =>`, starting at `<` or `(`.
-  private signature(i: number, doc: string | undefined, arrow = false): { signature: Signature | { reason: string }; end: number; overload?: boolean; arrow?: boolean } {
+  // `isAsync`: declared `async`, so it returns a Promise whatever its annotation says.
+  private signature(i: number, doc: string | undefined, arrow = false, isAsync = false): { signature: Signature | { reason: string }; end: number; overload?: boolean; arrow?: boolean } {
     const jsdoc = parseJsDoc(doc);
     let generic = false;
     if (this.at(i, '<')) {
@@ -438,6 +440,15 @@ class DeclarationParser {
     if (generic) return { signature: { reason: 'generic functions can\'t be nodes yet' }, end, arrow: isArrow };
     // The declared return type (annotation, else @returns), else whether the body returns a value.
     if ('reason' in params) return { signature: params, end, arrow: isArrow };
+    // Async (docs/node-authoring.md, gap 4): a latent node, whose value is what the Promise gives.
+    const declaredText = returnText ?? jsdocReturnText(jsdoc);
+    const promise = declaredText !== undefined ? /^Promise\s*(?:<([\s\S]*)>)?$/.exec(normalize(declaredText)) : null;
+    if (isAsync || promise) {
+      const inner = promise?.[1] !== undefined ? mapReturnText(promise[1]) : promise ? { type: undefined } : undefined;
+      if (inner && 'reason' in inner) return { signature: inner, end, arrow: isArrow };
+      const returns = inner ? inner.type : this.returnsValue(j, isArrow) ? undefined : null;
+      return { signature: { params, returns, jsdoc, latent: true }, end, arrow: isArrow };
+    }
     // Several outputs: an object type's fields, or a tuple's positions.
     const several = severalOutputs(returnText ?? jsdocReturnText(jsdoc), jsdoc);
     if (several) return { signature: { params, returns: undefined, jsdoc, ...several }, end, arrow: isArrow };
@@ -534,7 +545,7 @@ class DeclarationParser {
       return;
     }
     const { outputs, results } = fn.signature;
-    const scanned: ScannedFunction = { name: fn.name, line: fn.line, params: fn.signature.params, returns: fn.signature.returns, doc: jsdoc, ...(outputs && results ? { outputs, results } : {}) };
+    const scanned: ScannedFunction = { name: fn.name, line: fn.line, params: fn.signature.params, returns: fn.signature.returns, doc: jsdoc, ...(outputs && results ? { outputs, results } : {}), ...(fn.signature.latent ? { latent: true } : {}) };
     this.result.functions.push(scanned);
   }
 
@@ -694,7 +705,6 @@ class DeclarationParser {
   }
 }
 
-const ASYNC_REASON = 'async functions become latent nodes with Phase 4\'s latent actions';
 
 export function scanTypeScript(source: string, javascript = false): ModuleScan {
   return new DeclarationParser(tokenize(source), source, javascript).run();
@@ -787,7 +797,7 @@ const SIMPLE: Record<string, TypeRef | undefined> = {
 function mapReturnText(text: string): { type: TypeRef | null | undefined } | { reason: string } {
   const t = normalize(text);
   if (t === 'void' || t === 'undefined' || t === 'never') return { type: null };
-  if (/^Promise\s*</.test(t) || t === 'Promise') return { reason: 'it returns a Promise; asynchronous functions become latent nodes with Phase 4\'s latent actions' };
+  if (/^Promise\s*</.test(t) || t === 'Promise') return { reason: 'it returns a Promise of a Promise' };
   if (/^(asserts\s+)?\w+\s+is\s+/.test(t)) return { type: { id: 'bool' } };
   return { type: mapTypeText(t) };
 }

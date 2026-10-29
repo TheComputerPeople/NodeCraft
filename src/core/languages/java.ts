@@ -23,13 +23,14 @@ const RESERVED = new Set([
 
 // Helper methods emitted into the generated class on demand. They implement docs/semantics.md
 // ("Values") exactly as Simulate does, so output matches the other targets.
-const HELPER_NAMES = ['formatValue', 'formatNumber', 'toJson', 'jsonString', 'toNumber', 'toBoolean', 'asLong', 'asDouble', 'asBoolean', 'asString', 'mapOf', 'delay', 'latentQueue', 'latentClock', 'runLatentActions', 'EventDispatcher'];
+const HELPER_NAMES = ['formatValue', 'formatNumber', 'toJson', 'jsonString', 'toNumber', 'toBoolean', 'asLong', 'asDouble', 'asBoolean', 'asString', 'mapOf', 'delay', 'latentQueue', 'latentClock', 'runLatentActions', 'latentWaiting', 'latentOrder', 'awaitLatent', 'latentResult', 'latentWait', 'EventDispatcher'];
 
 function helpers(className: string, enums: boolean, structs: boolean): Record<'format' | 'number' | 'boolean' | 'as' | 'map' | 'latent', string[]> {
   return {
     latent: [
       '// Latent actions of every class run from one queue (kept in the system properties), in the',
-      '// order they fall due, once start() has returned: runLatentActions() runs them.',
+      '// order they fall due, once start() has returned: runLatentActions() runs them. Async',
+      '// functions\' futures wait beside it, and each one\'s Completed joins the queue when it finishes.',
       '@SuppressWarnings("unchecked")',
       'private static java.util.List<Object[]> latentQueue() {',
       '    var properties = System.getProperties();',
@@ -37,39 +38,94 @@ function helpers(className: string, enums: boolean, structs: boolean): Record<'f
       '    if (queue == null) {',
       '        queue = new ArrayList<>();',
       '        properties.put("blueprint.latent", queue);',
+      '        properties.put("blueprint.latent.waiting", new ArrayList<Object[]>());',
       '        properties.put("blueprint.latent.clock", System.nanoTime());',
       `        properties.put("blueprint.latent.run", (Runnable) ${className}::runLatentActions);`,
       '    }',
       '    return queue;',
       '}',
       '',
+      '@SuppressWarnings("unchecked")',
+      'private static java.util.List<Object[]> latentWaiting() {',
+      '    latentQueue();',
+      '    return (java.util.List<Object[]>) System.getProperties().get("blueprint.latent.waiting");',
+      '}',
+      '',
       'private static double latentClock() {',
       '    return (System.nanoTime() - (long) System.getProperties().get("blueprint.latent.clock")) / 1e9;',
       '}',
       '',
-      'private static void delay(double seconds, Runnable then) {',
-      '    var queue = latentQueue();',
+      'private static long latentOrder(java.util.List<Object[]> queue) {',
       '    long order = 0;',
       '    for (var entry : queue) order = Math.max(order, (long) entry[1] + 1);',
-      '    queue.add(new Object[] { latentClock() + Math.max(0, seconds), order, then });',
+      '    return order;',
+      '}',
+      '',
+      'private static void delay(double seconds, Runnable then) {',
+      '    var queue = latentQueue();',
+      '    queue.add(new Object[] { latentClock() + Math.max(0, seconds), latentOrder(queue), then });',
+      '}',
+      '',
+      '// An async function\'s future: `then` runs when it finishes, and reads its result with latentResult.',
+      'private static void awaitLatent(java.util.concurrent.CompletionStage<?> stage, Runnable then) {',
+      '    latentWaiting().add(new Object[] { stage.toCompletableFuture(), then });',
+      '}',
+      '',
+      '// A finished future\'s value, or its error.',
+      'private static <T> T latentResult(java.util.concurrent.CompletionStage<T> stage) {',
+      '    try {',
+      '        return stage.toCompletableFuture().join();',
+      '    } catch (java.util.concurrent.CompletionException error) {',
+      '        if (error.getCause() instanceof RuntimeException cause) throw cause;',
+      '        if (error.getCause() instanceof Error cause) throw cause;',
+      '        throw error;',
+      '    }',
+      '}',
+      '',
+      '// Waits for one of the futures, up to `seconds` (forever when negative).',
+      'private static void latentWait(java.util.List<Object[]> waiting, double seconds) {',
+      '    var futures = waiting.stream().map(entry -> (java.util.concurrent.CompletableFuture<?>) entry[0]).toArray(java.util.concurrent.CompletableFuture[]::new);',
+      '    try {',
+      '        if (seconds < 0) java.util.concurrent.CompletableFuture.anyOf(futures).get();',
+      '        else java.util.concurrent.CompletableFuture.anyOf(futures).get((long) Math.ceil(seconds * 1000), java.util.concurrent.TimeUnit.MILLISECONDS);',
+      '    } catch (InterruptedException error) {',
+      '        Thread.currentThread().interrupt();',
+      '    } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException error) {',
+      '        // A failure is thrown when its Completed reads it.',
+      '    }',
       '}',
       '',
       'public static void runLatentActions() {',
       '    var queue = latentQueue();',
-      '    while (!queue.isEmpty()) {',
+      '    var waiting = latentWaiting();',
+      '    while (!queue.isEmpty() || !waiting.isEmpty()) {',
+      '        for (var entry : new ArrayList<>(waiting)) {',
+      '            if (!((java.util.concurrent.CompletableFuture<?>) entry[0]).isDone()) continue;',
+      '            waiting.remove(entry);',
+      '            queue.add(new Object[] { latentClock(), latentOrder(queue), entry[1] });',
+      '        }',
+      '        if (queue.isEmpty()) {',
+      '            latentWait(waiting, -1);',
+      '            continue;',
+      '        }',
       '        var next = queue.get(0);',
       '        for (var entry : queue) {',
       '            if ((double) entry[0] < (double) next[0] || ((double) entry[0] == (double) next[0] && (long) entry[1] < (long) next[1])) next = entry;',
       '        }',
-      '        queue.remove(next);',
       '        double wait = (double) next[0] - latentClock();',
       '        if (wait > 0) {',
-      '            try {',
-      '                Thread.sleep((long) Math.ceil(wait * 1000));',
-      '            } catch (InterruptedException error) {',
-      '                Thread.currentThread().interrupt();',
+      '            if (!waiting.isEmpty()) {',
+      '                latentWait(waiting, wait);',
+      '                if ((double) next[0] > latentClock()) continue;',
+      '            } else {',
+      '                try {',
+      '                    Thread.sleep((long) Math.ceil(wait * 1000));',
+      '                } catch (InterruptedException error) {',
+      '                    Thread.currentThread().interrupt();',
+      '                }',
       '            }',
       '        }',
+      '        queue.remove(next);',
       '        ((Runnable) next[2]).run();',
       '    }',
       '}'
@@ -793,6 +849,20 @@ class JavaEmitter {
         const other = s.target && s.type ? classInfo(this.program, s.type)?.dispatchers.find((d) => d.id === s.dispatcher)?.inputs.filter((p) => p.kind === 'data') : undefined;
         const params = other ?? this.program.dispatchers?.find((d) => d.id === s.dispatcher)?.params ?? [];
         out.line(`for (var handler : ${this.dispatcherRef(s)}.handlers()) handler.accept(new Object[] { ${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')} });`);
+        break;
+      }
+      case 'await': {
+        // An async function (docs/node-authoring.md, gap 4): Completed runs when its future
+        // finishes, from the latent queue; latentResult gives its value, or throws its error.
+        this.helpersUsed.add('latent');
+        const future = `vgFuture${++this.temps}`;
+        out.line(`var ${future} = ${this.call(s.callee, s.args)};`);
+        out.line(`awaitLatent(${future}, () -> {`);
+        out.indent();
+        out.line(s.resultSlot ? `${this.slotNames.get(s.resultSlot)} = latentResult(${future});` : `latentResult(${future});`);
+        this.statements(s.then);
+        out.dedent();
+        out.line('});');
         break;
       }
       case 'delay': {

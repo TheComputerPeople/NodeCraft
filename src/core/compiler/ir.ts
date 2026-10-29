@@ -104,6 +104,10 @@ export type IrStatement =
   // seconds while the code after it goes on. A retriggerable one starts over instead: `generation`
   // (an int slot) counts the starts, and only the latest one's countdown runs `then`.
   | { kind: 'delay'; duration: IrExpr; pending?: string; generation?: string; then: IrStatement[]; source: SourceRef }
+  // An async function from the project's code (docs/node-authoring.md, gap 4): called at once, the
+  // code after it going on; when it finishes, its value (if it gives one) goes into `resultSlot`
+  // and `then` runs, from the latent queue. A failure stops the run with its error.
+  | { kind: 'await'; callee: IrCallee; args: IrExpr[]; resultSlot?: string; then: IrStatement[]; source: SourceRef }
   // Cast To: `succeeded` runs with the value (as `type`, a class or interface) in `slot` when it is one,
   // else `failed`.
   | { kind: 'cast'; value: IrExpr; type: string; slot: string; succeeded: IrStatement[]; failed: IrStatement[]; source: SourceRef }

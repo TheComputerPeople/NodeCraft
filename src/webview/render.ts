@@ -118,6 +118,8 @@ function renderNode(node: GraphNode): HTMLElement {
     title.className = 'node-title';
     title.textContent = def.displayName;
     header.appendChild(title);
+    // A latent node (Delay, an async function) has Unreal's clock: Completed runs later.
+    if (def.latent) header.appendChild(clockIcon());
     el.appendChild(header);
 
     const body = document.createElement('div');
@@ -461,4 +463,19 @@ export function scheduleRuntimePaint(): void {
     });
     renderEdges();
   });
+}
+
+function clockIcon(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'node-latent');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('aria-label', 'Latent');
+  const face = document.createElementNS(SVG_NS, 'circle');
+  face.setAttribute('cx', '8');
+  face.setAttribute('cy', '8');
+  face.setAttribute('r', '6.5');
+  const hands = document.createElementNS(SVG_NS, 'path');
+  hands.setAttribute('d', 'M8 4v4l3 2');
+  svg.append(face, hands);
+  return svg;
 }

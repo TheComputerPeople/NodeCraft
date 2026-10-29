@@ -768,7 +768,7 @@ class PhpEmitter {
     if (member.kind === 'construct') return `new ${this.importNames.get(callee.id)}(${list})`;
     const [target, ...rest] = args;
     const object = `(${this.expr(target)})`;
-    const values = rest.map((a) => this.expr(a)).join(', ');
+    const values = [...rest.map((a) => this.expr(a)), ...extra].join(', ');
     return member.kind === 'get' ? `${object}->${member.name}` : member.kind === 'set' ? `${object}->${member.name} = ${values}` : `${object}->${member.name}(${values})`;
   }
 

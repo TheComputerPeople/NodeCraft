@@ -32,6 +32,9 @@ export interface ScannedFunction {
   // typed, and how the code gives them.
   outputs?: { name: string; type?: TypeRef }[];
   results?: CodeResults;
+  // An async function (docs/node-authoring.md, gap 4): `returns` is the value it gives when it
+  // finishes, and its node is latent.
+  latent?: boolean;
 }
 
 // A function that can't become a node, and why.
@@ -124,11 +127,14 @@ export function exposeFunctions(scan: ModuleScan, options: ExposeOptions): Expos
 
 function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCategory = `Project / ${fileStem(options.path)}`): NodeDefinition {
   const tag = (name: string): string | undefined => fn.doc.tags.find((t) => t.name === name)?.text.trim();
-  // Several outputs: the function runs where execution reaches it, once, however many are read.
-  const pure = /^pure\b/i.test(tag(MARKER) ?? '') && !fn.outputs;
+  // Several outputs: the function runs where execution reaches it, once, however many are read. A
+  // latent one runs there too, and its exec output, Completed, runs when it finishes.
+  const pure = /^pure\b/i.test(tag(MARKER) ?? '') && !fn.outputs && !fn.latent;
   const category = tag('category');
   const keywords = tag('keywords')?.split(/[\s,]+/).filter(Boolean);
-  const exec = (direction: 'input' | 'output'): PinDefinition[] => pure ? [] : [{ id: direction === 'input' ? 'execIn' : 'execOut', name: '', kind: 'exec', direction }];
+  const exec = (direction: 'input' | 'output'): PinDefinition[] => pure
+    ? []
+    : direction === 'output' && fn.latent ? [{ id: 'completed', name: 'Completed', kind: 'exec', direction }] : [{ id: direction === 'input' ? 'execIn' : 'execOut', name: '', kind: 'exec', direction }];
   const inputs: PinDefinition[] = fn.params.map((p) => ({
     id: p.name, name: words(p.name), kind: 'data', direction: 'input',
     ...(p.type ? { type: p.type } : {}),
@@ -147,7 +153,8 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
     inputs: [...exec('input'), ...inputs],
     outputs: [...exec('output'), ...outputs],
     implementation: { kind: 'function', language: options.language, path: options.path, name: fn.name, ...(moduleOf(fn, options) ? { module: moduleOf(fn, options) } : {}), ...(fn.results ? { results: fn.results } : {}) },
-    ...(keywords?.length ? { keywords } : {})
+    ...(keywords?.length ? { keywords } : {}),
+    ...(fn.latent ? { latent: true } : {})
   };
 }
 
@@ -177,7 +184,7 @@ function classDefinitions(cls: ScannedClass, options: ExposeOptions): NodeDefini
   for (const method of cls.methods.filter((m) => isMarked(m.doc))) {
     const base = definitionFor(method, options, `Project / ${simple}`);
     const exec = base.inputs.filter((p) => p.kind === 'exec');
-    definitions.push({ ...base, type: type(method.name), inputs: [...exec, target, ...base.inputs.filter((p) => p.kind === 'data')], implementation: implementation('method', method.name) });
+    definitions.push({ ...base, type: type(method.name), inputs: [...exec, target, ...base.inputs.filter((p) => p.kind === 'data')], implementation: { ...implementation('method', method.name), ...(method.results ? { results: method.results } : {}) } });
   }
   for (const property of cls.properties.filter((p) => isMarked(p.doc))) {
     const tag = (name: string): string | undefined => property.doc.tags.find((t) => t.name === name)?.text.trim();

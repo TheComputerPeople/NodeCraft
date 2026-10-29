@@ -884,7 +884,7 @@ class CppEmitter {
     if (member.kind === 'construct') return `vgraph::code_new<${[imported, ...(imported.bases ?? [])].map(qualified).join(', ')}>(${list})`;
     const [target, ...rest] = args;
     const object = `vgraph::code_object<${qualified(imported)}>(${this.expr(target)})`;
-    const values = rest.map((a, i) => this.coerce(a, signature?.params[i + 1]?.type)).join(', ');
+    const values = [...rest.map((a, i) => this.coerce(a, signature?.params[i + 1]?.type)), ...extra].join(', ');
     return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
 

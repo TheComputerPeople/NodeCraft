@@ -133,8 +133,6 @@ export function scanPython(source: string): ModuleScan {
   return result;
 }
 
-const ASYNC_REASON = 'async functions become latent nodes with Phase 4\'s latent actions';
-
 // The `def` at lines[i]: the function, or why it can't be a node. A method's first parameter
 // (self) isn't a pin.
 function scanDef(lines: LogicalLine[], i: number, method: boolean): { name: string; line: number; doc: DocComment; result: ScannedFunction | { reason: string } } | undefined {
@@ -149,16 +147,21 @@ function scanDef(lines: LogicalLine[], i: number, method: boolean): { name: stri
   const doc = body.length ? docstring(body[0]) : NO_DOC;
   const skip = (reason: string) => ({ name, line, doc, result: { reason } });
   const parsed = parseHeader(header.text, match[0].length);
-  if (match[1]) return skip(ASYNC_REASON);
   if (match[3]) return skip('generic functions can\'t be nodes yet');
   if (!parsed) return skip('its parameters couldn\'t be read');
   const inline = parsed.rest ? [{ indent: header.indent + 1, line, text: parsed.rest, code: parsed.rest }] : [];
   const statements = [...inline, ...body];
   const params = parseParams(method ? splitTop(parsed.params, ',').slice(1).join(',') : parsed.params);
-  const returns = parsed.returns !== undefined ? mapReturn(parsed.returns) : { type: returnsValue(statements) ? undefined : null };
+  // Async (docs/node-authoring.md, gap 4): an `async def`, or a def returning an Awaitable or
+  // Coroutine, is a latent node whose value is what it gives when awaited.
+  const awaitable = parsed.returns !== undefined ? /^(?:Awaitable|Coroutine)\[(.*)\]$/.exec(normalize(parsed.returns)) : null;
+  const latent = !!match[1] || !!awaitable;
+  const returnText = awaitable ? splitTop(awaitable[1], ',').pop()!.trim() : parsed.returns;
+  const returns = returnText !== undefined ? mapReturn(returnText) : { type: returnsValue(statements) ? undefined : null };
   if ('reason' in params) return skip(params.reason);
   if ('reason' in returns) return skip(returns.reason);
   if (yields(statements)) return skip('generator functions can\'t be nodes');
+  if (latent) return { name, line, doc, result: { name, line, params, returns: returns.type, doc, latent } };
   // Several outputs (docs/node-authoring.md, gap 3): a tuple, named by @outputs.
   const tuple = parsed.returns !== undefined ? /^(?:tuple|Tuple)\[(.*)\]$/.exec(normalize(parsed.returns)) : null;
   const outputs = tuple ? tupleOutputs(doc, splitTop(tuple[1], ',').map((t) => mapPythonType(t))) : undefined;
@@ -331,7 +334,7 @@ function mapReturn(text: string): { type: TypeRef | null | undefined } | { reaso
   const t = normalize(text);
   if (t === 'None' || t === 'NoReturn' || t === 'Never') return { type: null };
   if (/^(Awaitable|Coroutine|Generator|Iterator|Iterable|AsyncGenerator|AsyncIterator)\b/.test(t)) {
-    return { reason: /^(Awaitable|Coroutine|Async)/.test(t) ? 'async functions become latent nodes with Phase 4\'s latent actions' : 'generator functions can\'t be nodes' };
+    return { reason: /^(Awaitable|Coroutine)/.test(t) ? 'it gives an awaitable when awaited' : 'generator functions can\'t be nodes' };
   }
   if (/^TypeGuard\[|^TypeIs\[/.test(t)) return { type: { id: 'bool' } };
   return { type: mapPythonType(t) };

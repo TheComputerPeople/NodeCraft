@@ -16,6 +16,7 @@ import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner'
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
+import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-java-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -227,5 +228,83 @@ describe('Java several outputs', () => {
     }
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), SEVERAL_OUTPUTS_OUTPUT);
+  });
+});
+
+// Async functions (docs/node-authoring.md, gap 4): a method returning a CompletableFuture is a latent
+// node, whose Completed runs when the future finishes.
+describe('Java async functions', () => {
+  // The Remote class, its future giving `result` (an expression of `value`) after 10 ms.
+  const remote = (result: string) => [
+    'package game.remote;',
+    '',
+    'import java.util.concurrent.CompletableFuture;',
+    '',
+    'public final class Remote {',
+    '    /** @blueprint */',
+    '    public static CompletableFuture<Long> fetchDouble(long value) {',
+    '        return CompletableFuture.supplyAsync(() -> {',
+    '            try {',
+    '                Thread.sleep(10);',
+    '            } catch (InterruptedException error) {',
+    '                Thread.currentThread().interrupt();',
+    '            }',
+    `            ${result};`,
+    '        });',
+    '    }',
+    '}',
+    ''
+  ].join('\n');
+
+  // Builds the shared graph against the Remote class and runs it; undefined when Java is missing.
+  async function run(name: string, source: string): Promise<{ text: string; outcome: Awaited<ReturnType<typeof runGeneratedCode>> | undefined; skipped?: string }> {
+    const project = path.join(workDir, name);
+    const files: Record<string, string> = {
+      'pom.xml': '<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>latent</artifactId><version>1</version></project>',
+      'src/main/java/game/remote/Remote.java': source
+    };
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, file)), { recursive: true });
+      fs.writeFileSync(path.join(project, file), text);
+    }
+    const graphDir = path.join(project, 'src/main/java/game/graphs');
+    fs.mkdirSync(graphDir, { recursive: true });
+    const placement = javaProject(graphDir, project);
+    const definitions = exposeFunctions(scanJava(source), { language: 'java', path: 'src/main/java/game/remote/Remote.java', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(latentCodeGraph(definitions, 'java'), {
+      registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Fetching.vgraph', outputDir: 'src/main/java/game/graphs', namespace: placement.package }
+    });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    const file = path.join(graphDir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    try {
+      const outcome = await runGeneratedCode(builtinLanguagePacks().get('java')!.generator!.runner!, file, output.className, {
+        cwd: project, importRoots: placement.sourceRoots, sources: Object.keys(files).filter((f) => f.endsWith('.java')).map((f) => path.join(project, f)), timeoutMs: 300000
+      });
+      return { text: output.text, outcome };
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return { text: output.text, outcome: undefined, skipped: error.message };
+      throw error;
+    }
+  }
+
+  test('a graph waits for a future and reads its value on Completed', async (t) => {
+    const { text, outcome, skipped } = await run('latent', remote('return value * 2'));
+    assert.match(text, /awaitLatent\(vgFuture1, \(\) -> \{\n\s*\w+ = latentResult\(vgFuture1\);/);
+    if (!outcome) return t.skip(skipped);
+    assert.equal(outcome.stderr, '');
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), LATENT_CODE_OUTPUT);
+  });
+
+  test("a failed future stops the run with its own exception, and Completed doesn't run", async (t) => {
+    const { outcome, skipped } = await run('latent-fails', remote('throw new IllegalStateException("no double for " + value)'));
+    if (!outcome) return t.skip(skipped);
+    assert.notEqual(outcome.exitCode, 0);
+    assert.match(outcome.stderr, /IllegalStateException: no double for 4/);
+    assert.doesNotMatch(outcome.stderr, /CompletionException/);
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['started']);
   });
 });

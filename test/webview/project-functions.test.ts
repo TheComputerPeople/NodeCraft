@@ -148,4 +148,13 @@ describe('project function nodes', () => {
     await e.page.waitForFunction(() => (window as unknown as { __posted: { type: string }[] }).__posted.some((m) => m.type === 'applyDocument'));
     assert.deepEqual((await lastSave(e))?.metadata?.libraries, { 'combat-nodes': '2.0.0' });
   });
+
+  test('an async function is a latent node: a clock in its title, and Completed for its exec output', async (t) => {
+    const latent: NodeDefinition = { ...applyDamage, latent: true, outputs: [{ id: 'completed', name: 'Completed', kind: 'exec', direction: 'output' }, data('returnValue', 'output')] };
+    const e = await open(t, documentWith(undefined), [latent]);
+    if (!e) return;
+    assert.ok(await e.page.$('.node[data-node="f"] .node-header .node-latent'), 'a clock');
+    assert.equal(await e.page.$('.node[data-node="s"] .node-latent'), null, 'no clock on other nodes');
+    assert.ok(await e.page.$('.pin[data-node="f"][data-pin="completed"]'));
+  });
 });
