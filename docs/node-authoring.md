@@ -115,8 +115,19 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
 | Go | several results, named or with `@outputs`. A last `error` result isn't a pin: a non-nil error stops the run with its message |
 | Lua | several `---@return type name` annotations |
 | Ruby | `@return [Array(…)]` with `@outputs` |
-| PHP | by-reference parameters (`&$count`) |
+| PHP | by-reference parameters (`&$count`), or an array shape (`@return array{total: int, count: int}`, or `array{int, int}` with `@outputs`) |
 | GDScript | none (Godot functions return one value) |
+
+**Built (step 7): every language but GDScript.**
+
+- **Scanning.** Each scanner reads its language's form from the table into the function's `outputs` and `results` (`ScannedFunction` in src/core/importing/symbols.ts). `tupleOutputs` names positions from the code when it names them all, otherwise from `@outputs`. Without names, a tuple stays one value of its native type, as before. Out parameters follow the returned value, which becomes the first output, Return Value.
+- **Nodes.** A node with several outputs always has exec pins, even when marked pure, since the function runs once for all of them. Its implementation carries `results` (`CodeResults` in src/core/model.ts): `fields`, `tuple` or `out`, the names in the code, and Go's `error`.
+- **Generated code.** The lowering already gave a call with several outputs a slot per output, as for library functions. Each generator now reads them in its own way:
+  - Fields: TypeScript and JavaScript destructure the object. Java reads each record accessor. PHP destructures the array by its keys.
+  - Tuples: TypeScript, JavaScript, Python, Lua and Ruby destructure positionally (a NamedTuple too). C# deconstructs. C++ uses `std::tie`. Rust and Go read each element.
+  - Out parameters: new variables are passed to the call, then each goes into its output's slot. C# passes `out var`, C++ declares variables of the parameters' own types, and PHP starts each at its type's default, since a typed parameter by reference checks what it's given.
+- **Go's errors.** gopls's signature gives the result list. A last `error` result is no pin: when it isn't nil, generated code stops the run with `VgFail(err.Error())`. A function returning only an error gets exec pins and no outputs.
+- **Tests.** A shared graph (test/conformance/several-outputs.ts) calls `divide(17, 5)` and prints its quotient and remainder. It runs in every language but GDScript, covering each form in the table. Scanner tests cover the forms not shown there, and the reasons for what's still skipped.
 
 ## Gap 4: async functions aren't latent nodes
 

@@ -5,7 +5,7 @@
 // and mapped back through the pack's own spellings; types it doesn't know become native types.
 import { LanguageServerImport } from '../language-pack';
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText, tupleOutputs } from './symbols';
 
 // Why a function is skipped when its hover has no signature (the server may still be loading).
 export const NO_SIGNATURE = 'the language server gave no signature for it';
@@ -63,11 +63,44 @@ export function scanSymbols(text: string, functions: SymbolFunction[], spec: Lan
     }
     const params: ScannedParam[] = parsed.params.map((p) => ({ name: p.name, ...(p.type ? { type: typeFromText(p.type, known) } : {}), ...(p.defaultValue !== undefined ? { defaultValue: p.defaultValue } : {}) }));
     const returns = parsed.returns === null ? null : parsed.returns ? typeFromText(parsed.returns, known) : undefined;
-    if (fn.owner) classOf(fn.owner, line, container).methods.push({ name: fn.name, line, params, returns, doc });
-    else result.functions.push({ name: fn.name, line, params, returns, doc, ...(container ? { container } : {}) });
+    const several = spec.severalResults && parsed.returns ? severalResults(parsed.returns, spec, doc, known) : undefined;
+    if (several && 'reason' in several) {
+      skip(several.reason);
+      continue;
+    }
+    const scanned: ScannedFunction = { name: fn.name, line, params, returns: several ? undefined : returns, doc, ...several };
+    if (fn.owner) classOf(fn.owner, line, container).methods.push(scanned);
+    else result.functions.push({ ...scanned, ...(container ? { container } : {}) });
   }
   if (classes.size) result.classes = [...classes.values()];
   return result;
+}
+
+// Several results (Go's `(int, int)`, `(sum int, count int)`, `(int, error)`; docs/node-authoring.md,
+// gap 3): each an output, named in the signature or by @outputs; a last error result stops the
+// run. Undefined when the function returns one value as usual.
+function severalResults(text: string, spec: LanguageServerImport, doc: DocComment, known: Map<string, TypeRef>): Pick<ScannedFunction, 'outputs' | 'results'> | { reason: string } | undefined {
+  const errorType = spec.severalResults?.error;
+  const list = text.startsWith('(') && text.endsWith(')') ? text.slice(1, -1) : undefined;
+  if (list === undefined) return text === errorType ? { outputs: [], results: { kind: 'tuple', names: [], error: true } } : undefined;
+  // Either every result is named (`sum, count int` groups names of one type) or none is.
+  const pieces = splitTopLevel(list).map((p) => p.trim()).filter(Boolean);
+  const named = pieces.some((p) => /^[A-Za-z_]\w*\s+\S/.test(p));
+  const results: { name?: string; type?: string }[] = pieces.map((p) => {
+    const match = /^([A-Za-z_]\w*)(?:\s+(.+))?$/.exec(p);
+    return named && match ? { name: match[1], ...(match[2] ? { type: match[2].trim() } : {}) } : { type: p };
+  });
+  for (let i = results.length - 2; i >= 0; i--) if (!results[i].type) results[i].type = results[i + 1].type;
+  const error = !!errorType && results[results.length - 1]?.type === errorType;
+  const values = error ? results.slice(0, -1) : results;
+  const types = values.map((r) => (r.type ? typeFromText(r.type, known) : undefined));
+  if (error && values.length <= 1) {
+    const outputs = values.map((r, i) => ({ name: r.name ?? 'returnValue', ...(types[i] ? { type: types[i] } : {}) }));
+    return { outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name), error: true } };
+  }
+  const outputs = tupleOutputs(doc, types, values.map((r) => r.name));
+  if (!outputs) return { reason: 'its results need names: name them in the signature or with @outputs' };
+  return { outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name), ...(error ? { error: true } : {}) } };
 }
 
 // ---- Doc comments ------------------------------------------------------------------------------

@@ -63,7 +63,7 @@ describe('Lua scanner', () => {
     assert.deepEqual(scanLua(MODULE).skipped.filter((s) => s.marked).map((s) => [s.name, s.reason]), [
       ['sum', 'It takes any number of arguments (...).'],
       ['reset', 'It takes self (a method): only module functions can be nodes.'],
-      ['pair', 'It returns several values.'],
+      ['pair', 'It returns several values without names: name each (`---@return int sum`) or list them with @outputs.'],
       ['hidden', 'It belongs to Other, not the table the module returns (M).']
     ]);
   });
@@ -129,5 +129,30 @@ describe('Lua classes', () => {
     const scan = scanLua(['---@class Counter', 'local Counter = {}', '---@blueprint', 'function Counter:add() end', 'return Counter', ''].join('\n'));
     const { definitions } = exposeFunctions(scan, { language: 'lua', path: 'lib/counter.lua', exposeAll: false });
     assert.deepEqual(definitions.map((d) => [d.type, d.category]), [['fn:lua:lib/counter.lua#:add', 'Project / Counter']]);
+  });
+});
+
+// Several values returned (docs/node-authoring.md, gap 3): named in `---@return type name`, or by
+// @outputs.
+describe('Lua several outputs', () => {
+  test('each ---@return is an output, in order', () => {
+    const scan = scanLua([
+      'local M = {}',
+      '---@blueprint',
+      '---@return integer quotient',
+      '---@return integer remainder',
+      'function M.divide(a, b) return a // b, a % b end',
+      '---@blueprint',
+      '---@return number',
+      '---@return string',
+      '---@outputs score label',
+      'function M.rate() return 1, "a" end',
+      'return M',
+      ''
+    ].join('\n'));
+    const fns = Object.fromEntries(scan.functions.map((f) => [f.name, f]));
+    assert.deepEqual(fns.divide.outputs, [{ name: 'quotient', type: { id: 'int' } }, { name: 'remainder', type: { id: 'int' } }]);
+    assert.deepEqual(fns.divide.results, { kind: 'tuple', names: ['quotient', 'remainder'] });
+    assert.deepEqual(fns.rate.outputs, [{ name: 'score', type: { id: 'float' } }, { name: 'label', type: { id: 'string' } }]);
   });
 });

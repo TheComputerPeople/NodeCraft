@@ -18,6 +18,7 @@ import { rustCrateModules, rustRunSources } from '../../src/extension/placement'
 import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
+import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-rust-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -215,5 +216,49 @@ describe('Rust code classes', () => {
     }
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), CODE_CLASS_OUTPUT);
+  });
+});
+
+// Several outputs (docs/node-authoring.md, gap 3): a tuple, named by @outputs.
+describe('Rust several outputs', () => {
+  const DIVIDE = [
+    '/// @blueprint',
+    '/// @outputs quotient remainder',
+    'pub fn divide(a: i64, b: i64) -> (i64, i64) {',
+    '    (a / b, a % b)',
+    '}',
+    ''
+  ].join('\n');
+
+  test('a graph reads each element of a returned tuple', async (t) => {
+    const project = path.join(workDir, 'outputs');
+    const files: Record<string, string> = {
+      'Cargo.toml': '[package]\nname = "outputs"\nversion = "0.1.0"\nedition = "2021"\n\n[workspace]\n',
+      'src/main.rs': 'mod arithmetic;\n\nfn main() {}\n',
+      'src/arithmetic.rs': DIVIDE
+    };
+    for (const [name, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+      fs.writeFileSync(path.join(project, name), text);
+    }
+    const definitions = exposeFunctions(scanRust(DIVIDE), { language: 'rust', path: 'src/arithmetic.rs', module: 'arithmetic', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(severalOutputsGraph(definitions, 'rust'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Dividing.vgraph', outputDir: 'src/graphs' } });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    const file = path.join(project, 'src/graphs', output.fileName);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, output.text);
+    const sources = rustRunSources(file, project, output.importedFiles ?? []);
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('rust')!.generator!.runner!, file, output.className, { cwd: project, sources: sources.generated, crate: sources.crate, timeoutMs: 300000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.stderr, '');
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), SEVERAL_OUTPUTS_OUTPUT);
   });
 });

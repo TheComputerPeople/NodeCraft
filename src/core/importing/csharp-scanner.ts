@@ -2,7 +2,7 @@
 // and XML documentation comments (docs/program-structure.md, "C# language pack"). Like the other
 // scanners it parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText, tupleOutputs } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -317,8 +317,8 @@ export function scanCSharp(source: string): CSharpScan {
         i = at(i, '{') ? skipGroup(i) : i + 1;
         continue;
       }
-      // A method: return type, name, optional <T>, then (parameters).
-      let k = i;
+      // A method: return type (a tuple's in parentheses), name, optional <T>, then (parameters).
+      let k = at(i, '(') ? skipGroup(i) : i;
       while (k < end && !at(k, '(') && !at(k, '{') && !at(k, ';') && !at(k, '=') && !at(k, '=>')) k = at(k, '<') ? skipAngles(k) : k + 1;
       const memberDoc = parseXmlDoc(doc);
       const instanceSkip = (memberName: string, reason: string) => {
@@ -361,14 +361,15 @@ export function scanCSharp(source: string): CSharpScan {
       const memberEnd = skipMember(close);
       // An instance method of a class.
       if (cls && !modifiers.includes('static') && /^[A-Za-z_]\w*$/.test(name) && returnText !== '') {
-        const params = parseParams(k + 1, close - 1);
+        const outs: { name: string; type?: TypeRef }[] = [];
+        const params = parseParams(k + 1, close - 1, outs);
         const returns = mapReturn(returnText);
         if (!access) instanceSkip(name, 'it isn\'t public or internal, so generated code can\'t call it');
         else if (genericMethod) instanceSkip(name, 'generic methods can\'t be nodes yet');
         else if (modifiers.includes('async') || /^(Task|ValueTask)\b|^System\.Threading\.Tasks\./.test(returnText)) instanceSkip(name, 'async methods become latent nodes with Phase 4\'s latent actions');
         else if ('reason' in params) instanceSkip(name, params.reason);
         else if ('reason' in returns) instanceSkip(name, returns.reason);
-        else cls.methods.push({ name, line: tokens[first].line, params, returns: returns.type, doc: memberDoc });
+        else cls.methods.push(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: memberDoc }, outs, returnText));
         i = memberEnd;
         continue;
       }
@@ -384,16 +385,33 @@ export function scanCSharp(source: string): CSharpScan {
       else if (modifiers.includes('async') || /^(Task|ValueTask)\b|^System\.Threading\.Tasks\./.test(returnText)) skip('async methods become latent nodes with Phase 4\'s latent actions');
       else if (modifiers.includes('extern')) skip('extern methods can\'t be nodes');
       else {
-        const params = parseParams(k + 1, close - 1);
+        const outs: { name: string; type?: TypeRef }[] = [];
+        const params = parseParams(k + 1, close - 1, outs);
         if ('reason' in params) skip(params.reason);
         else {
           const returns = mapReturn(returnText);
           if ('reason' in returns) skip(returns.reason);
-          else result.functions.push({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, container: className });
+          else result.functions.push(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, container: className }, outs, returnText));
         }
       }
       i = memberEnd;
     }
+  };
+
+  // Several outputs (docs/node-authoring.md, gap 3): out parameters (after the returned value, if
+  // any), or a tuple's elements, named in it or by @outputs.
+  const withOutputs = (fn: ScannedFunction, outs: { name: string; type?: TypeRef }[], returnText: string): ScannedFunction => {
+    if (outs.length) {
+      const returnValue = fn.returns !== null;
+      const outputs = [...(returnValue ? [{ name: 'returnValue', ...(fn.returns ? { type: fn.returns } : {}) }] : []), ...outs];
+      return { ...fn, returns: undefined, outputs, results: { kind: 'out', names: outs.map((o) => o.name), ...(returnValue ? { returnValue } : {}) } };
+    }
+    const tuple = /^\((.*)\)$/.exec(returnText.trim());
+    if (!tuple) return fn;
+    const elements = splitTop(tuple[1]).map((e) => e.trim());
+    const named = elements.map((e) => /^(.+?)\s+([A-Za-z_]\w*)$/.exec(e));
+    const outputs = tupleOutputs(fn.doc, named.map((m, i) => mapCSharpType(m ? m[1] : elements[i])), named.map((m) => m?.[2]));
+    return outputs ? { ...fn, returns: undefined, outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name) } } : fn;
   };
 
   const findGenericStart = (closeIndex: number): number => {
@@ -405,7 +423,8 @@ export function scanCSharp(source: string): CSharpScan {
     return 0;
   };
 
-  const parseParams = (start: number, end: number): ScannedParam[] | { reason: string } => {
+  // Out parameters go into `outs` (docs/node-authoring.md, gap 3) when it's given.
+  const parseParams = (start: number, end: number, outs?: { name: string; type?: TypeRef }[]): ScannedParam[] | { reason: string } => {
     const params: ScannedParam[] = [];
     let from = start;
     const pieces: [number, number][] = [];
@@ -428,7 +447,14 @@ export function scanCSharp(source: string): CSharpScan {
       let s = a;
       while (at(s, '[')) s = skipGroup(s);
       if (at(s, 'this')) s++;
-      if (['ref', 'out', 'in', 'params', 'scoped'].includes(tokens[s]?.text ?? '')) return { reason: 'ref, out, in and params parameters can\'t be pins yet' };
+      if (at(s, 'out') && outs) {
+        const nameToken = tokens[b - 1];
+        if (nameToken?.kind !== 'name' || b - s < 3) return { reason: 'its parameters couldn\'t be read' };
+        const type = mapCSharpType(text(s + 1, b - 1));
+        outs.push({ name: nameToken.text.replace(/^@/, ''), ...(type ? { type } : {}) });
+        continue;
+      }
+      if (['ref', 'out', 'in', 'params', 'scoped'].includes(tokens[s]?.text ?? '')) return { reason: 'ref, in and params parameters can\'t be pins yet' };
       const eq = tokens.slice(s, b).findIndex((t) => t.text === '=' && t.kind === 'punct');
       const declEnd = eq < 0 ? b : s + eq;
       const nameToken = tokens[declEnd - 1];

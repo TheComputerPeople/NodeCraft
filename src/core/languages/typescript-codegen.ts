@@ -775,10 +775,19 @@ class TypeScriptEmitter {
       case 'call': {
         const call = this.call(s.callee, s.args);
         if (s.results) {
-          // A library function with several outputs returns an object; each field into its slot.
+          // A library function with several outputs returns an object; each field into its slot. A
+          // project function's are its object's fields or its tuple's positions (docs/node-authoring.md, gap 3).
           const imported = this.program.imports.find((i) => i.id === s.callee.id);
-          const fields = resultFields(imported?.outputs ?? []);
-          out.line(`({ ${s.results.map((r) => `${fields.get(r.output)}: ${this.slotRef(r.slot)}`).join(', ')} } = ${call});`);
+          const code = imported?.results;
+          const position = (output: string) => imported?.outputs?.findIndex((o) => o.id === output) ?? 0;
+          if (code?.kind === 'tuple') {
+            const targets: string[] = [];
+            for (const r of s.results) targets[position(r.output)] = this.slotRef(r.slot);
+            out.line(`[${Array.from({ length: code.names.length }, (_, i) => targets[i] ?? '').join(', ')}] = ${call};`);
+          } else {
+            const fields = code ? new Map((imported?.outputs ?? []).map((o, i) => [o.id, code.names[i]])) : resultFields(imported?.outputs ?? []);
+            out.line(`({ ${s.results.map((r) => `${fields.get(r.output)}: ${this.slotRef(r.slot)}`).join(', ')} } = ${call});`);
+          }
         } else out.line(s.resultSlot ? `${this.slotRef(s.resultSlot)} = ${call};` : `${call};`);
         break;
       }

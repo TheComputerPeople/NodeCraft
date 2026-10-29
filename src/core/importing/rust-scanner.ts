@@ -3,7 +3,7 @@
 // inline modules inside it, with their parameters, types and documentation. Like the other scanners
 // it parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText, tupleOutputs } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'lifetime' | 'punct';
 
@@ -264,7 +264,7 @@ export function scanRust(source: string): ModuleScan {
         else if (method) {
           const returns = mapReturn(returnText);
           if ('reason' in returns) skip(returns.reason);
-          else block.methods.push({ name: fnName, line: tokens[first].line, params, returns: returns.type, doc: docComment });
+          else block.methods.push(withOutputs({ name: fnName, line: tokens[first].line, params, returns: returns.type, doc: docComment }, returnText));
         } else if (returnText === 'Self' || returnText === name) block.constructors.push({ name: fnName, line: tokens[first].line, params, returns: null, doc: docComment });
         else skip('associated functions without self have no object; make it a free function instead');
       }
@@ -363,7 +363,7 @@ export function scanRust(source: string): ModuleScan {
         const returns = mapReturn(returnText);
         if ('reason' in params) skip(params.reason);
         else if ('reason' in returns) skip(returns.reason);
-        else result.functions.push({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, ...(module ? { container: module } : {}) });
+        else result.functions.push(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, ...(module ? { container: module } : {}) }, returnText));
       }
       i = itemEnd;
     }
@@ -423,6 +423,32 @@ const SIMPLE: Record<string, TypeRef> = {
   i64: { id: 'int' }, f64: { id: 'float' },
   String: { id: 'string' }, 'std::string::String': { id: 'string' }
 };
+
+// Several outputs (docs/node-authoring.md, gap 3): a tuple's elements, named by @outputs.
+function withOutputs(fn: ScannedFunction, returnText: string): ScannedFunction {
+  const t = normalize(returnText);
+  if (!t.startsWith('(') || !t.endsWith(')')) return fn;
+  const elements = splitTopCommas(t.slice(1, -1)).map((e) => e.trim()).filter(Boolean);
+  const outputs = tupleOutputs(fn.doc, elements.map((e) => mapRustType(e)));
+  return outputs ? { ...fn, returns: undefined, outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name) } } : fn;
+}
+
+// Splits at commas outside <>, () and [].
+function splitTopCommas(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let from = 0;
+  for (let i = 0; i < text.length; i++) {
+    if ('<(['.includes(text[i])) depth++;
+    else if ('>)]'.includes(text[i])) depth--;
+    else if (text[i] === ',' && depth === 0) {
+      parts.push(text.slice(from, i));
+      from = i + 1;
+    }
+  }
+  parts.push(text.slice(from));
+  return parts;
+}
 
 function mapReturn(text: string): { type: TypeRef | null | undefined } | { reason: string } {
   const t = normalize(text);

@@ -15,6 +15,7 @@ import { phpNamespace } from '../../src/extension/placement';
 import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
+import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-php-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -150,4 +151,56 @@ describe('PHP code classes', () => {
     }
     assert.deepEqual(run.stdout.trim().split(/\r?\n/), CODE_CLASS_OUTPUT, run.stderr);
   });
+});
+
+// Several outputs (docs/node-authoring.md, gap 3): parameters by reference, and an array shape's
+// keys.
+describe('PHP several outputs', () => {
+  const VARIANTS: Record<string, string[]> = {
+    'parameters by reference': [
+      '    /** @blueprint */',
+      '    public static function divide(int $a, int $b, int &$quotient, int &$remainder): void',
+      '    {',
+      '        $quotient = intdiv($a, $b);',
+      '        $remainder = $a % $b;',
+      '    }'
+    ],
+    'an array shape': [
+      '    /**',
+      '     * @blueprint',
+      '     * @return array{quotient: int, remainder: int}',
+      '     */',
+      '    public static function divide(int $a, int $b): array',
+      '    {',
+      "        return ['quotient' => intdiv($a, $b), 'remainder' => $a % $b];",
+      '    }'
+    ]
+  };
+  for (const [label, method] of Object.entries(VARIANTS)) {
+    test(`a graph reads each output (${label})`, async (t) => {
+      const dir = path.join(workDir, `outputs-${label.replace(/ /g, '-')}`);
+      fs.mkdirSync(path.join(dir, 'src', 'Math'), { recursive: true });
+      fs.mkdirSync(path.join(dir, 'src', 'Game'), { recursive: true });
+      const arithmetic = ['<?php', 'namespace App\\Math;', '', 'final class Arithmetic', '{', ...method, '}', ''].join('\n');
+      fs.writeFileSync(path.join(dir, 'src', 'Math', 'Arithmetic.php'), arithmetic);
+      const definitions = exposeFunctions(scanPhp(arithmetic), { language: 'php', path: 'src/Math/Arithmetic.php', exposeAll: false }).definitions;
+      const registry = new NodeRegistry();
+      registry.registerMany(definitions);
+      const result = compileDocument(severalOutputsGraph(definitions, 'php'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Dividing.vgraph', outputDir: 'src/Game' } });
+      assert.deepEqual(result.diagnostics, []);
+      if (label === 'parameters by reference') assert.match(result.output!.text, /\$vgOut1_0 = 0;\n\s*\$vgOut1_1 = 0;\n\s*\\App\\Math\\Arithmetic::divide\(17, 5, \$vgOut1_0, \$vgOut1_1\);/);
+      else assert.match(result.output!.text, /\['quotient' => [^,]+, 'remainder' => [^\]]+\] = /);
+      const file = path.join(dir, 'src', 'Game', result.output!.fileName);
+      fs.writeFileSync(file, result.output!.text);
+      for (const companion of result.output!.companionFiles ?? []) fs.writeFileSync(path.join(dir, 'src', 'Game', companion.fileName), companion.text);
+      let run;
+      try {
+        run = await runGeneratedCode(phpPack.generator!.runner!, file, result.output!.className, { cwd: dir, timeoutMs: 60000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(run.stdout.trim().split(/\r?\n/), SEVERAL_OUTPUTS_OUTPUT, run.stderr);
+    });
+  }
 });

@@ -22,6 +22,7 @@ import { parseDocument } from '../../src/core/serializer';
 import { RUN_PROJECT_FILE, csharpRunProject } from '../../src/core/languages/csharp';
 import { ToolNotFoundError, runCommand, runGeneratedCode, writeScaffold } from '../../src/extension/runner';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
+import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 const languages = builtinLanguagePacks();
@@ -511,6 +512,177 @@ describe('code classes', () => {
       assert.equal(result.status, 0, result.stdout + result.stderr);
     });
   }
+});
+
+// Several outputs from the project's code (docs/node-authoring.md, gap 3): an object's fields, a
+// tuple's positions (labeled, or named by @outputs), a NamedTuple's fields, out parameters and a
+// C# tuple's names.
+describe('several outputs from code', () => {
+  const MODULES: Record<string, { path: string; text: string }> = {
+    typescript: {
+      path: 'lib/divide.ts',
+      text: [
+        '/** @blueprint */',
+        'export function divide(a: number, b: number): { quotient: number; remainder: number } {',
+        '  return { quotient: Math.floor(a / b), remainder: a % b };',
+        '}',
+        ''
+      ].join('\n')
+    },
+    'typescript-tuple': {
+      path: 'lib/divide.ts',
+      text: [
+        '/** @blueprint */',
+        'export function divide(a: number, b: number): [quotient: number, remainder: number] {',
+        '  return [Math.floor(a / b), a % b];',
+        '}',
+        ''
+      ].join('\n')
+    },
+    'javascript-esm': {
+      path: 'lib/divide.mjs',
+      text: [
+        '/**',
+        ' * @blueprint',
+        ' * @param {number} a',
+        ' * @param {number} b',
+        ' * @returns {{ quotient: number, remainder: number }}',
+        ' */',
+        'export function divide(a, b) {',
+        '  return { quotient: Math.floor(a / b), remainder: a % b };',
+        '}',
+        ''
+      ].join('\n')
+    },
+    'javascript-commonjs': {
+      path: 'lib/divide.cjs',
+      text: [
+        '/**',
+        ' * @blueprint',
+        ' * @param {number} a',
+        ' * @param {number} b',
+        ' * @returns {[number, number]}',
+        ' * @outputs quotient remainder',
+        ' */',
+        'function divide(a, b) {',
+        '  return [Math.floor(a / b), a % b];',
+        '}',
+        'module.exports = { divide };',
+        ''
+      ].join('\n')
+    },
+    python: {
+      path: 'lib/game/divide.py',
+      text: [
+        'def divide(a: int, b: int) -> tuple[int, int]:',
+        '    """@blueprint',
+        '    @outputs quotient remainder"""',
+        '    return a // b, a % b',
+        ''
+      ].join('\n')
+    },
+    'python-namedtuple': {
+      path: 'lib/game/divide.py',
+      text: [
+        'from typing import NamedTuple',
+        '',
+        '',
+        'class Division(NamedTuple):',
+        '    quotient: int',
+        '    remainder: int',
+        '',
+        '',
+        'def divide(a: int, b: int) -> Division:',
+        '    """@blueprint"""',
+        '    return Division(a // b, a % b)',
+        ''
+      ].join('\n')
+    },
+    csharp: {
+      path: 'lib/Divide.cs',
+      text: [
+        'namespace Game;',
+        '',
+        'public static class Arithmetic',
+        '{',
+        '    /// @blueprint',
+        '    public static void Divide(int a, int b, out int quotient, out int remainder)',
+        '    {',
+        '        quotient = a / b;',
+        '        remainder = a % b;',
+        '    }',
+        '}',
+        ''
+      ].join('\n')
+    },
+    'csharp-tuple': {
+      path: 'lib/Divide.cs',
+      text: [
+        'namespace Game;',
+        '',
+        'public static class Arithmetic',
+        '{',
+        '    /// @blueprint',
+        '    public static (int quotient, int remainder) Divide(int a, int b) => (a / b, a % b);',
+        '}',
+        ''
+      ].join('\n')
+    }
+  };
+
+  function build(language: string, key: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; importRoots?: string[]; text: string } {
+    const importer = languages.get(language)!.importer!;
+    const module = MODULES[key];
+    const defs = exposeFunctions(importer.scan!(module.text), { language, path: module.path, module: language === 'python' ? 'game.divide' : undefined, exposeAll: false }).definitions;
+    const r = registry();
+    r.registerMany(defs);
+    const dir = path.join(workDir, `outputs-${key}`);
+    fs.mkdirSync(path.join(dir, path.dirname(module.path)), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
+    fs.writeFileSync(path.join(dir, module.path), module.text);
+    if (language === 'python') fs.writeFileSync(path.join(dir, path.dirname(module.path), '__init__.py'), '');
+    const result = compileDocument(severalOutputsGraph(defs, language), { registry: r, languages, generate: { sourceFileName: 'dividing.vgraph', outputDir: 'graphs', namespace: 'Game', ...generate } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'graphs', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    return { file, className: result.output!.className, dir, importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)), text: result.output!.text };
+  }
+
+  for (const target of [
+    { label: 'TypeScript (an object)', language: 'typescript', key: 'typescript', code: /\(\{ quotient: [\w.]+, remainder: [\w.]+ \} = / },
+    { label: 'TypeScript (a labeled tuple)', language: 'typescript', key: 'typescript-tuple', code: /\[[\w.]+, [\w.]+\] = / },
+    { label: 'JavaScript (ES modules, an object)', language: 'javascript', key: 'javascript-esm', moduleFormat: 'esm' as const },
+    { label: 'JavaScript (CommonJS, a tuple named by @outputs)', language: 'javascript', key: 'javascript-commonjs', moduleFormat: 'commonjs' as const },
+    { label: 'Python (a tuple named by @outputs)', language: 'python', key: 'python' },
+    { label: 'Python (a NamedTuple)', language: 'python', key: 'python-namedtuple' },
+    { label: 'C# (out parameters)', language: 'csharp', key: 'csharp', code: /out var vgOut1_0, out var vgOut1_1/ },
+    { label: 'C# (a named tuple)', language: 'csharp', key: 'csharp-tuple' }
+  ]) {
+    test(`${target.label} gives each output`, async (t) => {
+      const { file, className, dir, importRoots, text } = build(target.language, target.key, { moduleFormat: target.moduleFormat });
+      if (target.code) assert.match(text, target.code);
+      let outcome;
+      try {
+        const sources = target.language === 'csharp' ? [path.join(dir, MODULES[target.key].path)] : undefined;
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, file, className, { cwd: path.join(dir, 'graphs'), importRoots, sources, timeoutMs: 180000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), SEVERAL_OUTPUTS_OUTPUT, `stderr:\n${outcome.stderr}`);
+    });
+  }
+
+  test('TypeScript calling one type-checks under --strict', () => {
+    const { file, dir } = build('typescript', 'typescript-tuple');
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: { strict: true, noEmit: true, target: 'es2022', module: 'esnext', moduleResolution: 'bundler', lib: ['es2022', 'dom'], types: [], allowImportingTsExtensions: true },
+      files: [path.relative(dir, file)]
+    }));
+    const tsc = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+    const result = spawnSync(process.execPath, [tsc, '-p', dir], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
 });
 
 // A function library made of graphs (docs/program-structure.md, "Functions"), called from a graph

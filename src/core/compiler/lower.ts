@@ -1276,11 +1276,13 @@ class Lowerer {
       ...(target.module ? { module: target.module } : {}),
       ...(implementation.member ? { member: implementation.member } : {}),
       ...(implementation.member?.kind === 'construct' ? { bases: this.codeBases(implementation.member.type) } : {}),
+      ...(implementation.results ? { results: implementation.results } : {}),
       params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
       returns: def.outputs.find((p) => p.kind === 'data')?.type
     };
     const outputs = def.outputs.filter((p) => p.kind === 'data');
-    if (outputs.length > 1) imported.outputs = outputs.map((p) => ({ id: p.id, name: p.name, type: p.type }));
+    // Several outputs, or (code with out parameters) one that isn't the returned value.
+    if (outputs.length > 1 || implementation.results) imported.outputs = outputs.map((p) => ({ id: p.id, name: p.name, type: p.type }));
     this.imports.set(def.type, imported);
     return imported;
   }

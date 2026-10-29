@@ -97,3 +97,30 @@ describe('class members through the language server', () => {
     assert.deepEqual(definitions.map((d) => d.type.slice(d.type.indexOf('#') + 1)), ['Counter:Add', 'Counter:get:Count', 'Counter:set:Count']);
   });
 });
+
+// Several results (docs/node-authoring.md, gap 3): Go's parenthesised results are outputs, named in
+// the signature or by @outputs; a last error result isn't one.
+describe('several results through the language server', () => {
+  const GO: LanguageServerImport = { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], severalResults: { error: 'error' } };
+  const goSpelling = spelling({ bool: 'bool', int: 'int', float: 'float64', string: 'string' });
+  const scanOne = (signature: string, doc = '// @blueprint') => {
+    const source = ['package demo', '', doc, `${signature} {}`, ''].join('\n');
+    const name = /^func (\w+)/.exec(signature)![1];
+    const line = source.split('\n').findIndex((l) => l.startsWith('func '));
+    return scanSymbols(source, [{ name, line, nameLine: line, containers: [], hover: `\`\`\`go\n${signature}\n\`\`\`` }], GO, goSpelling);
+  };
+
+  test('named results, grouped names taking the next type, and a last error', () => {
+    const [fn] = scanOne('func Divide(a, b int) (quotient, remainder int, err error)').functions;
+    assert.deepEqual(fn.outputs, [{ name: 'quotient', type: { id: 'int' } }, { name: 'remainder', type: { id: 'int' } }]);
+    assert.deepEqual(fn.results, { kind: 'tuple', names: ['quotient', 'remainder'], error: true });
+  });
+
+  test('one value and an error, an error alone, and unnamed results named by @outputs', () => {
+    assert.deepEqual(scanOne('func Load(path string) ([]byte, error)').functions[0].outputs, [{ name: 'returnValue', type: { id: 'native:[]byte' } }]);
+    const [save] = scanOne('func Save(path string) error').functions;
+    assert.deepEqual([save.outputs, save.results], [[], { kind: 'tuple', names: [], error: true }]);
+    assert.deepEqual(scanOne('func Bounds() (int, *Box)', '// @blueprint\n// @outputs size box').functions[0].outputs?.map((o) => o.name), ['size', 'box']);
+    assert.deepEqual(scanOne('func Bounds() (int, int)').skipped.map((s) => s.reason), ['its results need names: name them in the signature or with @outputs']);
+  });
+});

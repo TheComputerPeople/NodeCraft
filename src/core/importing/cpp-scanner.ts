@@ -3,7 +3,7 @@
 // with the @blueprint marker as in the other languages). Like the other scanners it parses only
 // declarations and skips bodies by matching brackets; classes, templates and macros aren't read.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText, tupleOutputs } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -228,11 +228,12 @@ export function scanCpp(source: string): ModuleScan {
       } else if (specifiers.includes('static')) skip('static functions can\'t be called from generated code (they belong to their file)');
       else if (returnText === '' || returnText === 'auto') skip('its return type has to be written out');
       else {
-        const params = parseParams(open + 1, close - 1);
+        const outs: Out[] = [];
+        const params = parseParams(open + 1, close - 1, outs);
         const returns = mapReturn(returnText);
         if ('reason' in params) skip(params.reason);
         else if ('reason' in returns) skip(returns.reason);
-        else result.functions.push({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, ...(namespace ? { container: namespace } : {}) });
+        else result.functions.push(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, ...(namespace ? { container: namespace } : {}) }, outs, returnText));
       }
       i = declEnd;
     }
@@ -341,11 +342,12 @@ export function scanCpp(source: string): ModuleScan {
         else if (specifiers.includes('static')) skip(name, 'static member functions have no object; make it a free function instead');
         else if (returnText === '' || returnText === 'auto') skip(name, 'its return type has to be written out');
         else {
-          const params = parseParams(open + 1, close - 1);
+          const outs: Out[] = [];
+          const params = parseParams(open + 1, close - 1, outs);
           const returns = mapReturn(returnText);
           if ('reason' in params) skip(name, params.reason);
           else if ('reason' in returns) skip(name, returns.reason);
-          else cls.methods.push({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment });
+          else cls.methods.push(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment }, outs, returnText));
         }
         i = declEnd;
         continue;
@@ -370,6 +372,20 @@ export function scanCpp(source: string): ModuleScan {
     }
   };
 
+  // Several outputs: out parameters (after the returned value, if any), or a std::tuple's or
+  // std::pair's elements named by @outputs.
+  const withOutputs = (fn: ScannedFunction, outs: Out[], returnText: string): ScannedFunction => {
+    if (outs.length) {
+      const returnValue = fn.returns !== null;
+      const outputs = [...(returnValue ? [{ name: 'returnValue', ...(fn.returns ? { type: fn.returns } : {}) }] : []), ...outs.map((o) => ({ name: o.name, ...(o.type ? { type: o.type } : {}) }))];
+      return { ...fn, returns: undefined, outputs, results: { kind: 'out', names: outs.map((o) => o.name), types: outs.map((o) => o.text), ...(returnValue ? { returnValue } : {}) } };
+    }
+    const tuple = /^std::(?:tuple|pair)<(.*)>$/.exec(normalize(returnText.replace(/\b(inline|constexpr|static|extern|virtual)\b/g, '').trim()));
+    if (!tuple) return fn;
+    const outputs = tupleOutputs(fn.doc, splitTopCommas(tuple[1]).map((t) => mapCppType(t.trim())));
+    return outputs ? { ...fn, returns: undefined, outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name) } } : fn;
+  };
+
   // The index of a declared function's name: the name before `(` at the top of the declaration,
   // after a return type.
   const functionName = (i: number, end: number): number | undefined => {
@@ -384,7 +400,9 @@ export function scanCpp(source: string): ModuleScan {
     return undefined;
   };
 
-  const parseParams = (start: number, end: number): ScannedParam[] | { reason: string } => {
+  // Non-const reference parameters (`int& count`) go into `outs` (docs/node-authoring.md, gap 3)
+  // when it's given, as Unreal takes them for out parameters.
+  const parseParams = (start: number, end: number, outs?: Out[]): ScannedParam[] | { reason: string } => {
     if (end <= start || (end - start === 1 && at(start, 'void'))) return [];
     const pieces: [number, number][] = [];
     let from = start;
@@ -412,6 +430,11 @@ export function scanCpp(source: string): ModuleScan {
       const nameToken = tokens[declEnd - 1];
       if (!nameToken || nameToken.kind !== 'name' || declEnd - a < 2) return { reason: 'its parameters need names' };
       const typeText = text(a, declEnd - 1);
+      const reference = /^(?!const\b)(.*[^&])&$/.exec(normalize(typeText));
+      if (outs && reference && !/\bconst$/.test(reference[1])) {
+        outs.push({ name: nameToken.text, text: reference[1], ...(mapCppType(reference[1]) ? { type: mapCppType(reference[1]) } : {}) });
+        continue;
+      }
       const mapped = mapParam(typeText);
       if ('reason' in mapped) return mapped;
       const param: ScannedParam = { name: nameToken.text, ...(mapped.type ? { type: mapped.type } : {}) };
@@ -426,6 +449,30 @@ export function scanCpp(source: string): ModuleScan {
 
   declarations(0, tokens.length, '');
   return result;
+}
+
+// An out parameter: its name, its type as written (without &), and as a pin type.
+interface Out {
+  name: string;
+  text: string;
+  type?: TypeRef;
+}
+
+// Splits at commas outside <>, () and [].
+function splitTopCommas(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let from = 0;
+  for (let i = 0; i < text.length; i++) {
+    if ('<(['.includes(text[i])) depth++;
+    else if ('>)]'.includes(text[i])) depth--;
+    else if (text[i] === ',' && depth === 0) {
+      parts.push(text.slice(from, i));
+      from = i + 1;
+    }
+  }
+  parts.push(text.slice(from));
+  return parts;
 }
 
 function parseDoc(lines: string[] | undefined): DocComment {

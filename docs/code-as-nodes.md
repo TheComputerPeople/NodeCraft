@@ -42,7 +42,7 @@ The setting `blueprintVisualScripting.exposeAllFunctions` exposes every exported
 ## What becomes a node
 
 - **Which functions:** exported top-level function declarations, and exported `const` arrow functions or function expressions, in TypeScript and JavaScript. Top-level `def` in Python. Members of classes: see [Classes](#classes).
-- **Pins:** each parameter becomes an input pin, named in words like the title. A literal default value (number, string, boolean) becomes the pin's default. The return value becomes an output pin named "Return Value", as in Unreal; a function returning `void` or `None` has none.
+- **Pins:** each parameter becomes an input pin, named in words like the title. A literal default value (number, string, boolean) becomes the pin's default. The return value becomes an output pin named "Return Value", as in Unreal; a function returning `void` or `None` has none. A function returning several values has an output for each: see [Several outputs](#several-outputs).
 - **Types** map to canonical types ([semantics.md](semantics.md), "Values"):
 
 | Canonical | TypeScript / JavaScript (JSDoc) | Python |
@@ -91,6 +91,36 @@ A class's members become nodes too, each when its own documentation comment is m
 - **Types.** Objects travel on pins of the class's `native:` type, as functions returning the class already make them. A subclass's object connects where its base class is expected, when the subclass has a marked member (its nodes record the base). The default category is "Project / <Class>".
 - **Generated code.** It imports the class and writes `new Player(…)` (`Player(…)` in Python), `target.heal(…)`, `target.health` and `target.health = …`. C# and Java pass such objects as `object`/`Object`, so they cast the Target to the class. C++ passes them in a `std::any`, as the object and as each class it extends (`vgraph::code_new<Player, Entity>(…)`), and `vgraph::code_object<Player>(target)` finds the object as the class it needs. Rust passes them as a `vgraph::Value` holding the object (`vgraph::code_new`), borrowed for each use (`vgraph::code_object::<Counter>(&target).borrow_mut().add(…)`). Go passes them as `any` and asserts the Target to the struct's pointer. An empty Target stops the run with the language's own null error (C++ and Rust: "Accessed None"), as Unreal stops on "Accessed None".
 - **Languages.** All twelve. Lua, GDScript, Ruby and PHP are dynamic, so their objects need no help: generated code writes `Counter.new(…)`, `target:add(…)` (Lua), the preloaded script's `.new(…)` (GDScript), and `new \App\Counter(…)`, `$target->add(…)` (PHP).
+
+## Several outputs
+
+A function that gives back several values, in its language's way, has an output pin for each, as Unreal's out parameters do ([node-authoring.md](node-authoring.md), gap 3). The pins take the names the code gives the values. Where the code has none (a plain tuple), an `@outputs` tag in the documentation names them in order:
+
+```python
+def divide(a: int, b: int) -> tuple[int, int]:
+    """@blueprint
+    @outputs quotient remainder"""
+    return a // b, a % b
+```
+
+| Language | Several outputs from |
+|---|---|
+| TypeScript, JavaScript | an object type (`{ quotient: number; remainder: number }`, or JSDoc's `@returns {{ quotient: number, remainder: number }}`), or a tuple, labeled (`[quotient: number, remainder: number]`) or with `@outputs` |
+| Python | a `NamedTuple` class in the module, or `tuple[…]` with `@outputs` |
+| C# | `out` parameters, or a tuple, named (`(int Quotient, int Remainder)`) or with `@outputs` |
+| C++ | non-const reference parameters (`int& quotient`), or `std::tuple` / `std::pair` with `@outputs` |
+| Rust | a tuple with `@outputs` |
+| Java | a `record` declared in the same file: its components |
+| Go (through gopls) | several results, named (`(quotient, remainder int)`) or with `@outputs`. A last `error` result isn't a pin: when it isn't nil, the run stops with its message |
+| Lua | several `---@return type name` annotations (names, or `@outputs`) |
+| Ruby | `@return [Array(Integer, Integer)]` with `@outputs` |
+| PHP | parameters by reference (`int &$quotient`, after the others), or an array shape (`@return array{quotient: int, remainder: int}`, or `array{int, int}` with `@outputs`) |
+| GDScript | none: Godot functions return one value |
+
+- **Out parameters** follow the value the function returns, if any, which keeps its Return Value pin first. They aren't inputs.
+- **Exec pins.** The node always has them, even when marked `@blueprint pure`, since the function runs once for all its outputs.
+- **Generated code** reads each output from what the function gives back: it destructures the object, tuple or array, reads a record's accessors, or passes new variables for the out parameters and copies each to its output.
+- **Not exposed:** C# `ref`, `in` and `params` parameters, PHP variadics, and a tuple with no names in the code and no `@outputs` (which stays one value of its native type, or, for Lua and Go, is reported).
 
 ## Node identity
 

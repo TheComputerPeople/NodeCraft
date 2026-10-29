@@ -18,6 +18,7 @@ import { goPackage, goRunSources } from '../../src/extension/placement';
 import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
+import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-go-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -204,4 +205,78 @@ describe('Go code classes', () => {
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), CODE_CLASS_OUTPUT);
   });
+});
+
+// Several results (docs/node-authoring.md, gap 3): named in the signature, or by @outputs; a last
+// error result stops the run when it isn't nil.
+describe('Go several results', () => {
+  const VARIANTS: Record<string, { code: string; signature: string }> = {
+    'named, with an error': {
+      code: [
+        'package arithmetic',
+        '',
+        'import "errors"',
+        '',
+        '// @blueprint',
+        'func Divide(a, b int) (quotient, remainder int, err error) {',
+        '\tif b == 0 {',
+        '\t\treturn 0, 0, errors.New("division by zero")',
+        '\t}',
+        '\treturn a / b, a % b, nil',
+        '}',
+        ''
+      ].join('\n'),
+      signature: 'func Divide(a int, b int) (quotient int, remainder int, err error)'
+    },
+    'named by @outputs': {
+      code: [
+        'package arithmetic',
+        '',
+        '// @blueprint',
+        '// @outputs quotient remainder',
+        'func Divide(a, b int) (int, int) {',
+        '\treturn a / b, a % b',
+        '}',
+        ''
+      ].join('\n'),
+      signature: 'func Divide(a int, b int) (int, int)'
+    }
+  };
+  for (const [label, variant] of Object.entries(VARIANTS)) {
+    test(`a graph reads each result (${label})`, async (t) => {
+      const project = path.join(workDir, `results-${label.replace(/\W+/g, '-')}`);
+      const files: Record<string, string> = { 'go.mod': 'module example.com/results\n\ngo 1.22\n', 'arithmetic/arithmetic.go': variant.code, 'graphs/doc.go': '// Package graphs holds the graphs.\npackage graphs\n' };
+      for (const [name, text] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+        fs.writeFileSync(path.join(project, name), text);
+      }
+      const graphDir = path.join(project, 'graphs');
+      const pkg = goPackage(graphDir, project);
+      const line = variant.code.split('\n').findIndex((l) => l.startsWith('func Divide'));
+      const scan = scanSymbols(variant.code, [{ name: 'Divide', line, nameLine: line, containers: [], hover: `\`\`\`go\n${variant.signature}\n\`\`\`` }],
+        builtinLanguagePacks().get('go')!.importer!.languageServer!, (type) => builtinLanguagePacks().get('go')!.mapType(type));
+      const definitions = exposeFunctions(scan, { language: 'go', path: 'arithmetic/arithmetic.go', module: 'example.com/results/arithmetic', exposeAll: false }).definitions;
+      const registry = new NodeRegistry();
+      registry.registerMany(definitions);
+      const result = compileDocument(severalOutputsGraph(definitions, 'go'), {
+        registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Dividing.vgraph', outputDir: 'graphs', namespace: pkg.name, packagePath: pkg.path }
+      });
+      assert.deepEqual(result.diagnostics, []);
+      const output = result.output!;
+      if (label === 'named, with an error') assert.match(output.text, /var vgErr1 error\n\s*[\w.]+, [\w.]+, vgErr1 = arithmetic\.Divide\(17, 5\)\n\s*if vgErr1 != nil \{\n\s*VgFail\(vgErr1\.Error\(\)\)/);
+      const file = path.join(graphDir, output.fileName);
+      fs.writeFileSync(file, output.text);
+      const plan = goPlacement({ generatedFiles: [`graphs/${output.fileName}`], readFile: (f) => fs.readFileSync(path.join(project, f), 'utf8'), exists: (f) => fs.existsSync(path.join(project, f)) });
+      for (const owned of plan.ownedFiles ?? []) fs.writeFileSync(path.join(project, owned.path), owned.text);
+      let outcome;
+      try {
+        outcome = await runGeneratedCode(builtinLanguagePacks().get('go')!.generator!.runner!, file, output.className, { cwd: project, sources: goRunSources(file), goModule: pkg.module, timeoutMs: 300000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.equal(outcome.stderr, '');
+      assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), SEVERAL_OUTPUTS_OUTPUT);
+    });
+  }
 });

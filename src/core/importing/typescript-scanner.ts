@@ -2,7 +2,8 @@
 // defaults and JSDoc (docs/code-as-nodes.md, "How declarations are read"). It parses only top-level
 // declarations and skips everything else by matching brackets, so it needs no compiler.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, ScannedProperty, SkippedFunction, isMarked, parseDocText } from './symbols';
+import { CodeResults } from '../model';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, ScannedProperty, SkippedFunction, isMarked, parseDocText, tupleOutputs } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'template' | 'regex' | 'punct';
 
@@ -148,6 +149,9 @@ interface Signature {
   params: ScannedParam[];
   returns: TypeRef | null | undefined;
   jsdoc: DocComment;
+  // Several outputs (docs/node-authoring.md, gap 3).
+  outputs?: { name: string; type?: TypeRef }[];
+  results?: CodeResults;
 }
 
 // Modifiers before a class member's name.
@@ -365,7 +369,7 @@ class DeclarationParser {
         else if (modifiers.has('get')) getters.set(name, { name, line, ...(signature.returns ? { type: signature.returns } : {}), readonly: true, doc: jsdoc });
         else if (modifiers.has('set')) setters.add(name);
         else if (name === 'constructor') cls.scan.init = { name, line, params: signature.params, returns: null, doc: jsdoc };
-        else cls.scan.methods.push({ name, line, params: signature.params, returns: signature.returns, doc: jsdoc });
+        else cls.scan.methods.push({ name, line, params: signature.params, returns: signature.returns, doc: jsdoc, ...(signature.outputs && signature.results ? { outputs: signature.outputs, results: signature.results } : {}) });
         continue;
       }
       // A field: `name?: Type = value;`.
@@ -433,10 +437,13 @@ class DeclarationParser {
     const end = this.bodyEnd(j, isArrow);
     if (generic) return { signature: { reason: 'generic functions can\'t be nodes yet' }, end, arrow: isArrow };
     // The declared return type (annotation, else @returns), else whether the body returns a value.
+    if ('reason' in params) return { signature: params, end, arrow: isArrow };
+    // Several outputs: an object type's fields, or a tuple's positions.
+    const several = severalOutputs(returnText ?? jsdocReturnText(jsdoc), jsdoc);
+    if (several) return { signature: { params, returns: undefined, jsdoc, ...several }, end, arrow: isArrow };
     const declared = returnText !== undefined ? mapReturnText(returnText) : jsdocReturns(jsdoc);
     if (declared && 'reason' in declared) return { signature: declared, end, arrow: isArrow };
     const returns = declared ? declared.type : this.returnsValue(j, isArrow) ? undefined : null;
-    if ('reason' in params) return { signature: params, end, arrow: isArrow };
     return { signature: { params, returns, jsdoc }, end, arrow: isArrow };
   }
 
@@ -526,7 +533,8 @@ class DeclarationParser {
       if (fn.signature.reason) this.result.skipped.push({ name: fn.name, line: fn.line, reason: fn.signature.reason, marked: isMarked(jsdoc) });
       return;
     }
-    const scanned: ScannedFunction = { name: fn.name, line: fn.line, params: fn.signature.params, returns: fn.signature.returns, doc: jsdoc };
+    const { outputs, results } = fn.signature;
+    const scanned: ScannedFunction = { name: fn.name, line: fn.line, params: fn.signature.params, returns: fn.signature.returns, doc: jsdoc, ...(outputs && results ? { outputs, results } : {}) };
     this.result.functions.push(scanned);
   }
 
@@ -711,6 +719,40 @@ function jsdocParam(doc: DocComment, name: string): { type?: TypeRef } {
     }
   }
   return {};
+}
+
+// The type text of `@returns {type}` (JavaScript), braces balanced: `{{ a: number }}` is an object.
+function jsdocReturnText(doc: DocComment): string | undefined {
+  const tag = doc.tags.find((t) => t.name === 'returns' || t.name === 'return');
+  if (!tag?.text.startsWith('{')) return undefined;
+  let depth = 0;
+  for (let i = 0; i < tag.text.length; i++) {
+    if (tag.text[i] === '{') depth++;
+    else if (tag.text[i] === '}' && --depth === 0) return tag.text.slice(1, i).trim();
+  }
+  return undefined;
+}
+
+// Several outputs from a return type (docs/node-authoring.md, gap 3): an object type's fields
+// (`{ total: number; count: number }`), or a tuple's positions, named by its labels
+// (`[total: number, count: number]`) or by the `@outputs` tag.
+function severalOutputs(text: string | undefined, doc: DocComment): { outputs: { name: string; type?: TypeRef }[]; results: CodeResults } | undefined {
+  const t = text?.trim();
+  if (!t) return undefined;
+  if (t.startsWith('{') && t.endsWith('}')) {
+    const members = splitTop(t.slice(1, -1).replace(/;/g, ','), ',').map((m) => m.trim()).filter(Boolean);
+    const fields = members.map((m) => /^(?:readonly\s+)?([A-Za-z_$][\w$]*)\??\s*:\s*([\s\S]+)$/.exec(m));
+    if (fields.length < 2 || fields.some((f) => !f)) return undefined;
+    const outputs = fields.map((f) => ({ name: f![1], ...(mapTypeText(f![2]) ? { type: mapTypeText(f![2]) } : {}) }));
+    return { outputs, results: { kind: 'fields', names: outputs.map((o) => o.name) } };
+  }
+  if (t.startsWith('[') && t.endsWith(']')) {
+    const elements = splitTop(t.slice(1, -1), ',').map((e) => e.trim()).filter(Boolean);
+    const labeled = elements.map((e) => /^([A-Za-z_$][\w$]*)\??\s*:\s*([\s\S]+)$/.exec(e));
+    const outputs = tupleOutputs(doc, labeled.map((l, i) => mapTypeText(l ? l[2] : elements[i])), labeled.map((l) => l?.[1]));
+    return outputs && { outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name) } };
+  }
+  return undefined;
 }
 
 // The return type from `@returns {type}` (JavaScript), if documented.

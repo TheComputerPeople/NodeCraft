@@ -82,8 +82,8 @@ describe('C# scanner: exposure', () => {
       "Load: async methods become latent nodes with Phase 4's latent actions",
       "Later: async methods become latent nodes with Phase 4's latent actions",
       "First: generic methods can't be nodes yet",
-      "Swap: ref, out, in and params parameters can't be pins yet",
-      "Sum: ref, out, in and params parameters can't be pins yet",
+      "Swap: ref, in and params parameters can't be pins yet",
+      "Sum: ref, in and params parameters can't be pins yet",
       "Put: methods of generic classes can't be nodes yet"
     ]);
   });
@@ -193,5 +193,37 @@ describe('C# classes', () => {
     assert.deepEqual(definitions.map((d) => d.type.slice(d.type.indexOf('#') + 1)), [
       'Game.Player:new', 'Game.Player:Heal', 'Game.Player:get:Health', 'Game.Player:set:Health', 'Game.Player:get:Name', 'Game.Player:get:Alive', 'Game.Player:get:Level', 'Game.Player:set:Level'
     ]);
+  });
+});
+
+// Several outputs (docs/node-authoring.md, gap 3): out parameters, after the value returned, and
+// tuples, named in them or by @outputs.
+describe('C# several outputs', () => {
+  test('out parameters follow the value returned', () => {
+    const [tryParse] = nodes(`
+      public static class P {
+          /// @blueprint
+          public static bool TryParse(string text, out double value) { value = 0; return true; }
+      }`);
+    assert.deepEqual(tryParse.inputs.filter((p) => p.kind === 'data').map((p) => p.id), ['text']);
+    assert.deepEqual(tryParse.outputs.filter((p) => p.kind === 'data').map((p) => [p.id, p.type?.id]), [['returnValue', 'bool'], ['value', 'float']]);
+    assert.deepEqual((tryParse.implementation as { results?: unknown }).results, { kind: 'out', names: ['value'], returnValue: true });
+  });
+
+  test('a tuple, named in it or by @outputs; an unnamed one without @outputs is one value', () => {
+    const found = nodes(`
+      public static class T {
+          /// @blueprint
+          public static (int low, double high) Range(int n) => (0, n);
+          /// @blueprint
+          /// @outputs first second
+          public static (int, int) Pair() => (1, 2);
+          /// @blueprint
+          public static (int, int) Unnamed() => (1, 2);
+      }`);
+    const outputs = (name: string) => found.find((d) => d.displayName === name)!.outputs.filter((p) => p.kind === 'data').map((p) => p.id);
+    assert.deepEqual(outputs('Range'), ['low', 'high']);
+    assert.deepEqual(outputs('Pair'), ['first', 'second']);
+    assert.deepEqual(outputs('Unnamed'), ['returnValue']);
   });
 });

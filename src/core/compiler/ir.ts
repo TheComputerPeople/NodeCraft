@@ -1,7 +1,7 @@
 // Visual IR: a language-neutral program produced from a graph document. Language packs turn it into
 // source code. Names here are raw (taken from graph ids); each generator makes them legal and
 // unique in its language.
-import type { CodeMember } from '../model';
+import type { CodeMember, CodeResults } from '../model';
 import { TypeRef } from '../types';
 import type { ClassMemberSpec } from './names';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
@@ -198,6 +198,8 @@ export interface IrImport {
   // Construct: the classes the class extends, nearest first, as far as the workspace knows them
   // (C++ keeps the object as each, so members of any of them reach it).
   bases?: { name: string; module?: string }[];
+  // A project function with several outputs: how its code gives them (with `outputs`).
+  results?: CodeResults;
 }
 
 // Imports of one name from one module share one local name (a class's member nodes all import

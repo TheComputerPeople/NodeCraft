@@ -212,11 +212,12 @@ export const goPack: LanguagePack = {
   mapType,
   generator: goGenerator,
   // Functions marked // @blueprint, found through gopls (Tier 2).
-  importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], objectsByPointer: true } }
+  importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], objectsByPointer: true, severalResults: { error: 'error' } } }
 };
 
 class GoEmitter {
   private tests: { name: string; method: string }[] = [];
+  private temps = 0;
   private readonly out = new CodeWriter('\t');
   private readonly names: NameScope;
   private readonly memberNames = new Map<string, string>();
@@ -557,6 +558,18 @@ class GoEmitter {
         const call = this.call(s.callee, s.args);
         if (s.results) {
           const imported = this.program.imports.find((i) => i.id === s.callee.id);
+          if (imported?.results?.error) {
+            // A project function's last `error` result (docs/node-authoring.md, gap 3): the run
+            // stops with it when it isn't nil.
+            const err = `vgErr${++this.temps}`;
+            const targets = imported.outputs?.length ? `${this.targets(imported.outputs, s.results)}, ` : '';
+            out.line(`var ${err} error`);
+            out.line(`${targets}${err} = ${call}`);
+            out.line(`if ${err} != nil {`);
+            out.line(`\tVgFail(${err}.Error())`);
+            out.line('}');
+            break;
+          }
           out.line(`${this.targets(imported?.outputs ?? [], s.results)} = ${call}`);
           break;
         }

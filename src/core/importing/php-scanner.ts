@@ -4,7 +4,7 @@
 // \App\Util\Scores::triple); a function's is its namespace followed by \ (\App\Util\triple). A class's
 // public constructor, instance methods and properties are its members (docs/node-authoring.md, gap 2).
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText, tupleOutputs } from './symbols';
 
 export function scanPhp(source: string): ModuleScan {
   const text = source.replace(/\r\n?/g, '\n');
@@ -65,9 +65,13 @@ export function scanPhp(source: string): ModuleScan {
         // From the line as written: string defaults were blanked in `code`.
         const written = /function\s+&?\w+\s*\(([^)]*)\)/.exec(line)?.[1] ?? paramText;
         const params = written.split(',').map((p) => p.trim()).filter(Boolean);
-        if (params.some((p) => /\.\.\.|&\s*\$/.test(p))) skip('It takes any number of arguments, or an argument by reference.');
+        // Parameters by reference (`int &$count`) are out parameters (docs/node-authoring.md, gap 3),
+        // after the inputs.
+        const references = params.filter((p) => /&\s*\$/.test(p));
+        if (params.some((p) => /\.\.\./.test(p))) skip('It takes any number of arguments.');
+        else if (references.length && params.indexOf(references[0]) < params.length - references.length) skip('Its parameters by reference (out parameters) must come after the others.');
         else {
-          const scanned: ScannedParam[] = params.map((p) => {
+          const scanned: ScannedParam[] = params.filter((p) => !references.includes(p)).map((p) => {
             const [, typeText, paramName, defaultText] = /^(?:(?:public|protected|private|readonly)\s+)*([?\w\\|]+\s+)?\$(\w+)\s*(?:=\s*(.+))?$/.exec(p) ?? [, undefined, p.replace(/^.*\$/, ''), undefined];
             const type = typeText ? mapPhpType(typeText.trim()) : null;
             const defaultValue = defaultText !== undefined ? literal(defaultText) : undefined;
@@ -76,9 +80,10 @@ export function scanPhp(source: string): ModuleScan {
           // A namespace alone ends with \, so generated code calls a function, not a static method.
           const container = inClass ? qualify(classes[classes.length - 1].name) : namespace ? `${namespace}\\` : undefined;
           const returns = returnText ? mapPhpType(returnText) : undefined;
+          const several = severalOutputs(doc, returns, references);
           if (member && name === '__construct') member.init = { name, line: where, params: scanned, returns: null, doc };
-          else if (member) member.methods.push({ name, line: where, params: scanned, returns, doc });
-          else functions.push({ name, line: where, params: scanned, returns, doc, ...(container ? { container } : {}) });
+          else if (member) member.methods.push({ name, line: where, params: scanned, returns, doc, ...several });
+          else functions.push({ name, line: where, params: scanned, returns, doc, ...several, ...(container ? { container } : {}) });
         }
       }
     }
@@ -117,6 +122,30 @@ function literal(text: string): unknown {
 // A PHP type as a canonical type: int, float, string, bool, ?T and T|null (nullable); mixed is any
 // value and void nothing. A PHP array isn't a graph array (graphs pass VgList objects), so it is
 // native, as other classes are.
+// Several outputs (docs/node-authoring.md, gap 3): parameters by reference (after the returned
+// value, if any), or an array shape the doc comment returns (`@return array{sum: int, count: int}`,
+// or `array{int, int}` named by @outputs).
+function severalOutputs(doc: DocComment, returns: TypeRef | null | undefined, references: string[]): Pick<ScannedFunction, 'returns' | 'outputs' | 'results'> | {} {
+  if (references.length) {
+    const outs = references.map((p) => /^(\??[\w\\|]+\s+)?&\s*\$(\w+)/.exec(p)).map((m, i) => ({ name: m?.[2] ?? references[i].replace(/^.*\$/, ''), ...(m?.[1] && mapPhpType(m[1].trim()) ? { type: mapPhpType(m[1].trim())! } : {}) }));
+    const returnValue = returns !== null;
+    const outputs = [...(returnValue ? [{ name: 'returnValue', ...(returns ? { type: returns } : {}) }] : []), ...outs];
+    return { returns: undefined, outputs, results: { kind: 'out', names: outs.map((o) => o.name), ...(returnValue ? { returnValue } : {}) } };
+  }
+  const shape = /^array\{(.*)\}/.exec(doc.tags.find((t) => t.name === 'return')?.text.trim() ?? '');
+  if (!shape) return {};
+  const elements = shape[1].split(',').map((e) => e.trim()).filter(Boolean).map((e) => /^(?:([A-Za-z_]\w*|\d+)\??\s*:\s*)?(.+)$/.exec(e)!);
+  const types = elements.map((e) => mapPhpType(e[2]) ?? undefined);
+  const keys = elements.map((e) => e[1]);
+  if (keys.every((k) => k && !/^\d/.test(k))) {
+    if (elements.length < 2) return {};
+    const outputs = keys.map((k, i) => ({ name: k!, ...(types[i] ? { type: types[i] } : {}) }));
+    return { returns: undefined, outputs, results: { kind: 'fields', names: outputs.map((o) => o.name) } };
+  }
+  const outputs = tupleOutputs(doc, types);
+  return outputs ? { returns: undefined, outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name) } } : {};
+}
+
 export function mapPhpType(text: string): TypeRef | null {
   let t = text.trim().replace(/^\\/, '');
   let nullable = false;

@@ -1,6 +1,6 @@
 // Functions read from project code, and how they become nodes (docs/code-as-nodes.md). Each language
 // pack's scanner produces a ModuleScan; exposeFunctions turns it into node definitions.
-import { CodeMember, FunctionImplementation, NodeDefinition, PinDefinition } from '../model';
+import { CodeMember, CodeResults, FunctionImplementation, NodeDefinition, PinDefinition } from '../model';
 import { TypeRef } from '../types';
 
 export interface DocComment {
@@ -28,6 +28,10 @@ export interface ScannedFunction {
   doc: DocComment;
   // The qualified class a static method belongs to (C#): generated code calls Container.name.
   container?: string;
+  // Several outputs (docs/node-authoring.md, gap 3), in place of the return value: each named and
+  // typed, and how the code gives them.
+  outputs?: { name: string; type?: TypeRef }[];
+  results?: CodeResults;
 }
 
 // A function that can't become a node, and why.
@@ -120,7 +124,8 @@ export function exposeFunctions(scan: ModuleScan, options: ExposeOptions): Expos
 
 function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCategory = `Project / ${fileStem(options.path)}`): NodeDefinition {
   const tag = (name: string): string | undefined => fn.doc.tags.find((t) => t.name === name)?.text.trim();
-  const pure = /^pure\b/i.test(tag(MARKER) ?? '');
+  // Several outputs: the function runs where execution reaches it, once, however many are read.
+  const pure = /^pure\b/i.test(tag(MARKER) ?? '') && !fn.outputs;
   const category = tag('category');
   const keywords = tag('keywords')?.split(/[\s,]+/).filter(Boolean);
   const exec = (direction: 'input' | 'output'): PinDefinition[] => pure ? [] : [{ id: direction === 'input' ? 'execIn' : 'execOut', name: '', kind: 'exec', direction }];
@@ -129,9 +134,9 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
     ...(p.type ? { type: p.type } : {}),
     ...(p.defaultValue !== undefined ? { defaultValue: p.defaultValue } : {})
   }));
-  const outputs: PinDefinition[] = fn.returns === null ? [] : [{
-    id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', ...(fn.returns ? { type: fn.returns } : {})
-  }];
+  const outputs: PinDefinition[] = fn.outputs
+    ? fn.outputs.map((o) => ({ id: o.name, name: o.name === 'returnValue' ? 'Return Value' : words(o.name), kind: 'data', direction: 'output', ...(o.type ? { type: o.type } : {}) }))
+    : fn.returns === null ? [] : [{ id: 'returnValue', name: 'Return Value', kind: 'data', direction: 'output', ...(fn.returns ? { type: fn.returns } : {}) }];
   return {
     type: functionNodeType(options.language, options.path, fn.container ? `${fn.container}.${fn.name}` : fn.name),
     version: 1,
@@ -141,7 +146,7 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
     ...(fn.doc.description ? { description: fn.doc.description } : {}),
     inputs: [...exec('input'), ...inputs],
     outputs: [...exec('output'), ...outputs],
-    implementation: { kind: 'function', language: options.language, path: options.path, name: fn.name, ...(moduleOf(fn, options) ? { module: moduleOf(fn, options) } : {}) },
+    implementation: { kind: 'function', language: options.language, path: options.path, name: fn.name, ...(moduleOf(fn, options) ? { module: moduleOf(fn, options) } : {}), ...(fn.results ? { results: fn.results } : {}) },
     ...(keywords?.length ? { keywords } : {})
   };
 }
@@ -201,6 +206,15 @@ const EXEC_OUT: PinDefinition = { id: 'execOut', name: '', kind: 'exec', directi
 function moduleOf(fn: ScannedFunction, options: ExposeOptions): string | undefined {
   if (options.language === 'rust') return [options.module, fn.container].filter(Boolean).join('::') || undefined;
   return fn.container ?? options.module;
+}
+
+// A tuple's outputs: named in the code (`names`, when every one is), else by the `@outputs a b` tag;
+// undefined when there aren't as many names as types.
+export function tupleOutputs(doc: DocComment, types: (TypeRef | undefined)[], names?: (string | undefined)[]): { name: string; type?: TypeRef }[] | undefined {
+  const tagged = doc.tags.find((t) => t.name === 'outputs')?.text.split(/[\s,]+/).filter(Boolean);
+  const chosen = names?.every(Boolean) ? (names as string[]) : tagged;
+  if (!chosen || chosen.length !== types.length || types.length < 2) return undefined;
+  return chosen.map((name, i) => ({ name, ...(types[i] ? { type: types[i] } : {}) }));
 }
 
 // A name in words, as Unreal displays function and parameter names: "applyDamage",

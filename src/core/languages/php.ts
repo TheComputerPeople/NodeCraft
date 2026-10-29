@@ -151,6 +151,7 @@ export const phpPack: LanguagePack = {
 
 class PhpEmitter {
   private tests: { name: string; method: string }[] = [];
+  private temps = 0;
   private readonly out = new CodeWriter('    ');
   private readonly names: NameScope;
   private readonly library: boolean;
@@ -542,8 +543,28 @@ class PhpEmitter {
         out.line('}');
         break;
       case 'call': {
+        const imported = s.results ? this.program.imports.find((i) => i.id === s.callee.id) : undefined;
+        const code = imported?.results;
+        if (s.results && code?.kind === 'out') {
+          // A project function's parameters by reference (docs/node-authoring.md, gap 3): into new
+          // variables, then each into its output's slot.
+          const n = ++this.temps;
+          const temps = code.names.map((_, i) => `$vgOut${n}_${i}`);
+          // Each starts as its type's default: a typed parameter by reference checks what it's given.
+          const outTypes = imported!.outputs!.slice(code.returnValue ? 1 : 0).map((o) => o.type);
+          temps.forEach((t, i) => out.line(`${t} = ${outTypes[i] && !outTypes[i]!.container ? this.defaultFor(outTypes[i]) : 'null'};`));
+          const withOuts = this.call(s.callee, s.args, temps);
+          const values = [...(code.returnValue ? [`$vgReturn${n}`] : []), ...temps];
+          out.line(code.returnValue ? `${values[0]} = ${withOuts};` : `${withOuts};`);
+          for (const r of s.results) out.line(`${this.slotRef(r.slot)} = ${values[imported!.outputs!.findIndex((o) => o.id === r.output)]};`);
+          break;
+        }
         const call = this.call(s.callee, s.args);
-        if (s.results) this.results(s.results, call);
+        if (s.results && code?.kind === 'fields') {
+          // An array shape's keys, each into its output's slot.
+          const keys = new Map((imported!.outputs ?? []).map((o, i) => [o.id, code.names[i]]));
+          out.line(`[${s.results.map((r) => `'${keys.get(r.output)}' => ${this.slotRef(r.slot)}`).join(', ')}] = ${call};`);
+        } else if (s.results) this.results(s.results, call);
         else out.line(s.resultSlot ? `${this.slotRef(s.resultSlot)} = ${call};` : `${call};`);
         break;
       }
@@ -737,8 +758,9 @@ class PhpEmitter {
     return `${this.library ? 'self::' : '$this->'}${this.functionNames.get(id)!}(${args.map((a) => this.expr(a)).join(', ')})`;
   }
 
-  private call(callee: IrCallee, args: IrExpr[]): string {
-    const list = args.map((a) => this.expr(a)).join(', ');
+  // `extra` arguments follow the inputs (parameters by reference).
+  private call(callee: IrCallee, args: IrExpr[], extra: string[] = []): string {
+    const list = [...args.map((a) => this.expr(a)), ...extra].join(', ');
     if (callee.kind === 'helper') return `self::${this.helperNames.get(callee.id)}(${list})`;
     const member = this.program.imports.find((i) => i.id === callee.id)?.member;
     if (!member) return `${this.importNames.get(callee.id)}(${list})`;

@@ -224,6 +224,7 @@ class CppEmitter {
   private readonly methods: MethodSpec[] = [];
   private tests: { name: string; method: string }[] = [];
   private casts = 0;
+  private temps = 0;
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions) {
     this.library = !!program.library;
@@ -596,6 +597,25 @@ class CppEmitter {
       }
       case 'call': {
         const call = this.call(s.callee, s.args);
+        const code = s.results ? this.program.imports.find((i) => i.id === s.callee.id) : undefined;
+        if (s.results && code?.results?.kind === 'out') {
+          // A project function's out parameters (docs/node-authoring.md, gap 3): variables of the
+          // code's own types, passed by reference, then each into its output's slot.
+          const results = code.results;
+          const n = ++this.temps;
+          const temps = results.names.map((_, i) => `vg_out${n}_${i}`);
+          out.line('{');
+          out.indent();
+          temps.forEach((t, i) => out.line(`${results.types?.[i] ?? 'std::any'} ${t}{};`));
+          const withOuts = this.call(s.callee, s.args, temps);
+          if (results.returnValue) out.line(`auto vg_return = ${withOuts};`);
+          else out.line(`${withOuts};`);
+          const values = [...(results.returnValue ? ['vg_return'] : []), ...temps];
+          for (const r of s.results) out.line(`${this.slotNames.get(r.slot)} = ${values[code.outputs!.findIndex((o) => o.id === r.output)]};`);
+          out.dedent();
+          out.line('}');
+          break;
+        }
         if (s.results) {
           out.line(`std::tie(${s.results.map((r) => this.slotNames.get(r.slot)).join(', ')}) = ${call};`);
           break;
@@ -850,9 +870,10 @@ class CppEmitter {
     return `${this.functionNames.get(fn.id)}(${args.map((a, i) => this.coerce(a, fn.params[i]?.type)).join(', ')})`;
   }
 
-  private call(callee: IrCallee, args: IrExpr[]): string {
+  // `extra` arguments follow the inputs (out parameters).
+  private call(callee: IrCallee, args: IrExpr[], extra: string[] = []): string {
     const signature = calleeSignature(callee, this.program);
-    const list = args.map((a, i) => (signature?.params[i]?.type?.container ? this.expr(a) : this.coerce(a, signature?.params[i]?.type))).join(', ');
+    const list = [...args.map((a, i) => (signature?.params[i]?.type?.container ? this.expr(a) : this.coerce(a, signature?.params[i]?.type))), ...extra].join(', ');
     if (callee.kind === 'helper') return `${this.helperNames.get(callee.id)}(${list})`;
     const imported = this.program.imports.find((i) => i.id === callee.id)!;
     const qualified = (i: { name: string; module?: string }) => `${i.module ? `${i.module}::` : ''}${i.name}`;

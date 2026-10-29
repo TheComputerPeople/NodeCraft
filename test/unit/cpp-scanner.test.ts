@@ -57,7 +57,7 @@ describe('C++ scanner', () => {
 
   test('marked free functions, in their namespaces, with parameters, defaults and docs', () => {
     const fns = Object.fromEntries(scan.functions.map((f) => [`${f.container ? `${f.container}::` : ''}${f.name}`, f]));
-    assert.deepEqual(Object.keys(fns).sort(), ['game::combat::damage', 'game::combat::isCritical', 'game::scores', 'greeting']);
+    assert.deepEqual(Object.keys(fns).sort(), ['bump', 'game::combat::damage', 'game::combat::isCritical', 'game::scores', 'greeting']);
     assert.deepEqual(fns['game::combat::damage'].params, [{ name: 'strength', type: { id: 'float' } }, { name: 'level', type: { id: 'int' }, defaultValue: 1 }]);
     assert.deepEqual(fns['game::combat::damage'].returns, { id: 'float' });
     assert.equal(fns['game::combat::damage'].doc.description, 'How much damage a hit does.');
@@ -69,7 +69,6 @@ describe('C++ scanner', () => {
   test('functions that can\'t be nodes are reported with the reason; class members aren\'t free functions', () => {
     const skipped = Object.fromEntries(scan.skipped.map((s) => [s.name, s.reason]));
     assert.match(skipped.log, /pointer parameters/);
-    assert.match(skipped.bump, /non-const reference/);
     assert.match(skipped.twice, /templates/);
     assert.match(skipped.hidden, /static functions/);
     assert.equal(skipped.level, undefined);
@@ -136,5 +135,45 @@ describe('C++ classes', () => {
       ['game::Counter:new', 'Construct Counter'], ['game::Counter:add', 'Add'], ['game::Counter:get:count', 'Get Count'],
       ['game::Counter:set:count', 'Set Count'], ['game::Counter:get:label', 'Get Label']
     ]);
+  });
+});
+
+// Several outputs (docs/node-authoring.md, gap 3): non-const reference parameters are out
+// parameters, after the value returned; a std::tuple or std::pair is named by @outputs.
+describe('C++ several outputs', () => {
+  const scan = scanCpp([
+    '/// @blueprint',
+    'void bump(int& counter);',
+    '/// @blueprint',
+    'bool tryParse(const std::string& text, double& value);',
+    '/// @blueprint',
+    '/// @outputs low high',
+    'std::pair<int, double> range(int n);',
+    '/// @blueprint',
+    'std::tuple<int, int> unnamed();',
+    ''
+  ].join('\n'));
+  const fns = Object.fromEntries(scan.functions.map((f) => [f.name, f]));
+
+  test('out parameters follow the value returned, with their types as written', () => {
+    assert.deepEqual(fns.bump.params, []);
+    assert.deepEqual(fns.bump.outputs, [{ name: 'counter', type: { id: 'int' } }]);
+    assert.deepEqual(fns.bump.results, { kind: 'out', names: ['counter'], types: ['int'] });
+    assert.deepEqual(fns.tryParse.params, [{ name: 'text', type: { id: 'string' } }]);
+    assert.deepEqual(fns.tryParse.outputs, [{ name: 'returnValue', type: { id: 'bool' } }, { name: 'value', type: { id: 'float' } }]);
+    assert.deepEqual(fns.tryParse.results, { kind: 'out', names: ['value'], types: ['double'], returnValue: true });
+  });
+
+  test('a tuple or pair named by @outputs; without names it stays one native value', () => {
+    assert.deepEqual(fns.range.outputs, [{ name: 'low', type: { id: 'int' } }, { name: 'high', type: { id: 'float' } }]);
+    assert.deepEqual(fns.range.results, { kind: 'tuple', names: ['low', 'high'] });
+    assert.equal(fns.unnamed.outputs, undefined);
+    assert.equal(fns.unnamed.returns?.id, 'native:std::tuple<int, int>');
+  });
+
+  test('a node with several outputs runs where execution reaches it, even when marked pure', () => {
+    const def = exposeFunctions(scanCpp('/// @blueprint pure\nvoid split(double v, int& whole, double& part);\n'), { language: 'cpp', path: 'm.h', exposeAll: false }).definitions[0];
+    assert.deepEqual(def.outputs.map((p) => p.id), ['execOut', 'whole', 'part']);
+    assert.deepEqual((def.implementation as { results?: unknown }).results, { kind: 'out', names: ['whole', 'part'], types: ['int', 'double'] });
   });
 });

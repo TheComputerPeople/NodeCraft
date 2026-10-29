@@ -15,6 +15,7 @@ import { NodeRegistry } from '../../src/core/registry';
 import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
+import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-ruby-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -132,5 +133,44 @@ describe('Ruby code classes', () => {
       throw error;
     }
     assert.deepEqual(run.stdout.trim().split(/\r?\n/), CODE_CLASS_OUTPUT, run.stderr);
+  });
+});
+
+// Several outputs (docs/node-authoring.md, gap 3): a fixed array, named by @outputs.
+describe('Ruby several outputs', () => {
+  test('a graph reads each element of a returned array', async (t) => {
+    const dir = path.join(workDir, 'outputs');
+    fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'game'), { recursive: true });
+    const arithmetic = [
+      'module Arithmetic',
+      '  # @blueprint',
+      '  # @param [Integer] a',
+      '  # @param [Integer] b',
+      '  # @return [Array(Integer, Integer)]',
+      '  # @outputs quotient remainder',
+      '  def self.divide(a, b)',
+      '    [a / b, a % b]',
+      '  end',
+      'end',
+      ''
+    ].join('\n');
+    fs.writeFileSync(path.join(dir, 'lib', 'arithmetic.rb'), arithmetic);
+    const definitions = exposeFunctions(scanRuby(arithmetic), { language: 'ruby', path: 'lib/arithmetic.rb', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(severalOutputsGraph(definitions, 'ruby'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Dividing.vgraph', outputDir: 'game' } });
+    assert.deepEqual(result.diagnostics, []);
+    const file = path.join(dir, 'game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    for (const companion of result.output!.companionFiles ?? []) fs.writeFileSync(path.join(dir, 'game', companion.fileName), companion.text);
+    let run;
+    try {
+      run = await runGeneratedCode(rubyPack.generator!.runner!, file, result.output!.className, { cwd: dir, timeoutMs: 60000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.deepEqual(run.stdout.trim().split(/\r?\n/), SEVERAL_OUTPUTS_OUTPUT, run.stderr);
   });
 });

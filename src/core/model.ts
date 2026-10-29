@@ -101,6 +101,24 @@ export interface FunctionImplementation {
   // other code imports, and generated code constructs it, or calls or reads or writes the member on
   // the Target pin's object.
   member?: CodeMember;
+  // A function of the project's code with several outputs (docs/node-authoring.md, gap 3): how the
+  // code gives them.
+  results?: CodeResults;
+}
+
+// How a function in the project's code gives several outputs.
+export interface CodeResults {
+  // fields: members of the value it returns (an object, a record); tuple: the positions of the tuple,
+  // array or list of values it returns; out: its out parameters, after the inputs (and the value it
+  // returns, when `returnValue`, as the first output).
+  kind: 'fields' | 'tuple' | 'out';
+  // Each output's name in the code, in pin order (for out, the out parameters').
+  names: string[];
+  // Each out parameter's type as the code spells it, for languages that declare its variable (C++).
+  types?: string[];
+  returnValue?: boolean;
+  // Go: a last `error` result, which isn't an output: when it isn't nil, the run stops with it.
+  error?: boolean;
 }
 
 export interface CodeMember {

@@ -412,6 +412,8 @@ export const csharpPack: LanguagePack = {
 };
 
 class CSharpEmitter {
+  // Numbers the temporary variables of out parameters and records.
+  private temps = 0;
   // The class's tests and their methods (claimed in emit).
   private tests: { name: string; method: string }[] = [];
   private readonly out = new CodeWriter('    ');
@@ -749,6 +751,19 @@ class CSharpEmitter {
       }
       case 'call': {
         const call = this.call(s.callee, s.args);
+        const imported = s.results ? this.program.imports.find((i) => i.id === s.callee.id) : undefined;
+        if (s.results && imported?.results?.kind === 'out') {
+          // A project function's out parameters (docs/node-authoring.md, gap 3): into new variables,
+          // then each into its output's slot; the returned value, if any, is the first output.
+          const code = imported.results;
+          const n = ++this.temps;
+          const temps = code.names.map((_, i) => `vgOut${n}_${i}`);
+          const withOuts = this.call(s.callee, s.args, temps.map((t) => `out var ${t}`));
+          const values = [...(code.returnValue ? [`vgReturn${n}`] : []), ...temps];
+          out.line(code.returnValue ? `var vgReturn${n} = ${withOuts};` : `${withOuts};`);
+          for (const r of s.results) out.line(`${this.slotNames.get(r.slot)} = ${values[imported.outputs!.findIndex((o) => o.id === r.output)]};`);
+          break;
+        }
         if (s.results) {
           // A library function with several outputs returns a named tuple, deconstructed into the slots.
           out.line(`(${s.results.map((r) => this.slotNames.get(r.slot)).join(', ')}) = ${call};`);
@@ -1006,9 +1021,10 @@ class CSharpEmitter {
     return `${this.functionNames.get(fn.id)}(${args.map((a, i) => this.coerce(a, fn.params[i]?.type)).join(', ')})`;
   }
 
-  private call(callee: IrCallee, args: IrExpr[]): string {
+  // `extra` arguments follow the inputs (out parameters).
+  private call(callee: IrCallee, args: IrExpr[], extra: string[] = []): string {
     const signature = calleeSignature(callee, this.program);
-    const list = args.map((a, i) => this.coerce(a, signature?.params[i]?.type)).join(', ');
+    const list = [...args.map((a, i) => this.coerce(a, signature?.params[i]?.type)), ...extra].join(', ');
     if (callee.kind === 'helper') return `${this.helperNames.get(callee.id)}(${list})`;
     const imported = this.program.imports.find((i) => i.id === callee.id)!;
     const qualified = `global::${imported.module ? `${imported.module}.` : ''}${imported.name}`;

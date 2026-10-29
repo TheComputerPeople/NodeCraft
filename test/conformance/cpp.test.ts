@@ -18,6 +18,7 @@ import { withBlock } from '../../src/core/output-plan';
 import { parseDocument } from '../../src/core/serializer';
 import { doc, node, repoRoot, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
+import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-cpp-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -185,4 +186,60 @@ describe('C++ code classes', () => {
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), CODE_CLASS_OUTPUT);
   });
+});
+
+// Several outputs (docs/node-authoring.md, gap 3): non-const reference parameters, or a std::tuple
+// named by @outputs.
+describe('C++ several outputs', () => {
+  const HEADERS: Record<string, string> = {
+    'out parameters': [
+      '#pragma once',
+      '',
+      'namespace math {',
+      '/// @blueprint',
+      'inline void divide(int a, int b, int& quotient, int& remainder) {',
+      '    quotient = a / b;',
+      '    remainder = a % b;',
+      '}',
+      '}',
+      ''
+    ].join('\n'),
+    'a tuple': [
+      '#pragma once',
+      '#include <tuple>',
+      '',
+      'namespace math {',
+      '/// @blueprint',
+      '/// @outputs quotient remainder',
+      'inline std::tuple<int, int> divide(int a, int b) { return { a / b, a % b }; }',
+      '}',
+      ''
+    ].join('\n')
+  };
+  for (const [label, header] of Object.entries(HEADERS)) {
+    test(`a graph reads each output (${label})`, async (t) => {
+      const dir = path.join(workDir, `outputs-${label.replace(/ /g, '-')}`);
+      fs.mkdirSync(path.join(dir, 'native'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'native/divide.h'), header);
+      const registry = new NodeRegistry();
+      const definitions = exposeFunctions(scanCpp(header), { language: 'cpp', path: 'native/divide.h', exposeAll: false }).definitions;
+      registry.registerMany(definitions);
+      const result = compileDocument(severalOutputsGraph(definitions, 'cpp'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Dividing.vgraph', outputDir: '' } });
+      assert.deepEqual(result.diagnostics, []);
+      const output = result.output!;
+      if (label === 'out parameters') assert.match(output.text, /int vg_out1_0\{\};\n\s*int vg_out1_1\{\};\n\s*math::divide\(17, 5, vg_out1_0, vg_out1_1\);/);
+      const file = path.join(dir, output.fileName);
+      fs.writeFileSync(file, output.text);
+      for (const companion of output.companionFiles ?? []) fs.writeFileSync(path.join(dir, companion.fileName), companion.text);
+      let outcome;
+      try {
+        outcome = await runGeneratedCode(builtinLanguagePacks().get('cpp')!.generator!.runner!, file, output.className, { cwd: dir, timeoutMs: 120000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.equal(outcome.stderr, '');
+      assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), SEVERAL_OUTPUTS_OUTPUT);
+    });
+  }
 });

@@ -2,7 +2,7 @@
 // docstrings (docs/code-as-nodes.md, "How declarations are read"). It works on logical lines, so it
 // needs no Python interpreter.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, ScannedProperty, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, ScannedProperty, isMarked, parseDocText, tupleOutputs } from './symbols';
 
 interface LogicalLine {
   // Columns of leading whitespace (a tab counts as one).
@@ -120,6 +120,16 @@ export function scanPython(source: string): ModuleScan {
     if ('reason' in def.result) result.skipped.push({ name: def.name, line: def.line, reason: def.result.reason, marked: isMarked(def.doc) });
     else result.functions.push(def.result);
   }
+  // A function returning a NamedTuple of the module gives its fields as outputs.
+  const namedTuples = new Map((result.classes ?? []).filter((c) => c.base?.id === 'native:NamedTuple').map((c) => [c.type.id, c.properties]));
+  const withFields = (fn: ScannedFunction): ScannedFunction => {
+    const fields = fn.returns ? namedTuples.get(fn.returns.id) : undefined;
+    if (!fields || fields.length < 2) return fn;
+    const outputs = fields.map((f) => ({ name: f.name, ...(f.type ? { type: f.type } : {}) }));
+    return { ...fn, returns: undefined, outputs, results: { kind: 'fields', names: outputs.map((o) => o.name) } };
+  };
+  result.functions = result.functions.map(withFields);
+  for (const cls of result.classes ?? []) cls.methods = cls.methods.map(withFields);
   return result;
 }
 
@@ -149,6 +159,10 @@ function scanDef(lines: LogicalLine[], i: number, method: boolean): { name: stri
   if ('reason' in params) return skip(params.reason);
   if ('reason' in returns) return skip(returns.reason);
   if (yields(statements)) return skip('generator functions can\'t be nodes');
+  // Several outputs (docs/node-authoring.md, gap 3): a tuple, named by @outputs.
+  const tuple = parsed.returns !== undefined ? /^(?:tuple|Tuple)\[(.*)\]$/.exec(normalize(parsed.returns)) : null;
+  const outputs = tuple ? tupleOutputs(doc, splitTop(tuple[1], ',').map((t) => mapPythonType(t))) : undefined;
+  if (outputs) return { name, line, doc, result: { name, line, params, returns: undefined, doc, outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name) } } };
   return { name, line, doc, result: { name, line, params, returns: returns.type, doc } };
 }
 

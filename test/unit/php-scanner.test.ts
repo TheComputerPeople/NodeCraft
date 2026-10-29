@@ -55,7 +55,7 @@ describe('PHP scanner', () => {
 
   test("says why marked functions can't be nodes", () => {
     assert.deepEqual(scanPhp(SOURCE).skipped.filter((s) => s.marked).map((s) => [s.name, s.reason]), [
-      ['many', 'It takes any number of arguments, or an argument by reference.']
+      ['many', 'It takes any number of arguments.']
     ]);
   });
 
@@ -106,5 +106,44 @@ describe('PHP classes', () => {
     assert.deepEqual(cls.methods.map((m) => m.name), ['add']);
     assert.deepEqual(cls.properties.map((p) => [p.name, p.readonly]), [['count', false], ['label', true]]);
     assert.deepEqual(scan.skipped.filter((s) => s.marked).map((s) => s.name), ['secret']);
+  });
+});
+
+// Several outputs (docs/node-authoring.md, gap 3): parameters by reference, after the value
+// returned, and array shapes.
+describe('PHP several outputs', () => {
+  const scan = scanPhp([
+    '<?php',
+    '/** @blueprint */',
+    'function tryParse(string $text, ?float &$value): bool { $value = 1.0; return true; }',
+    '/** @blueprint */',
+    'function first(&$a, int $b): void {}',
+    '/**',
+    ' * @blueprint',
+    ' * @return array{low: int, high: float}',
+    ' */',
+    'function range(int $n): array { return []; }',
+    '/**',
+    ' * @blueprint',
+    ' * @return array{int, string}',
+    ' * @outputs count label',
+    ' */',
+    'function pair(): array { return [1, "a"]; }',
+    ''
+  ].join('\n'));
+  const fns = Object.fromEntries(scan.functions.map((f) => [f.name, f]));
+
+  test('parameters by reference follow the value returned', () => {
+    assert.deepEqual(fns.tryParse.params.map((p) => p.name), ['text']);
+    assert.deepEqual(fns.tryParse.outputs?.map((o) => o.name), ['returnValue', 'value']);
+    assert.deepEqual(fns.tryParse.results, { kind: 'out', names: ['value'], returnValue: true });
+    assert.deepEqual(scan.skipped.map((s) => [s.name, s.reason]), [['first', 'Its parameters by reference (out parameters) must come after the others.']]);
+  });
+
+  test('an array shape: its keys, or its positions named by @outputs', () => {
+    assert.deepEqual(fns.range.outputs, [{ name: 'low', type: { id: 'int' } }, { name: 'high', type: { id: 'float' } }]);
+    assert.deepEqual(fns.range.results, { kind: 'fields', names: ['low', 'high'] });
+    assert.deepEqual(fns.pair.outputs, [{ name: 'count', type: { id: 'int' } }, { name: 'label', type: { id: 'string' } }]);
+    assert.deepEqual(fns.pair.results, { kind: 'tuple', names: ['count', 'label'] });
   });
 });

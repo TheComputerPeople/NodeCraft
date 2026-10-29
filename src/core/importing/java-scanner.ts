@@ -3,7 +3,7 @@
 // (nested ones too), with their parameters, types and documentation. Like the other scanners it
 // parses only declarations and skips bodies by matching brackets.
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedParam, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText } from './symbols';
 
 type TokenKind = 'name' | 'number' | 'string' | 'char' | 'punct';
 
@@ -150,6 +150,8 @@ export function scanJava(source: string): ModuleScan {
     i = end;
   }
 
+  const records = new Map<string, { name: string; type?: TypeRef }[]>();
+
   // The members of a type's body (or the file), between `from` and `to`. A class's (`cls`) public
   // constructors, instance methods and fields are read too (docs/node-authoring.md, gap 2).
   const members = (from: number, to: number, container: string, cls?: ScannedClass): void => {
@@ -188,6 +190,11 @@ export function scanJava(source: string): ModuleScan {
         const inner = container ? `${container}.${name}` : name;
         // A public class (not generic, nor nested without static): its objects' members can be nodes.
         const header = text(generic ? skipAngles(j + 2) : j + 2, k);
+        // A record's components: a function returning it gives them as outputs (gap 3).
+        if (keyword === 'record') {
+          const components = /^\s*\(([^)]*)\)/.exec(header)?.[1].split(',').map((c) => /^\s*(.+?)\s+([A-Za-z_]\w*)\s*$/.exec(c)).filter((m): m is RegExpExecArray => !!m);
+          if (components?.length) records.set(name, components.map((m) => ({ name: m[2], ...(mapJavaType(m[1]) ? { type: mapJavaType(m[1]) } : {}) })));
+        }
         const baseText = /\bextends\s+([\w.]+)/.exec(header)?.[1];
         const base = baseText ? mapJavaType(baseText) : undefined;
         const nested = !!container && !modifiers.has('static');
@@ -327,6 +334,14 @@ export function scanJava(source: string): ModuleScan {
   };
 
   members(i, tokens.length, '');
+  // A function returning a record of the file gives its components as outputs (docs/node-authoring.md, gap 3).
+  const withFields = (fn: ScannedFunction): ScannedFunction => {
+    const fields = fn.returns ? records.get(fn.returns.id.replace(/^native:/, '')) : undefined;
+    if (!fields || fields.length < 2) return fn;
+    return { ...fn, returns: undefined, outputs: fields, results: { kind: 'fields', names: fields.map((f) => f.name) } };
+  };
+  result.functions = result.functions.map(withFields);
+  for (const cls of result.classes ?? []) cls.methods = cls.methods.map(withFields);
   return result;
 }
 

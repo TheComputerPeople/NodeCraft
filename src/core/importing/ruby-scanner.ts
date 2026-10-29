@@ -6,7 +6,7 @@
 // the line it closes. A class's public instance methods, `initialize` and attributes (attr_accessor,
 // attr_reader) are its members (docs/node-authoring.md, gap 2).
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText, tupleOutputs } from './symbols';
 
 interface Scope {
   name: string;
@@ -92,9 +92,14 @@ export function scanRuby(source: string): ModuleScan {
     });
     const returns = doc.tags.find((t) => t.name === 'return');
     const returnType = returns ? /^\[([^\]]+)\]/.exec(returns.text)?.[1] : undefined;
-    const scannedFunction: ScannedFunction = { name, line, params: scanned, returns: returnType ? mapRubyType(returnType) : returns ? undefined : null, doc, ...(container ? { container } : {}) };
+    // Several outputs (docs/node-authoring.md, gap 3): a fixed array (`@return [Array(Integer, Integer)]`)
+    // named by @outputs.
+    const tuple = returnType ? /^Array\((.*)\)$/.exec(returnType.trim()) : null;
+    const outputs = tuple ? tupleOutputs(doc, tuple[1].split(',').map((t) => mapRubyType(t) ?? undefined)) : undefined;
+    const several = outputs ? { outputs, results: { kind: 'tuple' as const, names: outputs.map((o) => o.name) } } : {};
+    const scannedFunction: ScannedFunction = { name, line, params: scanned, returns: outputs ? undefined : returnType ? mapRubyType(returnType) : returns ? undefined : null, doc, ...several, ...(container ? { container } : {}) };
     if (member && name === 'initialize') scope.cls!.init = { ...scannedFunction, returns: null };
-    else if (member) scope.cls!.methods.push({ name, line, params: scanned, returns: scannedFunction.returns, doc });
+    else if (member) scope.cls!.methods.push({ name, line, params: scanned, returns: scannedFunction.returns, doc, ...several });
     else functions.push(scannedFunction);
   });
   return { functions, skipped, ...(classes.length ? { classes } : {}) };

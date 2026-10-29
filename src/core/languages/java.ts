@@ -419,6 +419,8 @@ export const javaPack: LanguagePack = {
 };
 
 class JavaEmitter {
+  // Numbers the temporary variables of records.
+  private temps = 0;
   private tests: { name: string; method: string }[] = [];
   private readonly out = new CodeWriter('    ');
   private readonly names: NameScope;
@@ -743,6 +745,15 @@ class JavaEmitter {
       }
       case 'call': {
         const call = this.call(s.callee, s.args);
+        const code = s.results ? this.program.imports.find((i) => i.id === s.callee.id) : undefined;
+        if (s.results && code?.results?.kind === 'fields') {
+          // A project function's record (docs/node-authoring.md, gap 3): each component's accessor
+          // into its output's slot.
+          const record = `vgRecord${++this.temps}`;
+          out.line(`var ${record} = ${call};`);
+          for (const r of s.results) out.line(`${this.slotNames.get(r.slot)} = ${record}.${code.results.names[code.outputs!.findIndex((o) => o.id === r.output)]}();`);
+          break;
+        }
         if (s.results) {
           // A library function with several outputs returns them as an Object[].
           const imported = this.program.imports.find((i) => i.id === s.callee.id);

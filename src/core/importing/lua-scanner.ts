@@ -6,7 +6,7 @@
 // returning the class) its constructor, and its `---@field`s whose text says @blueprint its properties.
 // The module's table reaches it (`M.Counter = Counter`), or is it (`return Counter`).
 import { TypeRef } from '../types';
-import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText } from './symbols';
+import { DocComment, ModuleScan, ScannedClass, ScannedFunction, ScannedParam, SkippedFunction, isMarked, parseDocText, tupleOutputs } from './symbols';
 
 export function scanLua(source: string): ModuleScan {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
@@ -61,14 +61,15 @@ export function scanLua(source: string): ModuleScan {
       if (!cls.reachable) return memberSkip(`Its class ${cls.title} isn't in the table the module returns (${returned ?? 'none'}), so generated code can't reach it.`);
       if (params.includes('...')) return memberSkip('It takes any number of arguments (...).');
       const memberReturns = doc.tags.filter((t) => t.name === 'return');
-      if (memberReturns.length > 1) return memberSkip('It returns several values.');
+      const memberOutputs = severalReturns(doc);
+      if (memberReturns.length > 1 && !memberOutputs) return memberSkip(NAME_RETURNS);
       const types = new Map(doc.tags.filter((t) => t.name === 'param').map((t) => /^([A-Za-z_]\w*)\??\s+(\S+)/.exec(t.text)).filter((m): m is RegExpExecArray => !!m).map((m) => [m[1], m[2]]));
       const memberParams: ScannedParam[] = params.map((p) => {
         const type = types.has(p) ? mapLuaType(types.get(p)!) : null;
         return { name: p, ...(type ? { type } : {}) };
       });
       const returnText = memberReturns[0] ? /^(\S+)/.exec(memberReturns[0].text)?.[1] : undefined;
-      if (declaration[2] === ':') cls.methods.push({ name, line, params: memberParams, returns: returnText ? mapLuaType(returnText) : null, doc });
+      if (declaration[2] === ':') cls.methods.push({ name, line, params: memberParams, returns: memberOutputs ? undefined : returnText ? mapLuaType(returnText) : null, doc, ...memberOutputs });
       else if (name === 'new' || returnText === cls.title) cls.init = { name, line, params: memberParams, returns: null, doc };
       else memberSkip('Functions of a class without self have no object; make it a module function instead.');
       return;
@@ -77,14 +78,15 @@ export function scanLua(source: string): ModuleScan {
     if (declaration[2] === ':') return skip('It takes self (a method): only module functions can be nodes.');
     if (params.includes('...')) return skip('It takes any number of arguments (...).');
     const returns = doc.tags.filter((t) => t.name === 'return');
-    if (returns.length > 1) return skip('It returns several values.');
+    const outputs = severalReturns(doc);
+    if (returns.length > 1 && !outputs) return skip(NAME_RETURNS);
     const paramTypes = new Map(doc.tags.filter((t) => t.name === 'param').map((t) => /^([A-Za-z_]\w*)\??\s+(\S+)/.exec(t.text)).filter((m): m is RegExpExecArray => !!m).map((m) => [m[1], m[2]]));
     const scanned: ScannedParam[] = params.map((p) => {
       const type = paramTypes.has(p) ? mapLuaType(paramTypes.get(p)!) : null;
       return { name: p, ...(type ? { type } : {}) };
     });
     const returnType = returns[0] ? /^(\S+)/.exec(returns[0].text)?.[1] : undefined;
-    functions.push({ name, line, params: scanned, returns: returnType ? mapLuaType(returnType) : null, doc });
+    functions.push({ name, line, params: scanned, returns: outputs ? undefined : returnType ? mapLuaType(returnType) : null, doc, ...outputs });
   });
   const reachable = [...classes.values()].filter((c) => c.reachable).map(({ reachable: _, ...c }) => c);
   return { functions, skipped, ...(reachable.length ? { classes: reachable } : {}) };
@@ -92,6 +94,17 @@ export function scanLua(source: string): ModuleScan {
 
 // The `---` comment lines just above a declaration, as a doc comment. LuaLS's annotations
 // (`---@param`) are its tags.
+const NAME_RETURNS = 'It returns several values without names: name each (`---@return int sum`) or list them with @outputs.';
+
+// Several values returned (docs/node-authoring.md, gap 3): a `---@return type name` each, named
+// there or by @outputs.
+function severalReturns(doc: DocComment): Pick<ScannedFunction, 'outputs' | 'results'> | undefined {
+  const returns = doc.tags.filter((t) => t.name === 'return').map((t) => /^(\S+)(?:\s+([A-Za-z_]\w*))?/.exec(t.text));
+  if (returns.length < 2 || returns.some((r) => !r)) return undefined;
+  const outputs = tupleOutputs(doc, returns.map((r) => mapLuaType(r![1]) ?? undefined), returns.map((r) => r![2]));
+  return outputs && { outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name) } };
+}
+
 function docAbove(lines: string[], index: number): DocComment {
   const block: string[] = [];
   for (let i = index - 1; i >= 0 && /^\s*---/.test(lines[i]); i--) block.unshift(lines[i].replace(/^\s*---\s?/, ''));

@@ -15,6 +15,7 @@ import { javaProject } from '../../src/extension/placement';
 import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
+import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-java-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -171,5 +172,60 @@ describe('Java code classes', () => {
     }
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), CODE_CLASS_OUTPUT);
+  });
+});
+
+// Several outputs (docs/node-authoring.md, gap 3): a function returning a record of its file gives
+// the record's components.
+describe('Java several outputs', () => {
+  const DIVIDE = [
+    'package game.math;',
+    '',
+    'public final class Arithmetic {',
+    '    public record Division(long quotient, long remainder) {}',
+    '',
+    '    /** @blueprint */',
+    '    public static Division divide(long a, long b) {',
+    '        return new Division(a / b, a % b);',
+    '    }',
+    '}',
+    ''
+  ].join('\n');
+
+  test('a graph reads each component of a returned record', async (t) => {
+    const project = path.join(workDir, 'outputs');
+    const files: Record<string, string> = {
+      'pom.xml': '<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>outputs</artifactId><version>1</version></project>',
+      'src/main/java/game/math/Arithmetic.java': DIVIDE
+    };
+    for (const [name, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+      fs.writeFileSync(path.join(project, name), text);
+    }
+    const graphDir = path.join(project, 'src/main/java/game/graphs');
+    fs.mkdirSync(graphDir, { recursive: true });
+    const placement = javaProject(graphDir, project);
+    const definitions = exposeFunctions(scanJava(DIVIDE), { language: 'java', path: 'src/main/java/game/math/Arithmetic.java', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(severalOutputsGraph(definitions, 'java'), {
+      registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Dividing.vgraph', outputDir: 'src/main/java/game/graphs', namespace: placement.package }
+    });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    assert.match(output.text, /var vgRecord1 = .*divide\(17L?, 5L?\);\n\s*\w+ = vgRecord1\.quotient\(\);/);
+    const file = path.join(graphDir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('java')!.generator!.runner!, file, output.className, {
+        cwd: project, importRoots: placement.sourceRoots, sources: Object.keys(files).filter((f) => f.endsWith('.java')).map((f) => path.join(project, f)), timeoutMs: 300000
+      });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.stderr, '');
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), SEVERAL_OUTPUTS_OUTPUT);
   });
 });

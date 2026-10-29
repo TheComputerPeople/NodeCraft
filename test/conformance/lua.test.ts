@@ -15,6 +15,7 @@ import { NodeRegistry } from '../../src/core/registry';
 import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
+import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-lua-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -160,5 +161,47 @@ describe('Lua code classes', () => {
       throw error;
     }
     assert.deepEqual(run.stdout.trim().split(/\r?\n/), CODE_CLASS_OUTPUT, run.stderr);
+  });
+});
+
+// Several values returned (docs/node-authoring.md, gap 3): a `---@return type name` each.
+describe('Lua several outputs', () => {
+  test('a graph reads each value a function returns', async (t) => {
+    const root = path.join(workDir, 'outputs');
+    fs.mkdirSync(path.join(root, 'lib'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'game'), { recursive: true });
+    const arithmetic = [
+      'local M = {}',
+      '',
+      '---@blueprint',
+      '---@param a integer',
+      '---@param b integer',
+      '---@return integer quotient',
+      '---@return integer remainder',
+      'function M.divide(a, b)',
+      '  return a // b, a % b',
+      'end',
+      '',
+      'return M',
+      ''
+    ].join('\n');
+    fs.writeFileSync(path.join(root, 'lib', 'arithmetic.lua'), arithmetic);
+    const definitions = exposeFunctions(scanLua(arithmetic), { language: 'lua', path: 'lib/arithmetic.lua', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(severalOutputsGraph(definitions, 'lua'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Dividing.vgraph', outputDir: 'game' } });
+    assert.deepEqual(result.diagnostics, []);
+    assert.match(result.output!.text, /[\w.]+, [\w.]+ = arithmetic\.divide\(17, 5\)/);
+    const file = path.join(root, 'game', result.output!.fileName);
+    fs.writeFileSync(file, result.output!.text);
+    for (const owned of luaPlacement({ generatedFiles: [`game/${result.output!.fileName}`], readFile: () => undefined, exists: () => false }).ownedFiles ?? []) fs.writeFileSync(path.join(root, owned.path), owned.text);
+    let run;
+    try {
+      run = await runGeneratedCode(luaPack.generator!.runner!, file, result.output!.className, { cwd: root, timeoutMs: 60000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.deepEqual(run.stdout.trim().split(/\r?\n/), SEVERAL_OUTPUTS_OUTPUT, run.stderr);
   });
 });

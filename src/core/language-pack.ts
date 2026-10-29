@@ -229,6 +229,10 @@ export interface LanguageServerImport {
   // Objects are passed by pointer (Go's *T): a member's Target pin is the pointer type, as
   // constructor functions return it.
   objectsByPointer?: boolean;
+  // Functions return several results as a parenthesised list after the parameters (Go's
+  // `(sum int, err error)`): each is an output (docs/node-authoring.md, gap 3). A last result of
+  // this type isn't one; when it isn't nil, the run stops with it (Go's `error`).
+  severalResults?: { error?: string };
 }
 
 export interface LanguagePack {
