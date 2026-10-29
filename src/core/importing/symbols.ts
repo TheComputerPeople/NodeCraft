@@ -149,8 +149,11 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
   const pure = /^pure\b/i.test(tag(MARKER) ?? '') && !fn.outputs && !fn.latent;
   const category = tag('category');
   const metadata = tagMetadata(fn.doc, fn.deprecated);
-  // Unreal's ExpandBoolAsExecs: a bool result becomes True and False exec outputs.
-  const execs = tag('execs') !== undefined && fn.returns?.id === 'bool' && !fn.returns.container && !fn.outputs && !fn.latent;
+  // Unreal's ExpandBoolAsExecs: a bool result becomes True and False exec outputs. ExpandEnumAsExecs:
+  // a result of a type the code names may be a graph enum, which adoptUserTypes finds.
+  const wantsExecs = tag('execs') !== undefined && !!fn.returns && !fn.returns.container && !fn.outputs && !fn.latent;
+  const execs = wantsExecs && fn.returns!.id === 'bool';
+  const enumExecs = wantsExecs && fn.returns!.id.startsWith('native:');
   const exec = (direction: 'input' | 'output'): PinDefinition[] => pure && !execs
     ? []
     : direction === 'output' && execs ? [{ id: 'true', name: 'True', kind: 'exec', direction }, { id: 'false', name: 'False', kind: 'exec', direction }]
@@ -176,7 +179,7 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
     outputs: [...exec('output'), ...outputs],
     implementation: {
       kind: 'function', language: options.language, path: options.path, name: fn.name, ...(moduleOf(fn, options) ? { module: moduleOf(fn, options) } : {}),
-      ...(fn.results ? { results: fn.results } : {}), ...(execs ? { execs: 'bool' as const } : {})
+      ...(fn.results ? { results: fn.results } : {}), ...(execs ? { execs: 'bool' as const } : enumExecs ? { execs: 'enum' as const } : {})
     },
     ...metadata.node,
     ...(fn.latent ? { latent: true } : {})

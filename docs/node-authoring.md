@@ -238,7 +238,11 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - PHP 8.4: `#[\Deprecated]`, with its message (added after the phase, from its deferrals).
 - **Fixed on the way.** In C#, documentation written before an attribute was lost (it was attached to the `[`). It now belongs to the member, as in C++ and Rust.
 - **`@execs`.** A function returning a bool gets True and False exec outputs (`FunctionImplementation.execs`). The call lowers to the call into a hidden bool slot, then an `if` on it, so every generator handles it with what it already writes.
-  - ExpandEnumAsExecs waits: a code function returning a graph enum comes through as a native type, so its values aren't known.
+  - ExpandEnumAsExecs came after the phase, from its deferrals.
+    - Code's pins typed by a type a graph file generates (`native:Mood`) take that struct or enum, when it's generated for the code's language (`adoptUserTypes` in src/core/user-types.ts).
+    - The registry works this out from the definitions as registered, whenever any change, so the order sources load in doesn't matter.
+    - `@execs` on such an enum result gives an exec output per value (`execs: { enum }`). The call stores its result in a hidden slot of the enum type, then an `if` chain compares it with each value, as Switch on an enum lowers.
+    - A conformance test runs it in TypeScript and Python.
 - **Tests.**
   - Unit: each tag, `@execs`, its lowering, and every language's marker.
   - Conformance: `@execs` runs in TypeScript, Python and C#.

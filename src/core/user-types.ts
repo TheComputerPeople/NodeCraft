@@ -321,6 +321,51 @@ export function listUserTypes(definitions: Iterable<NodeDefinition>, language?: 
   return [...types.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
+// Code functions using the workspace's structs and enums (docs/node-authoring.md, gap 6): a pin the
+// scanner typed `native:<Name>` (the code names the type the graph file generates) takes the
+// struct or enum of that name its language can use, so it connects to graph pins of that type. A
+// function marked @execs returning such an enum gets an exec output per value (ExpandEnumAsExecs);
+// one whose result isn't an enum stays a plain call. Returns the definitions that changed.
+export function adoptUserTypes(definitions: NodeDefinition[]): NodeDefinition[] {
+  const byLanguage = new Map<string, Map<string, UserType>>();
+  const typesFor = (language: string): Map<string, UserType> => {
+    let types = byLanguage.get(language);
+    if (!types) {
+      types = new Map(listUserTypes(definitions, language).filter((t) => t.kind === 'struct' || t.kind === 'enum').map((t) => [t.name, t]));
+      byLanguage.set(language, types);
+    }
+    return types;
+  };
+  const changed: NodeDefinition[] = [];
+  for (const def of definitions) {
+    const implementation = def.implementation;
+    if (implementation?.kind !== 'function' || implementation.source) continue;
+    const types = typesFor(implementation.language);
+    if (!types.size && implementation.execs !== 'enum') continue;
+    const adopt = (pin: PinDefinition): PinDefinition => {
+      if (pin.id === 'target' || !pin.type || pin.type.container || !pin.type.id.startsWith('native:')) return pin;
+      const type = types.get(pin.type.id.slice('native:'.length).split(/::|\.|\\/).pop()!);
+      return type ? { ...pin, type: { ...pin.type, id: type.id } } : pin;
+    };
+    const inputs = def.inputs.map(adopt);
+    let outputs = def.outputs.map(adopt);
+    let next = implementation;
+    if (implementation.execs === 'enum') {
+      const result = outputs.find((p) => p.kind === 'data');
+      const type = result?.type && [...types.values()].find((t) => t.id === result.type!.id);
+      if (type?.kind === 'enum') {
+        outputs = type.enumerators.map((e) => ({ id: e.id, name: e.name, kind: 'exec', direction: 'output' }));
+        next = { ...implementation, execs: { enum: type.id } };
+      } else {
+        const { execs: _, ...rest } = implementation;
+        next = rest;
+      }
+    }
+    if (JSON.stringify([inputs, outputs, next]) !== JSON.stringify([def.inputs, def.outputs, implementation])) changed.push({ ...def, inputs, outputs, implementation: next });
+  }
+  return changed;
+}
+
 // ---- Split struct pins (Unreal's Split Struct Pin and Recombine Struct Pin) ---------------------
 //
 // A struct pin listed in a node's `properties.split` shows a pin per field instead, with the id

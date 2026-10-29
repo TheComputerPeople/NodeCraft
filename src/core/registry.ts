@@ -1,5 +1,6 @@
 import { builtinNodeDefinitions } from './builtins';
 import { NodeDefinition, PinDefinition } from './model';
+import { adoptUserTypes } from './user-types';
 import { normalizeTypeRef } from './types';
 
 export interface Disposable {
@@ -7,9 +8,13 @@ export interface Disposable {
 }
 
 export class NodeRegistry {
+  // As registered.
   private readonly definitions = new Map<string, NodeDefinition>();
   // Former node types, to the definitions that took them over (NodeDefinition.aliases).
   private readonly aliases = new Map<string, NodeDefinition>();
+  // Code functions with the workspace's structs and enums they name (src/core/user-types.ts),
+  // worked out again from the definitions as registered whenever they change.
+  private readonly adopted = new Map<string, NodeDefinition>();
   // Definitions from the workspace, by source: node libraries, the project's functions.
   private readonly sources = new Map<string, NodeDefinition[]>();
   private readonly listeners = new Set<() => void>();
@@ -19,13 +24,13 @@ export class NodeRegistry {
   }
 
   register(definition: NodeDefinition): void {
-    const normalized = normalizeNodeDefinition(definition);
-    this.definitions.set(definition.type, normalized);
-    for (const alias of definition.aliases ?? []) this.aliases.set(alias, normalized);
+    this.add(definition);
+    this.adoptTypes();
   }
 
   registerMany(definitions: NodeDefinition[]): void {
-    definitions.forEach((d) => this.register(d));
+    definitions.forEach((d) => this.add(d));
+    this.adoptTypes();
   }
 
   // Replaces the definitions from one workspace source. Builtins are kept unless a source
@@ -34,9 +39,21 @@ export class NodeRegistry {
     this.sources.set(source, definitions);
     this.definitions.clear();
     this.aliases.clear();
-    this.registerMany(builtinNodeDefinitions());
-    for (const list of this.sources.values()) this.registerMany(list);
+    builtinNodeDefinitions().forEach((d) => this.add(d));
+    for (const list of this.sources.values()) list.forEach((d) => this.add(d));
+    this.adoptTypes();
     this.listeners.forEach((listener) => listener());
+  }
+
+  private add(definition: NodeDefinition): void {
+    const normalized = normalizeNodeDefinition(definition);
+    this.definitions.set(definition.type, normalized);
+    for (const alias of definition.aliases ?? []) this.aliases.set(alias, normalized);
+  }
+
+  private adoptTypes(): void {
+    this.adopted.clear();
+    for (const def of adoptUserTypes([...this.definitions.values()])) this.adopted.set(def.type, def);
   }
 
   onDidChange(listener: () => void): Disposable {
@@ -45,11 +62,12 @@ export class NodeRegistry {
   }
 
   get(type: string): NodeDefinition | undefined {
-    return this.definitions.get(type) ?? this.aliases.get(type);
+    const def = this.definitions.get(type) ?? this.aliases.get(type);
+    return def && (this.adopted.get(def.type) ?? def);
   }
 
   all(): NodeDefinition[] {
-    return [...this.definitions.values()];
+    return [...this.definitions.values()].map((d) => this.adopted.get(d.type) ?? d);
   }
 }
 

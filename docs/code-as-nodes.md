@@ -38,7 +38,7 @@ def apply_damage(health: float, amount: float = 10) -> float:
 | `@deprecated message` | `meta = (DeprecatedFunction, DeprecationMessage = "…")` | Left out of the action menu; nodes already placed show a warning with the message and compile with it. Each language's own marker counts too (see below). |
 | `@advanced a b` | `meta = (AdvancedDisplay = "a, b")` | Those inputs fold under the node's arrow until it's opened, or they're wired or set. |
 | `@pinName a Text` | `UPARAM(DisplayName = "Text")` | The pin's name on the node; `returnValue` (or an output's name) for outputs. |
-| `@execs` | `meta = (ExpandBoolAsExecs = "ReturnValue")` | A function returning a bool gets True and False exec outputs in place of Return Value, as if a Branch followed it. |
+| `@execs` | `meta = (ExpandBoolAsExecs = "ReturnValue")`, `ExpandEnumAsExecs` | A function returning a bool gets True and False exec outputs in place of Return Value, as if a Branch followed it. One returning a graph enum gets an exec output per value, as if a Switch followed it. |
 
 The rest of the comment becomes the node's description (its tooltip). `@param name text` describes a pin.
 
@@ -55,7 +55,7 @@ The rest of the comment becomes the node's description (its tooltip). `@param na
 | Python | PEP 702's `@deprecated("…")` (`warnings` or `typing_extensions`) | its message |
 | Go | a `Deprecated:` paragraph in the doc comment, before `@blueprint` | the paragraph |
 
-`@execs` covers bool results; Unreal's ExpandEnumAsExecs waits until code functions can return a graph enum by its own type (they come through as native types).
+**Graph types in code.** Code can use the structs and enums of the workspace's graph files through the types they generate (`Mood` from `Mood.vgraph`, imported from its generated file). A parameter or result of such a type gets the graph's struct or enum pin, so it connects to the graph's own nodes. The type has to be generated for the code's language. This is how `@execs` gets an enum's values.
 
 The setting `blueprintVisualScripting.exposeAllFunctions` exposes every public function as a callable node, for small projects where marking each one is a chore. Public is each language's rule: exported (TypeScript, JavaScript), not `_`-prefixed (Python, GDScript, Ruby), `public static` (C#, Java, PHP), `pub` (Rust), capitalized (Go), declared in a header (C++), in the module's table (Lua). Private functions aren't reported. Class members still need their marker. Markers still choose `pure`, category and title.
 

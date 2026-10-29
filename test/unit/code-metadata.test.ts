@@ -18,6 +18,7 @@ import { scanTypeScript } from '../../src/core/importing/typescript-scanner';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { GraphDocument, NodeDefinition } from '../../src/core/model';
 import { NodeRegistry } from '../../src/core/registry';
+import { declaredType, userTypeDefinitions } from '../../src/core/user-types';
 
 const expose = (scan: ModuleScan, language = 'typescript', path = 'lib/a.ts'): NodeDefinition[] => exposeFunctions(scan, { language, path, exposeAll: false }).definitions;
 const byName = (defs: NodeDefinition[], name: string): NodeDefinition => defs.find((d) => d.displayName === name)!;
@@ -193,5 +194,49 @@ describe("each language's deprecation markers", () => {
       ''
     ].join('\n')), 'php', 'a.php');
     assert.deepEqual(deprecated(defs), { Dbl: { message: 'Use twice.' }, Triple: {}, 'Get Hp': { message: 'Use health.' }, 'Set Hp': { message: 'Use health.' }, Heal: {} });
+  });
+});
+
+// The workspace's structs and enums in code (src/core/user-types.ts, adoptUserTypes): a pin typed
+// by the type a graph file generates takes that type; @execs on an enum result gives its values.
+describe('graph structs and enums in code', () => {
+  const typeNodes = (doc: GraphDocument) => userTypeDefinitions(declaredType(doc, { document: `lib/${doc.name}.vgraph`, generatedPath: `lib/${doc.name}.vgraph.ts` })!);
+  const mood: GraphDocument = { schemaVersion: 3, name: 'Mood', kind: 'enumeration', language: 'typescript', variables: [], graphs: [], enumerators: [{ id: 'happy', name: 'Happy' }, { id: 'sad', name: 'Sad' }] };
+  const point: GraphDocument = { schemaVersion: 3, name: 'Point', kind: 'structure', language: 'typescript', variables: [], graphs: [], fields: [{ id: 'x', name: 'X', type: { id: 'float' } }] };
+  const code = [
+    '/** @blueprint */',
+    'export function describe(mood: Mood, at: Point): string { return ""; }',
+    '/**',
+    ' * @blueprint',
+    ' * @execs',
+    ' */',
+    'export function feel(): Mood { return "Happy"; }',
+    '/**',
+    ' * @blueprint',
+    ' * @execs',
+    ' */',
+    'export function where(): Point { return { x: 0 }; }',
+    ''
+  ].join('\n');
+
+  test('pins take the graph types the code names; @execs on an enum result gives an exec output per value', () => {
+    const registry = new NodeRegistry();
+    registry.registerMany(expose(scanTypeScript(code)));
+    registry.registerMany([...typeNodes(mood), ...typeNodes(point)]);
+    const def = (name: string) => registry.all().find((d) => d.displayName === name)!;
+    assert.deepEqual(def('Describe').inputs.filter((p) => p.kind === 'data').map((p) => p.type?.id), ['enum:Mood', 'struct:Point']);
+    assert.deepEqual(def('Feel').outputs.map((p) => [p.id, p.name, p.kind]), [['happy', 'Happy', 'exec'], ['sad', 'Sad', 'exec']]);
+    assert.deepEqual((def('Feel').implementation as { execs?: unknown }).execs, { enum: 'enum:Mood' });
+    // Not an enum: @execs is dropped, and the result stays an output.
+    assert.deepEqual(def('Where').outputs.map((p) => p.id), ['execOut', 'returnValue']);
+    assert.equal((def('Where').implementation as { execs?: unknown }).execs, undefined);
+  });
+
+  test("a type another language's graph file declares isn't the code's", () => {
+    const registry = new NodeRegistry();
+    registry.registerMany(expose(scanTypeScript(code)));
+    registry.registerMany(typeNodes({ ...mood, language: 'python' }));
+    const describe = registry.all().find((d) => d.displayName === 'Describe')!;
+    assert.equal(describe.inputs.find((p) => p.id === 'mood')?.type?.id, 'native:Mood');
   });
 });

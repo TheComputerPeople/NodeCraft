@@ -123,9 +123,11 @@ export interface FunctionImplementation {
   // A function of the project's code with several outputs (docs/node-authoring.md, gap 3): how the
   // code gives them.
   results?: CodeResults;
-  // Unreal's ExpandBoolAsExecs (`@execs`, gap 6): the bool it returns picks its True or False exec
-  // output, which stand for its Return Value.
-  execs?: 'bool';
+  // Unreal's ExpandBoolAsExecs and ExpandEnumAsExecs (`@execs`, gap 6): the bool or graph enum it
+  // returns picks one of its exec outputs, which stand for its Return Value. 'enum' is asked for (a
+  // return type that may be a graph enum); { enum } is the enum it turned out to be
+  // (src/core/user-types.ts, adoptUserTypes).
+  execs?: 'bool' | 'enum' | { enum: string };
 }
 
 // How a function in the project's code gives several outputs.

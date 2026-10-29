@@ -9,6 +9,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { compileDocument } from '../../src/core/compiler';
+import { graphFileDefinitions } from '../../src/core/graph-files';
 import { exposeFunctions } from '../../src/core/importing/symbols';
 import { libraryDefinitions } from '../../src/core/libraries';
 import { declaredType, userTypeDefinitions } from '../../src/core/user-types';
@@ -944,6 +945,60 @@ describe('@execs from code', () => {
         throw error;
       }
       assert.deepEqual(outputLines(outcome.stdout), ['even', 'odd'], `stderr:\n${outcome.stderr}`);
+    });
+  }
+});
+
+// A graph enum returned by code (docs/node-authoring.md, gap 6): the code names the enum the graph
+// file generates, so its pin takes the graph's enum, and @execs gives an exec output per value
+// (Unreal's ExpandEnumAsExecs).
+describe('graph enums from code, and @execs on them', () => {
+  const MOOD: GraphDocument = { schemaVersion: 3, name: 'Mood', kind: 'enumeration', language: 'typescript', languages: ['python'], variables: [], graphs: [], enumerators: [{ id: 'happy', name: 'Happy' }, { id: 'sad', name: 'Sad' }] };
+  const CODE: Record<string, { path: string; module?: string; text: string }> = {
+    typescript: { path: 'lib/feel.ts', text: "import { Mood } from './Mood.vgraph.ts';\n\n/**\n * @blueprint\n * @execs\n */\nexport function feel(n: number): Mood {\n  return n > 0 ? Mood.Happy : Mood.Sad;\n}\n" },
+    python: { path: 'lib/feel.py', module: 'feel', text: 'from mood_vgraph import Mood\n\n\ndef feel(n: float) -> Mood:\n    """@blueprint\n    @execs"""\n    return Mood.HAPPY if n > 0 else Mood.SAD\n' }
+  };
+
+  for (const language of ['typescript', 'python']) {
+    test(`${language}: the code's enum is the graph's, and each value has its exec output`, async (t) => {
+      const code = CODE[language];
+      const r = registry();
+      r.registerMany(graphFileDefinitions(MOOD, { document: 'lib/Mood.vgraph', generatedPath: 'lib/Mood.vgraph.ts', others: { python: { generatedPath: 'lib/mood_vgraph.py', module: 'mood_vgraph' } } }, languages.get('typescript')!.generator, (l) => languages.get(l)?.generator)!);
+      const defs = exposeFunctions(languages.get(language)!.importer!.scan!(code.text), { language, path: code.path, module: code.module, exposeAll: false }).definitions;
+      r.registerMany(defs);
+      const feel = r.get(defs[0].type)!;
+      assert.deepEqual(feel.outputs.map((p) => [p.id, p.kind]), [['happy', 'exec'], ['sad', 'exec']]);
+      const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+      const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}`, fromNode, fromPin, toNode, toPin });
+      // Start → Feel(-1) → Sad: Print "sad" → Feel(2) → Happy: Print "happy".
+      const document: GraphDocument = {
+        schemaVersion: 3, name: 'Feelings', kind: 'class', language, variables: [],
+        graphs: [{
+          id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+          nodes: [n('s', 'core:event.start'), n('a', feel.type, { 'pin:n': -1 }), n('p1', 'core:console.print', { 'pin:value': 'sad' }), n('x1', 'core:console.print', { 'pin:value': 'wrong' }), n('b', feel.type, { 'pin:n': 2 }), n('p2', 'core:console.print', { 'pin:value': 'happy' })],
+          connections: [w('s', 'execOut', 'a', 'execIn'), w('a', 'sad', 'p1', 'execIn'), w('a', 'happy', 'x1', 'execIn'), w('p1', 'execOut', 'b', 'execIn'), w('b', 'happy', 'p2', 'execIn')]
+        }]
+      };
+      const dir = path.join(workDir, `enum-execs-${language}`);
+      fs.mkdirSync(path.join(dir, 'lib'), { recursive: true });
+      fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
+      fs.writeFileSync(path.join(dir, code.path), code.text);
+      for (const l of ['typescript', 'python']) {
+        const out = compileDocument({ ...MOOD, language: l }, { registry: r, languages, generate: { sourceFileName: 'Mood.vgraph', outputDir: 'lib' } }).output!;
+        fs.writeFileSync(path.join(dir, 'lib', out.fileName), out.text);
+      }
+      const result = compileDocument(document, { registry: r, languages, generate: { sourceFileName: 'feelings.vgraph', outputDir: 'graphs' } });
+      assert.deepEqual(result.diagnostics, []);
+      const file = path.join(dir, 'graphs', result.output!.fileName);
+      fs.writeFileSync(file, result.output!.text);
+      let outcome;
+      try {
+        outcome = await runGeneratedCode(languages.get(language)!.generator!.runner!, file, result.output!.className, { cwd: path.join(dir, 'graphs'), importRoots: [dir, path.join(dir, 'lib')], timeoutMs: 120000 });
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      assert.deepEqual(outputLines(outcome.stdout), ['sad', 'happy'], `stderr:\n${outcome.stderr}\n${result.output!.text}`);
     });
   }
 });

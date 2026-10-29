@@ -365,7 +365,6 @@ Design and steps: [node-authoring.md](node-authoring.md), with what each step bu
 
 - **Deferred:**
   - Async functions in Rust, Go, C++, Lua, Ruby, PHP and GDScript: no standard future, or one that needs an executor or a framework.
-  - ExpandEnumAsExecs: code functions return graph enums as native types.
   - Code classes as parents of graph classes.
   - Generic and wildcard code functions.
   - A package registry: packages come from folders and extensions.
@@ -456,7 +455,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
 | Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes deferred) | — |
 | Interop | Out parameters and several return values from code; latent (async) functions | ✅ (several outputs in every language but GDScript, which has none; async functions in TypeScript, JavaScript, Python, C# and Java, the languages with a standard future) | — |
-| Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ✅ (graph functions and macros in Details; code through tags and each language's deprecation marker; ExpandEnumAsExecs waits for code functions returning graph enums) | — |
+| Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ✅ (graph functions and macros in Details; code through tags and each language's deprecation marker) | — |
 | Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | ✅ (also F12 and Shift+F12; node files open at their type) | — |
 | Library | Standard math, string, utility and file nodes, with containers' functions; more of Unreal's (Lerp, Map Range, trigonometry, string and set functions, array functions as new arrays) and everyday utilities (text, maps, time, encoding, UUIDs) | ✅ (array functions return new arrays where Unreal's change theirs) | — |
 | Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace and extensions, not a registry) | 6 |

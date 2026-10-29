@@ -934,9 +934,20 @@ class Lowerer {
       return [{ kind: 'await', callee, args, ...(output ? { resultSlot: this.slot(info, node, def, output.id) } : {}), then, source }];
     }
     // ExpandBoolAsExecs: the result picks True or False.
-    if (def.implementation?.kind === 'function' && def.implementation.execs) {
+    const execs = def.implementation?.kind === 'function' ? def.implementation.execs : undefined;
+    if (execs === 'bool') {
       const result = this.stateSlot(info, node, def, 'result', 'bool');
       return [{ kind: 'call', callee, args, resultSlot: result, source }, { kind: 'if', condition: { kind: 'output', slot: result }, then: next('true'), else: next('false'), source }];
+    }
+    // ExpandEnumAsExecs: the result picks the output of its value, as Switch on an enum does.
+    if (typeof execs === 'object') {
+      const result = this.stateSlot(info, node, def, 'result', execs.enum);
+      const read: IrExpr = { kind: 'output', slot: result };
+      const chain = def.outputs.filter((p) => p.kind === 'exec').reduceRight<IrStatement[]>((otherwise, pin) => {
+        const then = next(pin.id);
+        return then.length ? [{ kind: 'if', condition: { kind: 'binary', op: '==', left: read, right: { kind: 'enumValue', type: execs.enum, value: pin.id } }, then, else: otherwise, source }] : otherwise;
+      }, []);
+      return [{ kind: 'call', callee, args, resultSlot: result, source }, ...chain];
     }
     // An imported function with several outputs (a graph library's) fills a slot per output.
     if (callee.kind === 'import' && this.imports.get(callee.id)?.outputs) {
@@ -1302,8 +1313,8 @@ class Lowerer {
       ...(implementation.member?.kind === 'construct' ? { bases: this.codeBases(implementation.member.type) } : {}),
       ...(implementation.results ? { results: implementation.results } : {}),
       params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type })),
-      // A function with @execs returns a bool, which its exec outputs stand for.
-      returns: implementation.execs ? { id: 'bool' } : def.outputs.find((p) => p.kind === 'data')?.type
+      // A function with @execs returns a bool or an enum, which its exec outputs stand for.
+      returns: implementation.execs === 'bool' ? { id: 'bool' } : typeof implementation.execs === 'object' ? { id: implementation.execs.enum } : def.outputs.find((p) => p.kind === 'data')?.type
     };
     const outputs = def.outputs.filter((p) => p.kind === 'data');
     // Several outputs, or (code with out parameters) one that isn't the returned value.
