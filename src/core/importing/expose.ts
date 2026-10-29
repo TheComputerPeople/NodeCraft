@@ -4,8 +4,9 @@
 import { ModuleScan, isMarked } from './symbols';
 
 // How a language documents a declaration: a /** … */ block above it, a line prefix above it, or a
-// Python docstring after it.
-export type DocStyle = { kind: 'block' } | { kind: 'line'; prefix: string } | { kind: 'docstring' };
+// Python docstring after it. `inlineFields`: a field is marked on its own annotation line (Lua's
+// `---@field count number @blueprint`).
+export type DocStyle = { kind: 'block' } | { kind: 'line'; prefix: string; inlineFields?: boolean } | { kind: 'docstring' };
 
 const STYLES: Record<string, DocStyle> = {
   typescript: { kind: 'block' },
@@ -16,7 +17,7 @@ const STYLES: Record<string, DocStyle> = {
   cpp: { kind: 'line', prefix: '/// ' },
   rust: { kind: 'line', prefix: '/// ' },
   go: { kind: 'line', prefix: '// ' },
-  lua: { kind: 'line', prefix: '---' },
+  lua: { kind: 'line', prefix: '---', inlineFields: true },
   gdscript: { kind: 'line', prefix: '## ' },
   ruby: { kind: 'line', prefix: '# ' },
   python: { kind: 'docstring' }
@@ -34,13 +35,12 @@ export interface ExposeCandidate {
   kind: 'function' | 'method' | 'constructor' | 'property';
 }
 
-export function exposeCandidates(scan: ModuleScan, language: string): ExposeCandidate[] {
+export function exposeCandidates(scan: ModuleScan): ExposeCandidate[] {
   const candidates: ExposeCandidate[] = scan.functions.filter((f) => !isMarked(f.doc)).map((f) => ({ name: f.name, line: f.line, kind: 'function' }));
   for (const cls of scan.classes ?? []) {
     if (cls.init && !isMarked(cls.init.doc)) candidates.push({ name: cls.init.name, line: cls.init.line, kind: 'constructor' });
     for (const m of cls.methods) if (!isMarked(m.doc)) candidates.push({ name: m.name, line: m.line, kind: 'method' });
-    // A Lua field is marked in its ---@field annotation, which a line above can't do.
-    if (language !== 'lua') for (const p of cls.properties) if (!isMarked(p.doc)) candidates.push({ name: p.name, line: p.line, kind: 'property' });
+    for (const p of cls.properties) if (!isMarked(p.doc)) candidates.push({ name: p.name, line: p.line, kind: 'property' });
   }
   return candidates;
 }
@@ -54,11 +54,12 @@ export interface LineEdit {
 
 // The edit adding `marker` ("@blueprint" or "@blueprint pure") to the declaration at `line`
 // (1-based) of `source`; undefined when it can't be placed (a one-line Python def).
-export function markerEdit(source: string, line: number, marker: string, style: DocStyle): LineEdit | undefined {
+export function markerEdit(source: string, line: number, marker: string, style: DocStyle, kind?: ExposeCandidate['kind']): LineEdit | undefined {
   const lines = source.replace(/\r\n/g, '\n').split('\n');
   const at = line - 1;
   const indent = /^\s*/.exec(lines[at] ?? '')![0];
   if (style.kind === 'docstring') return docstringEdit(lines, at, indent, marker);
+  if (kind === 'property' && style.kind === 'line' && style.inlineFields) return { start: at, end: at + 1, lines: [`${lines[at].trimEnd()} ${marker}`] };
   // Attributes, annotations and decorators sit between the documentation and the declaration.
   let top = at;
   while (top > 0 && /^\s*(@|\[|#\[)/.test(lines[top - 1]) && !/^\s*#\s/.test(lines[top - 1])) top--;

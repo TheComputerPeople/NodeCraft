@@ -17,15 +17,15 @@ const apply = (text: string, edit: LineEdit): string => {
 // Marks every candidate, one at a time, rescanning after each: what's left, and the nodes made.
 function exposeAll(language: string, text: string, marker = '@blueprint'): { text: string; left: number; nodes: string[] } {
   for (let guard = 0; guard < 20; guard++) {
-    const [first] = exposeCandidates(scan(language, text), language);
+    const [first] = exposeCandidates(scan(language, text));
     if (!first) break;
-    const edit = markerEdit(text, first.line, marker, docStyle(language)!);
+    const edit = markerEdit(text, first.line, marker, docStyle(language)!, first.kind);
     assert.ok(edit, `${language}: no edit for ${first.name}`);
     text = apply(text, edit);
   }
   const after = scan(language, text);
   const nodes = exposeFunctions(after, { language, path: 'x', exposeAll: false }).definitions.map((d) => d.displayName);
-  return { text, left: exposeCandidates(after, language).length, nodes };
+  return { text, left: exposeCandidates(after).length, nodes };
 }
 
 const SOURCES: Record<string, { text: string; nodes: string[] }> = {
@@ -127,11 +127,17 @@ describe('Expose as Blueprint node', () => {
     assert.equal(markerEdit('def f(a: int) -> int: return a\n', 1, '@blueprint', docStyle('python')!), undefined);
   });
 
-  test('candidates leave out marked declarations and Lua fields', () => {
+  test('candidates leave out marked declarations', () => {
     const marked = scan('typescript', '/** @blueprint */\nexport function done(): void {}\nexport function todo(): void {}\n');
-    assert.deepEqual(exposeCandidates(marked, 'typescript').map((c) => c.name), ['todo']);
-    const lua = scan('lua', 'local M = {}\n---@class Box\n---@field size number\nlocal Box = {}\nBox.__index = Box\n---@blueprint\nfunction Box.new() return setmetatable({}, Box) end\nM.Box = Box\nreturn M\n');
-    assert.ok(!exposeCandidates(lua, 'lua').some((c) => c.kind === 'property'));
+    assert.deepEqual(exposeCandidates(marked).map((c) => c.name), ['todo']);
+  });
+
+  test('a Lua field is marked on its own ---@field line', () => {
+    const text = 'local M = {}\n---@class Box\n---@field size number The size.\nlocal Box = {}\nBox.__index = Box\n---@blueprint\nfunction Box.new() return setmetatable({}, Box) end\nM.Box = Box\nreturn M\n';
+    const { text: after, left, nodes } = exposeAll('lua', text);
+    assert.ok(after.includes('---@field size number The size. @blueprint\n'), after);
+    assert.equal(left, 0);
+    assert.deepEqual(nodes.sort(), ['Construct Box', 'Get Size', 'Set Size']);
   });
 });
 

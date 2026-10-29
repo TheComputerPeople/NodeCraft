@@ -1223,4 +1223,20 @@ test('Go functions marked @blueprint become nodes through gopls', async () => {
   }
   assert.ok(await exists(addGenerated), `It doesn't compile: ${vscode.languages.getDiagnostics(addGraph).map((d) => d.message).join('; ')}`);
   assert.match(await readText(addGenerated), /\.\(\*scores\.Counter\)\.Add\(2\)/);
+
+  // An unmarked function offers Expose, from gopls's symbols (docs/node-authoring.md, gap 7).
+  const tools = workspaceFile('gomod/scores/tools.go');
+  await write('gomod/scores/tools.go', 'package scores\n\n// Triple triples a value.\nfunc Triple(value float64) float64 {\n\treturn value * 3\n}\n');
+  const document = await vscode.workspace.openTextDocument(tools);
+  const deadlineFix = Date.now() + 60000;
+  let actions: vscode.CodeAction[] = [];
+  while (!actions.some((a) => a.title === 'Expose as Blueprint node') && Date.now() < deadlineFix) {
+    actions = await vscode.commands.executeCommand<vscode.CodeAction[]>('vscode.executeCodeActionProvider', tools, new vscode.Range(3, 0, 3, 0));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  const expose = actions.find((a) => a.title === 'Expose as Blueprint node');
+  assert.ok(expose, actions.map((a) => a.title).join(', '));
+  assert.ok(await vscode.workspace.applyEdit(expose.edit!));
+  assert.ok(document.getText().includes('// Triple triples a value.\n// @blueprint\nfunc Triple('), document.getText());
+  await document.save();
 });

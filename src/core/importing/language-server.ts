@@ -5,6 +5,7 @@
 // and mapped back through the pack's own spellings; types it doesn't know become native types.
 import { LanguageServerImport } from '../language-pack';
 import { TypeRef } from '../types';
+import { ExposeCandidate } from './expose';
 import { DocComment, ModuleScan, NO_DOC, ScannedClass, ScannedFunction, ScannedParam, isMarked, parseDocText, tupleOutputs } from './symbols';
 
 // Why a function is skipped when its hover has no signature (the server may still be loading).
@@ -106,6 +107,17 @@ function severalResults(text: string, spec: LanguageServerImport, doc: DocCommen
   const outputs = tupleOutputs(doc, types, values.map((r) => r.name));
   if (!outputs) return { reason: 'its results need names: name them in the signature or with @outputs' };
   return { outputs, results: { kind: 'tuple', names: outputs.map((o) => o.name), ...(error ? { error: true } : {}) } };
+}
+
+// The Expose quick fixes' declarations for a language read through its language server
+// (docs/node-authoring.md, gap 7): its unmarked functions, methods and fields, those other packages
+// can use (Go's capitalized names).
+export function symbolCandidates(text: string, functions: SymbolFunction[], spec: LanguageServerImport): ExposeCandidate[] {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  return functions
+    .filter((fn) => !(spec.exportedNames === 'capitalized' && !/^[A-Z]/.test(fn.name)))
+    .filter((fn) => !isMarked(docAbove(lines, fn, spec.comments)))
+    .map((fn) => ({ name: fn.name, line: fn.line + 1, kind: fn.field ? 'property' : fn.owner ? 'method' : 'function' }));
 }
 
 // ---- Doc comments ------------------------------------------------------------------------------

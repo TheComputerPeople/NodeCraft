@@ -266,7 +266,7 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
 - **Quick fixes.** The same class is a code action provider for every file a scanner reads:
   - `exposeCandidates` (src/core/importing/expose.ts) lists the unmarked declarations a scan found, cached by document version.
   - `markerEdit` writes the marker in the language's style: into a `/** … */` block above (a one-line block becomes several lines), as a new `///`, `---`, `##` or `#` line after the existing ones and before any attributes or decorators, or into a Python docstring (a new one when there's none). A one-line Python def has no room, so it isn't offered.
-  - Lua fields (marked in `---@field`) and Go (read through its language server) get no quick fix.
+  - After the phase (from its deferrals): a Lua field gets the marker on its own `---@field` line (`DocStyle.inlineFields`), and Go's declarations come from the language server's symbols (`symbolCandidates`, the exported ones), fetched when the lightbulb asks.
 - **`exposeAllFunctions`** was already applied to every scanner; what was missing:
   - Go now keeps lowercase names out (`exportedNames: 'capitalized'` on its language-server import), and reports a marked one.
   - Unmarked functions a language keeps private aren't reported. The setting's description gives each language's rule.

@@ -2,7 +2,8 @@
 // reports, read from their hovers and the doc comments above them, as other servers word them.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findSignature, parseSignature, scanSymbols } from '../../src/core/importing/language-server';
+import { findSignature, parseSignature, scanSymbols, symbolCandidates } from '../../src/core/importing/language-server';
+import { docStyle, markerEdit } from '../../src/core/importing/expose';
 import { exposeFunctions } from '../../src/core/importing/symbols';
 import { LanguageServerImport } from '../../src/core/language-pack';
 import { TypeRef } from '../../src/core/types';
@@ -138,5 +139,44 @@ describe("Go's exported names", () => {
     const exposed = exposeFunctions(scan, { language: 'go', path: 'a/a.go', exposeAll: true });
     assert.deepEqual(exposed.definitions.map((d) => d.displayName), ['Open']);
     assert.deepEqual(exposed.skipped.map((s) => `${s.name}: ${s.reason}`), ["hidden: it isn't exported (capitalized), so generated code can't use it"]);
+  });
+});
+
+// The Expose quick fixes for Go (docs/node-authoring.md, gap 7): from the language server's symbols.
+describe('Expose quick fixes through the language server', () => {
+  const GO: LanguageServerImport = { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], exportedNames: 'capitalized' };
+
+  test("unmarked exported functions, methods and fields; the marker goes in Go's comment", () => {
+    const source = [
+      'package a',
+      '',
+      '// Counter counts.',
+      'type Counter struct {',
+      '\tCount float64',
+      '\tsecret int',
+      '}',
+      '',
+      '// Open opens.',
+      'func Open() int { return 1 }',
+      '',
+      '// @blueprint',
+      'func Done() int { return 2 }',
+      '',
+      'func helper() int { return 3 }',
+      '',
+      'func (c *Counter) Add(n float64) float64 { return n }',
+      ''
+    ].join('\n');
+    const at = (text: string) => source.split('\n').findIndex((l) => l.includes(text));
+    const fn = (name: string, text: string, extra: object = {}) => ({ name, line: at(text), nameLine: at(text), containers: [], ...extra });
+    const candidates = symbolCandidates(source, [
+      fn('Count', '\tCount float64', { owner: 'Counter', field: { type: 'float64' } }), fn('secret', '\tsecret int', { owner: 'Counter', field: {} }),
+      fn('Open', 'func Open'), fn('Done', 'func Done'), fn('helper', 'func helper'), fn('Add', 'func (c *Counter) Add', { owner: '*Counter' })
+    ], GO);
+    assert.deepEqual(candidates.map((c) => [c.name, c.kind]), [['Count', 'property'], ['Open', 'function'], ['Add', 'method']]);
+    const open = candidates.find((c) => c.name === 'Open')!;
+    assert.deepEqual(markerEdit(source, open.line, '@blueprint', docStyle('go')!, open.kind), { start: open.line - 1, end: open.line - 1, lines: ['// @blueprint'] });
+    const count = candidates.find((c) => c.name === 'Count')!;
+    assert.deepEqual(markerEdit(source, count.line, '@blueprint', docStyle('go')!, count.kind), { start: count.line - 1, end: count.line - 1, lines: ['\t// @blueprint'] });
   });
 });

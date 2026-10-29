@@ -2,7 +2,7 @@
 // date as source files change, the exposeAll setting changes, or workspace folders come and go.
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { NO_SIGNATURE, SymbolFunction, scanSymbols } from '../core/importing/language-server';
+import { NO_SIGNATURE, SymbolFunction, scanSymbols, symbolCandidates } from '../core/importing/language-server';
 import { ExposeCandidate, docStyle, exposeCandidates, markerEdit } from '../core/importing/expose';
 import { ModuleScan, SkippedFunction, exposeFunctions } from '../core/importing/symbols';
 import { LanguagePack, LanguagePackRegistry, LanguageServerImport } from '../core/language-pack';
@@ -249,17 +249,22 @@ export class ProjectFunctions implements vscode.Disposable, vscode.CodeActionPro
 
   // Expose as Blueprint node, and Expose as pure Blueprint node, on a declaration that could be one
   // (docs/node-authoring.md, gap 7): each adds the marker to its documentation comment.
-  provideCodeActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection): vscode.CodeAction[] {
-    const pack = this.packsFor(document.uri).find((p) => p.importer?.scan && docStyle(p.id));
+  async provideCodeActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection): Promise<vscode.CodeAction[]> {
+    const pack = this.packsFor(document.uri).find((p) => (p.importer?.scan || p.importer?.languageServer) && docStyle(p.id));
     if (!pack) return [];
     const key = document.uri.toString();
     let cached = this.candidates.get(key);
     if (cached?.version !== document.version) {
       let candidates: ExposeCandidate[] = [];
       try {
-        candidates = exposeCandidates(pack.importer!.scan!(document.getText()), pack.id);
+        if (pack.importer!.scan) candidates = exposeCandidates(pack.importer!.scan(document.getText()));
+        else {
+          // Read through the language server (Go): its symbols, as the scan finds them.
+          const symbols = await vscode.commands.executeCommand<(vscode.DocumentSymbol | vscode.SymbolInformation)[]>('vscode.executeDocumentSymbolProvider', document.uri);
+          candidates = symbols?.length ? symbolCandidates(document.getText(), collectFunctions(symbols), pack.importer!.languageServer!) : [];
+        }
       } catch {
-        // A file the scanner can't read offers nothing.
+        // A file that can't be read offers nothing.
       }
       cached = { version: document.version, candidates };
       this.candidates.set(key, cached);
@@ -268,7 +273,7 @@ export class ProjectFunctions implements vscode.Disposable, vscode.CodeActionPro
     return cached.candidates.filter((c) => c.line === line).flatMap((candidate) => {
       const markers = candidate.kind === 'function' || candidate.kind === 'method' ? [['@blueprint', 'Expose as Blueprint node'], ['@blueprint pure', 'Expose as pure Blueprint node']] : [['@blueprint', 'Expose as Blueprint node']];
       return markers.flatMap(([marker, title]) => {
-        const change = markerEdit(document.getText(), candidate.line, marker, docStyle(pack.id)!);
+        const change = markerEdit(document.getText(), candidate.line, marker, docStyle(pack.id)!, candidate.kind);
         if (!change) return [];
         const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
         const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';

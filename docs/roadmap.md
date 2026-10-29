@@ -368,7 +368,6 @@ Design and steps: [node-authoring.md](node-authoring.md), with what each step bu
   - ExpandEnumAsExecs: code functions return graph enums as native types.
   - Code classes as parents of graph classes.
   - Generic and wildcard code functions.
-  - Quick fixes for Go (read through its language server) and Lua fields.
   - A package registry: packages come from folders and extensions.
 
 ### Phase 10: Release
