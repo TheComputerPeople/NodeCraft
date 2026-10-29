@@ -4,6 +4,7 @@ import { PinAddress, definitionFor } from '../core/editing';
 import { PinKind } from '../core/model';
 import { addNode, collapseToFunction, collapseToLibrary, collapseToMacro, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected, refreshFunctionNodes, replaceFunctionNode } from './actions';
 import { findReferences, goToDefinition, siteOf } from './navigation';
+import { showPreview } from './preview';
 import { alignSelection, distributeSelection, straightenConnections } from './align';
 import { addBreakpoints, breakpointOn, enableBreakpoints, removeBreakpoints } from './breakpoints';
 import { PaletteEntry, functionProblem, libraryProblem, lookupDefinition, paletteEntries, searchText } from './document';
@@ -34,7 +35,8 @@ export function showAddNodeMenu(
   dom.contextMenu.innerHTML = `
       <div class="context-title"><span>${escapeHtml(title)}</span>${source ? `<label class="context-sensitive"><input type="checkbox" id="context-sensitive"${state.contextSensitive ? ' checked' : ''}> Context Sensitive</label>` : ''}</div>
       <input id="context-search" class="context-search" placeholder="Search nodes…" aria-label="Search nodes">
-      <div id="context-results"></div>`;
+      <div id="context-results"></div>
+      <div id="context-preview" class="node-preview" aria-live="polite" hidden></div>`;
   const toggle = dom.contextMenu.querySelector<HTMLInputElement>('#context-sensitive');
   toggle?.addEventListener('change', () => {
     state.contextSensitive = toggle.checked;
@@ -69,6 +71,8 @@ function renderContextNodeResults(query: string): void {
     const button = document.createElement('button');
     button.className = 'context-node';
     button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(headerColor(def))}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.category)}</small></span>`;
+    const preview = dom.contextMenu.querySelector<HTMLElement>('#context-preview');
+    if (preview) button.addEventListener('mouseenter', () => showPreview(preview, entry));
     button.addEventListener('mousedown', (e) => {
       e.preventDefault();
       const id = addNode(entry.type, context.position, entry.properties);

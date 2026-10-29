@@ -99,4 +99,57 @@ describe('language terms in the editor', () => {
     await e.page.selectOption('#language', 'typescript');
     assert.equal(await title(), 'Make Array');
   });
+
+  // docs/language-context.md, part 3.
+  test("the palette and the Add Node menu preview the highlighted node's code, asking the host once", async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    type Request = { type: string; requestId?: number; nodeType?: string; document?: GraphDocument };
+    const requests = async () => ((await e.posted()) as Request[]).filter((m) => m.type === 'previewNode');
+    let answered = 0;
+    // Answers the next request, once the webview has sent it.
+    const answer = async (nodeType: string, code: string) => {
+      await e.page.waitForFunction((after) => (window as unknown as { __posted: Request[] }).__posted.some((m) => m.type === 'previewNode' && (m.requestId ?? 0) > after), answered);
+      const request = (await requests()).filter((m) => (m.requestId ?? 0) > answered).pop()!;
+      assert.equal(request.nodeType, nodeType);
+      answered = request.requestId ?? 0;
+      await e.send({ type: 'nodePreview', requestId: request.requestId, preview: { code, kind: 'snippet' } });
+      return request;
+    };
+
+    await e.page.hover('.palette-node:has(strong:text-is("Make Array"))');
+    const request = await answer('core:array.make', 'return [item0];');
+    assert.equal(request.document?.language, 'typescript', 'the document goes with it');
+    assert.equal(await e.page.textContent('#palette-preview .node-preview-title'), 'In TypeScript');
+    assert.equal(await e.page.textContent('#palette-preview .node-preview-code'), 'return [item0];');
+
+    // Known now: no second request.
+    await e.page.hover('.palette-node:has(strong:text-is("Make Set"))');
+    await answer('core:set.make', 'return new Set([item0]);');
+    await e.page.hover('.palette-node:has(strong:text-is("Make Array"))');
+    assert.equal(await e.page.textContent('#palette-preview .node-preview-code'), 'return [item0];');
+    assert.equal((await requests()).filter((m) => m.nodeType === 'core:array.make').length, 1);
+
+    // A node with none says so.
+    await e.page.hover('.palette-node:has(strong:text-is("Sequence"))');
+    await e.page.waitForFunction(() => (window as unknown as { __posted: Request[] }).__posted.some((m) => m.type === 'previewNode' && m.nodeType === 'core:flow.sequence'));
+    const sequence = (await requests()).filter((m) => m.nodeType === 'core:flow.sequence').pop()!;
+    answered = sequence.requestId ?? 0;
+    await e.send({ type: 'nodePreview', requestId: sequence.requestId });
+    assert.equal(await e.page.textContent('#palette-preview .node-preview-title'), 'No TypeScript preview');
+
+    // Another language asks again.
+    await e.page.selectOption('#language', 'python');
+    await e.page.hover('.palette-node:has(strong:text-is("Make List"))');
+    await answer('core:array.make', 'return [item_0]');
+    assert.equal(await e.page.textContent('#palette-preview .node-preview-title'), 'In Python');
+
+    // The Add Node menu has its own.
+    const box = (await e.page.locator('#canvas-wrap').boundingBox())!;
+    await e.page.mouse.click(box.x + box.width - 60, box.y + box.height - 60, { button: 'right' });
+    await e.page.fill('#context-search', 'branch');
+    await e.page.hover('#context-results .context-node:has(strong:text-is("Branch"))');
+    await answer('core:flow.branch', 'if condition:\n    pass');
+    assert.equal(await e.page.textContent('#context-preview .node-preview-code'), 'if condition:\n    pass');
+  });
 });

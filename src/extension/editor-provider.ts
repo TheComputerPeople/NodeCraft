@@ -7,6 +7,8 @@ import { newDocument } from '../core/blueprint-edits';
 import { generatedLanguages } from '../core/user-types';
 import { createResolver } from '../core/resolve';
 import { DefinitionSite, findReferences } from '../core/navigation';
+import { previewNode } from '../core/preview';
+import { DEFAULT_LANGUAGE } from '../core/languages';
 import { SearchHit, searchDocument } from '../core/search';
 import { NodeRegistry } from '../core/registry';
 import { GraphRuntime } from '../core/runtime';
@@ -156,6 +158,9 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
             break;
           case 'goToDefinition':
             if (message.nodeType && message.site) await this.goToDefinition(document.uri, message.nodeType, message.site);
+            break;
+          case 'previewNode':
+            this.post(webviewPanel, { type: 'nodePreview', requestId: message.requestId, preview: message.nodeType && message.document ? previewNode({ type: message.nodeType, properties: message.properties }, { language: message.document.language || DEFAULT_LANGUAGE, languages: this.languages, registry: this.registry, document: message.document }) : undefined });
             break;
           case 'findReferences':
             this.post(webviewPanel, { type: 'findResults', results: await this.findAcrossGraphs(key, (doc, resolve) => findReferences(doc, message.nodeType ?? '', resolve)) });

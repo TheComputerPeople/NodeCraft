@@ -113,6 +113,18 @@ The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts)
 - **How.** The webview asks the host (`previewNode`, with the node type, preset properties and language). The host compiles the same one-node function graph as the audit, with pins named after the node's own, and returns the node's lines (through `nodeLines`). So Length shows `len(array)` in Python and `array.size()` in C++. Answers are cached for each type and language, and cleared when definitions change.
 - **When it can't.** Project functions show their call. A node the language can't compile isn't offered at all (Part 1). A language without a generator (a declarative pack still loading) shows nothing.
 
+**Built (step 7).**
+
+- **Core** (src/core/preview.ts, `previewNode`):
+  - **A code node** shows its snippet for the language: the first of the generator's `snippetLanguages` it has, or the pack's own `snippets`. `${pin}` placeholders read as the pin's name, as in the generated helper. Snippets become helper functions, so the call alone would say nothing; the snippet is what the node does: `return len(target)`.
+  - **Any other node** is compiled. An impure node goes in a custom event whose inputs are the node's own, and its outputs are left unwired. A pure one goes in a function that returns its outputs, since it's written where it's used.
+  - **Extraction.** The node's lines are its node line onward, while indented at least as deep, dedented: `if condition:` / `pass`, or Delay's latent block.
+  - **Context.** It's compiled alone first, then in a copy of the open document when the entry refers to it (a variable's Get and Set, Call Event, members): Set Score is `Score = score;` in C#. Project functions compile with the host's registry, so they show their call: `return damage(strength)`.
+  - Wildcard pins are shown as ints, and a map's values as strings.
+- **The editor** (src/webview/preview.ts): hovering or focusing a palette entry, or hovering an Add Node menu entry, shows its code in a pane below the list ("In Python"). The webview sends `previewNode` with the document (its copy may be newer than the file), after 120 ms. The host answers `nodePreview`. Answers are kept for each entry and language until the definitions or the document change.
+- **Without code.** Sequence and End write no code of their own, so their pane says "No Python preview". Every other node the palette offers has a preview in every language, which the unit test checks for all 12.
+- **Tests.** Unit (test/unit/preview.test.ts): snippets, generated lines in several languages, document entries, a project function, the extraction. Browser (test/webview/language-context.test.ts): the palette's pane and the menu's, a request only once per entry and language, "No … preview", and another language asking again.
+
 ## Part 4: language-only nodes
 
 **Design.** Nodes only some languages have, from their standard libraries, under a category named for the language (the Python palette's "Python" category). They're code nodes with snippets only for those languages, so the palette's existing filter offers them only there. They're built in and documented as language-specific.

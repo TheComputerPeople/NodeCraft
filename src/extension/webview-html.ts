@@ -29,6 +29,7 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
       <div class="panel-title">Palette</div>
       <input id="search" class="search" placeholder="Search nodes…" aria-label="Search nodes">
       <div id="categories"></div>
+      <div id="palette-preview" class="node-preview" aria-live="polite" hidden></div>
     </section>
   </aside>
   <div id="floating-menu" class="floating-menu" hidden></div>

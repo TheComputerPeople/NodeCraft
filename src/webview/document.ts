@@ -21,6 +21,7 @@ import { dom, setStatus } from './dom';
 import { postToHost } from './host';
 import { renderMyBlueprint } from './my-blueprint';
 import { renderPalette } from './panels';
+import { forgetPreviews } from './preview';
 import { pruneBreakpoints } from './breakpoints';
 import { render } from './render';
 import { state } from './state';
@@ -176,6 +177,7 @@ export function pinDef(nodeId: string, pinId: string): PinDefinition | undefined
 
 export function setDefinitions(definitions: NodeDefinition[]): void {
   state.sourceDefinitions = definitions;
+  forgetPreviews();
   applyTerms();
   renderPalette();
 }
@@ -240,6 +242,7 @@ export function loadDocument(doc: GraphDocument, preserveView = false): void {
   const previousGraphId = state.graph?.id;
   const language = state.document?.language;
   state.document = copyDocument(doc);
+  forgetPreviews();
   if (state.document.language !== language) applyTerms();
   else updateClassHierarchy();
   state.graph = state.document.graphs.find((g) => g.id === previousGraphId) ?? primaryGraph(state.document) ?? null;

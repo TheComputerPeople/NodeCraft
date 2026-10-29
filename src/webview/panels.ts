@@ -15,6 +15,7 @@ import { addNode, addPin } from './actions';
 import { PaletteEntry, lookupDefinition, markDirty, paletteEntries, searchText, updateClassHierarchy, languageCapabilities, languageTerms, shownType } from './document';
 import { dom, escapeHtml, setStatus } from './dom';
 import { renderMyBlueprint } from './my-blueprint';
+import { showPreview } from './preview';
 import { render } from './render';
 import { headerColor } from './style';
 import { state } from './state';
@@ -46,6 +47,8 @@ export function renderPalette(): void {
       const button = document.createElement('button');
       button.className = 'palette-node';
       button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(headerColor(def))}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.description || '')}</small></span>`;
+      button.addEventListener('mouseenter', () => showPreview(dom.palettePreview, entry));
+      button.addEventListener('focus', () => showPreview(dom.palettePreview, entry));
       button.addEventListener('mousedown', (e) => {
         e.preventDefault();
         const rect = dom.canvasWrap.getBoundingClientRect();

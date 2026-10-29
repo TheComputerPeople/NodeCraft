@@ -131,6 +131,12 @@ button, input { font: inherit; color: inherit; }
 .context-node { display: flex !important; gap: 8px; align-items: flex-start; }
 .context-node strong, .context-node small { display: block; }
 .context-node small { color: var(--muted); margin-top: 2px; }
+/* The highlighted entry's code in the graph's language (docs/language-context.md, part 3). */
+.node-preview { position: sticky; bottom: 0; padding: 6px 8px 8px; background: var(--panel); border-top: 1px solid var(--panel-border); }
+.node-preview[hidden] { display: none; }
+.node-preview-title { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.node-preview-code { margin: 4px 0 0; max-height: 9.5em; overflow: auto; white-space: pre; font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; line-height: 1.35; }
+#context-preview { position: static; max-width: 360px; }
 .context-empty { padding: 10px 8px; color: var(--muted); }
 .context-separator { height: 1px; background: var(--panel-border); margin: 5px 0; }
 .context-danger { color: var(--vscode-errorForeground); }

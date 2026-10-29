@@ -3,6 +3,7 @@ import type { CompileDiagnostic } from './compiler/diagnostics';
 import type { DefinitionSite } from './navigation';
 import type { SearchHit } from './search';
 import type { LanguageTerms } from './terms';
+import type { NodePreview } from './preview';
 import type { TypeRef } from './types';
 import type { EnumInfo, Enumerator, StructInfo } from './user-types';
 import type { Dispatcher } from './events';
@@ -410,9 +411,12 @@ export interface UIMessage {
   // 'functionLibrary'); saveLibrary: write that library with the new function.
   // goToDefinition: open where `nodeType` is defined (`site`, outside this file); findReferences:
   // every node of `nodeType` in the workspace (answered by 'findResults').
-  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'debug' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues' | 'pickFunctionLibrary' | 'saveLibrary' | 'goToDefinition' | 'findReferences';
+  // previewNode: the code a node of `nodeType` with `properties` becomes in `document`'s language
+  // (answered by 'nodePreview'; docs/language-context.md, part 3).
+  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'debug' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues' | 'pickFunctionLibrary' | 'saveLibrary' | 'goToDefinition' | 'findReferences' | 'previewNode';
   document?: GraphDocument;
   nodeType?: string;
+  properties?: Record<string, unknown>;
   site?: DefinitionSite;
   library?: LibraryFile;
   breakpoints?: GraphBreakpoint[];
@@ -450,7 +454,10 @@ export interface HostMessage {
     | 'debugValues'
     // Answers 'pickFunctionLibrary': the library chosen (none when the pick was cancelled).
     | 'functionLibrary'
+    // Answers 'previewNode': the node's code (none when it has no preview).
+    | 'nodePreview'
     | 'error';
+  preview?: NodePreview;
   library?: LibraryFile;
   breakpoints?: GraphBreakpoint[];
   watches?: PinRef[];

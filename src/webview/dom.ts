@@ -44,6 +44,8 @@ export const dom = {
   // Structure and enumeration files are edited here instead of on the canvas.
   typeEditor: element<HTMLElement>('type-editor'),
   palette: element<HTMLElement>('palette'),
+  // The highlighted palette entry's code in the graph's language (src/webview/preview.ts).
+  palettePreview: element<HTMLDivElement>('palette-preview'),
   help: element<HTMLElement>('help')
 };
 

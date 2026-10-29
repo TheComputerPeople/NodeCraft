@@ -13,6 +13,7 @@ import { showDebugState } from './debugger';
 import { receiveValues, setWatches } from './values';
 import { clearBreakpoints, pruneBreakpoints, setBreakpoints, toggleSelectedBreakpoints } from './breakpoints';
 import { finishVariableDrag, removeVariable, renderMyBlueprint, startRename, updateVariableDrag } from './my-blueprint';
+import { receivePreview } from './preview';
 import { findReferences, goToDefinition } from './navigation';
 import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showNodeContextMenu } from './menus';
 import { renderPalette } from './panels';
@@ -99,6 +100,9 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       break;
     case 'functionLibrary':
       finishCollapseToLibrary(message.library);
+      break;
+    case 'nodePreview':
+      receivePreview(message.requestId ?? -1, message.preview);
       break;
     case 'compileResult':
       if (message.compile) showCompileResult(message.compile);
