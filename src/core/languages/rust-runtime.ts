@@ -227,21 +227,68 @@ pub fn delay(seconds: f64, then: Box<dyn FnOnce()>) {
     LATENT.with(|queue| queue.borrow_mut().push(LatentAction { due, order, run: then }));
 }
 
+// Async functions' futures (docs/node-authoring.md, gap 4), polled by a tiny executor on each
+// latent turn; when one finishes, its Completed joins the queue. There's no reactor, so a future
+// that waits on tokio's I/O or timers won't make progress here.
+thread_local! {
+    static WAITING: RefCell<Vec<std::pin::Pin<Box<dyn std::future::Future<Output = ()>>>>> = RefCell::new(Vec::new());
+}
+
+pub fn await_latent<T: 'static>(future: impl std::future::Future<Output = T> + 'static, then: Box<dyn FnOnce(T)>) {
+    let finished = async move {
+        let value = future.await;
+        delay(0.0, Box::new(move || then(value)));
+    };
+    WAITING.with(|waiting| waiting.borrow_mut().push(Box::pin(finished)));
+}
+
+fn noop_waker() -> std::task::Waker {
+    fn clone(_: *const ()) -> std::task::RawWaker { std::task::RawWaker::new(std::ptr::null(), &VTABLE) }
+    fn noop(_: *const ()) {}
+    static VTABLE: std::task::RawWakerVTable = std::task::RawWakerVTable::new(clone, noop, noop, noop);
+    unsafe { std::task::Waker::from_raw(std::task::RawWaker::new(std::ptr::null(), &VTABLE)) }
+}
+
+// Polls each waiting future once; whether any still waits.
+fn poll_waiting() -> bool {
+    let mut futures = WAITING.with(|waiting| std::mem::take(&mut *waiting.borrow_mut()));
+    let waker = noop_waker();
+    let mut context = std::task::Context::from_waker(&waker);
+    futures.retain_mut(|future| future.as_mut().poll(&mut context).is_pending());
+    WAITING.with(|waiting| {
+        let mut waiting = waiting.borrow_mut();
+        // Futures started while these were polled.
+        futures.extend(waiting.drain(..));
+        *waiting = futures;
+        !waiting.is_empty()
+    })
+}
+
+fn earliest(queue: &[LatentAction]) -> Option<usize> {
+    if queue.is_empty() { return None; }
+    let mut best = 0;
+    for i in 1..queue.len() {
+        let (a, b) = (&queue[i], &queue[best]);
+        if a.due < b.due || (a.due == b.due && a.order < b.order) { best = i; }
+    }
+    Some(best)
+}
+
 pub fn run_latent_actions() {
     loop {
-        let next = LATENT.with(|queue| {
-            let mut queue = queue.borrow_mut();
-            if queue.is_empty() { return None; }
-            let mut best = 0;
-            for i in 1..queue.len() {
-                let (a, b) = (&queue[i], &queue[best]);
-                if a.due < b.due || (a.due == b.due && a.order < b.order) { best = i; }
-            }
-            Some(queue.remove(best))
-        });
-        let Some(action) = next else { return };
-        let wait = action.due - latent_clock();
-        if wait > 0.0 { std::thread::sleep(std::time::Duration::from_secs_f64(wait)); }
+        let waiting = poll_waiting();
+        let due = LATENT.with(|queue| { let queue = queue.borrow(); earliest(&queue).map(|i| queue[i].due) });
+        let Some(due) = due else {
+            if waiting { std::thread::sleep(std::time::Duration::from_millis(1)); continue; }
+            return;
+        };
+        let wait = due - latent_clock();
+        if wait > 0.0 {
+            // While futures wait, poll them again soon.
+            std::thread::sleep(std::time::Duration::from_secs_f64(if waiting { wait.min(0.001) } else { wait }));
+            continue;
+        }
+        let action = LATENT.with(|queue| { let mut queue = queue.borrow_mut(); let i = earliest(&queue).unwrap(); queue.remove(i) });
         (action.run)();
     }
 }

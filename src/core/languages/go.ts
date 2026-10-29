@@ -212,7 +212,7 @@ export const goPack: LanguagePack = {
   mapType,
   generator: goGenerator,
   // Functions marked // @blueprint, found through gopls (Tier 2).
-  importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], objectsByPointer: true, severalResults: { error: 'error' }, exportedNames: 'capitalized' } }
+  importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], objectsByPointer: true, severalResults: { error: 'error' }, exportedNames: 'capitalized', asyncChannels: true } }
 };
 
 class GoEmitter {
@@ -604,6 +604,20 @@ class GoEmitter {
         const other = s.target && s.type ? classInfo(this.program, s.type)?.dispatchers.find((d) => d.id === s.dispatcher)?.inputs.filter((p) => p.kind === 'data') : undefined;
         const params = other ?? this.program.dispatchers?.find((d) => d.id === s.dispatcher)?.params ?? [];
         out.line(`${this.dispatcherRef(s)}.Broadcast(${s.args.map((a, i) => this.coerce(a, params[i]?.type, true)).join(', ')})`);
+        break;
+      }
+      case 'await': {
+        // An async function (docs/node-authoring.md, gap 4): Completed runs with the first value
+        // its channel gives, from the latent queue.
+        out.line(`VgAwait(${this.call(s.callee, s.args)}, func(value any) {`);
+        out.indent();
+        if (s.resultSlot) {
+          const slot = this.program.slots.find((x) => x.id === s.resultSlot);
+          out.line(`${this.slotRef(s.resultSlot)} = VgAs[${this.typeName(slot?.type)}](value)`);
+        } else out.line('_ = value');
+        this.statements(s.then);
+        out.dedent();
+        out.line('})');
         break;
       }
       case 'delay': {

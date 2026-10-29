@@ -19,6 +19,7 @@ import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/exten
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
+import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-go-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -279,4 +280,61 @@ describe('Go several results', () => {
       assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), SEVERAL_OUTPUTS_OUTPUT);
     });
   }
+});
+
+// Async functions (docs/node-authoring.md, gap 4): a function returning a channel is a latent node,
+// whose Completed runs with the first value the channel gives.
+describe('Go async functions', () => {
+  const REMOTE = [
+    'package remote',
+    '',
+    'import "time"',
+    '',
+    '// @blueprint',
+    'func FetchDouble(value int) <-chan int {',
+    '\tch := make(chan int, 1)',
+    '\tgo func() {',
+    '\t\ttime.Sleep(10 * time.Millisecond)',
+    '\t\tch <- value * 2',
+    '\t}()',
+    '\treturn ch',
+    '}',
+    ''
+  ].join('\n');
+
+  test('a graph waits for a channel and reads its value on Completed', async (t) => {
+    const project = path.join(workDir, 'latent');
+    const files: Record<string, string> = { 'go.mod': 'module example.com/latent\n\ngo 1.22\n', 'remote/remote.go': REMOTE, 'graphs/doc.go': '// Package graphs holds the graphs.\npackage graphs\n' };
+    for (const [name, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+      fs.writeFileSync(path.join(project, name), text);
+    }
+    const graphDir = path.join(project, 'graphs');
+    const pkg = goPackage(graphDir, project);
+    const line = REMOTE.split('\n').findIndex((l) => l.startsWith('func FetchDouble'));
+    const scan = scanSymbols(REMOTE, [{ name: 'FetchDouble', line, nameLine: line, containers: [], hover: '```go\nfunc FetchDouble(value int) <-chan int\n```' }],
+      builtinLanguagePacks().get('go')!.importer!.languageServer!, (type) => builtinLanguagePacks().get('go')!.mapType(type));
+    const definitions = exposeFunctions(scan, { language: 'go', path: 'remote/remote.go', module: 'example.com/latent/remote', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(latentCodeGraph(definitions, 'go'), {
+      registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Fetching.vgraph', outputDir: 'graphs', namespace: pkg.name, packagePath: pkg.path }
+    });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    assert.match(output.text, /VgAwait\(remote\.FetchDouble\(4\), func\(value any\) \{/);
+    const file = path.join(graphDir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    const plan = goPlacement({ generatedFiles: [`graphs/${output.fileName}`], readFile: (f) => fs.readFileSync(path.join(project, f), 'utf8'), exists: (f) => fs.existsSync(path.join(project, f)) });
+    for (const owned of plan.ownedFiles ?? []) fs.writeFileSync(path.join(project, owned.path), owned.text);
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('go')!.generator!.runner!, file, output.className, { cwd: project, sources: goRunSources(file), goModule: pkg.module, timeoutMs: 300000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.stderr, '', output.text);
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), LATENT_CODE_OUTPUT);
+  });
 });

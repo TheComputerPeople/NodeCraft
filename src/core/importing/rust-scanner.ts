@@ -266,15 +266,16 @@ export function scanRust(source: string): ModuleScan {
       const method = at(p, 'self');
       const afterSelf = method ? (at(p + 1, ',') ? p + 2 : p + 1) : open + 1;
       if (!pub) skip("it isn't pub, so generated code can't call it");
-      else if (isAsync) skip("async functions can't be nodes yet");
       else if (typeParameters.length > 2) skip(TOO_MANY_TYPE_PARAMETERS);
       else if (method && at(open + 1, 'self')) skip('methods that take self by value would consume the object; take &self or &mut self');
       else {
         const params = parseParams(afterSelf, paramsClose - 1);
         if ('reason' in params) skip(params.reason);
         else if (method) {
-          const returns = mapReturn(returnText);
+          const future = futureReturn(returnText, isAsync);
+          const returns = future ?? mapReturn(returnText);
           if ('reason' in returns) skip(returns.reason);
+          else if (future) block.methods.push({ name: fnName, line: tokens[first].line, params, returns: returns.type, doc: docComment, latent: true });
           else block.methods.push(withOutputs({ name: fnName, line: tokens[first].line, params, returns: returns.type, doc: docComment }, returnText));
         } else if (returnText === 'Self' || returnText === name) block.constructors.push({ name: fnName, line: tokens[first].line, params, returns: null, doc: docComment });
         else skip('associated functions without self have no object; make it a free function instead');
@@ -370,15 +371,16 @@ export function scanRust(source: string): ModuleScan {
       if (skipTest) {
         // Test code isn't part of the program.
       } else if (visibility !== 'pub' && visibility !== 'pub(crate)') skip('it isn\'t pub or pub(crate), so generated code can\'t call it');
-      else if (qualifiers.includes('async')) skip('async functions can\'t be nodes yet');
       else if (qualifiers.includes('unsafe')) skip('unsafe functions can\'t be nodes');
       else if (qualifiers.includes('extern')) skip('extern functions can\'t be nodes');
       else if (typeParameters.length > 2) skip(TOO_MANY_TYPE_PARAMETERS);
       else {
         const params = parseParams(k + 1, close - 1);
-        const returns = mapReturn(returnText);
+        const future = futureReturn(returnText, qualifiers.includes('async'));
+        const returns = future ?? mapReturn(returnText);
         if ('reason' in params) skip(params.reason);
         else if ('reason' in returns) skip(returns.reason);
+        else if (future) result.functions.push({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, latent: true, ...(module ? { container: module } : {}) });
         else result.functions.push(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment, ...(module ? { container: module } : {}) }, returnText));
       }
       i = itemEnd;
@@ -473,6 +475,23 @@ function splitTopCommas(text: string): string[] {
   }
   parts.push(text.slice(from));
   return parts;
+}
+
+// Async (docs/node-authoring.md, gap 4): an `async fn`, or one returning `impl Future<Output = T>`
+// or `Pin<Box<dyn Future<Output = T>>>`, is a latent node, whose value is T. Undefined otherwise.
+function futureReturn(text: string, isAsync: boolean): { type: TypeRef | null | undefined } | { reason: string } | undefined {
+  if (isAsync) return mapReturn(text);
+  const t = normalize(text);
+  const head = /^(impl |(std::pin::)?Pin<Box<dyn )((std|core)::future::)?Future<Output\s*=\s*/.exec(t);
+  if (!head) return undefined;
+  const start = head[0].length;
+  let depth = 1;
+  let end = start;
+  for (; end < t.length; end++) {
+    if (t[end] === '<') depth++;
+    else if (t[end] === '>' && --depth === 0) break;
+  }
+  return mapReturn(t.slice(start, end));
 }
 
 function mapReturn(text: string): { type: TypeRef | null | undefined } | { reason: string } {

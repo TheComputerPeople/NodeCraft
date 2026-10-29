@@ -172,6 +172,15 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - `get()` throws the function's exception, which stops the run.
 - **Tests.** The shared latent graph and a failing future, compiled and run.
 
+**Built after the phase: Go and Rust** (decided 2026-10-29: Go's channels, and a Rust executor of the runtime's own).
+
+- **Go.** A function returning a channel (`<-chan T` or `chan T`; `chan struct{}` gives no value) is latent: the language-server import reads it when the pack sets `asyncChannels`. The runtime's `VgAwait` keeps the channel beside the Delay queue and moves its Completed into the queue once a receive succeeds (a closed channel gives its zero value). Generated code converts the value to the output's type with `VgAs`.
+- **Rust.** An `async fn`, or a function returning `impl Future<Output = T>` or `Pin<Box<dyn Future<Output = T>>>`, is latent.
+  - The runtime's `await_latent` wraps the future so that finishing queues its Completed.
+  - Each latent turn polls the waiting futures once, with a waker that does nothing, so it needs no crates.
+  - A future waiting on a reactor (tokio) never progresses. A panic in the future stops the run.
+- **Tests.** The shared latent graph in both. Rust's uses a hand-written future that's pending for 10 ms, and a future that panics.
+
 ## Gap 5: no way from a node to its definition
 
 **Today.** Double-clicking a node opens a function or macro graph in the same file only (`render.ts`). Nothing opens a library function's graph, the code behind a project function, or a `*.node.json` file. Unreal opens a library function's graph, and a C++ node's source in the IDE.

@@ -679,6 +679,29 @@ class RustEmitter {
         out.line(`${this.dispatcherRef(s)}.broadcast(${this.tuple(s.args.map((a, i) => this.coerce(a, params[i]?.type)), true)});`);
         break;
       }
+      case 'await': {
+        // An async function (docs/node-authoring.md, gap 4): Completed runs with its future's value
+        // when the latent queue's executor finds it finished.
+        const call = this.call(s.callee, s.args);
+        out.line('{');
+        out.indent();
+        // The closure keeps its own copies of the event's inputs.
+        for (const p of this.currentParams) out.line(`let ${p} = ${p}.clone();`);
+        out.line(`let this = ${this.receiver}.me();`);
+        out.line(`vgraph::await_latent(${call}, Box::new(move |value| {`);
+        out.indent();
+        const receiver = this.receiver;
+        this.receiver = 'this';
+        if (s.resultSlot) out.line(this.assign('slot', s.resultSlot, 'value'));
+        else out.line('let _ = value;');
+        this.statements(s.then);
+        this.receiver = receiver;
+        out.dedent();
+        out.line('}));');
+        out.dedent();
+        out.line('}');
+        break;
+      }
       case 'delay': {
         const seconds = this.coerce(s.duration, FLOAT);
         out.line('{');

@@ -20,6 +20,7 @@ import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
 import { GENERICS_OUTPUT, genericsGraph } from './generics';
+import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-rust-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
@@ -298,5 +299,77 @@ describe('Rust generic functions', () => {
     }
     assert.equal(outcome.stderr, '', output.text);
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), GENERICS_OUTPUT);
+  });
+});
+
+// Async functions (docs/node-authoring.md, gap 4): an async fn is a latent node, polled by the
+// runtime's own executor; Completed runs when it finishes.
+describe('Rust async functions', () => {
+  const remote = (body: string) => [
+    'use std::future::Future;',
+    'use std::pin::Pin;',
+    'use std::task::{Context, Poll};',
+    'use std::time::{Duration, Instant};',
+    '',
+    '// A future ready after a while, with no reactor.',
+    'struct Later { until: Instant }',
+    'impl Future for Later {',
+    '    type Output = ();',
+    '    fn poll(self: Pin<&mut Self>, _: &mut Context<\'_>) -> Poll<()> {',
+    '        if Instant::now() >= self.until { Poll::Ready(()) } else { Poll::Pending }',
+    '    }',
+    '}',
+    '',
+    '/// @blueprint',
+    'pub async fn fetch_double(value: i64) -> i64 {',
+    '    Later { until: Instant::now() + Duration::from_millis(10) }.await;',
+    `    ${body}`,
+    '}',
+    ''
+  ].join('\n');
+
+  async function run(name: string, code: string): Promise<{ outcome?: Awaited<ReturnType<typeof runGeneratedCode>>; skipped?: string; text: string }> {
+    const project = path.join(workDir, name);
+    const files: Record<string, string> = {
+      'Cargo.toml': `[package]\nname = "${name.replace(/-/g, '_')}"\nversion = "0.1.0"\nedition = "2021"\n\n[workspace]\n`,
+      'src/main.rs': 'mod remote;\n\nfn main() {}\n',
+      'src/remote.rs': code
+    };
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, file)), { recursive: true });
+      fs.writeFileSync(path.join(project, file), text);
+    }
+    const definitions = exposeFunctions(scanRust(code), { language: 'rust', path: 'src/remote.rs', module: 'remote', exposeAll: false }).definitions;
+    const registry = new NodeRegistry();
+    registry.registerMany(definitions);
+    const result = compileDocument(latentCodeGraph(definitions, 'rust'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Fetching.vgraph', outputDir: 'src/graphs' } });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    const file = path.join(project, 'src/graphs', output.fileName);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, output.text);
+    const sources = rustRunSources(file, project, output.importedFiles ?? []);
+    try {
+      return { outcome: await runGeneratedCode(builtinLanguagePacks().get('rust')!.generator!.runner!, file, output.className, { cwd: project, sources: sources.generated, crate: sources.crate, timeoutMs: 300000 }), text: output.text };
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return { skipped: error.message, text: output.text };
+      throw error;
+    }
+  }
+
+  test('a graph waits for a future and reads its value on Completed', async (t) => {
+    const { outcome, skipped, text } = await run('latent', remote('value * 2'));
+    assert.match(text, /vgraph::await_latent\(.*crate::remote::fetch_double\(arg\d+\) \}, Box::new\(move \|value\| \{/);
+    if (!outcome) return t.skip(skipped);
+    assert.equal(outcome.stderr, '', text);
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), LATENT_CODE_OUTPUT);
+  });
+
+  test("a future that panics stops the run, and Completed doesn't run", async (t) => {
+    const { outcome, skipped } = await run('latent-fails', remote('panic!("no double for {}", value)'));
+    if (!outcome) return t.skip(skipped);
+    assert.notEqual(outcome.exitCode, 0);
+    assert.match(outcome.stderr, /no double for 4/);
+    assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['started']);
   });
 });

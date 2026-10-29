@@ -506,20 +506,68 @@ func VgDelay(seconds float64, then func()) {
 	vgLatentQueue = append(vgLatentQueue, vgLatent{vgLatentClock() + math.Max(0, seconds), vgLatentOrder, then})
 }
 
-// VgRunLatentActions runs the latent actions in the order they fall due.
+// An async function's channel (docs/node-authoring.md, gap 4): its Completed waits beside the
+// queue until the channel gives a value (its zero value once it's closed).
+type vgWaiting struct {
+	ready func() bool
+	run   func()
+}
+
+var vgLatentWaiting []vgWaiting
+
+// VgAwait runs then with the first value the channel gives, from the latent queue.
+func VgAwait[T any](ch <-chan T, then func(any)) {
+	var value T
+	received := false
+	vgLatentWaiting = append(vgLatentWaiting, vgWaiting{
+		ready: func() bool {
+			if !received {
+				select {
+				case value = <-ch:
+					received = true
+				default:
+				}
+			}
+			return received
+		},
+		run: func() { then(value) },
+	})
+}
+
+// VgRunLatentActions runs the latent actions in the order they fall due, and each waiting
+// channel's Completed once it has a value.
 func VgRunLatentActions() {
-	for len(vgLatentQueue) > 0 {
+	for len(vgLatentQueue) > 0 || len(vgLatentWaiting) > 0 {
+		var still []vgWaiting
+		for _, w := range vgLatentWaiting {
+			if w.ready() {
+				vgLatentOrder++
+				vgLatentQueue = append(vgLatentQueue, vgLatent{vgLatentClock(), vgLatentOrder, w.run})
+			} else {
+				still = append(still, w)
+			}
+		}
+		vgLatentWaiting = still
+		if len(vgLatentQueue) == 0 {
+			time.Sleep(time.Millisecond)
+			continue
+		}
 		next := 0
 		for i, l := range vgLatentQueue {
 			if l.due < vgLatentQueue[next].due || (l.due == vgLatentQueue[next].due && l.order < vgLatentQueue[next].order) {
 				next = i
 			}
 		}
+		if wait := vgLatentQueue[next].due - vgLatentClock(); wait > 0 {
+			// While channels are waiting, look at them again soon.
+			if len(vgLatentWaiting) > 0 {
+				wait = math.Min(wait, 0.001)
+			}
+			time.Sleep(time.Duration(wait * float64(time.Second)))
+			continue
+		}
 		latent := vgLatentQueue[next]
 		vgLatentQueue = append(vgLatentQueue[:next], vgLatentQueue[next+1:]...)
-		if wait := latent.due - vgLatentClock(); wait > 0 {
-			time.Sleep(time.Duration(wait * float64(time.Second)))
-		}
 		latent.run()
 	}
 }

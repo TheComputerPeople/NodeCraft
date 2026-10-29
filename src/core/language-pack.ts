@@ -235,6 +235,9 @@ export interface LanguageServerImport {
   severalResults?: { error?: string };
   // Only names other packages can use are nodes: Go's capitalized ones.
   exportedNames?: 'capitalized';
+  // A function returning a channel (Go's `<-chan T`) is async (docs/node-authoring.md, gap 4): a
+  // latent node, whose value is the first the channel gives.
+  asyncChannels?: boolean;
 }
 
 export interface LanguagePack {

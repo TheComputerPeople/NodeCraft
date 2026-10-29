@@ -69,6 +69,15 @@ export function scanSymbols(text: string, functions: SymbolFunction[], spec: Lan
     }
     const params: ScannedParam[] = parsed.params.map((p) => ({ name: p.name, ...(p.type ? { type: typeFromText(p.type, known) } : {}), ...(p.defaultValue !== undefined ? { defaultValue: p.defaultValue } : {}) }));
     const returns = parsed.returns === null ? null : parsed.returns ? typeFromText(parsed.returns, known) : undefined;
+    // Go's channel results are async (docs/node-authoring.md, gap 4): the channel's value.
+    const channel = spec.asyncChannels && parsed.returns ? /^(?:<-\s*)?chan\s+(.+)$/.exec(parsed.returns.trim()) : null;
+    if (channel) {
+      const value = channel[1].trim();
+      const scanned: ScannedFunction = { name: fn.name, line, params, returns: /^struct\s*\{\s*\}$/.test(value) ? null : typeFromText(value, known), doc, latent: true };
+      if (fn.owner) classOf(fn.owner, line, container).methods.push(scanned);
+      else result.functions.push({ ...scanned, ...(container ? { container } : {}) });
+      continue;
+    }
     const several = spec.severalResults && parsed.returns ? severalResults(parsed.returns, spec, doc, known) : undefined;
     if (several && 'reason' in several) {
       skip(several.reason);

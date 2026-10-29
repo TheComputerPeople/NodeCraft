@@ -70,7 +70,9 @@ describe('Rust scanner', () => {
 
   test('pub functions, in inline modules, with parameters, types and docs', () => {
     const fns = Object.fromEntries(scan.functions.map((f) => [`${f.container ? `${f.container}::` : ''}${f.name}`, f]));
-    assert.deepEqual(Object.keys(fns).sort(), ['damage', 'greeting', 'is_critical', 'lookup', 'scores::best']);
+    assert.deepEqual(Object.keys(fns).sort(), ['damage', 'greeting', 'is_critical', 'later', 'lookup', 'scores::best']);
+    // An async fn is a latent node (docs/node-authoring.md, gap 4).
+    assert.deepEqual([fns.later.latent, fns.later.returns], [true, null]);
     assert.deepEqual(fns.damage.params, [{ name: 'strength', type: { id: 'float' } }, { name: 'level', type: { id: 'int' } }]);
     assert.deepEqual(fns.damage.returns, { id: 'float' });
     assert.equal(fns.damage.doc.description, 'How much damage a hit does.');
@@ -87,7 +89,6 @@ describe('Rust scanner', () => {
     // A lifetime isn't a type parameter: the reference is why.
     assert.match(skipped.label, /reference parameters/);
     assert.match(skipped.private_helper, /isn't pub/);
-    assert.match(skipped.later, /async/);
     assert.match(skipped.twice, /more than two type parameters/);
     assert.equal(skipped.level, undefined);
     assert.equal(skipped.helper, undefined);
