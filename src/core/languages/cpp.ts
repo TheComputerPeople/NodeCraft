@@ -196,6 +196,7 @@ export const cppPack: LanguagePack = {
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.cpp,
+  requires: { version: '20', label: 'C++20', basis: 'needs', why: 'std::erase, starts_with and defaulted ==' },
   generator: cppGenerator,
   // Functions marked @blueprint in headers: generated code includes the header to call them.
   importer: { extensions: ['.h', '.hpp', '.hh', '.hxx'], scan: scanCpp }

@@ -471,6 +471,7 @@ export const javaPack: LanguagePack = {
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.java,
+  requires: { version: '17', label: 'Java 17', basis: 'needs', why: 'switch rules, pattern matching in instanceof and HexFormat' },
   generator: javaGenerator,
   // public static methods marked @blueprint in a Javadoc comment, called by their qualified class.
   importer: { extensions: ['.java'], scan: scanJava }

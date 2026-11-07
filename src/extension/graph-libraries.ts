@@ -13,10 +13,10 @@ import { graphFileDefinitions } from '../core/graph-files';
 import { duplicateTypes, generatedLanguages } from '../core/user-types';
 import { tagPackageDefinitions } from '../core/node-packages';
 import { csharpNamespace, goPackage, javaProject, phpNamespace, pythonModule } from './placement';
+import { findFilesLimited } from './scan-limit';
 
 const GLOB = '**/*.vgraph';
 const EXCLUDE = '**/{node_modules,.git,.venv,venv,dist,out,build,bin,obj}/**';
-const MAX_FILES = 5000;
 const RELOAD_DEBOUNCE_MS = 300;
 const SOURCE = 'graph-libraries';
 
@@ -56,7 +56,7 @@ export class GraphLibraries implements vscode.Disposable {
 
   async rescan(): Promise<void> {
     const generation = ++this.generation;
-    const uris = await vscode.workspace.findFiles(GLOB, EXCLUDE, MAX_FILES);
+    const uris = await findFilesLimited(GLOB, EXCLUDE, 'graph files');
     const scanned = await Promise.all(uris.map((uri) => this.scan(uri)));
     if (generation !== this.generation) return;
     this.files.clear();

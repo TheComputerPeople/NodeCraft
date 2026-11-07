@@ -175,6 +175,12 @@
           "default": true,
           "description": "Compile a graph to its target language whenever it is saved, keeping the generated file next to it up to date."
         },
+        "blueprintVisualScripting.scanLimit": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 1,
+          "markdownDescription": "The most files of each kind (source files, graphs, node files, package manifests) the extension scans in a workspace. A scan that reaches it says so once, rather than silently leaving files out."
+        },
         "blueprintVisualScripting.exposeAllFunctions": {
           "type": "boolean",
           "default": false,

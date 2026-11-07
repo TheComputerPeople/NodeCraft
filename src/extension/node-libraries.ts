@@ -9,6 +9,7 @@ import { NodeDefinition } from '../core/model';
 import { SnippetLanguage, nodeFileProblems } from '../core/node-files';
 import { NodePackage, NodePackageManifest, manifestProblems, resolvePackages } from '../core/node-packages';
 import { NodeRegistry, parseNodeDefinition } from '../core/registry';
+import { findFilesLimited } from './scan-limit';
 
 const NODE_LIBRARY_GLOB = '**/*.node.json';
 const PACKAGE_GLOB = '**/*.vgraph-package.json';
@@ -112,7 +113,7 @@ export class NodeLibraries implements vscode.Disposable {
     const manifestProblemsByFile = new Map<string, string[]>();
     const claimed = new Set<string>();
     const graphPackages = new Map<string, { name: string; version: string }>();
-    for (const manifestUri of await vscode.workspace.findFiles(PACKAGE_GLOB, EXCLUDE, 200)) {
+    for (const manifestUri of await findFilesLimited(PACKAGE_GLOB, EXCLUDE, 'package manifests')) {
       let manifest: NodePackageManifest;
       try {
         manifest = JSON.parse(await readText(manifestUri)) as NodePackageManifest;
@@ -129,7 +130,7 @@ export class NodeLibraries implements vscode.Disposable {
       const nodes: NodeDefinition[] = [];
       const missing: string[] = [];
       for (const entry of manifest.nodes ?? []) {
-        const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, entry), EXCLUDE, 1000);
+        const files = await findFilesLimited(new vscode.RelativePattern(folder, entry), EXCLUDE, "packages' node files");
         if (!files.length) missing.push(`"${entry}" matches no node definition file.`);
         for (const file of files) {
           claimed.add(file.toString());
@@ -138,7 +139,7 @@ export class NodeLibraries implements vscode.Disposable {
         }
       }
       for (const entry of manifest.graphs ?? []) {
-        const files = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, entry), EXCLUDE, 1000);
+        const files = await findFilesLimited(new vscode.RelativePattern(folder, entry), EXCLUDE, "packages' graph files");
         if (!files.length) missing.push(`"${entry}" matches no graph file.`);
         for (const file of files) graphPackages.set(file.toString(), { name: manifest.name, version: manifest.version });
       }
@@ -150,7 +151,7 @@ export class NodeLibraries implements vscode.Disposable {
     }
     // Node files no package holds load on their own, as before packages.
     const loose: NodeDefinition[] = [];
-    for (const file of await vscode.workspace.findFiles(NODE_LIBRARY_GLOB, EXCLUDE, 500)) {
+    for (const file of await findFilesLimited(NODE_LIBRARY_GLOB, EXCLUDE, 'node files')) {
       if (claimed.has(file.toString())) continue;
       const def = await read(file);
       if (def) loose.push(def);
@@ -222,7 +223,7 @@ function positionAt(text: string, offset: number): vscode.Position {
 // The languages of the workspace's graphs, as snippets need them (New Node writes one for each).
 export async function workspaceSnippetLanguages(languages: LanguagePackRegistry): Promise<SnippetLanguage[]> {
   const ids = new Set<string>();
-  for (const uri of await vscode.workspace.findFiles(GRAPH_GLOB, EXCLUDE, 2000)) {
+  for (const uri of await findFilesLimited(GRAPH_GLOB, EXCLUDE, 'graph files')) {
     try {
       const doc = JSON.parse(await readText(uri)) as { language?: string; languages?: string[] };
       if (doc.language) ids.add(doc.language);

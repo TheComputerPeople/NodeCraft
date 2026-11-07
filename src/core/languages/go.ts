@@ -213,6 +213,7 @@ export const goPack: LanguagePack = {
   capabilities: { staticTyping: true, classes: true, inheritance: false, interfaces: true, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.go,
+  requires: { version: '1.21', label: 'Go 1.21', basis: 'needs', why: 'the slices package, min and max' },
   generator: goGenerator,
   // Functions marked // @blueprint, found through gopls (Tier 2).
   importer: { extensions: ['.go'], languageServer: { comments: ['//'], parameters: 'name type', returns: 'after', ignore: ['func'], objectsByPointer: true, severalResults: { error: 'error' }, exportedNames: 'capitalized', asyncChannels: true } }

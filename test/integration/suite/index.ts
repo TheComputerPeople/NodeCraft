@@ -143,6 +143,27 @@ test('Compile writes the generated file next to the graph', async () => {
   assert.deepEqual(vscode.languages.getDiagnostics(graph), []);
 });
 
+// docs/project-integration.md, part 2.
+test("Compile warns when the graph's project declares an older language version than generated code needs", async () => {
+  const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
+  const graph = workspaceFile('legacy-java/src/main/java/game/Hello.vgraph');
+  await write('legacy-java/pom.xml', '<project><modelVersion>4.0.0</modelVersion><groupId>g</groupId><artifactId>a</artifactId><version>1</version><properties><maven.compiler.release>11</maven.compiler.release></properties></project>');
+  await write('legacy-java/src/main/java/game/Hello.vgraph', JSON.stringify({
+    schemaVersion: 3, name: 'Hello', kind: 'class', language: 'java', variables: [],
+    graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [{ id: 's', type: 'core:event.start', position: { x: 0, y: 0 }, properties: {} }], connections: [] }]
+  }));
+  try {
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    const warning = vscode.languages.getDiagnostics(graph).find((d) => d.code === 'project-version');
+    assert.ok(warning, 'the version warning');
+    assert.equal(warning.severity, vscode.DiagnosticSeverity.Warning);
+    assert.match(warning.message, /declares 11 in pom\.xml, but generated Java needs Java 17/);
+    assert.ok(await exists(workspaceFile('legacy-java/src/main/java/game/Hello.java')), 'generated all the same');
+  } finally {
+    await vscode.workspace.fs.delete(workspaceFile('legacy-java'), { recursive: true });
+  }
+});
+
 test('saving a graph compiles it', async () => {
   const graph = workspaceFile('legacy.vgraph');
   const document = await editGraph(graph, (g) => {

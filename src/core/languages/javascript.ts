@@ -58,6 +58,7 @@ export const typescriptPack: LanguagePack = {
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.typescript,
+  requires: { version: '2020', label: 'the ES2020 library', basis: 'needs', why: 'String.matchAll, for Regex Find All' },
   simulator: javascriptSimulator,
   generator: typescriptGenerator({ typed: true, mapType }),
   importer: { extensions: ['.ts', '.mts', '.cts'], scan: (source) => scanTypeScript(source) }
@@ -71,6 +72,7 @@ export const javascriptPack: LanguagePack = {
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: false, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.javascript,
+  requires: { version: '2022', label: 'ES2022', basis: 'needs', why: 'class fields' },
   simulator: javascriptSimulator,
   generator: typescriptGenerator({ typed: false, mapType }),
   importer: { extensions: ['.js', '.mjs', '.cjs'], scan: (source) => scanTypeScript(source, true) }

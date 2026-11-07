@@ -14,6 +14,7 @@ import { NodePackageManifest, compareVersions, manifestProblems } from '../core/
 import { parseDocument, serializeDocument } from '../core/serializer';
 import { workspaceSnippetLanguages } from './node-libraries';
 import { downloadPackage, packageVersion, registryFor, searchPackages } from './npm-registry';
+import { commandFolder } from './workspace-folders';
 
 export const PACKAGES_FOLDER = 'blueprint-packages';
 
@@ -80,7 +81,7 @@ async function pickFromNpm(workspaceFolder: vscode.Uri): Promise<NpmSource | und
 
 // Adds the package in `source` (asked for when absent) and returns where it went.
 export async function addBlueprintPackage(languages: LanguagePackRegistry, source?: vscode.Uri | NpmSource): Promise<vscode.Uri | undefined> {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+  const workspaceFolder = await commandFolder();
   if (!workspaceFolder) {
     void vscode.window.showErrorMessage('Open a folder first: a Blueprint package is added to the workspace.');
     return undefined;

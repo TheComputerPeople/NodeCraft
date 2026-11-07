@@ -7,6 +7,7 @@ import { NodeLine } from './compiler/writer';
 import { ModuleScan } from './importing/symbols';
 import { OutputPlan, PlacementContext } from './output-plan';
 import type { LanguageTerms } from './terms';
+import type { LanguageRequirement } from './versions';
 import { TypeRef } from './types';
 
 // Which Blueprint concepts generated code in the language can express (not which keywords the
@@ -257,6 +258,9 @@ export interface LanguagePack {
   // Its words for containers and types, as the editor shows them (src/core/terms.ts); Unreal's
   // when absent.
   terms?: LanguageTerms;
+  // The language version its generated code needs (src/core/versions.ts), for warning a project
+  // that declares an older one.
+  requires?: LanguageRequirement;
   simulator?: CodeSimulator;
   generator?: CodeGenerator;
   importer?: SymbolImporter;

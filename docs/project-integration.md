@@ -85,6 +85,41 @@ What doesn't:
 - **When it's older**, compiling a graph in that project gives a warning in Compiler Results (once per project): "This project declares Java 11 (pom.xml); generated code needs Java 17." Set Up in This Project lists it under **Can't** (Part 5). Generation goes on: the project may build with a newer toolchain than it declares.
 - **Without a declaration**, nothing is said.
 
+**Built (step 2: Parts 1 and 2).**
+
+- **The model** (src/extension/projects.ts, free of the vscode API like placement.ts):
+  - `projectAt(dir)` reads a folder's project files: each language's, as above, with a Makefile counting only beside C++ sources.
+  - It records the build systems, languages, project files, declared versions and configured checkers. Comments and trailing commas in `tsconfig.json` and `.luarc.json` are allowed, and a `tsconfig.json`'s relative `extends` is followed.
+  - `findProjects(root)` walks a workspace folder (to a depth of 8), leaving out dependencies, build output and tool folders (`node_modules`, `target`, `vendor`, `.venv`, `blueprint-packages`, ...). It gives each project the workspace it belongs to: npm or pnpm workspaces, a Cargo `[workspace]`, `go.work`, Maven `<modules>`, a Gradle settings file, a parent `CMakeLists.txt` with `add_subdirectory`, a `.sln`.
+  - `nearestProject(dir, stopDir, language)` finds a graph's project: the nearest folder above it with a project of the graph's language.
+  - **Placement keeps its own lookups.** They already take the nearest project file of their kind, which is what the model would give them, so rewiring them would change nothing a user sees. The model serves the version warning now, and Set Up in This Project (Part 5) later.
+- **What generated code needs** was measured on the node audit's program (Phase 10), which uses every built-in node. `LanguagePack.requires` declares it (src/core/versions.ts):
+
+  | Language | Needs | How it was measured |
+  |---|---|---|
+  | TypeScript | the ES2020 library | `tsc --strict` without `@types/node` at each `--lib` level: ES2019 lacks `String.matchAll` (Regex Find All). `tsc` compiles the syntax down. |
+  | JavaScript | ES2022 | class fields; `?.` and `??` |
+  | Python | 3.8 | syntax parses as 3.7 (`ast.parse` with `feature_version`); no newer library calls; annotations aren't evaluated (`from __future__ import annotations`) |
+  | C# | 10 | built at each `LangVersion`: 9 lacks file-scoped namespaces |
+  | C++ | C++20 | `-std=c++17` lacks `std::erase`, `starts_with` and defaulted `==` |
+  | Java | 17 | `--release 16` lacks `HexFormat`; 11 lacks switch rules and pattern matching in `instanceof` |
+  | Go | 1.21 | the `slices` package and the `min` and `max` built-ins (read, since only one Go is installed) |
+  | Rust | edition 2018 | built as edition 2018. Its minimum compiler (`rust-version`) can't be measured with one toolchain, so it isn't checked. |
+  | Lua | 5.3 | `math.type`, `utf8`, `table.move` |
+  | GDScript | Godot 4.3 | tested only (marked `tested`) |
+  | Ruby | 3.3 | tested only: nothing installed can check an older Ruby |
+  | PHP | 8.1 | Fibers and enums; nothing newer found in the generated code or runtime |
+
+- **Declared versions** become the lowest version they allow (`lowestVersion`): `>=3.8`, `^3.8`, `~> 3.8` and `3.8.*` give 3.8, `^7.4 || ^8.0` gives 7.4, and `<4` gives none.
+  - Some read in a language's own scale: an ES target is a year, `LuaJIT` is 5.1, Java's `1.8` is 8, and Cargo without an edition is 2015.
+  - A `.csproj` without `LangVersion` uses its target framework's default (`net6.0` is C# 10, `netstandard2.0` and `net48` are 7.3).
+- **The warning** (`projectVersionDiagnostics`, code `project-version`) goes with the graph's other placement warnings. For example: "This project declares 11 in pom.xml, but generated Java needs Java 17 (switch rules, pattern matching in instanceof and HexFormat). Older versions may not build or run it." Generation goes on.
+- **Multi-root.** New Graph, New Node, Test Node Library and Add Blueprint Package work in the workspace folder of what they're run on, then of the active editor's file (a graph editor counts), then the only folder, then one the user picks (src/extension/workspace-folders.ts). Compiling already used the graph's own folder.
+- **Scanning.** Every workspace scan (source files, graphs, node files, package manifests and their entries) stops at the `blueprintVisualScripting.scanLimit` setting (5000). A scan that reaches it says so once, with Open Settings, instead of leaving files out silently. It doesn't choose which files to keep; VS Code's search order decides.
+- **Tests.**
+  - Unit (test/unit/projects.test.ts): every language's project and declared version, `tsconfig` extends and comments, workspaces in a tree with dependencies and build output left out, checkers, a graph's nearest project, `lowestVersion`, the warning's wording, and every pack declaring what it needs.
+  - Integration: a Java graph in a Maven project declaring Java 11 compiles with the warning, and its file is generated all the same.
+
 ## Part 3: the project's checkers
 
 **Design.**

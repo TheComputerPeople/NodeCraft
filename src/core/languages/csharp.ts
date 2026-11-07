@@ -436,6 +436,7 @@ export const csharpPack: LanguagePack = {
   capabilities: { staticTyping: true, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.csharp,
+  requires: { version: '10', label: 'C# 10', basis: 'needs', why: 'file-scoped namespaces' },
   generator: csharpGenerator,
   importer: { extensions: ['.cs'], scan: scanCSharp }
 };

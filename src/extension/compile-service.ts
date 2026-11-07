@@ -11,6 +11,7 @@ import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
 import { generatedLanguages } from '../core/user-types';
 import { cppRunSources, csharpNamespace, csharpRunSources, godotProject, goPackage, goRunSources, javaProject, phpNamespace, rustRunSources, detectImportExtension, detectModuleFormat, isGeneratedFrom, verifyPlacement } from './placement';
+import { projectVersionDiagnostics } from './projects';
 import { OutputPlans } from './output-plans';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
 
@@ -123,7 +124,7 @@ export class CompileService implements vscode.Disposable {
     await this.removeStaleOutputs(graphDir, graphFileName, [outputPath, ...companions.map((c) => c.path), ...(testPath ? [testPath] : []), ...shared.paths]);
     const pack = this.languages.get(language);
     const registration = pack && this.outputPlans ? await this.outputPlans.apply(pack, root, outputPath) : [];
-    const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root), ...registration, ...shared.diagnostics];
+    const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root), ...(pack ? projectVersionDiagnostics(pack, graphDir, root) : []), ...registration, ...shared.diagnostics];
     // Java finds the project's classes in its source roots (javac's -sourcepath).
     const javaRoots = language === 'java' ? javaProject(graphDir, root).sourceRoots : [];
     const importRoots = javaRoots.length ? javaRoots : result.output.importRoots?.map((r) => path.join(root, r));

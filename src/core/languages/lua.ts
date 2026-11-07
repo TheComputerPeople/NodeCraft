@@ -176,6 +176,7 @@ export const luaPack: LanguagePack = {
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.lua,
+  requires: { version: '5.3', label: 'Lua 5.3', basis: 'needs', why: 'integer and float numbers, utf8 and table.move' },
   generator: luaGenerator,
   // Module functions marked ---@blueprint (LuaLS annotations give their types).
   importer: { extensions: ['.lua'], scan: scanLua }

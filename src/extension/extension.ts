@@ -23,6 +23,7 @@ import { OutputPlans } from './output-plans';
 import { BlueprintVisualScriptingApi } from '../core/api';
 import { ProjectFunctions } from './project-functions';
 import { watchWorkspaceLanguagePacks } from './workspace-packs';
+import { commandFolder } from './workspace-folders';
 
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
@@ -162,7 +163,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       );
       if (!picked) return;
       const target = await vscode.window.showSaveDialog({
-        defaultUri: vscode.Uri.joinPath(vscode.workspace.workspaceFolders?.[0]?.uri ?? context.extensionUri, 'NewGraph.vgraph'),
+        defaultUri: vscode.Uri.joinPath((await commandFolder()) ?? context.extensionUri, 'NewGraph.vgraph'),
         filters: { 'Visual Graph': ['vgraph'] },
         saveLabel: 'Create Graph'
       });
@@ -182,7 +183,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     if (!name?.trim()) return undefined;
     const category = given?.category ?? await vscode.window.showInputBox({ prompt: 'Its category in the palette ("|" nests one in another)', value: 'My Nodes' });
     if (category === undefined) return undefined;
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const workspaceFolder = folder ? undefined : await commandFolder();
     let directory = folder ?? (workspaceFolder && vscode.Uri.joinPath(workspaceFolder, 'nodes'));
     if (!directory) {
       void vscode.window.showErrorMessage('Open a folder first: New Node writes its file there.');
@@ -210,7 +211,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       void vscode.window.showWarningMessage('Testing a node library runs its code; trust the workspace first.');
       return undefined;
     }
-    const where = target ?? vscode.window.activeTextEditor?.document.uri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+    const where = target ?? vscode.window.activeTextEditor?.document.uri ?? (await commandFolder());
     if (!where) return undefined;
     const isFile = (await vscode.workspace.fs.stat(where)).type === vscode.FileType.File;
     const files = isFile ? [where] : await vscode.workspace.findFiles(new vscode.RelativePattern(where, '**/*.node.json'), '**/node_modules/**', 500);

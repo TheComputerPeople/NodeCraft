@@ -315,6 +315,7 @@ export const pythonPack: LanguagePack = {
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.python,
+  requires: { version: '3.8', label: 'Python 3.8', basis: 'needs' },
   generator: pythonGenerator,
   importer: { extensions: ['.py'], scan: scanPython }
 };

@@ -9,10 +9,10 @@ import { LanguagePack, LanguagePackRegistry, LanguageServerImport } from '../cor
 import { NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { goPackage, pythonModule, rustModule } from './placement';
+import { findFilesLimited } from './scan-limit';
 
 // Build output, dependencies and virtual environments hold no project functions.
 const EXCLUDE = '**/{node_modules,.git,.venv,venv,env,__pycache__,site-packages,dist,out,build,.tox,bin,obj}/**';
-const MAX_FILES = 5000;
 const MAX_FILE_BYTES = 1_000_000;
 const RELOAD_DEBOUNCE_MS = 300;
 // A language server with no symbols (or signatures) yet for a marked file may still be starting: it's asked again,
@@ -91,7 +91,7 @@ export class ProjectFunctions implements vscode.Disposable, vscode.CodeActionPro
   // Scans every source file in the workspace.
   async rescan(): Promise<void> {
     const generation = ++this.generation;
-    const uris = (await vscode.workspace.findFiles(this.glob, EXCLUDE, MAX_FILES)).filter((uri) => this.packsFor(uri).length);
+    const uris = (await findFilesLimited(this.glob, EXCLUDE, 'source files')).filter((uri) => this.packsFor(uri).length);
     const results = new Map<string, FileFunctions>();
     for (let i = 0; i < uris.length; i += 50) {
       const batch = uris.slice(i, i + 50);

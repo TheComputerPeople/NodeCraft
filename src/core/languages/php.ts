@@ -146,6 +146,7 @@ export const phpPack: LanguagePack = {
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.php,
+  requires: { version: '8.1', label: 'PHP 8.1', basis: 'needs', why: 'Fibers and enums' },
   generator: phpGenerator,
   // Functions and public static methods marked @blueprint in docblocks.
   importer: { extensions: ['.php'], scan: scanPhp }

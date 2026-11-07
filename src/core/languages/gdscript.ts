@@ -194,6 +194,7 @@ export const gdscriptPack: LanguagePack = {
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.gdscript,
+  requires: { version: '4.3', label: 'Godot 4.3', basis: 'tested' },
   generator: gdscriptGenerator,
   // Static functions marked ## @blueprint.
   importer: { extensions: ['.gd'], scan: scanGdscript }

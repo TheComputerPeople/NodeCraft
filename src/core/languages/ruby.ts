@@ -138,6 +138,7 @@ export const rubyPack: LanguagePack = {
   capabilities: { staticTyping: false, classes: true, inheritance: true, interfaces: true, generics: true, async: true, exceptions: true, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.ruby,
+  requires: { version: '3.3', label: 'Ruby 3.3', basis: 'tested' },
   generator: rubyGenerator,
   // Module methods and top-level methods marked @blueprint in YARD comments.
   importer: { extensions: ['.rb'], scan: scanRuby }

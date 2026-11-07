@@ -240,6 +240,7 @@ export const rustPack: LanguagePack = {
   capabilities: { staticTyping: true, classes: true, inheritance: false, interfaces: false, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
   mapType,
   terms: LANGUAGE_TERMS.rust,
+  requires: { version: '2018', label: 'edition 2018', basis: 'needs' },
   generator: rustGenerator,
   // pub functions marked /// @blueprint, called through their module in the crate.
   importer: { extensions: ['.rs'], scan: scanRust }
