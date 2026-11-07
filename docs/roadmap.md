@@ -399,12 +399,13 @@ Goal: the extension fits into any codebase, a new project or existing code, in e
 Before it: placement detects each language's project (module format, tsconfig, Python packages, C# namespaces, Maven and Gradle roots, Go modules, Rust crates, Composer PSR-4, Godot projects), and existing code becomes nodes in all 12 languages. Generated code needs recent language versions (C++20, Java 17, Go 1.21, Ruby 3.3, PHP 8.3, Lua 5.3), nothing sets a project up, and no layout but a single folder is tested.
 
 - **A project model**: each project in the workspace, with its build system, workspace, declared language version and checkers; placement on top of it; multi-root workspaces and large codebases.
-- **Generated code for the project's version**, detected from its files, down to a floor per language (decided 2026-11-07: detect and adapt): ES2020, Python 3.8, C# 8, C++17, Java 11, Go 1.18, Rust 2018, Godot 4.2, Ruby 3.0, PHP 8.0. What a version can't do leaves its capabilities.
-- **Lua 5.1 and LuaJIT** (decided 2026-11-07), as well as 5.2 to 5.4: LÖVE, Neovim and Defold run on them.
+- **Versions, reported**: what each language's generated code needs is measured and declared by its pack, and a project that declares an older version gets a clear warning.
 - **The project's checkers**: generated code passes its compilers and type checkers at their strictest, and carries the markers style linters skip, tested on a corpus of real-world layouts in every language (monorepos, workspaces, multi-module builds, Unity-, Rails- and Laravel-shaped folders).
 - **New Project** for each language, and **Set Up in This Project** for existing code: what fits, what's missing, and the one-time hooks, applied with consent.
 
 Design and steps: [project-integration.md](project-integration.md).
+
+- **Deferred** (decided 2026-11-07, before building): generated code that adapts to a project's older language version, down to a floor per language, and Lua 5.1 and LuaJIT. Their design is kept in project-integration.md.
 
 ### Phase 12: Code classes as parents
 
@@ -512,7 +513,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace, extensions and npm, or a private npm registry) | 6 |
 | Library | Blueprint Function Libraries usable from graphs in each of several languages; plugins that carry library graphs | ✅ (a library is generated for each of its languages; packages carry graphs, added with Add Blueprint Package) | — |
 | Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Rust has no inheritance or interfaces, Go no inheritance) | 6, 8 |
-| Languages | (Beyond Unreal, which owns its projects) Graphs fit any codebase: each project's build, workspace and declared language version (down to a floor, with Lua 5.1 and LuaJIT), generated code that passes the project's own checkers, New Project and Set Up in This Project | ⬜ | 11 |
+| Languages | (Beyond Unreal, which owns its projects) Graphs fit any codebase: each project's build and workspace, its declared language version checked against what generated code needs, generated code that passes the project's own checkers, New Project and Set Up in This Project | ⬜ | 11 |
 | Languages | (Beyond Unreal) Workspaces with graphs in several languages: a new graph takes its folder's language, structs and enums can be shared between languages, and another language's code is reached through project functions | ✅ (generated cross-language bindings deferred) | 7 |
 | Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |
 | Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |

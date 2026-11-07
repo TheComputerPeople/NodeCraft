@@ -5,9 +5,9 @@ Phase 11 of the [roadmap](roadmap.md): the extension fits into any codebase, a n
 The user chose to:
 
 - make it a phase of its own;
-- have generated code **detect and adapt** to each project's declared language version, down to a floor per language;
-- support **Lua 5.1 and LuaJIT** as well as 5.2 to 5.4;
 - build all three ways in: a **New Project** command, **Set Up in This Project** for existing code, and generated code that **passes the project's own checkers**, tested on a corpus of real-world layouts.
+
+They first chose to have generated code adapt to each project's declared language version, down to a floor per language, and to support Lua 5.1 and LuaJIT. Later the same day they set that aside ("skip retro-fitting to older languages right now"): this phase integrates with projects on the versions generated code supports today. It records each project's declared version only to say clearly when it's older than that (Part 2). Adapting to older versions is deferred, with its design kept at the end of this doc.
 
 A "Built" section after each design says what each step built.
 
@@ -49,19 +49,130 @@ What doesn't:
 
 **Design.** One place knows each project in the workspace: src/core/projects.ts (pure, over a file-reading interface) and src/extension/projects.ts (watching).
 
-- **A project** is a folder with a language's project file: `package.json` or `tsconfig.json`, `pyproject.toml` or `setup.py` or `setup.cfg`, `*.csproj`, `CMakeLists.txt` or `Makefile` or `*.vcxproj`, `Cargo.toml`, `pom.xml` or `build.gradle(.kts)`, `go.mod`, `.luarc.json` or `*.rockspec` or LÖVE's `conf.lua` or `main.lua`, `project.godot`, `Gemfile` or `*.gemspec`, `composer.json`.
+- **A project** is a folder with a language's project file: `package.json` or `tsconfig.json`, `pyproject.toml` or `setup.py` or `setup.cfg`, `*.csproj`, `CMakeLists.txt` or `Makefile` or `*.vcxproj`, `Cargo.toml`, `pom.xml` or `build.gradle(.kts)`, `go.mod`, `.luarc.json` or `*.rockspec`, `project.godot`, `Gemfile` or `*.gemspec`, `composer.json`.
 - **What it records:**
   - its root;
   - its language or languages;
   - its build system;
   - its workspace (an npm, pnpm or Yarn workspace, a Cargo workspace, `go.work`, a Maven parent, a Gradle settings file, a CMake parent, a `.sln`);
-  - its **declared language version** (Part 2);
+  - its **declared language version**, to compare with what generated code needs (Part 2);
   - the checkers it configures (`tsconfig` strictness, `.eslintrc*` or `eslint.config.*`, `mypy.ini` or `[tool.mypy]`, `ruff.toml` or `[tool.ruff]`, `.editorconfig`, `Directory.Build.props` with `TreatWarningsAsErrors`, `clippy.toml`, `.luacheckrc`, `.rubocop.yml`, `phpstan.neon`).
 - **Placement** reads the model instead of looking up files itself, so every language's placement sees workspaces and nested projects the same way.
 - **Multi-root.** Every command works in the workspace folder of the file or folder it's run on, falling back to asking which folder when there is none.
 - **Large codebases.** Scanning has no silent limit. Past 5000 files, scanning warns once, names the setting `blueprintVisualScripting.scanLimit`, and keeps the files nearest to the graphs.
 
-## Part 2: generated code for the project's version
+## Part 2: versions, reported
+
+**Design.** Generated code keeps needing what it needs today. The phase makes that known and checked:
+
+- **What generated code needs** is measured for each language (step 2) and written in the language's doc and in each pack: `LanguagePack.requires`, e.g. Java 17, C++20, Go 1.21, PHP 8.1, Lua 5.3.
+- **What the project declares** is read where projects declare it:
+
+  | Language | Read from |
+  |---|---|
+  | TypeScript, JavaScript | `tsconfig.json` or `jsconfig.json` `target`; `package.json` `engines.node` |
+  | Python | `pyproject.toml` `requires-python`, `.python-version`, `setup.cfg` `python_requires` |
+  | C# | `.csproj` `LangVersion`, else its `TargetFramework`'s default |
+  | C++ | `CMAKE_CXX_STANDARD` or `cxx_std_NN`, `-std=` in `compile_commands.json`, a `.vcxproj`'s `LanguageStandard` |
+  | Java | `maven.compiler.release` or `source`, Gradle's `sourceCompatibility` or toolchain `languageVersion` |
+  | Go | `go.mod`'s `go` line |
+  | Rust | `Cargo.toml` `edition` and `rust-version` |
+  | Lua | `.luarc.json` `runtime.version`, a rockspec's `lua` dependency |
+  | GDScript | `project.godot` `config/features` |
+  | Ruby | `.ruby-version`, the `Gemfile`'s `ruby`, a gemspec's `required_ruby_version` |
+  | PHP | `composer.json` `require.php` |
+
+- **When it's older**, compiling a graph in that project gives a warning in Compiler Results (once per project): "This project declares Java 11 (pom.xml); generated code needs Java 17." Set Up in This Project lists it under **Can't** (Part 5). Generation goes on: the project may build with a newer toolchain than it declares.
+- **Without a declaration**, nothing is said.
+
+## Part 3: the project's checkers
+
+**Design.**
+
+- **Two kinds of checker:**
+  - **Compilers and type checkers** must pass on generated code with the project's strictest settings: `tsc --strict` with `noUnusedLocals`, `noUnusedParameters`, `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`; mypy `--strict`; C# nullable with warnings as errors; `-Wall -Wextra -Werror`; clippy `-D warnings`; `javac -Xlint:all -Werror`; `go vet`; PHPStan level 9; Godot's warnings as errors.
+  - **Style linters** may differ from generated code's style: ESLint, Ruff, RuboCop, luacheck, PHP_CodeSniffer. Generated files carry each one's standard "generated" marker so it skips them: `/* eslint-disable */`, `# ruff: noqa`, `# rubocop:disable all`, `-- luacheck: ignore`, `// @phpcs:disable`. They also carry the header's `@generated`, which many tools and code review honor.
+- **`.gitattributes`.** New Project, and Set Up when the user agrees, add `*.vgraph.* linguist-generated` (and each language's file pattern), so diffs and statistics treat generated files as generated.
+- **Tests: a corpus of layouts** (test/fixtures/projects/), each a small but real-shaped project:
+
+  | Language | Layouts |
+  |---|---|
+  | TypeScript | a Vite app (ESM, bundler resolution), a Node library built with `tsc` (`rootDir`, `outDir`, CommonJS), a pnpm monorepo with a shared package and path aliases |
+  | JavaScript | CommonJS and ESM packages |
+  | Python | a src layout with `pyproject.toml`, a flat scripts folder, a Django-shaped package |
+  | C# | an SDK console with nullable and warnings as errors, a solution of two projects |
+  | C++ | CMake with a library subproject, a plain Makefile project |
+  | Rust | a binary crate, a workspace of two crates |
+  | Java | Maven, a multi-module Gradle build |
+  | Go | a module with internal packages, a `go.work` of two modules |
+  | Lua | a LuaRocks library, a plain script folder with `.luarc.json` |
+  | GDScript | a Godot project with an addon |
+  | Ruby | a gem, a Rails-shaped app (without Rails) |
+  | PHP | a Composer PSR-4 library, a Laravel-shaped app (without Laravel) |
+
+  For each, the test puts graphs where a user would: one using the project's code, and one the project's code calls. It compiles them, then runs the project's own build and checkers, and its own entry point or tests, which must use the generated code. A checker or toolchain that isn't installed is reported in the test's output as skipped, by name.
+
+## Part 4: New Project
+
+**Design.** **Blueprint: New Project…** asks for a language and a folder (an empty one, or a new one in it). It writes a minimal project in that language's usual layout, with a first class graph that prints "Hello from Blueprint" and runs:
+
+| Language | Files |
+|---|---|
+| TypeScript | `package.json` (ESM), `tsconfig.json` (strict), `src/Main.vgraph` |
+| JavaScript | `package.json` (ESM), `src/Main.vgraph` |
+| Python | `pyproject.toml`, `src/<name>/__init__.py`, `src/<name>/Main.vgraph` |
+| C# | `<Name>.csproj` (SDK, nullable), `Main.vgraph` |
+| C++ | `CMakeLists.txt` including the extension's generated-files include, `src/main.cpp`, `src/Main.vgraph` |
+| Rust | `Cargo.toml`, `src/main.rs` declaring the generated module, `src/Main.vgraph` |
+| Java | `pom.xml` (or `build.gradle` if Gradle is on the PATH and Maven isn't), `src/main/java/<package>/Main.vgraph` |
+| Go | `go.mod`, `main.go` calling the generated package, `game/Main.vgraph` |
+| Lua | `.luarc.json` (the Lua found on the PATH), `main.lua`, `Main.vgraph` |
+| GDScript | `project.godot`, a main scene running the graph's class, `Main.vgraph` |
+| Ruby | `Gemfile`, `.ruby-version`, `lib/main.rb`, `lib/Main.vgraph` |
+| PHP | `composer.json` (PSR-4), `src/Main.vgraph`, `bin/main.php` |
+
+- **Every project gets:** a `.gitignore` for the language's build output, the `.gitattributes` above, and a README saying how to run it with and without VS Code.
+- **Versions** are what generated code needs, or newer when the installed toolchain is, written in the project's files (so Part 2 reads them back).
+- **It opens the graph, compiles it, and offers Run.**
+
+## Part 5: Set Up in This Project
+
+**Design.** **Blueprint: Set Up in This Project** runs on an existing codebase (the workspace folder, or a folder picked in the Explorer) and shows a report in a webview, one section per project found (Part 1):
+
+- **Found:**
+  - the language, the build system, and the declared version against what generated code needs;
+  - where graphs placed in each source folder would generate;
+  - the checkers found.
+- **Needs:** each one-time hook the project needs before generated code builds, as today's Register Generated Files offers them (a CMake include, a Rust `mod`, a `tsconfig.json` include, a legacy `.csproj`'s import), each with **Show Change** and **Apply** buttons. Applying is an undoable workspace edit; nothing is changed without a click.
+- **Can't:** a declared version older than generated code needs, a build system the extension can't hook (Bazel, Meson, Unreal's), and a checker with settings generated code can't meet. Each says what to do instead.
+- **Optional:** add `.gitattributes`, add `@blueprint` to a function (Phase 9's quick fixes), and create a first graph in a chosen folder.
+
+Register Generated Files with the Build stays, and its hooks move into the report.
+
+## Exit check
+
+- The corpus passes: in every layout, generated code builds and passes the project's own checkers, runs from the project's own entry point, and calls and is called by the project's code.
+- New Project makes a project that compiles and runs in each of the 12 languages, and passes its own checkers.
+- Set Up in This Project reports correctly on the corpus (including a project declaring an older version than generated code needs), and applying its hooks makes the C++ and Rust layouts build.
+- A multi-root workspace of two projects in different languages works from both folders.
+
+## Steps
+
+One commit each; large steps may take several.
+
+1. This design, and the roadmap. (Amended the same day: older versions deferred.)
+2. The project model: detection, workspaces, declared versions and checkers; what each language's generated code needs, measured and declared by its pack; the version warning; placement on top of the model; multi-root and the scan limit.
+3. The corpus: layouts, the harness, compilers and type checkers; markers for style linters; fixes. TypeScript, JavaScript, Python, C#, Java.
+4. The corpus: C++, Rust, Go, Lua, GDScript, Ruby, PHP.
+5. New Project.
+6. Set Up in This Project.
+7. The exit check, docs, the parity checklist and status.
+
+## Deferred: older language versions
+
+Set aside on 2026-11-07, before building. The design as it was, for when it's taken up:
+
+### Generated code for the project's version
 
 **Design.**
 
@@ -99,11 +210,11 @@ What doesn't:
   - Where the toolchain can target an older version, the tests use that: `javac --release 11`, `-std=c++17`, `LangVersion 8`, Cargo's edition, `tsc --target ES2020 --lib ES2020`, `mypy --python-version 3.8`, PHPStan's `phpVersion`.
   - Where it can't, they need that version's interpreter installed (Python 3.8, Node.js 18, Lua 5.1 or LuaJIT, PHP 8.0, Ruby 3.0, Go 1.18), and say plainly when it's missing.
 
-## Part 3: Lua 5.1 and LuaJIT
+### Lua 5.1 and LuaJIT
 
 **Design.**
 
-- **Targets:** Lua 5.1, LuaJIT 2.1 (5.1 with its extensions), 5.2, 5.3 and 5.4, from Part 2's detection. LÖVE projects are LuaJIT.
+- **Targets:** Lua 5.1, LuaJIT 2.1 (5.1 with its extensions), 5.2, 5.3 and 5.4, from the detection above. LÖVE projects are LuaJIT.
 - **Numbers.** Before 5.3, Lua has one number type, so the runtime can't tell an int from a float. The semantics need it: an int prints as `3`, a float as `3.0`, and integer division truncates.
   - The generator knows every value's type at compile time, so it formats and divides by the pin's type instead of asking the value (`vg.format_int`, `vg.format_float`, `vg.idiv`).
   - Wildcards and `any` values carry their type: the runtime boxes a float stored in an `any` (`vg.float(x)`) only where the graph loses the type.
@@ -114,92 +225,3 @@ What doesn't:
   - `math.type` and `math.tointeger` are replaced as above;
   - coroutines and `string.format` work as they are.
 - **Tests:** the conformance fixtures, the node audit and the Lua interop tests under LuaJIT and Lua 5.1 when installed.
-
-## Part 4: the project's checkers
-
-**Design.**
-
-- **Two kinds of checker:**
-  - **Compilers and type checkers** must pass on generated code with the project's strictest settings: `tsc --strict` with `noUnusedLocals`, `noUnusedParameters`, `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`; mypy `--strict`; C# nullable with warnings as errors; `-Wall -Wextra -Werror`; clippy `-D warnings`; `javac -Xlint:all -Werror`; `go vet`; PHPStan level 9; Godot's warnings as errors.
-  - **Style linters** may differ from generated code's style: ESLint, Ruff, RuboCop, luacheck, PHP_CodeSniffer. Generated files carry each one's standard "generated" marker so it skips them: `/* eslint-disable */`, `# ruff: noqa`, `# rubocop:disable all`, `-- luacheck: ignore`, `// @phpcs:disable`. They also carry the header's `@generated`, which many tools and code review honor.
-- **`.gitattributes`.** New Project, and Set Up when the user agrees, add `*.vgraph.* linguist-generated` (and each language's file pattern), so diffs and statistics treat generated files as generated.
-- **Tests: a corpus of layouts** (test/fixtures/projects/), each a small but real-shaped project:
-
-  | Language | Layouts |
-  |---|---|
-  | TypeScript | a Vite app (ESM, bundler resolution), a Node library built with `tsc` (`rootDir`, `outDir`, CommonJS), a pnpm monorepo with a shared package and path aliases |
-  | JavaScript | CommonJS and ESM packages |
-  | Python | a src layout with `pyproject.toml`, a flat scripts folder, a Django-shaped package |
-  | C# | an SDK console with nullable and warnings as errors, a solution of two projects, a Unity-shaped `Assets` folder (checked as C# 9 on .NET Standard 2.1) |
-  | C++ | CMake with a library subproject, a plain Makefile project |
-  | Rust | a binary crate, a workspace of two crates |
-  | Java | Maven, a multi-module Gradle build |
-  | Go | a module with internal packages, a `go.work` of two modules |
-  | Lua | a LÖVE-shaped game (LuaJIT), a LuaRocks library (5.4) |
-  | GDScript | a Godot project with an addon |
-  | Ruby | a gem, a Rails-shaped app (without Rails) |
-  | PHP | a Composer PSR-4 library, a Laravel-shaped app (without Laravel) |
-
-  For each, the test puts graphs where a user would: one using the project's code, and one the project's code calls. It compiles them, then runs the project's own build and checkers, and its own entry point or tests, which must use the generated code. A checker or toolchain that isn't installed is reported in the test's output as skipped, by name.
-
-## Part 5: New Project
-
-**Design.** **Blueprint: New Project…** asks for a language and a folder (an empty one, or a new one in it). It writes a minimal project in that language's usual layout, with a first class graph that prints "Hello from Blueprint" and runs:
-
-| Language | Files |
-|---|---|
-| TypeScript | `package.json` (ESM), `tsconfig.json` (strict), `src/Main.vgraph` |
-| JavaScript | `package.json` (ESM), `src/Main.vgraph` |
-| Python | `pyproject.toml`, `src/<name>/__init__.py`, `src/<name>/Main.vgraph` |
-| C# | `<Name>.csproj` (SDK, nullable), `Main.vgraph` |
-| C++ | `CMakeLists.txt` including the extension's generated-files include, `src/main.cpp`, `src/Main.vgraph` |
-| Rust | `Cargo.toml`, `src/main.rs` declaring the generated module, `src/Main.vgraph` |
-| Java | `pom.xml` (or `build.gradle` if Gradle is on the PATH and Maven isn't), `src/main/java/<package>/Main.vgraph` |
-| Go | `go.mod`, `main.go` calling the generated package, `game/Main.vgraph` |
-| Lua | `.luarc.json` (the Lua found on the PATH), `main.lua`, `Main.vgraph` |
-| GDScript | `project.godot`, a main scene running the graph's class, `Main.vgraph` |
-| Ruby | `Gemfile`, `.ruby-version`, `lib/main.rb`, `lib/Main.vgraph` |
-| PHP | `composer.json` (PSR-4), `src/Main.vgraph`, `bin/main.php` |
-
-- **Every project gets:** a `.gitignore` for the language's build output, the `.gitattributes` above, and a README saying how to run it with and without VS Code.
-- **Versions** are the newest the installed toolchain supports, written in the project's files (so Part 2 reads them back).
-- **It opens the graph, compiles it, and offers Run.**
-
-## Part 6: Set Up in This Project
-
-**Design.** **Blueprint: Set Up in This Project** runs on an existing codebase (the workspace folder, or a folder picked in the Explorer) and shows a report in a webview, one section per project found (Part 1):
-
-- **Found:**
-  - the language, the build system and the declared version, and what that means: "Java 11: generated code uses classes for structures, not records";
-  - where graphs placed in each source folder would generate;
-  - the checkers found.
-- **Needs:** each one-time hook the project needs before generated code builds, as today's Register Generated Files offers them (a CMake include, a Rust `mod`, a `tsconfig.json` include, a legacy `.csproj`'s import), each with **Show Change** and **Apply** buttons. Applying is an undoable workspace edit; nothing is changed without a click.
-- **Can't:** a version below the floor, a build system the extension can't hook (Bazel, Meson, Unreal's), and a checker with settings generated code can't meet. Each says what to do instead.
-- **Optional:** add `.gitattributes`, add `@blueprint` to a function (Phase 9's quick fixes), and create a first graph in a chosen folder.
-
-Register Generated Files with the Build stays, and its hooks move into the report.
-
-## Exit check
-
-- The corpus passes: in every layout, generated code builds and passes the project's own checkers, runs from the project's own entry point, and calls and is called by the project's code. This happens at each language's floor version as well as its newest, and for Lua under LuaJIT.
-- New Project makes a project that compiles and runs in each of the 12 languages, and passes its own checkers.
-- Set Up in This Project reports correctly on the corpus, and applying its hooks makes the C++ and Rust layouts build.
-- A multi-root workspace of two projects in different languages works from both folders.
-
-## Steps
-
-One commit each; large steps may take several.
-
-1. This design, and the roadmap.
-2. The project model: detection, workspaces, declared versions and checkers; placement on top of it; multi-root and the scan limit.
-3. Versions, the framework: `GenerateOptions.target`, capabilities by version, Compiler Results, the override settings, the audit and fixtures at a target.
-4. Versions: TypeScript, JavaScript and Python.
-5. Versions: C# and Java.
-6. Versions: C++, Go and Rust.
-7. Versions: GDScript, Ruby and PHP.
-8. Lua 5.1, LuaJIT and 5.2.
-9. The corpus: layouts, the harness, compilers and type checkers; markers for style linters; fixes. TypeScript, JavaScript, Python, C#, Java.
-10. The corpus: C++, Rust, Go, Lua, GDScript, Ruby, PHP.
-11. New Project.
-12. Set Up in This Project.
-13. The exit check, docs, the parity checklist and status.
