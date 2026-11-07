@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "corpus-game"
+version = "0.1.0"
+description = "A src-layout package."
+requires-python = ">=3.10"
+
+[project.scripts]
+corpus-game = "corpus_game.__main__:main"
+
+[tool.mypy]
+strict = true
+mypy_path = "src"
+packages = ["corpus_game"]
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["src"]
+typeCheckingMode = "strict"
+
+[tool.ruff]
+src = ["src"]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "N"]

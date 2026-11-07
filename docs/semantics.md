@@ -37,7 +37,7 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 ## Values
 
 - Type defaults: `bool` is false; `int` and `float` are 0; `string` is empty; containers are empty; `any`, objects and other types are null.
-- Numbers are double precision. In TypeScript, JavaScript and Python `int` and `float` share that representation. In C#, as in Unreal, `int` is a 32-bit integer and `float` a double; a `float` wired into an `int` pin is truncated toward zero, and integers beyond 32 bits don't fit.
+- Numbers are double precision. In TypeScript and JavaScript `int` and `float` share that representation. In C#, as in Unreal, `int` is a 32-bit integer and `float` a double; a `float` wired into an `int` pin is truncated toward zero, and integers beyond 32 bits don't fit. Python's `int` and `float` are different types too (a `float` can't index a list, and type checkers keep them apart), so a `float` wired into an `int` pin is truncated toward zero there as well (since Phase 11).
 - **Converting a value to text** (Print, and any later string conversion):
   - null prints as an empty string;
   - booleans print as `true` and `false`;

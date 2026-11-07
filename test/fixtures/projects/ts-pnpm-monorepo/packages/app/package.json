@@ -1,0 +1,13 @@
+{
+  "name": "@corpus/app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@corpus/shared": "workspace:*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "start": "node src/main.ts"
+  }
+}

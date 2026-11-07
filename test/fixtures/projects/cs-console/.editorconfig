@@ -1,0 +1,10 @@
+root = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+# Every analyzer rule is a warning (and, with TreatWarningsAsErrors, an error).
+dotnet_analyzer_diagnostic.severity = warning
+csharp_style_namespace_declarations = file_scoped:warning
+# Generated code calls Names from other files of the app, so it stays public.
+dotnet_diagnostic.CA1515.severity = none

@@ -338,7 +338,10 @@ const RANGE = {
   python: 'if index < 0 or index >= len(target):\n    raise IndexError("Index out of range")',
   csharp: 'if (index < 0 || index >= target.Count) throw new ArgumentOutOfRangeException(nameof(index), "Index out of range");'
 };
-const with_range = (code: Snippets): Snippets => ({ javascript: `${RANGE.javascript}\n${code.javascript}`, python: `${RANGE.python}\n${code.python}`, csharp: `${RANGE.csharp}\n${code.csharp}` });
+const with_range = (code: Snippets): Snippets => ({
+  javascript: `${RANGE.javascript}\n${code.javascript}`, ...(code.typescript ? { typescript: `${RANGE.javascript}\n${code.typescript}` } : {}),
+  python: `${RANGE.python}\n${code.python}`, csharp: `${RANGE.csharp}\n${code.csharp}`
+});
 
 export function containerDefinitions(): NodeDefinition[] {
   const index = pin('index', 'Index', 'input', INT, 0);
@@ -400,7 +403,7 @@ export function containerDefinitions(): NodeDefinition[] {
     fn('core:array.clear', 'Clear', 'Utilities / Array', [target(ARRAY)], undefined,
       { javascript: 'target.length = 0;', python: 'target.clear()', csharp: 'target.Clear();' }, 'Removes every item.', { impure: true, keywords: ['empty', 'reset'] }),
     fn('core:array.get', 'Get', 'Utilities / Array', [target(ARRAY), index], T,
-      with_range({ javascript: 'return target[index];', python: 'return target[index]', csharp: 'return target[index];' }),
+      with_range({ javascript: 'return target[index];', typescript: 'return target[index]!;', python: 'return target[index]', csharp: 'return target[index];' }),
       'The item at the index. An index out of range stops the run.', { keywords: ['item', 'element', 'at'] }),
     fn('core:array.length', 'Length', 'Utilities / Array', [target(ARRAY)], INT,
       { javascript: 'return target.length;', python: 'return len(target)', csharp: 'return target.Count;' }, 'The number of items.', { keywords: ['count', 'size'] }),

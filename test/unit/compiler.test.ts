@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { CompileDiagnostic } from '../../src/core/compiler/diagnostics';
 import { IrStatement } from '../../src/core/compiler/ir';
 import { LowerResult, lowerDocument } from '../../src/core/compiler/lower';
+import { pruneUnreadSlots } from '../../src/core/compiler/prune';
 import { GraphDocument, NodeDefinition } from '../../src/core/model';
 import { NodeRegistry } from '../../src/core/registry';
 import { parseDocument } from '../../src/core/serializer';
@@ -45,19 +46,64 @@ describe('lowerDocument: the sample graph', () => {
   test('produces the expected structure', () => {
     const program = result.program!;
     assert.equal(program.className, 'BlueprintDemo');
-    assert.deepEqual(shape(program.start), [
-      'store:add_1',
-      { if: { then: ['print:print_true'], else: ['print:print_false'] } }
-    ]);
+    // Its Branch's condition is unconnected (true), so only the True side runs.
+    assert.deepEqual(shape(program.start), ['store:add_1', 'print:print_true']);
     assert.deepEqual(program.slots.map((s) => s.name), ['add_1_result']);
     assert.deepEqual(program.blocks, []);
     assert.deepEqual(program.members, []);
   });
 
-  test('wraps Add inputs and the Branch condition in conversions', () => {
-    const [store, branch] = result.program!.start;
+  test('wraps Add inputs in conversions', () => {
+    const [store] = result.program!.start;
     assert.equal(store.kind === 'store' && store.value.kind === 'add' && store.value.left.kind, 'toNumber');
-    assert.equal(branch.kind === 'if' && branch.condition.kind, 'toBoolean');
+  });
+});
+
+describe('lowerDocument: what compiling decides', () => {
+  const flag = [{ id: 'flag', name: 'Flag', type: { id: 'any' } }];
+
+  test("a wired Branch condition is converted; an unconnected one picks its side, as the other can't run", () => {
+    const branch = (properties: Record<string, unknown>, wired: boolean) => lower(doc(
+      [node('s', 'core:event.start'), node('g', 'core:variable.get', { variable: 'flag' }), node('br', 'core:flow.branch', properties), node('t', 'core:console.print', { 'pin:value': 'yes' }), node('f', 'core:console.print', { 'pin:value': 'no' })],
+      [wire('s', 'execOut', 'br', 'execIn'), ...(wired ? [wire('g', 'value', 'br', 'condition')] : []), wire('br', 'true', 't', 'execIn'), wire('br', 'false', 'f', 'execIn')],
+      flag
+    )).program!.start;
+    const [wired] = branch({}, true);
+    assert.equal(wired.kind === 'if' && wired.condition.kind, 'toBoolean');
+    assert.deepEqual(shape(branch({ 'pin:condition': true }, false)), ['print:t']);
+    assert.deepEqual(shape(branch({ 'pin:condition': false }, false)), ['print:f']);
+  });
+
+  test('an unconnected Switch selection picks its case, or Default', () => {
+    const sw = (selection: number) => shape(lower(doc(
+      [node('s', 'core:event.start'), node('sw', 'core:flow.switch-int', { 'pin:selection': selection }), node('a', 'core:console.print'), node('b', 'core:console.print'), node('d', 'core:console.print')],
+      [wire('s', 'execOut', 'sw', 'execIn'), wire('sw', 'case0', 'a', 'execIn'), wire('sw', 'case1', 'b', 'execIn'), wire('sw', 'default', 'd', 'execIn')]
+    )).program!.start);
+    assert.deepEqual(sw(1), ['print:b']);
+    assert.deepEqual(sw(7), ['print:d']);
+  });
+
+  test('an Assert Equal of two unconnected inputs is decided when compiling', () => {
+    const assertion = (expected: number) => lower(doc(
+      [node('t', 'core:test.case', { name: 'Math' }), node('a', 'core:test.assert-equal', { wildcards: { wildcard: 'int' }, 'pin:actual': 1, 'pin:expected': expected })],
+      [wire('t', 'execOut', 'a', 'execIn')]
+    )).program!.tests![0].body;
+    assert.deepEqual(assertion(1), [], 'it holds: nothing to check');
+    const [failing] = assertion(2);
+    assert.deepEqual(failing.kind === 'assert' && failing.condition, { kind: 'literal', value: false }, 'it fails, with its message');
+  });
+
+  test("an output nothing reads isn't kept: the node still runs", () => {
+    const save = codeNode('test:save', { typescript: 'return 1;' });
+    const program = (printed: boolean) => pruneUnreadSlots(lower(doc(
+      [node('s', 'core:event.start'), node('f', 'test:save'), node('add', 'core:math.add', { 'pin:a': 1, 'pin:b': 2 }), node('p', 'core:console.print'), node('p2', 'core:console.print')],
+      [wire('s', 'execOut', 'f', 'execIn'), wire('f', 'execOut', 'add', 'execIn'), wire('add', 'execOut', 'p', 'execIn'), wire('p', 'execOut', 'p2', 'execIn'), ...(printed ? [wire('f', 'out0', 'p', 'value'), wire('add', 'result', 'p2', 'value')] : [])]
+    ), registryWith(save)).program!);
+    const unread = program(false);
+    assert.deepEqual(shape(unread.start), ['call:f', 'print:p', 'print:p2'], 'the call stays; storing the sum goes');
+    assert.equal(unread.start[0].kind === 'call' && unread.start[0].resultSlot, undefined);
+    assert.deepEqual(unread.slots, []);
+    assert.deepEqual(program(true).slots.map((s) => s.name), ['f_out0', 'add_result']);
   });
 });
 
@@ -294,8 +340,9 @@ describe('lowerDocument: flow control', () => {
   });
 
   test('Switch cases become one if/else-if chain from the same node', () => {
-    const result = lower(doc([node('s', 'core:event.start'), node('sw', 'core:flow.switch-int', { 'pin:selection': 1 }), node('a', 'core:console.print'), node('b', 'core:console.print')],
-      [wire('s', 'execOut', 'sw', 'execIn'), wire('sw', 'case0', 'a', 'execIn'), wire('sw', 'case1', 'b', 'execIn')]));
+    const result = lower(doc([node('s', 'core:event.start'), node('g', 'core:variable.get', { variable: 'n' }), node('sw', 'core:flow.switch-int'), node('a', 'core:console.print'), node('b', 'core:console.print')],
+      [wire('s', 'execOut', 'sw', 'execIn'), wire('g', 'value', 'sw', 'selection'), wire('sw', 'case0', 'a', 'execIn'), wire('sw', 'case1', 'b', 'execIn')],
+      [{ id: 'n', name: 'N', type: { id: 'int' } }]));
     assert.deepEqual(shape(result.program!.start), ['store:sw', { if: { then: ['print:a'], else: [{ if: { then: ['print:b'], else: [] } }] } }]);
   });
 });

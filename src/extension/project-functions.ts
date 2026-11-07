@@ -8,7 +8,7 @@ import { ModuleScan, SkippedFunction, exposeFunctions } from '../core/importing/
 import { LanguagePack, LanguagePackRegistry, LanguageServerImport } from '../core/language-pack';
 import { NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
-import { goPackage, pythonModule, rustModule } from './placement';
+import { codeModuleFor } from './placement';
 import { findFilesLimited } from './scan-limit';
 
 // Build output, dependencies and virtual environments hold no project functions.
@@ -169,9 +169,7 @@ export class ProjectFunctions implements vscode.Disposable, vscode.CodeActionPro
       const importer = pack.importer!;
       const scan = importer.scan ? importer.scan(text) : importer.languageServer ? await this.symbolScan(uri, text, importer.languageServer, pack, exposeAll) : undefined;
       if (!scan) continue;
-      const module = pack.id === 'python' ? pythonModule(uri.fsPath, folder.uri.fsPath).module
-        : pack.id === 'rust' ? rustModule(uri.fsPath, folder.uri.fsPath)
-        : pack.id === 'go' ? goPackage(path.dirname(uri.fsPath), folder.uri.fsPath).path : undefined;
+      const module = codeModuleFor(pack.id, uri.fsPath, folder.uri.fsPath);
       const exposed = exposeFunctions(scan, { language: pack.id, path: relative, module, exposeAll });
       definitions.push(...exposed.definitions);
       skipped.push(...exposed.skipped);

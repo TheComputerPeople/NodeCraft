@@ -48,6 +48,26 @@ export class CodeWriter {
     this.depth = Math.max(0, this.depth - 1);
   }
 
+  // How many lines are written.
+  get length(): number {
+    return this.lines.length;
+  }
+
+  // The text of the lines from `start` (0-based) on.
+  textFrom(start: number): string {
+    return this.lines.slice(start).join('\n');
+  }
+
+  // Replaces `count` lines from `start` (0-based) with `replacement`, which are written as they are
+  // (indented already). The node lines and breaks after them move with them.
+  splice(start: number, count: number, replacement: string[]): void {
+    this.lines.splice(start, count, ...replacement);
+    const shift = replacement.length - count;
+    if (!shift) return;
+    for (const n of this.nodeLines) if (n.line > start) n.line += shift;
+    for (let i = 0; i < this.breaks.length; i++) if (this.breaks[i] > start) this.breaks[i] += shift;
+  }
+
   // Removes trailing blank lines, e.g. after the last member of a class.
   trimTrailingBlank(): void {
     while (this.lines.length && this.lines[this.lines.length - 1] === '') this.lines.pop();

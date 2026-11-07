@@ -333,6 +333,7 @@
     "test:conformance": "npm run build:test && node --test \"out/test/conformance/**/*.test.js\"",
     "test:integration": "npm run compile && npm run build:test && node out/test/integration/runTest.js",
     "build:sdk": "node scripts/build-sdk.js",
+    "corpus:tools": "node scripts/corpus-tools.js",
     "test:sdk": "node scripts/build-sdk.js && node packages/pack-sdk/dist/cli.js javascript --filter flow",
     "test:integration:debuggers": "npm run compile && npm run build:test && node out/test/integration/runTest.js --with-debuggers",
     "build:test": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\" && tsc -p test",

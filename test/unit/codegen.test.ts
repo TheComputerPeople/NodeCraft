@@ -62,10 +62,11 @@ describe('Python generation', () => {
 
   test('writes pass for empty branches', () => {
     const d = doc(
-      [node('s', 'core:event.start'), node('br', 'core:flow.branch'), node('p', 'core:console.print', { 'pin:value': 'no' })],
-      [wire('s', 'execOut', 'br', 'execIn'), wire('br', 'false', 'p', 'execIn')]
+      [node('s', 'core:event.start'), node('g', 'core:variable.get', { variable: 'flag' }), node('br', 'core:flow.branch'), node('p', 'core:console.print', { 'pin:value': 'no' })],
+      [wire('s', 'execOut', 'br', 'execIn'), wire('g', 'value', 'br', 'condition'), wire('br', 'false', 'p', 'execIn')],
+      [{ id: 'flag', name: 'Flag', type: { id: 'bool' }, defaultValue: true }]
     );
-    assert.match(compileAs(d, 'python').output!.text, /if True:\n {12}pass\n {8}else:\n/);
+    assert.match(compileAs(d, 'python').output!.text, /if self\.Flag:\n {12}pass\n {8}else:\n/);
   });
 });
 
@@ -83,7 +84,8 @@ describe('TypeScript and JavaScript generation', () => {
     for (const { nodeId, line } of output.nodeLines) {
       assert.match(lines[line - 2], new RegExp(`// .+ \\(${nodeId}\\)$`), `marker above line ${line} for ${nodeId}`);
     }
-    assert.deepEqual(output.nodeLines.map((l) => l.nodeId), ['add_1', 'branch_1', 'print_true', 'print_false']);
+    // The sample's Branch has an unconnected condition (true): only its True side is generated.
+    assert.deepEqual(output.nodeLines.map((l) => l.nodeId), ['add_1', 'print_true']);
   });
 
   test('only includes the format helper when a value has no static type', () => {
@@ -142,7 +144,8 @@ describe('project function imports', () => {
     const text = compileWith('typescript', 'ts');
     assert.match(text, /^import \{ double, save \} from "\.\.\/lib\/math\.ts";$/m);
     assert.match(text, /^import \{ Test as Test_2 \} from "\.\.\/lib\/other\.ts";$/m);
-    assert.match(text, /this\.f_returnValue = save\(/, 'impure: called once and stored');
+    assert.match(text, /^ {4}save\(/m, 'impure: called once');
+    assert.doesNotMatch(text, /f_returnValue/, 'its result, which nothing reads, is not kept');
     assert.match(text, /console\.log\(String\(double\(Test_2\(/, 'pure: called where used');
   });
 

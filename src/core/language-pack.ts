@@ -55,6 +55,10 @@ export interface GenerateOptions {
   namespace?: string;
   // Go: the import path of the generated file's package, so calls within it aren't qualified.
   packagePath?: string;
+  // Python: the generated module's name as the project imports it, with its packages
+  // ("game.graphs.inventory_vgraph"), when it's in a package. Its test file imports it so, which
+  // type checkers can follow.
+  module?: string;
 }
 
 export interface GeneratedCode {

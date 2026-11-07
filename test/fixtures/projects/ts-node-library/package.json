@@ -1,0 +1,16 @@
+{
+  "name": "corpus-node-library",
+  "version": "1.0.0",
+  "description": "A Node.js library built with tsc, as CommonJS.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "node dist/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

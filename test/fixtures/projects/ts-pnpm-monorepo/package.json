@@ -1,0 +1,7 @@
+{
+  "name": "corpus-monorepo",
+  "private": true,
+  "scripts": {
+    "typecheck": "pnpm -r typecheck"
+  }
+}

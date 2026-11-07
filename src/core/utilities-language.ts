@@ -57,6 +57,9 @@ const digestNode = (d: Digest): UtilityNode => ({
   examples: d.examples.map(([input, digest]) => ({ inputs: { text: input }, outputs: { returnValue: digest } })),
   code: {
     javascript: `return globalThis.process.getBuiltinModule('node:crypto').createHash('${d.node}').update(text, 'utf8').digest('hex');`,
+    // As the other Node.js snippets reach Node.js: through `any`, so a project without Node.js's
+    // types (a browser app) type-checks it too.
+    typescript: `return (globalThis as any).process.getBuiltinModule('node:crypto').createHash('${d.node}').update(text, 'utf8').digest('hex') as string;`,
     python: `import hashlib\nreturn hashlib.${d.python}(text.encode("utf-8")).hexdigest()`,
     csharp: `return System.Convert.ToHexString(System.Security.Cryptography.${d.dotnet}.HashData(System.Text.Encoding.UTF8.GetBytes(text))).ToLowerInvariant();`,
     java: [

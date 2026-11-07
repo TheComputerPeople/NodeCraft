@@ -59,13 +59,13 @@ const isDigit = (c: string) => c >= '0' && c <= '9';
 const words: string[] = [];
 let word = '';
 for (let i = 0; i < chars.length; i++) {
-  const c = chars[i];
+  const c = chars[i]!;
   if (!isUpper(c) && !isLower(c) && !isDigit(c)) {
     if (word) words.push(word.toLowerCase());
     word = '';
     continue;
   }
-  const prev = word ? word[word.length - 1] : '';
+  const prev = word ? word[word.length - 1]! : '';
   const next = chars[i + 1] ?? '';
   if (word && isUpper(c) && (isLower(prev) || isDigit(prev) || (isUpper(prev) && isLower(next)))) {
     words.push(word.toLowerCase());
@@ -74,13 +74,13 @@ for (let i = 0; i < chars.length; i++) {
   word += c;
 }
 if (word) words.push(word.toLowerCase());`,
-  python: String.raw`def is_upper(c):
+  python: String.raw`def is_upper(c: str) -> bool:
     return "A" <= c <= "Z"
-def is_lower(c):
+def is_lower(c: str) -> bool:
     return "a" <= c <= "z"
-def is_digit(c):
+def is_digit(c: str) -> bool:
     return "0" <= c <= "9"
-words = []
+words: list[str] = []
 word = ""
 for i, c in enumerate(text):
     if not (is_upper(c) or is_lower(c) or is_digit(c)):
@@ -236,7 +236,7 @@ function joined(separator: string): Snippets {
 
 const CAMEL: Snippets = {
   javascript: `${WORDS.javascript}\nreturn words.map((w, i) => (i ? w[0].toUpperCase() + w.slice(1) : w)).join('');`,
-  typescript: `${WORDS.typescript}\nreturn words.map((w, i) => (i ? w[0].toUpperCase() + w.slice(1) : w)).join('');`,
+  typescript: `${WORDS.typescript}\nreturn words.map((w, i) => (i ? w[0]!.toUpperCase() + w.slice(1) : w)).join('');`,
   python: `${WORDS.python}\nreturn "".join(w if i == 0 else w[:1].upper() + w[1:] for i, w in enumerate(words))`,
   csharp: `${WORDS.csharp}\nreturn string.Concat(words.Select((w, i) => i == 0 ? w : char.ToUpperInvariant(w[0]) + w.Substring(1)));`,
   cpp: `${WORDS.cpp}\nstd::string result;\nfor (std::size_t i = 0; i < words.size(); i++) {\n    std::string w = words[i];\n    if (i) w[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(w[0])));\n    result += w;\n}\nreturn result;`,
@@ -379,6 +379,7 @@ return string(chars[:max(0, maxLength-len(end))]) + string(end[:min(maxLength, l
     description: 'The text with its first character in upper case; the rest is unchanged.',
     code: {
       javascript: "const chars = [...text];\nreturn chars.length ? chars[0].toUpperCase() + chars.slice(1).join('') : text;",
+      typescript: "const chars = [...text];\nreturn chars.length ? chars[0]!.toUpperCase() + chars.slice(1).join('') : text;",
       python: 'return text[:1].upper() + text[1:]',
       csharp: 'if (text.Length == 0) return text;\nvar first = text.EnumerateRunes().First();\nreturn first.ToString().ToUpperInvariant() + text.Substring(first.Utf16SequenceLength);',
       cpp: 'if (!text.empty()) text[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(text[0])));\nreturn text;',
@@ -864,6 +865,7 @@ return int(result)`
     description: 'The middle value once the values are sorted, or the mean of the two middle ones. An empty array stops the run with an error.',
     code: {
       javascript: "if (!values.length) throw new Error('Median needs at least one value');\nconst sorted = [...values].sort((a, b) => a - b);\nconst middle = Math.floor(sorted.length / 2);\nreturn sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;",
+      typescript: "if (!values.length) throw new Error('Median needs at least one value');\nconst sorted = [...values].sort((a, b) => a - b);\nconst middle = Math.floor(sorted.length / 2);\nreturn sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;",
       python: 'if not values:\n    raise ValueError("Median needs at least one value")\nordered = sorted(values)\nmiddle = len(ordered) // 2\nreturn ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2',
       csharp: 'if (values.Count == 0) throw new InvalidOperationException("Median needs at least one value");\nvar sorted = new List<double>(values);\nsorted.Sort();\nvar middle = sorted.Count / 2;\nreturn sorted.Count % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;',
       cpp: 'if (values.empty()) throw std::invalid_argument("Median needs at least one value");\nstd::vector<double> sorted(values.begin(), values.end());\nstd::sort(sorted.begin(), sorted.end());\nstd::size_t middle = sorted.size() / 2;\nreturn sorted.size() % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;',
@@ -880,7 +882,7 @@ return int(result)`
     description: 'A map of the entries whose keys are in Keys, in Keys\' order. Keys the map doesn\'t have are left out.',
     code: {
       javascript: 'const result = new Map();\nfor (const key of keys) if (source.has(key) && !result.has(key)) result.set(key, source.get(key));\nreturn result;',
-      python: 'result = {}\nfor key in keys:\n    if key in source and key not in result:\n        result[key] = source[key]\nreturn result',
+      python: 'return {key: source[key] for key in keys if key in source}',
       csharp: 'return keys.Where(source.ContainsKey).Distinct().ToDictionary(key => key, key => source[key]);',
       cpp: 'std::decay_t<decltype(source)> result;\nfor (const auto& key : keys) if (source.contains(key) && !result.contains(key)) result[key] = source.at(key);\nreturn result;',
       rust: 'let mut result = vgraph::Map::new();\nfor key in keys.iter() {\n    if let Some(value) = source.get(key) {\n        if !result.contains(key) { result.insert(key.clone(), value); }\n    }\n}\nreturn result;',
@@ -964,7 +966,7 @@ if len(rest) >= 2 and rest[1] == ":" and ("A" <= rest[0] <= "Z" or "a" <= rest[0
     drive = rest[:2]
     rest = rest[2:]
 absolute = rest.startswith("/")
-parts = []
+parts: list[str] = []
 for part in rest.split("/"):
     if part in ("", "."):
         continue

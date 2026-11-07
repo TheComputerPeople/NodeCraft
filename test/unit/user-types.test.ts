@@ -130,7 +130,7 @@ describe('compiling structs and enums', () => {
     };
     const { output } = compileDocument(doc, { registry: r, languages: builtinLanguagePacks(), generate: { sourceFileName: 'T.vgraph' } });
     assert.match(output!.text, /^import \{ Point \} from "\.\/types\/Point\.vgraph\.js";$/m);
-    assert.match(output!.text, /^import \{ Team \} from "\.\/types\/Team\.vgraph\.js";$/m, 'the struct\'s enum field may be needed too');
+    assert.doesNotMatch(output!.text, /import \{ Team \}/, "the struct's enum field: nothing here uses it, and projects' checkers reject unused imports");
     assert.match(output!.text, /P = new Point\(\);/);
   });
 });

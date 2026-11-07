@@ -109,7 +109,7 @@ function generated(entry: PreviewEntry, context: GraphDocument, options: Preview
   }
   let result;
   try {
-    result = compileDocument(doc, { registry: options.registry, languages: options.languages, generate: { sourceFileName: `${context.name || 'Preview'}.vgraph`, outputDir: '' } });
+    result = compileDocument(doc, { registry: options.registry, languages: options.languages, generate: { sourceFileName: `${context.name || 'Preview'}.vgraph`, outputDir: '' }, prune: false });
   } catch {
     return undefined;
   }

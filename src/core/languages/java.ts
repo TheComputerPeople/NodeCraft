@@ -2,7 +2,7 @@
 // a small launcher compiled with it. Close to the C# pack; where Java differs: functions with several
 // outputs return them as an Object[], ints are longs, strings compare with equals, and a method's
 // end must be reachable before it returns a default.
-import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
+import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { scanJava } from '../importing/java-scanner';
@@ -1003,7 +1003,8 @@ class JavaEmitter {
       case 'add':
         return `${this.operand(e.left)} + ${this.operand(e.right)}`;
       case 'toNumber':
-        if (isNumeric(this.typeOf(e.value))) return this.typeOf(e.value)?.id === 'int' ? `(double) ${this.operand(e.value)}` : this.expr(e.value);
+        // A constant is written as a double (`0.0`), not cast: -Xlint:cast rejects `(double) 1e+21`.
+        if (isNumeric(this.typeOf(e.value))) return this.typeOf(e.value)?.id !== 'int' ? this.expr(e.value) : e.value.kind === 'literal' ? this.coerce(e.value, { id: 'float' }) : `(double) ${this.operand(e.value)}`;
         this.helpersUsed.add('number');
         return `toNumber(${this.expr(e.value)})`;
       case 'toText':
@@ -1314,14 +1315,6 @@ function comparesByIdentity(type: TypeRef | undefined, types: Map<string, UserTy
 }
 
 // Whether execution can reach the end of the statements (Java refuses a statement it can't reach).
-function canComplete(statements: IrStatement[]): boolean {
-  const last = statements[statements.length - 1];
-  if (!last) return true;
-  if (last.kind === 'return') return false;
-  if (last.kind === 'if') return canComplete(last.then) || canComplete(last.else);
-  return true;
-}
-
 function literalTypeOf(value: unknown): TypeRef | undefined {
   if (typeof value === 'number') return { id: Number.isInteger(value) ? 'int' : 'float' };
   if (typeof value === 'string') return { id: 'string' };

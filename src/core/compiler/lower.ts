@@ -19,6 +19,7 @@ import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, type
 import { TypeRef, setClassHierarchy } from '../types';
 import { TEST_CASE, assertEqualMessage, assertTrueMessage, testName } from '../tests';
 import { toIdentifier } from './names';
+import { toNumber } from '../values';
 
 export interface LowerOptions {
   registry: NodeRegistry;
@@ -785,6 +786,12 @@ class Lowerer {
           ? (message.value ? [{ kind: 'literal', value: `: ${String(message.value)}` }] : [])
           : [{ kind: 'literal', value: ': ' }, { kind: 'toText', value: message }];
         const text: IrExpr = { kind: 'concat', parts: [{ kind: 'literal', value: before }, { kind: 'toText', value: expected }, { kind: 'literal', value: between }, { kind: 'toText', value: actual }, ...note] };
+        // Two unconnected inputs are compared here, not in the generated code, where type checkers
+        // reject comparing two constants (TypeScript's TS2367, mypy's strict equality).
+        if (actual.kind === 'literal' && expected.kind === 'literal') {
+          if (actual.value === expected.value) return next('execOut');
+          return [{ kind: 'assert', condition: { kind: 'literal', value: false }, message: text, source }, ...next('execOut')];
+        }
         return [{ kind: 'assert', condition: { kind: 'binary', op: '==', left: actual, right: expected }, message: text, source }, ...next('execOut')];
       }
       case 'add':
@@ -797,8 +804,13 @@ class Lowerer {
         this.checkPrintable(info, nodeId, value);
         return [{ kind: 'print', value, source }, ...next('execOut')];
       }
-      case 'branch':
-        return [{ kind: 'if', condition: { kind: 'toBoolean', value: input('condition') }, then: next('true'), else: next('false'), source }];
+      case 'branch': {
+        // An unconnected condition picks its side here: the other can't run, and type checkers
+        // reject it as unreachable (TypeScript's allowUnreachableCode: false).
+        const condition = input('condition');
+        if (condition.kind === 'literal') return next(condition.value ? 'true' : 'false');
+        return [{ kind: 'if', condition: { kind: 'toBoolean', value: condition }, then: next('true'), else: next('false'), source }];
+      }
       case 'sequence':
         return def.outputs.filter((p) => p.kind === 'exec').map((p) => p.id).flatMap(next);
       case 'reroute':
@@ -899,6 +911,9 @@ class Lowerer {
       return [...statements, ...next('execOut')];
     }
     if (user?.kind === 'enum' && user.operation === 'switch') {
+      // An unconnected selection picks its output here, as Branch's condition does.
+      const chosen = input('selection');
+      if (chosen.kind === 'literal') return next(user.type.enumerators.find((e) => e.id === chosen.value)?.id ?? user.type.enumerators[0]?.id ?? '');
       const selection = this.stateSlot(info, node, def, 'selection', user.type.id);
       const read: IrExpr = { kind: 'output', slot: selection };
       // Values with nothing wired to their output need no test.
@@ -1206,6 +1221,12 @@ class Lowerer {
       case 'switch': {
         const selection = state('selection', node.type === SWITCH_STRING ? 'string' : 'int');
         const values: unknown[] = node.type === SWITCH_STRING ? switchStringCases(node) : switchIntCases(node);
+        // An unconnected selection picks its case here, as Branch's condition does.
+        const chosen = input('selection');
+        if (chosen.kind === 'literal') {
+          const i = values.findIndex((value) => (node.type === SWITCH_STRING ? String(chosen.value ?? '') === value : toNumber(chosen.value) === value));
+          return next(i < 0 ? 'default' : `case${i}`);
+        }
         const chain = values.reduceRight<IrStatement[]>(
           (otherwise, value, i) => [when({ kind: 'binary', op: '==', left: read(selection), right: { kind: 'literal', value } }, next(`case${i}`), otherwise)],
           next('default')

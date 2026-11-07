@@ -45,7 +45,8 @@ const NEGATIVE_COUNT: Snippets = {
   php: "if ($count < 0) {\n    throw new \\InvalidArgumentException(\"Count can't be negative\");\n}"
 };
 
-const after = (first: Snippets, then: Snippets): Snippets => Object.fromEntries(Object.entries(then).map(([language, code]) => [language, `${first[language]}\n${code}`]));
+// A check before each language's code; TypeScript's code takes JavaScript's check unless it has its own.
+const after = (first: Snippets, then: Snippets): Snippets => Object.fromEntries(Object.entries(then).map(([language, code]) => [language, `${first[language] ?? (language === 'typescript' ? first.javascript : '')}\n${code}`]));
 
 export const STRING_UTILITIES: UtilityNode[] = [
   {
@@ -450,9 +451,15 @@ export const TEXT_UTILITIES: UtilityNode[] = [
         '  return items[Number(digits)];',
         '});'
       ].join('\n'),
+      typescript: [
+        'return format.replace(/\\{([0-9]+)\\}/g, (_, digits: string) => {',
+        `  if (digits.length > 9 || Number(digits) >= items.length) throw new Error('${NO_ARGUMENT}' + digits + '}');`,
+        '  return items[Number(digits)]!;',
+        '});'
+      ].join('\n'),
       python: [
         'import re',
-        'def fill(match):',
+        'def fill(match: re.Match[str]) -> str:',
         '    digits = match.group(1)',
         '    if len(digits) > 9 or int(digits) >= len(items):',
         `        raise IndexError("${NO_ARGUMENT}" + digits + "}")`,

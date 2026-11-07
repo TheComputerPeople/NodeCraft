@@ -1,5 +1,5 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, importKey, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, importKey, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
 import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
@@ -32,13 +32,14 @@ function mapType(type: TypeRef): string {
 
 // Helper functions emitted into generated modules on demand. They implement docs/semantics.md
 // ("Values") exactly as Simulate does, so output matches the other targets.
-const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent', string[]> = {
+const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent' | 'await', string[]> = {
   latent: [
     'def _latent_queue() -> Any:',
     '    # Latent actions of every class run from one queue, in the order they fall due, once start()',
     '    # has returned: _run_latent_actions() runs them. Async functions run meanwhile on an asyncio',
     '    # event loop, and each one\'s Completed joins the queue when it finishes.',
     '    import asyncio',
+    '    import functools',
     '    import heapq',
     '    import sys',
     '    import time',
@@ -66,7 +67,7 @@ const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent', string[]> = {
     '                while queue.waiting:',
     '                    awaitable, then = queue.waiting.pop(0)',
     '                    running += 1',
-    '                    asyncio.ensure_future(awaitable).add_done_callback(lambda task, then=then: done(task, then))',
+    '                    asyncio.ensure_future(awaitable).add_done_callback(functools.partial(done, then=then))',
     '                if queue.pending and queue.pending[0][0] <= time.monotonic():',
     '                    _, _, then, then_args = heapq.heappop(queue.pending)',
     '                    then(*then_args)',
@@ -94,13 +95,14 @@ const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent', string[]> = {
     '    heapq.heappush(queue.pending, (time.monotonic() + max(0.0, seconds), queue.order, action, args))',
     '',
     '',
-    '# An async function\'s awaitable: `then` runs with its value when it finishes.',
-    'def _await_latent(awaitable: Any, then: Any) -> None:',
-    '    _latent_queue().waiting.append((awaitable, then))',
-    '',
-    '',
     'def _run_latent_actions() -> None:',
     '    _latent_queue().run()'
+  ],
+  // Only with an async function (a module defining it unused fails Pyright's reportUnusedFunction).
+  await: [
+    '# An async function\'s awaitable: `then` runs with its value when it finishes.',
+    'def _await_latent(awaitable: Any, then: Any) -> None:',
+    '    _latent_queue().waiting.append((awaitable, then))'
   ],
   format: [
     'def _format_value(value: Any) -> str:',
@@ -128,11 +130,13 @@ const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent', string[]> = {
     '    if isinstance(value, str):',
     '        return json.dumps(value, ensure_ascii=False)',
     '    if isinstance(value, (set, frozenset)):',
-    '        return "[" + ",".join(_to_json(item) for item in sorted(value)) + "]"',
+    '        return "[" + ",".join(_to_json(item) for item in sorted(cast("set[Any]", value))) + "]"',
     '    if isinstance(value, dict):',
-    '        return "{" + ",".join(json.dumps(_key_text(k), ensure_ascii=False) + ":" + _to_json(v) for k, v in value.items()) + "}"',
+    // Cast to known types for Pyright's strict mode (isinstance leaves them unknown), and to types
+    // other than isinstance's, which mypy would call a redundant cast.
+    '        return "{" + ",".join(json.dumps(_key_text(k), ensure_ascii=False) + ":" + _to_json(v) for k, v in cast("dict[object, object]", value).items()) + "}"',
     '    if isinstance(value, (list, tuple)):',
-    '        return "[" + ",".join(_to_json(item) for item in value) + "]"',
+    '        return "[" + ",".join(_to_json(item) for item in cast("list[Any]", value)) + "]"',
     '    return json.dumps(str(value), ensure_ascii=False)',
     '',
     '',
@@ -191,6 +195,12 @@ const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent', string[]> = {
   ]
 };
 
+// Generated Python without its comments and one-line string literals, where names of types also
+// appear (a node's title in its comment), to find the names the code itself uses.
+function pythonCodeOnly(code: string): string {
+  return code.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, '""').replace(/#[^\n]*/g, '');
+}
+
 // The format helper with branches for the structs and enums a module prints: an enum prints its
 // value (its name), a struct each field by name.
 function formatHelper(enums: boolean, structs: boolean): string[] {
@@ -200,7 +210,7 @@ function formatHelper(enums: boolean, structs: boolean): string[] {
     lines.splice(at, 0, ...added);
   };
   if (enums) {
-    insert('    return _to_json(value)', ['    if isinstance(value, Enum):', '        return value.value']);
+    insert('    return _to_json(value)', ['    if isinstance(value, Enum):', '        return str(value.value)']);
     insert('    return json.dumps(str(value), ensure_ascii=False)', ['    if isinstance(value, Enum):', '        return json.dumps(value.value, ensure_ascii=False)']);
   }
   if (structs) {
@@ -547,9 +557,15 @@ class PythonEmitter {
     const header = new CodeWriter('    ');
     header.line(`# Generated by Blueprint Visual Scripting from ${this.options.sourceFileName}.`);
     header.line('# Do not edit: changes are overwritten when the graph is compiled.');
+    // The project's style linters skip generated code (docs/project-integration.md, part 3): Ruff
+    // and flake8, then Pylint. Its type checkers don't.
+    header.line('# flake8: noqa');
+    header.line('# pylint: skip-file');
     header.line();
     header.line('from __future__ import annotations');
     header.line();
+    // The dispatcher class's handlers are typed Any.
+    if (this.program.dispatchers?.length) this.usesAny = true;
     const printsEnums = this.helpersUsed.has('format') && [...this.types.values()].some((t) => t.kind === 'enum');
     if (printsEnums) this.extraImports.add('from enum import Enum');
     const dataclassImport = this.extraImports.has('from dataclasses import dataclass, field') ? 'from dataclasses import dataclass, field' : this.extraImports.has('from dataclasses import dataclass') ? 'from dataclasses import dataclass' : undefined;
@@ -557,7 +573,7 @@ class PythonEmitter {
       ...(this.helpersUsed.has('format') ? ['import json'] : []),
       ...(dataclassImport ? [dataclassImport] : []),
       ...(this.extraImports.has('from enum import Enum') ? ['from enum import Enum'] : []),
-      ...(this.usesAny || this.helpersUsed.size ? ['from typing import Any'] : [])
+      ...(this.usesAny || this.helpersUsed.size ? [this.helpersUsed.has('format') ? 'from typing import Any, cast' : 'from typing import Any'] : [])
     ];
     if (imports.length) {
       imports.forEach((i) => header.line(i));
@@ -565,12 +581,16 @@ class PythonEmitter {
     }
     // Project code, one import per module (docs/code-as-nodes.md, "Generated imports").
     const byModule = new Map<string, string[]>();
+    // Only what the code uses: a class imports every type its parent's members use, and projects'
+    // checkers reject the ones it doesn't (Pyright's reportUnusedImport, Ruff's F401).
+    const code = pythonCodeOnly(body.toString());
     const fromImports = (imports: IrImport[]): string[] => {
       const byModule = new Map<string, string[]>();
       for (const i of [...imports].sort((a, b) => compare(a.name, b.name))) {
         if (!i.path && !i.module) continue;
         const module = i.module ?? pythonModuleName(i.path);
         const local = this.importNames.get(i.id)!;
+        if (!new RegExp(`(?<![\\w.])${local}(?!\\w)`).test(code)) continue;
         byModule.set(module, [...(byModule.get(module) ?? []), local === i.name ? local : `${i.name} as ${local}`]);
       }
       return [...byModule].sort(([a], [b]) => compare(a, b)).map(([module, names]) => `from ${module} import ${[...new Set(names)].join(', ')}`);
@@ -586,13 +606,12 @@ class PythonEmitter {
     header.line();
 
     const footer: string[] = [];
-    for (const helper of ['format', 'number', 'boolean', 'latent'] as const) {
+    for (const helper of ['format', 'number', 'boolean', 'latent', 'await'] as const) {
       if (!this.helpersUsed.has(helper)) continue;
       const kinds = [...this.types.values()].map((t) => t.kind);
       footer.push('', '', ...(helper === 'format' ? formatHelper(kinds.includes('enum'), kinds.includes('struct')) : HELPERS[helper]));
     }
     if (this.program.dispatchers?.length) {
-      this.usesAny = true;
       footer.push('', '', "# Unreal's event dispatcher: bound events run in the order they were bound, each event once.", ...DISPATCHER_CLASS);
     }
     if (late.length) footer.push('', '', '# Classes are imported last: they may use this one.', ...late);
@@ -619,12 +638,20 @@ class PythonEmitter {
 
   // The tests, for unittest: each runs its method on a new object, then the latent actions it started.
   private testFile(roots: string[]): string {
-    const module = pythonOutputFileName(this.options.sourceFileName).replace(/\.py$/, '');
+    const own = pythonOutputFileName(this.options.sourceFileName).replace(/\.py$/, '');
+    // In a package, by its full name, from the folder above its top package: type checkers resolve
+    // that, not a module found through the folder put on sys.path.
+    const qualified = this.options.module && this.options.module.endsWith(`.${own}`) ? this.options.module : undefined;
+    const module = qualified ?? own;
+    const packages = qualified ? qualified.split('.').length - 1 : 0;
     const depth = (this.options.outputDir ?? '').split('/').filter((s) => s).length;
     const fromRoot = (root: string) => JSON.stringify([...Array(depth).fill('..'), ...root.split('/').filter((s) => s)].join('/') || '.');
+    if (qualified) roots = [...new Set([(this.options.outputDir ?? '').split('/').filter((s) => s).slice(0, -packages).join('/'), ...roots])];
     const lines = [
       `# Generated by Blueprint Visual Scripting from ${this.options.sourceFileName}.`,
       '# Its Test Case events, run with python -m unittest. Do not edit: changes are overwritten when the graph is compiled.',
+      '# flake8: noqa',
+      '# pylint: skip-file',
       'import os',
       'import sys',
       'import unittest',
@@ -693,7 +720,7 @@ class PythonEmitter {
       for (const x of slots) this.out.line(`${this.slotNames.get(x.id)}: ${this.typeName(x.type)} = ${this.defaultFor(x.type)}`);
       this.statements(fn.body);
       // Reaching the end without a Return Node returns the outputs' defaults.
-      if (fn.outputs.length && fn.body[fn.body.length - 1]?.kind !== 'return') this.out.line(`return ${fn.outputs.map((o) => this.defaultFor(o.type)).join(', ')}`);
+      if (fn.outputs.length && canComplete(fn.body)) this.out.line(`return ${fn.outputs.map((o) => this.defaultFor(o.type)).join(', ')}`);
     });
   }
 
@@ -745,7 +772,7 @@ class PythonEmitter {
         out.line(`    raise AssertionError(${this.expr(s.message)})`);
         break;
       case 'store':
-        out.line(`${this.slotRef(s.slot)} = ${this.expr(s.value)}`);
+        out.line(`${this.slotRef(s.slot)} = ${this.value(s.value, this.program.slots.find((x) => x.id === s.slot)?.type)}`);
         break;
       case 'setMember': {
         const member = this.program.members.find((m) => m.id === s.member);
@@ -828,6 +855,7 @@ class PythonEmitter {
         // An async function (docs/node-authoring.md, gap 4): Completed runs with its value when it
         // finishes, from the latent queue.
         this.helpersUsed.add('latent');
+        this.helpersUsed.add('await');
         this.usesAny = true;
         const callback = `_completed_${++this.latents}`;
         out.line(`def ${callback}(value: Any) -> None:`);
@@ -1016,11 +1044,13 @@ class PythonEmitter {
   }
 
   private functionCall(id: string, args: IrExpr[]): string {
-    return `${this.self(this.functionNames.get(id)!)}(${args.map((a) => this.expr(a)).join(', ')})`;
+    const params = this.program.functions.find((f) => f.id === id)?.params;
+    return `${this.self(this.functionNames.get(id)!)}(${args.map((a, i) => this.value(a, params?.[i]?.type)).join(', ')})`;
   }
 
   private call(callee: IrCallee, args: IrExpr[]): string {
-    const list = args.map((a) => this.expr(a)).join(', ');
+    const params = callee.kind === 'helper' ? this.program.helpers.find((h) => h.id === callee.id)?.params : this.program.imports.find((i) => i.id === callee.id)?.params;
+    const list = args.map((a, i) => this.value(a, params?.[i]?.type)).join(', ');
     if (callee.kind === 'helper') return `${this.self(this.helperNames.get(callee.id)!)}(${list})`;
     const local = this.importNames.get(callee.id)!;
     const member = this.program.imports.find((i) => i.id === callee.id)?.member;
@@ -1040,6 +1070,12 @@ class PythonEmitter {
   // An expression for a member or slot of `type`: a container default (JSON: an array, or a map's
   // [key, value] pairs) becomes the container.
   private value(e: IrExpr, type: TypeRef | undefined): string {
+    // A float wired into an int is truncated toward zero, as in C# and Java: Python's ints and
+    // floats are different types (a float can't index a list), and type checkers hold them apart.
+    const from = this.typeOf(e);
+    if (type?.id === 'int' && !type.container && from?.id === 'float' && !from.container) {
+      return e.kind === 'literal' && typeof e.value === 'number' ? String(Math.trunc(e.value)) : `int(${this.expr(e)})`;
+    }
     if (e.kind !== 'literal' || !type?.container || !Array.isArray(e.value)) return this.expr(e);
     if (type.container === 'set') return e.value.length ? `{${e.value.map(literal).join(', ')}}` : 'set()';
     if (type.container === 'map') {

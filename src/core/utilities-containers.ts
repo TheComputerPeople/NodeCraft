@@ -6,7 +6,8 @@ import { TypeRef } from './model';
 import { ARRAY, FLOAT, FLOATS, INT, INTS, ITEM, MAP, SET, Snippets, UtilityNode, input } from './utility-kit';
 
 // A snippet in each language, after a check in that language.
-const after = (first: Snippets, then: Snippets): Snippets => Object.fromEntries(Object.entries(then).map(([language, code]) => [language, `${first[language]}\n${code}`]));
+// A check before each language's code; TypeScript's code takes JavaScript's check unless it has its own.
+const after = (first: Snippets, then: Snippets): Snippets => Object.fromEntries(Object.entries(then).map(([language, code]) => [language, `${first[language] ?? (language === 'typescript' ? first.javascript : '')}\n${code}`]));
 
 const sets = () => [input('a', 'A', SET), input('b', 'B', SET)];
 
@@ -198,6 +199,7 @@ function extreme(smallest: boolean): Snippets {
   const op = smallest ? '<' : '>';
   return after(FLOATS_NOT_EMPTY, {
     javascript: `let result = values[0];\nfor (const value of values) if (value ${op} result) result = value;\nreturn result;`,
+    typescript: `let result = values[0]!;\nfor (const value of values) if (value ${op} result) result = value;\nreturn result;`,
     python: `result = values[0]\nfor value in values:\n    if value ${op} result:\n        result = value\nreturn result`,
     csharp: `var result = values[0];\nforeach (var value in values) if (value ${op} result) result = value;\nreturn result;`,
     cpp: `double result = values[0];\nfor (double value : values) if (value ${op} result) result = value;\nreturn result;`,
@@ -266,6 +268,7 @@ export const ARRAY_UTILITIES: UtilityNode[] = [
     inputs: [items()], description: 'A new array of the items in a random order. A new order each time it is read.',
     code: {
       javascript: 'const result = [...items];\nfor (let i = result.length - 1; i > 0; i--) {\n  const j = Math.floor(Math.random() * (i + 1));\n  [result[i], result[j]] = [result[j], result[i]];\n}\nreturn result;',
+      typescript: 'const result = [...items];\nfor (let i = result.length - 1; i > 0; i--) {\n  const j = Math.floor(Math.random() * (i + 1));\n  [result[i], result[j]] = [result[j]!, result[i]!];\n}\nreturn result;',
       python: 'import random\nresult = list(items)\nrandom.shuffle(result)\nreturn result',
       csharp: 'return items.OrderBy((_) => Random.Shared.Next()).ToList();',
       cpp: 'static std::mt19937_64 engine{std::random_device{}()};\nstd::decay_t<decltype(items)> result = items;\nstd::shuffle(result.begin(), result.end(), engine);\nreturn result;',
@@ -326,7 +329,7 @@ export const ARRAY_UTILITIES: UtilityNode[] = [
     type: 'core:array.first', displayName: 'First', category: 'Utilities / Array', result: ITEM, keywords: ['first', 'head', 'front'],
     inputs: [items()], description: 'The first item. An empty array stops the run with an error.',
     code: after(NOT_EMPTY, {
-      javascript: 'return items[0];', python: 'return items[0]', csharp: 'return items[0];', cpp: 'return items.front();', rust: 'return items[0].clone();',
+      javascript: 'return items[0];', typescript: 'return items[0]!;', python: 'return items[0]', csharp: 'return items[0];', cpp: 'return items.front();', rust: 'return items[0].clone();',
       java: 'return items.get(0);', go: 'return (*items)[0]', lua: 'return items[1]', gdscript: 'return items[0]', ruby: 'return items.first', php: 'return $items->items[0];'
     })
   },
@@ -334,7 +337,7 @@ export const ARRAY_UTILITIES: UtilityNode[] = [
     type: 'core:array.last', displayName: 'Last', category: 'Utilities / Array', result: ITEM, keywords: ['last', 'tail', 'back', 'end'],
     inputs: [items()], description: 'The last item. An empty array stops the run with an error.',
     code: after(NOT_EMPTY, {
-      javascript: 'return items[items.length - 1];', python: 'return items[-1]', csharp: 'return items[items.Count - 1];', cpp: 'return items.back();',
+      javascript: 'return items[items.length - 1];', typescript: 'return items[items.length - 1]!;', python: 'return items[-1]', csharp: 'return items[items.Count - 1];', cpp: 'return items.back();',
       rust: 'return items[items.len() - 1].clone();', java: 'return items.get(items.size() - 1);', go: 'return (*items)[len(*items)-1]', lua: 'return items[items.n]',
       gdscript: 'return items.back()', ruby: 'return items.last', php: 'return $items->items[count($items->items) - 1];'
     })
@@ -343,7 +346,7 @@ export const ARRAY_UTILITIES: UtilityNode[] = [
     type: 'core:array.random-item', displayName: 'Random Item', category: 'Utilities / Array', result: ITEM, keywords: ['random', 'pick', 'choose', 'sample'],
     inputs: [items()], description: 'One of the items, picked at random; a new pick each time it is read. An empty array stops the run with an error.',
     code: after(NOT_EMPTY, {
-      javascript: 'return items[Math.floor(Math.random() * items.length)];', python: 'import random\nreturn random.choice(items)',
+      javascript: 'return items[Math.floor(Math.random() * items.length)];', typescript: 'return items[Math.floor(Math.random() * items.length)]!;', python: 'import random\nreturn random.choice(items)',
       csharp: 'return items[Random.Shared.Next(items.Count)];',
       cpp: 'static std::mt19937_64 engine{std::random_device{}()};\nreturn items[std::uniform_int_distribution<std::size_t>(0, items.size() - 1)(engine)];',
       rust: 'return items[(vgraph::random() * items.len() as f64) as usize].clone();', java: 'return items.get((int) (Math.random() * items.size()));',
@@ -370,6 +373,7 @@ export const ARRAY_UTILITIES: UtilityNode[] = [
     description: 'A new array with the items at First Index and Second Index changed places. An index out of range stops the run with an error.',
     code: after(SWAP_RANGE, {
       javascript: 'const result = [...items];\n[result[first], result[second]] = [result[second], result[first]];\nreturn result;',
+      typescript: 'const result = [...items];\n[result[first], result[second]] = [result[second]!, result[first]!];\nreturn result;',
       python: 'result = list(items)\nresult[first], result[second] = result[second], result[first]\nreturn result',
       csharp: 'var result = items.ToList();\n(result[first], result[second]) = (result[second], result[first]);\nreturn result;',
       cpp: 'std::decay_t<decltype(items)> result = items;\nstd::iter_swap(result.begin() + first, result.begin() + second);\nreturn result;',

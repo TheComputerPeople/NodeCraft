@@ -227,6 +227,17 @@ export interface IrPinValue {
   value: IrExpr;
 }
 
+// Whether running the statements can reach their end: not when the last returns, or is an if
+// whose two sides both return. A function's fallback return goes there only then (Java refuses an
+// unreachable statement, TypeScript's allowUnreachableCode: false too).
+export function canComplete(statements: IrStatement[]): boolean {
+  const last = statements[statements.length - 1];
+  if (!last) return true;
+  if (last.kind === 'return') return false;
+  if (last.kind === 'if') return canComplete(last.then) || canComplete(last.else);
+  return true;
+}
+
 // Expressions that only read storage, so evaluating them in a paused frame runs nothing.
 export function readsStorageOnly(e: IrExpr): boolean {
   switch (e.kind) {

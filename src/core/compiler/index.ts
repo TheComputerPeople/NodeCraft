@@ -7,11 +7,15 @@ import { checkCapabilities } from '../capabilities';
 import { createResolver } from '../resolve';
 import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { lowerDocument } from './lower';
+import { pruneUnreadSlots } from './prune';
 
 export interface CompileOptions {
   registry: NodeRegistry;
   languages: LanguagePackRegistry;
   generate: GenerateOptions;
+  // Leaves out the outputs nothing reads (true by default). The code preview keeps them: it shows
+  // one node, whose outputs nothing in the preview reads.
+  prune?: boolean;
 }
 
 export interface CompiledOutput extends GeneratedCode {
@@ -44,7 +48,7 @@ export function compileDocument(doc: GraphDocument, options: CompileOptions): Co
     ...(generator.snippets ? { snippets: generator.snippets } : {})
   });
   if (!lowered.program) return { diagnostics: lowered.diagnostics };
-  const { diagnostics: generated = [], ...code } = generator.generate(lowered.program, options.generate);
+  const { diagnostics: generated = [], ...code } = generator.generate(options.prune === false ? lowered.program : pruneUnreadSlots(lowered.program), options.generate);
   const diagnostics = [...lowered.diagnostics, ...generated];
   if (hasErrors(generated)) return { diagnostics };
   return {
