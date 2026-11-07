@@ -364,7 +364,7 @@ Status: complete (October 2026), with the deferrals below. The exit check is sam
 Design and steps: [node-authoring.md](node-authoring.md), with what each step built.
 
 - **Deferred:**
-  - Code classes as parents of graph classes: Phase 11.
+  - Code classes as parents of graph classes: Phase 12.
   - Generic functions in C++ (templates), Go, Lua (`---@generic`) and PHP (`@template`), and generic functions with more than two type parameters.
 
 ### Phase 10: Language context
@@ -392,9 +392,23 @@ Status: complete (October 2026), with the deferrals below. The exit check is in 
 
 Design and steps: [language-context.md](language-context.md), with what each step built.
 
-### Phase 11: Code classes as parents
+### Phase 11: Project integration
 
-Goal: a graph class can extend a class written in code, as a Blueprint extends a C++ class. Decided 2026-10-29 as its own phase, after Phase 9 is merged, rather than as Phase 9's deferred work (then numbered 10; Language context came first).
+Goal: the extension fits into any codebase, a new project or existing code, in each of its 12 languages. Asked for on 2026-11-07 as the first priority, before generics in C++, Go, Lua and PHP (Phase 9's deferral) and before code classes as parents.
+
+Before it: placement detects each language's project (module format, tsconfig, Python packages, C# namespaces, Maven and Gradle roots, Go modules, Rust crates, Composer PSR-4, Godot projects), and existing code becomes nodes in all 12 languages. Generated code needs recent language versions (C++20, Java 17, Go 1.21, Ruby 3.3, PHP 8.3, Lua 5.3), nothing sets a project up, and no layout but a single folder is tested.
+
+- **A project model**: each project in the workspace, with its build system, workspace, declared language version and checkers; placement on top of it; multi-root workspaces and large codebases.
+- **Generated code for the project's version**, detected from its files, down to a floor per language (decided 2026-11-07: detect and adapt): ES2020, Python 3.8, C# 8, C++17, Java 11, Go 1.18, Rust 2018, Godot 4.2, Ruby 3.0, PHP 8.0. What a version can't do leaves its capabilities.
+- **Lua 5.1 and LuaJIT** (decided 2026-11-07), as well as 5.2 to 5.4: LÖVE, Neovim and Defold run on them.
+- **The project's checkers**: generated code passes its compilers and type checkers at their strictest, and carries the markers style linters skip, tested on a corpus of real-world layouts in every language (monorepos, workspaces, multi-module builds, Unity-, Rails- and Laravel-shaped folders).
+- **New Project** for each language, and **Set Up in This Project** for existing code: what fits, what's missing, and the one-time hooks, applied with consent.
+
+Design and steps: [project-integration.md](project-integration.md).
+
+### Phase 12: Code classes as parents
+
+Goal: a graph class can extend a class written in code, as a Blueprint extends a C++ class. Decided 2026-10-29 as its own phase, after Phase 9 is merged, rather than as Phase 9's deferred work (first numbered 10; Language context and Project integration came first).
 
 Before it: graph classes extend other graph classes (Parent Class, overrides, Parent calls, virtual calls), and code classes' constructors, methods and properties are nodes with a Target pin (Phase 9).
 
@@ -405,7 +419,7 @@ Before it: graph classes extend other graph classes (Parent Class, overrides, Pa
 
 Design and steps: written when the phase starts.
 
-### Phase 12: Release
+### Phase 13: Release
 
 Marketplace packaging waits until the platform is complete and robust (decided 2026-10-28).
 
@@ -482,7 +496,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | For Each Loop (with Break) | ✅ | — |
 | Structure | Structs, enums, Make/Break, Set Members, Switch on Enum, the structure and enumeration editors | ✅ (sets and map keys of structs or enums later) | — |
 | Structure | Object references: Construct, Self, Is Valid, Target pins on variables, functions, events and dispatchers | ✅ | — |
-| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents in Phase 11) | 11 |
+| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents in Phase 12) | 12 |
 | Structure | Blueprint Interfaces (implemented in Class Settings, interface calls), Cast To class or interface | ✅ (pure Cast later) | — |
 | Structure | Access (Public, Protected, Private) for variables and functions | ✅ | — |
 | Structure | Entry points: Main with command-line arguments; framework packs' events; Test Case events with Assert nodes and Run Tests | ✅ (C# tests run through Run's project, not xUnit) | — |
@@ -490,7 +504,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python, C#, C++ headers, Rust, Java, Lua, GDScript, Ruby, PHP; Go and other languages through their language server) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
-| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes in Phase 11) | 11 |
+| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes in Phase 12) | 12 |
 | Interop | Out parameters and several return values from code; latent (async) functions | ✅ (several outputs in every language but GDScript, which has none; async functions in all twelve: futures, promises and tasks; Go's channels, Lua's coroutines, PHP's Fibers, GDScript's await and Ruby's threads) | — |
 | Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ✅ (graph functions and macros in Details; code through tags and each language's deprecation marker) | — |
 | Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | ✅ (also F12 and Shift+F12; node files open at their type) | — |
@@ -498,6 +512,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Library | Plugins: node packages with versions and dependencies; a new major version marks the package's nodes for Refresh Node | ✅ (from the workspace, extensions and npm, or a private npm registry) | 6 |
 | Library | Blueprint Function Libraries usable from graphs in each of several languages; plugins that carry library graphs | ✅ (a library is generated for each of its languages; packages carry graphs, added with Add Blueprint Package) | — |
 | Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Rust has no inheritance or interfaces, Go no inheritance) | 6, 8 |
+| Languages | (Beyond Unreal, which owns its projects) Graphs fit any codebase: each project's build, workspace and declared language version (down to a floor, with Lua 5.1 and LuaJIT), generated code that passes the project's own checkers, New Project and Set Up in This Project | ⬜ | 11 |
 | Languages | (Beyond Unreal) Workspaces with graphs in several languages: a new graph takes its folder's language, structs and enums can be shared between languages, and another language's code is reached through project functions | ✅ (generated cross-language bindings deferred) | 7 |
 | Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |
 | Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |
