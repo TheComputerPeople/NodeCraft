@@ -121,9 +121,10 @@ export function corpusWorkDir(): string {
 // Copies the layout into `workDir` and generates its graphs; then runs its steps.
 export async function runLayout(layout: Layout, workDir: string): Promise<LayoutResult> {
   const root = path.join(workDir, layout.name);
-  // Without build output a tool or IDE may have left in the repository's copy (a C# restore's obj/).
+  // Without build output a tool or IDE may have left in the repository's copy (a C# restore's obj/,
+  // a Gradle import's .gradle/ and build/).
   const source = path.join(repoRoot, 'test/fixtures/projects', layout.name);
-  fs.cpSync(source, root, { recursive: true, filter: (file) => !['obj', 'bin'].includes(path.basename(file)) || !fs.statSync(file).isDirectory() });
+  fs.cpSync(source, root, { recursive: true, filter: (file) => !['obj', 'bin', '.gradle', 'build'].includes(path.basename(file)) || !fs.statSync(file).isDirectory() });
   const tools = corpusToolsFolder();
   const result: LayoutResult = { compileErrors: [], warnings: [], generated: [], steps: [] };
   await generate(layout, root, result);

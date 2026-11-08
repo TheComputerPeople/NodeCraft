@@ -4,6 +4,8 @@ dist/
 .vscode-test/
 .DS_Store
 out/
-# Build output a C# tool or IDE leaves in the corpus layouts (the corpus builds in a copy).
+# Build output a tool or IDE leaves in the corpus layouts (the corpus builds in a copy).
 test/fixtures/projects/**/obj/
 test/fixtures/projects/**/bin/
+test/fixtures/projects/**/.gradle/
+test/fixtures/projects/**/build/

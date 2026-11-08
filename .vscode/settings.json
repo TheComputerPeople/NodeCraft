@@ -1,5 +1,13 @@
 {
-  // The C# projects under test/fixtures are corpus inputs, copied and built elsewhere by the tests.
-  // Opening them here would restore them into obj/ and bin/ inside the fixtures.
-  "dotnet.defaultSolution": "disable"
+  // The projects under test/fixtures are corpus inputs, copied and built elsewhere by the tests.
+  // Opening them here would build them into obj/, bin/ and .gradle/ inside the fixtures.
+  "dotnet.defaultSolution": "disable",
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.metadata/**",
+    "**/archetype-resources/**",
+    "**/META-INF/maven/**",
+    "**/test/fixtures/**"
+  ],
+  "gradle.autoDetect": "off"
 }
