@@ -154,10 +154,12 @@ test("Compile warns when the graph's project declares an older language version 
   }));
   try {
     await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
-    const warning = vscode.languages.getDiagnostics(graph).find((d) => d.code === 'project-version');
+    // Once for the project, on the file that declares the version, rather than on each graph.
+    const warning = vscode.languages.getDiagnostics(workspaceFile('legacy-java/pom.xml')).find((d) => d.code === 'project-version');
     assert.ok(warning, 'the version warning');
     assert.equal(warning.severity, vscode.DiagnosticSeverity.Warning);
     assert.match(warning.message, /declares 11 in pom\.xml, but generated Java needs Java 17/);
+    assert.ok(!vscode.languages.getDiagnostics(graph).some((d) => d.code === 'project-version'), 'not on the graph');
     assert.ok(await exists(workspaceFile('legacy-java/src/main/java/game/Hello.java')), 'generated all the same');
   } finally {
     await vscode.workspace.fs.delete(workspaceFile('legacy-java'), { recursive: true });

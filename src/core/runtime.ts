@@ -2,7 +2,7 @@
 // generated code must match it (docs/semantics.md, enforced by test/conformance).
 import { LanguagePackRegistry } from './language-pack';
 import { DEFAULT_LANGUAGE, builtinLanguagePacks } from './languages';
-import { DebugFrame, DebugValue, Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent } from './model';
+import { DebugFrame, DebugValue, Graph, GraphDocument, GraphNode, NodeDefinition, PinDefinition, RuntimeLogEvent, TypeRef } from './model';
 import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
@@ -1007,8 +1007,8 @@ export class GraphRuntime {
     const pin = definition.inputs.find((p) => p.id === pinId);
     const connection = graph.connections.find((c) => c.toNode === node.id && c.toPin === pinId);
     const source = connection && graph.nodes.find((n) => n.id === connection.fromNode);
-    if (!connection || !source) return unconnectedValue(node, pin, pinId, context.run.types);
-    return this.outputValue(context, source, connection.fromPin, following);
+    const value = !connection || !source ? unconnectedValue(node, pin, pinId, context.run.types) : this.outputValue(context, source, connection.fromPin, following);
+    return intoPin(pin?.type, value);
   }
 
   private outputValue(context: GraphContext, node: GraphNode, pinId: string, following: Set<string>): unknown {
@@ -1116,6 +1116,12 @@ function unconnectedValue(node: GraphNode, pin: PinDefinition | undefined, pinId
   if (stored !== undefined) return fromStored(stored, pin?.type, types);
   if (pin?.defaultValue !== undefined) return fromStored(pin.defaultValue, pin?.type, types);
   return defaultValue(pin?.type, types);
+}
+
+// A number read by an int pin is truncated toward zero, as Unreal converts a float wired into an
+// int, and as the generated code of every language does (docs/semantics.md, "Values").
+function intoPin(type: TypeRef | undefined, value: unknown): unknown {
+  return type?.id === 'int' && !type.container && typeof value === 'number' ? Math.trunc(value) : value;
 }
 
 function outputKey(graph: Graph, node: GraphNode, pinId: string): string {

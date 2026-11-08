@@ -1142,6 +1142,15 @@ class Lowerer {
       return when(not(read(done)), [store(done, bool(true)), ...init]);
     };
 
+    // An int input compared as it is: a float wired into it is truncated first, through an int slot
+    // (docs/semantics.md, "Values").
+    const asInt = (value: IrExpr, name: string): [IrStatement[], IrExpr] => {
+      const type = exprType(value, this.programView());
+      if (type?.id !== 'float' || type.container) return [[], value];
+      const slot = state(name, 'int');
+      return [[store(slot, value)], read(slot)];
+    };
+
     switch (nativeOperation(def)) {
       case 'for-loop': {
         const stop = def.inputs.some((p) => p.id === 'break') ? state('stop', 'bool') : undefined;
@@ -1177,7 +1186,8 @@ class Lowerer {
       case 'do-n': {
         const counter = this.slot(info, node, def, 'counter');
         if (entry === 'reset') return [store(counter, int(0))];
-        return [when({ kind: 'binary', op: '<', left: read(counter), right: input('n') }, [
+        const [readN, n] = asInt(input('n'), 'n');
+        return [...readN, when({ kind: 'binary', op: '<', left: read(counter), right: n }, [
           store(counter, { kind: 'binary', op: '+', left: read(counter), right: int(1) }),
           ...next('exit')
         ])];
@@ -1206,10 +1216,11 @@ class Lowerer {
         if (entry === 'reset') return [store(initialized, bool(false))];
         const outputs = def.outputs.filter((p) => p.kind === 'exec').map((p) => p.id);
         const current = state('current', 'int');
+        const [readStart, startIndex] = asInt(input('startIndex'), 'startIndex');
         // out0 if current is 0, else out1 if 1, …
         const dispatch = outputs.reduceRight<IrStatement[]>((otherwise, out, i) => [when({ kind: 'binary', op: '==', left: read(current), right: int(i) }, next(out), otherwise)], []);
         return [
-          initOnce([store(position, int(0)), when({ kind: 'binary', op: '>=', left: input('startIndex'), right: int(0) }, [store(position, input('startIndex'))])]),
+          initOnce([store(position, int(0)), ...readStart, when({ kind: 'binary', op: '>=', left: startIndex, right: int(0) }, [store(position, startIndex)])]),
           when({ kind: 'binary', op: '&&', left: { kind: 'binary', op: '>=', left: read(position), right: int(outputs.length) }, right: truthy(input('loop')) }, [store(position, int(0))]),
           when({ kind: 'binary', op: '<', left: read(position), right: int(outputs.length) }, [
             store(current, read(position)),
@@ -1224,7 +1235,7 @@ class Lowerer {
         // An unconnected selection picks its case here, as Branch's condition does.
         const chosen = input('selection');
         if (chosen.kind === 'literal') {
-          const i = values.findIndex((value) => (node.type === SWITCH_STRING ? String(chosen.value ?? '') === value : toNumber(chosen.value) === value));
+          const i = values.findIndex((value) => (node.type === SWITCH_STRING ? String(chosen.value ?? '') === value : Math.trunc(toNumber(chosen.value)) === value));
           return next(i < 0 ? 'default' : `case${i}`);
         }
         const chain = values.reduceRight<IrStatement[]>(

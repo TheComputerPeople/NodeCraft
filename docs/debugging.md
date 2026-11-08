@@ -18,6 +18,7 @@ Shortcut sources are in [unreal-conventions.md](unreal-conventions.md). Unreal s
 - The editor draws them on nodes and offers them in the node menu (Add Breakpoint, Remove Breakpoint, Disable/Enable Breakpoint); Ctrl+Shift+F9 removes all of the file's breakpoints.
 - Breakpoints on nodes that don't run on their own (pure nodes, which run where their values are read) stop when the node that reads them runs, as in Unreal.
 - For generated-code debugging, each graph breakpoint is mirrored as a VS Code breakpoint on its node's first line in the generated file (`GeneratedCode.nodeLines`), updated whenever the file is compiled. They appear in VS Code's Breakpoints view too.
+- A node can leave no code (since Phase 11): compiling works out constants, so a Branch on a constant keeps only the side that runs, and a value nothing reads isn't computed. A breakpoint on such a node has no line, so it can't stop in the generated code; Debug starts all the same and says which nodes they are. Simulate runs the graph as drawn and stops there.
 
 ## Debugging in Simulate
 

@@ -203,7 +203,7 @@
       "additionalProperties": {
         "type": "string"
       },
-      "description": "Templates by name: file, function, comment; statements (print, assert, assign, declare, statement, if, while, for, forEach, return, callResults); expressions (literal.int, literal.float, literal.bool, literal.string, literal.null, field, add, binary, binary.<op>, binary.<op>.<type>, not, concat, toText[.<type>], toNumber[.<type>], toBoolean[.<type>], call, import, callFunction, callBlock, callOutput, makeContainer.<container>, makeStruct, structField, enumValue); structFile and enumFile."
+      "description": "Templates by name: file, function, comment; statements (print, assert, assign, declare, statement, if, while, for, forEach, return, callResults); expressions (literal.int, literal.float, literal.bool, literal.string, literal.null, field, add, binary, binary.<op>, binary.<op>.<type>, not, concat, toText[.<type>], toNumber[.<type>], toBoolean[.<type>], toInt (a float into an int, truncated toward zero), call, import, callFunction, callBlock, callOutput, makeContainer.<container>, makeStruct, structField, enumValue); structFile and enumFile."
     },
     "helpers": {
       "type": "object",

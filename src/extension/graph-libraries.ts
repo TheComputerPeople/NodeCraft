@@ -9,10 +9,9 @@ import { LanguagePackRegistry } from '../core/language-pack';
 import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
-import { graphFileDefinitions } from '../core/graph-files';
-import { duplicateTypes, generatedLanguages } from '../core/user-types';
+import { duplicateTypes } from '../core/user-types';
 import { tagPackageDefinitions } from '../core/node-packages';
-import { graphOutputFor } from './placement';
+import { graphFileNodes } from './placement';
 import { findFilesLimited } from './scan-limit';
 
 const GLOB = '**/*.vgraph';
@@ -113,20 +112,7 @@ export class GraphLibraries implements vscode.Disposable {
       return undefined;
     }
     const root = folder.uri.fsPath;
-    // Where a language generates this file, and the module other code imports it as.
-    const output = (language: string | undefined): { generatedPath: string; module?: string } | undefined => {
-      const generator = language ? this.languages.get(language)?.generator : undefined;
-      return language && generator ? graphOutputFor(language, uri.fsPath, root, generator) : undefined;
-    };
-    const generator = doc.language ? this.languages.get(doc.language)?.generator : undefined;
-    const own = output(doc.language) ?? { generatedPath: relative(root, uri.fsPath) };
-    // A shared struct, enum or function library is generated for its other languages too
-    // (docs/multi-language.md, gap 2; docs/node-authoring.md, gap 1).
-    const others = Object.fromEntries(generatedLanguages(doc).slice(1).flatMap((language) => {
-      const other = output(language);
-      return other ? [[language, other]] : [];
-    }));
-    const definitions = graphFileDefinitions(doc, { document: relative(root, uri.fsPath), ...own, ...(Object.keys(others).length ? { others } : {}) }, generator, (language) => this.languages.get(language)?.generator);
+    const definitions = graphFileNodes(doc, uri.fsPath, root, this.languages);
     const pkg = this.packages?.packageOfGraph(uri);
     return definitions && { path: relative(root, uri.fsPath), definitions: pkg ? tagPackageDefinitions(definitions, pkg) : definitions };
   }

@@ -1,7 +1,7 @@
 // Ruby pack (docs/more-languages.md, "Ruby"): generates a Ruby file (one class per graph) from Visual
 // IR. Files require each other with require_relative, and the support file (ruby-runtime.ts) is a
 // companion: a copy goes next to every generated file.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, dataPins, targetCallParams } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
@@ -24,6 +24,8 @@ const RESERVED = new Set([
   'test', 'select', 'trap', 'fork', 'exec', 'abort', 'at_exit', 'autoload', 'eval', 'load', 'block_given', 'iterator', 'srand', 'sprintf',
   'printf', 'putc', 'readline', 'readlines', 'Integer', 'Float', 'String', 'Array', 'Hash', 'Rational', 'Complex'
 ]);
+
+const INT: TypeRef = { id: 'int' };
 
 function mapType(type: TypeRef): string {
   if (type.container === 'array') return 'Array';
@@ -462,7 +464,7 @@ class RubyEmitter {
         out.line(`raise ${this.expr(s.message)} unless ${this.operand(s.condition)}`);
         break;
       case 'store':
-        out.line(`${this.slotRef(s.slot)} = ${this.expr(s.value)}`);
+        out.line(`${this.slotRef(s.slot)} = ${this.value(s.value, this.program.slots.find((x) => x.id === s.slot)?.type)}`);
         break;
       case 'setMember':
         out.line(`${this.memberRef(s.member)} = ${this.value(s.value, this.program.members.find((m) => m.id === s.member)?.type)}`);
@@ -486,8 +488,8 @@ class RubyEmitter {
       }
       case 'for': {
         const counter = this.slotRef(s.counter);
-        out.line(`${counter} = ${this.expr(s.first)}`);
-        out.line(`while ${counter} <= ${this.operand(s.last)}${s.stop ? ` && !${this.slotRef(s.stop)}` : ''}`);
+        out.line(`${counter} = ${this.value(s.first, INT)}`);
+        out.line(`while ${counter} <= ${this.intOperand(s.last)}${s.stop ? ` && !${this.slotRef(s.stop)}` : ''}`);
         out.indent();
         this.statements(s.body);
         out.line(`${counter} += 1`);
@@ -545,7 +547,7 @@ class RubyEmitter {
         out.line(`${this.dispatcherRef(s)}.clear`);
         break;
       case 'broadcast':
-        out.line(`${this.dispatcherRef(s)}.broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
+        out.line(`${this.dispatcherRef(s)}.broadcast(${this.args(s.args, broadcastParams(this.program, s)).join(', ')})`);
         break;
       case 'delay': {
         // The action is a block: `next` leaves it (`return` would leave the method).
@@ -590,7 +592,7 @@ class RubyEmitter {
         break;
       case 'interfaceCall': {
         const iface = interfaceInfo(this.program, s.type);
-        const call = `${this.targetRef(s.target)}.${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(s.target)}.${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
         if (s.results.length) this.results(s.results, call);
         else out.line(call);
         break;
@@ -612,7 +614,7 @@ class RubyEmitter {
       case 'objectCall': {
         const names = this.membersOf(s.type);
         const name = s.function !== undefined ? names?.functions.get(s.function) : names?.events.get(s.event!);
-        const call = `${this.targetRef(s.target)}.${name}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(s.target)}.${name}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
         if (s.results.length) this.results(s.results, call);
         else out.line(call);
         break;
@@ -628,7 +630,7 @@ class RubyEmitter {
   // The parent class's version of a function: Ruby's super only reaches the method of the same name.
   private parentCall(name: string, args: IrExpr[]): string {
     const target = this.parentFunction(name);
-    return `${target?.owner ?? 'super'}.instance_method(:${target?.method ?? name}).bind_call(${['self', ...args.map((a) => this.expr(a))].join(', ')})`;
+    return `${target?.owner ?? 'super'}.instance_method(:${target?.method ?? name}).bind_call(${['self', ...this.args(args, dataPins(this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === name)?.inputs))].join(', ')})`;
   }
 
   // ---- Expressions --------------------------------------------------------------------------
@@ -692,7 +694,7 @@ class RubyEmitter {
       case 'interfaceCall': {
         const iface = interfaceInfo(this.program, e.type);
         const outputs = iface?.functions.find((f) => f.id === e.function)?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `${this.targetRef(e.target)}.${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(e.target)}.${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'parentCall': {
@@ -707,7 +709,7 @@ class RubyEmitter {
         return `${this.targetRef(e.target)}.${this.membersOf(e.type)?.variables.get(e.variable)}`;
       case 'objectCall': {
         const fn = classInfo(this.program, e.type)?.functions.find((f) => f.id === e.function);
-        const call = `${this.targetRef(e.target)}.${this.membersOf(e.type)?.functions.get(e.function)}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(e.target)}.${this.membersOf(e.type)?.functions.get(e.function)}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
@@ -717,18 +719,19 @@ class RubyEmitter {
           for (let i = 0; i + 1 < e.items.length; i += 2) pairs.push(`${this.expr(e.items[i])} => ${this.expr(e.items[i + 1])}`);
           return `{${pairs.join(', ')}}`;
         }
-        const items = `[${e.items.map((item) => this.expr(item)).join(', ')}]`;
+        const items = `[${e.items.map((item, i) => this.value(item, e.type.container === 'map' && i % 2 ? e.type.valueType : { id: e.type.id })).join(', ')}]`;
         return e.type.container === 'set' ? `Set.new(${items})` : items;
       }
     }
   }
 
   private functionCall(id: string, args: IrExpr[]): string {
-    return `${this.functionNames.get(id)!}(${args.map((a) => this.expr(a)).join(', ')})`;
+    return `${this.functionNames.get(id)!}(${this.args(args, this.program.functions.find((f) => f.id === id)?.params ?? []).join(', ')})`;
   }
 
   private call(callee: IrCallee, args: IrExpr[]): string {
-    const list = args.map((a) => this.expr(a)).join(', ');
+    const params = calleeSignature(callee, this.program)?.params ?? [];
+    const list = this.args(args, params).join(', ');
     if (callee.kind === 'helper') return `${this.helperNames.get(callee.id)}(${list})`;
     const member = this.program.imports.find((i) => i.id === callee.id)?.member;
     if (!member) return `${this.importNames.get(callee.id)}(${list})`;
@@ -736,11 +739,27 @@ class RubyEmitter {
     if (member.kind === 'construct') return `${this.importNames.get(callee.id)}.new(${list})`;
     const [target, ...rest] = args;
     const object = `(${this.expr(target)})`;
-    const values = rest.map((a) => this.expr(a)).join(', ');
+    const values = this.args(rest, params.slice(1)).join(', ');
     return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
 
+  // Arguments for parameters of these types, in order.
+  private args(args: IrExpr[], params: { type?: TypeRef }[]): string[] {
+    return args.map((a, i) => this.value(a, params[i]?.type));
+  }
+
+  // An int operand: a float is truncated first.
+  private intOperand(e: IrExpr): string {
+    const type = this.typeOf(e);
+    return type?.id === 'float' && !type.container ? this.value(e, INT) : this.operand(e);
+  }
+
   private value(e: IrExpr, type: TypeRef | undefined): string {
+    // A float wired into an int is truncated toward zero (docs/semantics.md, "Values").
+    const from = this.typeOf(e);
+    if (type?.id === 'int' && !type.container && from?.id === 'float' && !from.container) {
+      return e.kind === 'literal' && typeof e.value === 'number' ? String(Math.trunc(e.value)) : `${this.operand(e)}.truncate`;
+    }
     if (e.kind !== 'literal' || !type?.container || !Array.isArray(e.value)) return this.expr(e);
     if (type.container === 'map') {
       const pairs = e.value.filter((p): p is unknown[] => Array.isArray(p) && p.length === 2);

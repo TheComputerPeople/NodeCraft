@@ -321,6 +321,32 @@ export function classInfo(program: Pick<IrProgram, 'imports' | 'classInfo'> & { 
   return type?.kind === 'class' ? type : undefined;
 }
 
+// The data pins of a function's or event's inputs: the parameters a call passes, in order.
+export function dataPins<P extends { kind: string; type?: TypeRef }>(pins: readonly P[] | undefined): P[] {
+  return pins?.filter((p) => p.kind === 'data') ?? [];
+}
+
+// The parameters a dispatcher's Call passes: this object's dispatcher, or (with `target`) another class's.
+export function broadcastParams(program: Pick<IrProgram, 'imports' | 'classInfo' | 'dispatchers'> & { ancestors?: ClassInfo[] }, s: Extract<IrStatement, { kind: 'broadcast' }>): { type?: TypeRef }[] {
+  if (s.target && s.type) return dataPins(classInfo(program, s.type)?.dispatchers.find((d) => d.id === s.dispatcher)?.inputs);
+  return program.dispatchers?.find((d) => d.id === s.dispatcher)?.params ?? [];
+}
+
+// The parameters an interface, parent or object call passes, in order.
+type TargetCall = Extract<IrStatement | IrExpr, { kind: 'interfaceCall' | 'parentCall' | 'objectCall' }>;
+export function targetCallParams(program: Pick<IrProgram, 'imports' | 'classInfo' | 'allInterfaces' | 'declaration'> & { ancestors?: ClassInfo[] }, call: TargetCall): { type?: TypeRef }[] {
+  switch (call.kind) {
+    case 'interfaceCall':
+      return dataPins(interfaceInfo(program, call.type)?.functions.find((f) => f.id === call.function)?.inputs);
+    case 'parentCall':
+      return dataPins(program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === call.function)?.inputs);
+    case 'objectCall': {
+      const info = classInfo(program, call.type);
+      return dataPins(call.function !== undefined ? info?.functions.find((f) => f.id === call.function)?.inputs : 'event' in call ? info?.events.find((e) => e.id === call.event)?.inputs : undefined);
+    }
+  }
+}
+
 // The structs and enums a program uses, by type id.
 export function userTypes(program: Pick<IrProgram, 'imports'>): Map<string, UserType> {
   return new Map(program.imports.flatMap((i) => (i.userType ? [[i.id, i.userType] as const] : [])));

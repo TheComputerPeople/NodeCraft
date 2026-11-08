@@ -14,7 +14,7 @@ export class Fighter {
 
   takeHit(damage: number): { remaining: number; defeated: boolean } {
     // Set members in Stats (lower)
-    this.Stats = new Stats(this.math_subtract(this.Stats.health, damage), this.Stats.attack, this.Stats.team);
+    this.Stats = new Stats(Math.trunc(this.math_subtract(this.Stats.health, damage)), this.Stats.attack, this.Stats.team);
     // Branch (branch)
     if (this.math_less_equal(this.Stats.health, 0)) {
       // Call Defeated (defeated)

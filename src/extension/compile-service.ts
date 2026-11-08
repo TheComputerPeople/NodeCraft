@@ -2,18 +2,21 @@
 // reports results (Problems panel and the editor's Compiler Results), and runs generated code.
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { CompileDiagnostic, compileDocument } from '../core/compiler';
+import { CompileDiagnostic } from '../core/compiler';
 import { LanguagePackRegistry } from '../core/language-pack';
 import { NodeLine } from '../core/compiler/writer';
 import { PinExpression } from '../core/language-pack';
 import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
-import { generatedLanguages } from '../core/user-types';
-import { cppRunSources, csharpRunSources, generateOptionsFor, godotProject, goPackage, goRunSources, javaProject, rustRunSources, isGeneratedFrom, verifyPlacement } from './placement';
-import { projectVersionDiagnostics } from './projects';
+import { cppRunSources, csharpRunSources, godotProject, goPackage, goRunSources, javaProject, rustRunSources } from './placement';
+import { compileGraphFile, outputPathsFor } from './graph-compile';
+import { ProjectVersionCheck } from './projects';
 import { OutputPlans } from './output-plans';
 import { ToolNotFoundError, runGeneratedCode } from './runner';
+
+// Diagnostics about the graph's project rather than the graph.
+const PROJECT_CODES = new Set(['project-version']);
 
 export interface CompileOutcome {
   report: CompileReport;
@@ -49,6 +52,10 @@ export interface GeneratedFile {
 
 export class CompileService implements vscode.Disposable {
   private readonly problems = vscode.languages.createDiagnosticCollection('blueprintVisualScripting');
+  // Problems of a graph's project, shown once, on the project's file (the version it declares), by
+  // project root.
+  private readonly projectProblems = vscode.languages.createDiagnosticCollection('blueprintVisualScripting.projects');
+  private readonly projectProblemFiles = new Map<string, vscode.Uri>();
   private readonly runs = new Map<string, AbortController>();
   private readonly lastReports = new Map<string, CompileReport>();
   private readonly generated = new Map<string, GeneratedFile>();
@@ -90,7 +97,8 @@ export class CompileService implements vscode.Disposable {
     });
     const finish = (outcome: CompileOutcome, graph?: GraphDocument): CompileOutcome => {
       this.lastReports.set(document.uri.toString(), outcome.report);
-      this.problems.set(document.uri, outcome.report.diagnostics.map((d) => this.toProblem(document, d, graph)));
+      // The project's own problems are in Problems on the project's file (reportProject).
+      this.problems.set(document.uri, outcome.report.diagnostics.filter((d) => !PROJECT_CODES.has(d.code)).map((d) => this.toProblem(document, d, graph)));
       return outcome;
     };
 
@@ -107,24 +115,26 @@ export class CompileService implements vscode.Disposable {
 
     const graphPath = document.uri.fsPath;
     const graphDir = path.dirname(graphPath);
-    const graphFileName = path.basename(graphPath);
     const root = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ?? graphDir;
-    const result = compileDocument(graph, { registry: this.registry, languages: this.languages, generate: generateOptionsFor(graph.language, graphFileName, graphDir, root, this.languages.get(graph.language ?? '')?.generator) });
-    const language = result.output?.language ?? graph.language ?? '';
-    if (!result.output) return finish({ report: report(result.diagnostics, language) }, graph);
-
-    const outputPath = path.join(graphDir, result.output.fileName);
-    await writeIfChanged(vscode.Uri.file(outputPath), result.output.text);
-    const companions = (result.output.companionFiles ?? []).map((c) => ({ path: path.join(graphDir, c.fileName), text: c.text }));
-    for (const companion of companions) await writeIfChanged(vscode.Uri.file(companion.path), companion.text);
-    const testFileName = result.output.testFile !== undefined ? this.languages.get(language)?.generator?.testFileName?.(graphFileName) : undefined;
-    const testPath = testFileName ? path.join(graphDir, testFileName) : undefined;
-    if (testPath) await writeIfChanged(vscode.Uri.file(testPath), result.output.testFile!);
-    const shared = await this.compileOtherLanguages(graph, graphFileName, graphDir, root);
-    await this.removeStaleOutputs(graphDir, graphFileName, [outputPath, ...companions.map((c) => c.path), ...(testPath ? [testPath] : []), ...shared.paths]);
-    const pack = this.languages.get(language);
-    const registration = pack && this.outputPlans ? await this.outputPlans.apply(pack, root, outputPath) : [];
-    const diagnostics = [...result.diagnostics, ...verifyPlacement(language, outputPath, root), ...(pack ? projectVersionDiagnostics(pack, graphDir, root) : []), ...registration, ...shared.diagnostics];
+    const compiled = await compileGraphFile(graph, graphPath, root, {
+      registry: this.registry,
+      languages: this.languages,
+      write: (file, text) => writeIfChanged(vscode.Uri.file(file), text),
+      remove: async (file) => {
+        try {
+          await vscode.workspace.fs.delete(vscode.Uri.file(file), { useTrash: false });
+        } catch (error) {
+          // Another compile of the graph (Compile while compile-on-save runs) removed it first.
+          if (!(error instanceof vscode.FileSystemError && error.code === 'FileNotFound')) throw error;
+        }
+      },
+      ...(this.outputPlans ? { register: (pack, folder, outputFile) => this.outputPlans!.apply(pack, folder, outputFile) } : {})
+    });
+    const { result, language, diagnostics } = compiled;
+    this.reportProject(compiled.versionCheck);
+    if (!result.output || !compiled.outputPath) return finish({ report: report(diagnostics, language) }, graph);
+    const outputPath = compiled.outputPath;
+    const testPath = compiled.testPath;
     // Java finds the project's classes in its source roots (javac's -sourcepath).
     const javaRoots = language === 'java' ? javaProject(graphDir, root).sourceRoots : [];
     const importRoots = javaRoots.length ? javaRoots : result.output.importRoots?.map((r) => path.join(root, r));
@@ -213,12 +223,9 @@ export class CompileService implements vscode.Disposable {
   // Output paths every pack would use for a graph file (generated code and test files), e.g. for
   // following renames and deletes.
   outputPathsFor(graphPath: string): string[] {
-    const dir = path.dirname(graphPath);
-    const name = path.basename(graphPath);
-    return this.languages.all().flatMap((p) => (p.generator
-      ? [p.generator.outputFileName(name), ...(p.generator.companionFileNames?.(name) ?? []), ...(p.generator.testFileName ? [p.generator.testFileName(name)] : [])].map((f) => path.join(dir, f))
-      : []));
+    return outputPathsFor(this.languages, graphPath);
   }
+
 
   forget(uri: vscode.Uri): void {
     this.problems.delete(uri);
@@ -226,44 +233,29 @@ export class CompileService implements vscode.Disposable {
     this.generated.delete(uri.toString());
   }
 
+  // The project's version warning, on the file that declares the version; cleared when it's gone.
+  private reportProject(check: ProjectVersionCheck | undefined): void {
+    if (!check) return;
+    const previous = this.projectProblemFiles.get(check.root);
+    if (previous) this.projectProblems.delete(previous);
+    this.projectProblemFiles.delete(check.root);
+    if (!check.file || !check.diagnostics.length) return;
+    const uri = vscode.Uri.file(check.file);
+    const range = new vscode.Range(check.line ?? 0, 0, check.line ?? 0, Number.MAX_SAFE_INTEGER);
+    this.projectProblems.set(uri, check.diagnostics.map((d) => {
+      const problem = new vscode.Diagnostic(range, d.message, vscode.DiagnosticSeverity.Warning);
+      problem.code = d.code;
+      problem.source = 'Blueprint Visual Scripting';
+      return problem;
+    }));
+    this.projectProblemFiles.set(check.root, uri);
+  }
+
   dispose(): void {
     this.problems.dispose();
+    this.projectProblems.dispose();
     this.compiled.dispose();
     this.runs.forEach((c) => c.abort());
-  }
-
-  // After switching a graph's language, its old generated file would linger; remove it, but only
-  // if it really was generated from this graph.
-  // A shared struct or enum is generated for its other languages too, next to its own output
-  // (docs/multi-language.md, gap 2). Their problems name the language.
-  private async compileOtherLanguages(graph: GraphDocument, graphFileName: string, graphDir: string, root: string): Promise<{ paths: string[]; diagnostics: CompileDiagnostic[] }> {
-    const paths: string[] = [];
-    const diagnostics: CompileDiagnostic[] = [];
-    for (const language of generatedLanguages(graph).slice(1)) {
-      const pack = this.languages.get(language);
-      const named = (list: CompileDiagnostic[]) => list.map((d) => ({ ...d, message: `${pack?.displayName ?? language}: ${d.message}` }));
-      const result = compileDocument({ ...graph, language }, { registry: this.registry, languages: this.languages, generate: generateOptionsFor(language, graphFileName, graphDir, root, pack?.generator) });
-      diagnostics.push(...named(result.diagnostics));
-      if (!result.output || !pack) continue;
-      const outputs = [{ path: path.join(graphDir, result.output.fileName), text: result.output.text }, ...(result.output.companionFiles ?? []).map((c) => ({ path: path.join(graphDir, c.fileName), text: c.text }))];
-      for (const output of outputs) await writeIfChanged(vscode.Uri.file(output.path), output.text);
-      paths.push(...outputs.map((o) => o.path));
-      diagnostics.push(...named([...verifyPlacement(language, outputs[0].path, root), ...(this.outputPlans ? await this.outputPlans.apply(pack, root, outputs[0].path) : [])]));
-    }
-    return { paths, diagnostics };
-  }
-
-  private async removeStaleOutputs(graphDir: string, graphFileName: string, current: string[]): Promise<void> {
-    for (const candidate of this.outputPathsFor(path.join(graphDir, graphFileName))) {
-      if (!current.includes(candidate) && isGeneratedFrom(candidate, graphFileName)) {
-        try {
-          await vscode.workspace.fs.delete(vscode.Uri.file(candidate), { useTrash: false });
-        } catch (error) {
-          // Another compile of the graph (Compile while compile-on-save runs) removed it first.
-          if (!(error instanceof vscode.FileSystemError && error.code === 'FileNotFound')) throw error;
-        }
-      }
-    }
   }
 
   // Points a diagnostic at its node's id in the .vgraph text, so Problems can jump to it.

@@ -37,7 +37,8 @@ How a graph behaves when it runs. Simulate (the reference interpreter in `src/co
 ## Values
 
 - Type defaults: `bool` is false; `int` and `float` are 0; `string` is empty; containers are empty; `any`, objects and other types are null.
-- Numbers are double precision. In TypeScript and JavaScript `int` and `float` share that representation. In C#, as in Unreal, `int` is a 32-bit integer and `float` a double; a `float` wired into an `int` pin is truncated toward zero, and integers beyond 32 bits don't fit. Python's `int` and `float` are different types too (a `float` can't index a list, and type checkers keep them apart), so a `float` wired into an `int` pin is truncated toward zero there as well (since Phase 11).
+- Numbers are double precision. In TypeScript and JavaScript `int` and `float` share that representation; in C#, as in Unreal, `int` is a 32-bit integer and `float` a double, and integers beyond 32 bits don't fit.
+- **A `float` wired into an `int` is truncated toward zero**, as Unreal converts it: 7.5 becomes 7 and -2.5 becomes -2. This holds wherever an `int` takes a value: a variable, a function's or event's input, a function's output, a struct field, a container's element, and the inputs of nodes such as For Loop, Do N and Switch on Int. It holds in Simulate and in every language (since Phase 11; before, Simulate, TypeScript, JavaScript, Lua, Ruby and PHP kept the fraction). A value an `any` pin carries is converted only in Simulate, which sees the number; generated code converts by the wire's type. Declarative packs spell the conversion with their `toInt` template; one without it passes the value as it is.
 - **Converting a value to text** (Print, and any later string conversion):
   - null prints as an empty string;
   - booleans print as `true` and `false`;

@@ -247,7 +247,9 @@ class TypeScriptEmitter {
       '/* eslint-disable */',
       '',
       ...(this.esm
-        ? [`import { test } from ${JSON.stringify(TEST_MODULE)};`, `import { ${this.className} } from ${JSON.stringify(specifier)};`]
+        // node:test's types come from @types/node, which a browser project (Vite's) doesn't have:
+        // there `test` is untyped, and the file still type-checks.
+        ? ['// @ts-ignore', `import { test } from ${JSON.stringify(TEST_MODULE)};`, `import { ${this.className} } from ${JSON.stringify(specifier)};`]
         : [`const { test } = require(${JSON.stringify(TEST_MODULE)});`, `const { ${this.className} } = require(${JSON.stringify(specifier)});`])
     ];
     for (const t of tests) lines.push('', `test(${JSON.stringify(t.name)}, () => {`, `  new ${this.className}().${t.method}();`, '});');
@@ -749,7 +751,7 @@ class TypeScriptEmitter {
         out.line(`if (!(${this.expr(s.condition)})) throw new Error(${this.expr(s.message)});`);
         break;
       case 'store':
-        out.line(`${this.slotRef(s.slot)} = ${this.expr(s.value)};`);
+        out.line(`${this.slotRef(s.slot)} = ${this.coerce(s.value, this.program.slots.find((x) => x.id === s.slot)?.type)};`);
         break;
       case 'setMember': {
         const member = this.program.members.find((m) => m.id === s.member);
@@ -1109,6 +1111,11 @@ class TypeScriptEmitter {
   private coerce(e: IrExpr, target: TypeRef | undefined): string {
     // A container default (JSON: an array, or a map's [key, value] pairs) becomes the container.
     if (e.kind === 'literal' && target?.container && Array.isArray(e.value)) return this.containerLiteral(e.value, target);
+    // A float wired into an int is truncated toward zero, as in every language (docs/semantics.md).
+    const from = this.typeOf(e);
+    if (target?.id === 'int' && !target.container && from?.id === 'float' && !from.container) {
+      return e.kind === 'literal' && typeof e.value === 'number' ? String(Math.trunc(e.value)) : `Math.trunc(${this.expr(e)})`;
+    }
     const text = this.expr(e);
     if (!this.flavor.typed || !target || target.id === 'any') return text;
     return this.typeOf(e) ? text : `(${text} as ${this.typeName(target)})`;

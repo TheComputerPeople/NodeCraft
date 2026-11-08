@@ -1,5 +1,5 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, importKey, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, broadcastParams, canComplete, classInfo, exprType, importKey, interfaceInfo, programClassSpec, userTypes, targetCallParams } from '../compiler/ir';
 import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
@@ -20,6 +20,8 @@ const PRIMITIVES: Record<string, string> = { bool: 'bool', int: 'int', float: 'f
 
 // Types from project code (native) aren't imported into generated files: the editor checks them by
 // name, and the generated code passes them on as `Any`.
+const INT: TypeRef = { id: 'int' };
+
 function mapType(type: TypeRef): string {
   const { category, name } = parseTypeId(type.id);
   const element = PRIMITIVES[type.id] ?? (category === 'native' ? 'Any' : name);
@@ -32,11 +34,11 @@ function mapType(type: TypeRef): string {
 
 // Helper functions emitted into generated modules on demand. They implement docs/semantics.md
 // ("Values") exactly as Simulate does, so output matches the other targets.
-const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent' | 'await', string[]> = {
+const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent' | 'delay' | 'await', string[]> = {
   latent: [
     'def _latent_queue() -> Any:',
     '    # Latent actions of every class run from one queue, in the order they fall due, once start()',
-    '    # has returned: _run_latent_actions() runs them. Async functions run meanwhile on an asyncio',
+    '    # has returned: run_latent_actions() runs them. Async functions run meanwhile on an asyncio',
     '    # event loop, and each one\'s Completed joins the queue when it finishes.',
     '    import asyncio',
     '    import functools',
@@ -87,16 +89,19 @@ const HELPERS: Record<'format' | 'number' | 'boolean' | 'latent' | 'await', stri
     '    return queue',
     '',
     '',
+    '# Runs the latent actions waiting (Delay, async functions) until none is left: the project\'s code',
+    '# calls it after start() when it runs this class itself.',
+    'def run_latent_actions() -> None:',
+    '    _latent_queue().run()'
+  ],
+  // Only with a Delay, as `await` (an unused one fails Pyright's reportUnusedFunction).
+  delay: [
     'def _delay(seconds: float, action: Any, *args: Any) -> None:',
     '    import heapq',
     '    import time',
     '    queue = _latent_queue()',
     '    queue.order += 1',
-    '    heapq.heappush(queue.pending, (time.monotonic() + max(0.0, seconds), queue.order, action, args))',
-    '',
-    '',
-    'def _run_latent_actions() -> None:',
-    '    _latent_queue().run()'
+    '    heapq.heappush(queue.pending, (time.monotonic() + max(0.0, seconds), queue.order, action, args))'
   ],
   // Only with an async function (a module defining it unused fails Pyright's reportUnusedFunction).
   await: [
@@ -261,7 +266,7 @@ const DISPATCHER_CLASS = [
 const CLASS_STYLES: ClassMemberStyles = { functions: 'snake', variables: 'keep', dispatchers: 'keep', hiddenPrefix: '_' };
 
 // Names fixed in every generated module, which functions must not take.
-const MODULE_NAMES = ['_EventDispatcher', 'annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text', '_delay', '_run_latent_actions', '_latent_queue', '_await_latent'];
+const MODULE_NAMES = ['_EventDispatcher', 'annotations', 'json', 'Any', '_format_value', '_format_number', '_to_number', '_to_boolean', '_to_json', '_key_text', '_delay', 'run_latent_actions', '_latent_queue', '_await_latent'];
 
 // The names a function library's functions are defined as (snake_case, unique in the module). The
 // library's own generated module and every module that imports it use these.
@@ -606,7 +611,7 @@ class PythonEmitter {
     header.line();
 
     const footer: string[] = [];
-    for (const helper of ['format', 'number', 'boolean', 'latent', 'await'] as const) {
+    for (const helper of ['format', 'number', 'boolean', 'latent', 'delay', 'await'] as const) {
       if (!this.helpersUsed.has(helper)) continue;
       const kinds = [...this.types.values()].map((t) => t.kind);
       footer.push('', '', ...(helper === 'format' ? formatHelper(kinds.includes('enum'), kinds.includes('struct')) : HELPERS[helper]));
@@ -618,7 +623,7 @@ class PythonEmitter {
     const main = this.program.functions.find((f) => f.event?.entry === 'Main');
     const mainName = main && this.functionNames.get(main.id);
     if (runnable) {
-      footer.push('', '', 'if __name__ == "__main__":', ...(mainName ? ['    import sys', '', `    app = ${this.className}()`, '    app.start()', `    app.${mainName}(sys.argv[1:])`] : [`    ${this.className}().start()`]), ...(this.helpersUsed.has('latent') ? ['    _run_latent_actions()'] : []));
+      footer.push('', '', 'if __name__ == "__main__":', ...(mainName ? ['    import sys', '', `    app = ${this.className}()`, '    app.start()', `    app.${mainName}(sys.argv[1:])`] : [`    ${this.className}().start()`]), ...(this.helpersUsed.has('latent') ? ['    run_latent_actions()'] : []));
     }
 
     const roots = [...new Set(this.program.imports.map((i) => pythonImportRoot(i.path, i.module ?? pythonModuleName(i.path))))].sort();
@@ -800,8 +805,8 @@ class PythonEmitter {
         // Python's range() would read Last Index once; Unreal reads it before each pass.
         const counter = `${this.slotRef(s.counter)}`;
         const stop = s.stop ? ` and not ${this.slotRef(s.stop)}` : '';
-        out.line(`${counter} = ${this.expr(s.first)}`);
-        out.line(`while ${counter} <= ${this.expr(s.last)}${stop}:`);
+        out.line(`${counter} = ${this.value(s.first, INT)}`);
+        out.line(`while ${counter} <= ${this.value(s.last, INT)}${stop}:`);
         this.block(() => {
           this.statements(s.body);
           out.line(`${counter} += 1`);
@@ -849,7 +854,7 @@ class PythonEmitter {
         out.line(`${this.dispatcherRef(s)}.clear()`);
         break;
       case 'broadcast':
-        out.line(`${this.dispatcherRef(s)}.broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
+        out.line(`${this.dispatcherRef(s)}.broadcast(${this.args(s.args, broadcastParams(this.program, s))})`);
         break;
       case 'await': {
         // An async function (docs/node-authoring.md, gap 4): Completed runs with its value when it
@@ -870,6 +875,7 @@ class PythonEmitter {
       }
       case 'delay': {
         this.helpersUsed.add('latent');
+        this.helpersUsed.add('delay');
         this.usesAny = true;
         const callback = `_after_${this.slotNames.get((s.pending ?? s.generation)!)!.replace(/^_+/, '')}`;
         const generation = s.generation && this.slotRef(s.generation);
@@ -911,7 +917,7 @@ class PythonEmitter {
         break;
       case 'interfaceCall': {
         const iface = interfaceInfo(this.program, s.type);
-        const call = `${this.targetRef(s.target)}.${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(s.target)}.${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${this.args(s.args, targetCallParams(this.program, s))})`;
         out.line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
         break;
       }
@@ -920,7 +926,7 @@ class PythonEmitter {
           out.line('super().start()');
           break;
         }
-        const call = `super().${this.parentFunctionName(s.function!)}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `super().${this.parentFunctionName(s.function!)}(${this.args(s.args, targetCallParams(this.program, s))})`;
         out.line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
         break;
       }
@@ -934,7 +940,7 @@ class PythonEmitter {
       case 'objectCall': {
         const names = this.membersOf(s.type);
         const name = s.function !== undefined ? names?.functions.get(s.function) : names?.events.get(s.event!);
-        const call = `${this.targetRef(s.target)}.${name}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(s.target)}.${name}(${this.args(s.args, targetCallParams(this.program, s))})`;
         out.line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
         break;
       }
@@ -1011,13 +1017,13 @@ class PythonEmitter {
       case 'interfaceCall': {
         const iface = interfaceInfo(this.program, e.type);
         const outputs = iface?.functions.find((f) => f.id === e.function)?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `${this.targetRef(e.target)}.${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(e.target)}.${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${this.args(e.args, targetCallParams(this.program, e))})`;
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'parentCall': {
         const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `super().${this.parentFunctionName(e.function)}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `super().${this.parentFunctionName(e.function)}(${this.args(e.args, targetCallParams(this.program, e))})`;
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'isValid':
@@ -1026,21 +1032,26 @@ class PythonEmitter {
         return `${this.targetRef(e.target)}.${this.membersOf(e.type)?.variables.get(e.variable)}`;
       case 'objectCall': {
         const fn = classInfo(this.program, e.type)?.functions.find((f) => f.id === e.function);
-        const call = `${this.targetRef(e.target)}.${this.membersOf(e.type)?.functions.get(e.function)}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(e.target)}.${this.membersOf(e.type)?.functions.get(e.function)}(${this.args(e.args, targetCallParams(this.program, e))})`;
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'makeContainer': {
         if (e.type.container === 'map') {
           const pairs: string[] = [];
-          for (let i = 0; i + 1 < e.items.length; i += 2) pairs.push(`${this.expr(e.items[i])}: ${this.expr(e.items[i + 1])}`);
+          for (let i = 0; i + 1 < e.items.length; i += 2) pairs.push(`${this.value(e.items[i], { id: e.type.id })}: ${this.value(e.items[i + 1], e.type.valueType)}`);
           return `{${pairs.join(', ')}}`;
         }
-        const items = e.items.map((item) => this.expr(item));
+        const items = e.items.map((item) => this.value(item, { id: e.type.id }));
         if (e.type.container === 'set') return items.length ? `{${items.join(', ')}}` : 'set()';
         return `[${items.join(', ')}]`;
       }
     }
+  }
+
+  // Arguments for parameters of these types, in order.
+  private args(args: IrExpr[], params: { type?: TypeRef }[]): string {
+    return args.map((a, i) => this.value(a, params[i]?.type)).join(', ');
   }
 
   private functionCall(id: string, args: IrExpr[]): string {
@@ -1058,7 +1069,7 @@ class PythonEmitter {
     // A code class's member (docs/node-authoring.md, gap 2), on the Target pin's object.
     const [target, ...rest] = args;
     const object = this.targetRef(target);
-    const values = rest.map((a) => this.expr(a)).join(', ');
+    const values = rest.map((a, i) => this.value(a, params?.[i + 1]?.type)).join(', ');
     return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
 

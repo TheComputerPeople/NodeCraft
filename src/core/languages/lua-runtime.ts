@@ -141,6 +141,12 @@ function Map:value_array()
   return array
 end
 
+-- A float wired into an int: truncated toward zero, an integer when it fits (NaN and the infinities stay).
+function vg.trunc(x)
+  local whole = x >= 0 and math.floor(x) or math.ceil(x)
+  return math.tointeger(whole) or whole
+end
+
 -- Ascending order for sorting: numbers and text as Lua compares them, false before true.
 function vg.less(a, b)
   if type(a) == "boolean" then return (not a) and b end

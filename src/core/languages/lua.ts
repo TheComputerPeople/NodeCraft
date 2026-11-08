@@ -1,7 +1,7 @@
 // Lua pack (docs/more-languages.md, "Lua"): generates a Lua 5.4 module (one class per graph) from
 // Visual IR. Containers, formatting, classes, dispatchers and the latent queue come from the support
 // module (lua-runtime.ts), which generated code requires as "vgraph_runtime".
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams } from '../compiler/ir';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
@@ -24,6 +24,8 @@ const RESERVED = new Set([
   'type', 'select', 'setmetatable', 'getmetatable', 'pairs', 'ipairs', 'tostring', 'tonumber', 'pcall', 'xpcall', 'rawget', 'rawset',
   'next', 'package', 'new', '__init', '__index', '_ENV', '_G'
 ]);
+
+const INT: TypeRef = { id: 'int' };
 
 function mapType(type: TypeRef): string {
   const { name } = parseTypeId(type.id);
@@ -540,7 +542,7 @@ class LuaEmitter {
         line(`if not (${this.expr(s.condition)}) then error(${this.expr(s.message)}, 0) end`);
         break;
       case 'store':
-        line(`${this.slotRef(s.slot)} = ${this.expr(s.value)}`);
+        line(`${this.slotRef(s.slot)} = ${this.value(s.value, this.program.slots.find((x) => x.id === s.slot)?.type)}`);
         break;
       case 'setMember':
         line(`${this.memberRef(s.member)} = ${this.value(s.value, this.program.members.find((m) => m.id === s.member)?.type)}`);
@@ -565,8 +567,8 @@ class LuaEmitter {
       case 'for': {
         // Last Index is read before each pass, as Unreal reads it.
         const counter = this.slotRef(s.counter);
-        out.line(`${counter} = ${this.expr(s.first)}`);
-        out.line(`while ${counter} <= ${this.operand(s.last)}${s.stop ? ` and not ${this.slotRef(s.stop)}` : ''} do`);
+        out.line(`${counter} = ${this.value(s.first, INT)}`);
+        out.line(`while ${counter} <= ${this.intOperand(s.last)}${s.stop ? ` and not ${this.slotRef(s.stop)}` : ''} do`);
         out.indent();
         this.statements(s.body);
         out.line(`${counter} = ${counter} + 1`);
@@ -613,7 +615,7 @@ class LuaEmitter {
         line(`${this.dispatcherRef(s)}:clear()`);
         break;
       case 'broadcast':
-        line(`${this.dispatcherRef(s)}:broadcast(${s.args.map((a) => this.expr(a)).join(', ')})`);
+        line(`${this.dispatcherRef(s)}:broadcast(${this.args(s.args, broadcastParams(this.program, s)).join(', ')})`);
         break;
       case 'await': {
         // An async function (docs/node-authoring.md, gap 4): a coroutine the latent queue resumes;
@@ -672,7 +674,7 @@ class LuaEmitter {
         break;
       case 'interfaceCall': {
         const iface = interfaceInfo(this.program, s.type);
-        const call = `${this.targetRef(s.target)}:${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(s.target)}:${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
         line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
         break;
       }
@@ -682,7 +684,7 @@ class LuaEmitter {
           line(`${parent}.start(self)`);
           break;
         }
-        const call = `${parent}.${this.parentFunctionName(s.function!)}(${['self', ...s.args.map((a) => this.expr(a))].join(', ')})`;
+        const call = `${parent}.${this.parentFunctionName(s.function!)}(${['self', ...this.args(s.args, targetCallParams(this.program, s))].join(', ')})`;
         line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
         break;
       }
@@ -696,7 +698,7 @@ class LuaEmitter {
       case 'objectCall': {
         const names = this.membersOf(s.type);
         const name = s.function !== undefined ? names?.functions.get(s.function) : names?.events.get(s.event!);
-        const call = `${this.targetRef(s.target)}:${name}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(s.target)}:${name}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
         line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
         break;
       }
@@ -778,14 +780,14 @@ class LuaEmitter {
       case 'interfaceCall': {
         const iface = interfaceInfo(this.program, e.type);
         const outputs = iface?.functions.find((f) => f.id === e.function)?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `${this.targetRef(e.target)}:${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(e.target)}:${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
         return e.output && outputs.length > 1 ? nth(call, outputs.findIndex((o) => o.id === e.output) + 1) : call;
       }
       case 'parentCall': {
         const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
         const parent = this.userTypeName(this.program.classInfo!.parent!);
-        const call = `${parent}.${this.parentFunctionName(e.function)}(${['self', ...e.args.map((a) => this.expr(a))].join(', ')})`;
+        const call = `${parent}.${this.parentFunctionName(e.function)}(${['self', ...this.args(e.args, targetCallParams(this.program, e))].join(', ')})`;
         return e.output && outputs.length > 1 ? nth(call, outputs.findIndex((o) => o.id === e.output) + 1) : call;
       }
       case 'isValid':
@@ -794,23 +796,24 @@ class LuaEmitter {
         return `${this.targetRef(e.target)}.${this.membersOf(e.type)?.variables.get(e.variable)}`;
       case 'objectCall': {
         const fn = classInfo(this.program, e.type)?.functions.find((f) => f.id === e.function);
-        const call = `${this.targetRef(e.target)}:${this.membersOf(e.type)?.functions.get(e.function)}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(e.target)}:${this.membersOf(e.type)?.functions.get(e.function)}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
         return e.output && outputs.length > 1 ? nth(call, outputs.findIndex((o) => o.id === e.output) + 1) : call;
       }
       case 'makeContainer':
-        return `vg.${e.type.container === 'map' ? 'map' : e.type.container === 'set' ? 'set' : 'array'}(${e.items.map((item) => this.expr(item)).join(', ')})`;
+        return `vg.${e.type.container === 'map' ? 'map' : e.type.container === 'set' ? 'set' : 'array'}(${e.items.map((item, i) => this.value(item, e.type.container === 'map' && i % 2 ? e.type.valueType : { id: e.type.id })).join(', ')})`;
     }
   }
 
   private functionCall(id: string, args: IrExpr[]): string {
     const name = this.functionNames.get(id)!;
-    const list = args.map((a) => this.expr(a)).join(', ');
+    const list = this.args(args, this.program.functions.find((f) => f.id === id)?.params ?? []).join(', ');
     return this.library ? `M.${name}(${list})` : `self:${name}(${list})`;
   }
 
   private call(callee: IrCallee, args: IrExpr[]): string {
-    const list = args.map((a) => this.expr(a)).join(', ');
+    const params = calleeSignature(callee, this.program)?.params ?? [];
+    const list = this.args(args, params).join(', ');
     if (callee.kind === 'helper') return `${this.helperNames.get(callee.id)}(${list})`;
     const member = this.program.imports.find((i) => i.id === callee.id)?.member;
     if (!member) return `${this.importNames.get(callee.id)}(${list})`;
@@ -818,13 +821,29 @@ class LuaEmitter {
     if (member.kind === 'construct') return `${this.importNames.get(callee.id)}.${member.name ?? 'new'}(${list})`;
     const [target, ...rest] = args;
     const object = this.expr(target);
-    const values = rest.map((a) => this.expr(a)).join(', ');
+    const values = this.args(rest, params.slice(1)).join(', ');
     return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}:${member.name}(${values})`;
   }
 
   // An expression for a member or slot of `type`: a container default (JSON: an array, or a map's
   // [key, value] pairs) becomes the container.
+  // Arguments for parameters of these types, in order.
+  private args(args: IrExpr[], params: { type?: TypeRef }[]): string[] {
+    return args.map((a, i) => this.value(a, params[i]?.type));
+  }
+
+  // An int operand: a float is truncated first.
+  private intOperand(e: IrExpr): string {
+    const type = this.typeOf(e);
+    return type?.id === 'float' && !type.container ? this.value(e, INT) : this.operand(e);
+  }
+
   private value(e: IrExpr, type: TypeRef | undefined): string {
+    // A float wired into an int is truncated toward zero (docs/semantics.md, "Values").
+    const from = this.typeOf(e);
+    if (type?.id === 'int' && !type.container && from?.id === 'float' && !from.container) {
+      return e.kind === 'literal' && typeof e.value === 'number' ? String(Math.trunc(e.value)) : `vg.trunc(${this.expr(e)})`;
+    }
     if (e.kind !== 'literal' || !type?.container || !Array.isArray(e.value)) return this.expr(e);
     if (type.container === 'map') {
       const pairs = e.value.filter((p): p is unknown[] => Array.isArray(p) && p.length === 2);

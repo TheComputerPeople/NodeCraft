@@ -5,7 +5,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CompileDiagnostic } from '../core/compiler/diagnostics';
-import type { CodeGenerator, GenerateOptions } from '../core/language-pack';
+import type { CodeGenerator, GenerateOptions, LanguagePackRegistry } from '../core/language-pack';
+import { graphFileDefinitions } from '../core/graph-files';
+import type { GraphDocument, NodeDefinition } from '../core/model';
+import { generatedLanguages } from '../core/user-types';
 import { scanCSharp } from '../core/importing/csharp-scanner';
 import { RUST_BLOCK } from '../core/languages/rust';
 import { findBlock } from '../core/output-plan';
@@ -35,6 +38,25 @@ export function graphOutputFor(language: string, graphFile: string, root: string
   const go = language === 'go' ? goPackage(dir, root) : undefined;
   const module = language === 'python' ? pythonModule(generated, root).module : language === 'csharp' ? csharpNamespace(dir, root) : language === 'java' ? javaProject(dir, root).package : go ? go.path ?? go.name : language === 'php' ? phpNamespace(dir, root) : undefined;
   return { generatedPath: toPosix(path.relative(root, generated)), ...(module ? { module } : {}) };
+}
+
+// The nodes a graph file gives other graphs (a library's functions, a type's Make and Break, a
+// class's members), with where each of its languages generates it: a shared struct, enum or function
+// library is generated for its other languages too (docs/multi-language.md, gap 2). What the
+// workspace's graphs know of it (graph-libraries.ts), and what the corpus registers.
+export function graphFileNodes(doc: GraphDocument, graphFile: string, root: string, languages: LanguagePackRegistry): NodeDefinition[] | undefined {
+  const output = (language: string | undefined): { generatedPath: string; module?: string } | undefined => {
+    const generator = language ? languages.get(language)?.generator : undefined;
+    return language && generator ? graphOutputFor(language, graphFile, root, generator) : undefined;
+  };
+  const document = toPosix(path.relative(root, graphFile));
+  const own = output(doc.language) ?? { generatedPath: document };
+  const others = Object.fromEntries(generatedLanguages(doc).slice(1).flatMap((language) => {
+    const other = output(language);
+    return other ? [[language, other]] : [];
+  }));
+  const generator = doc.language ? languages.get(doc.language)?.generator : undefined;
+  return graphFileDefinitions(doc, { document, ...own, ...(Object.keys(others).length ? { others } : {}) }, generator, (language) => languages.get(language)?.generator);
 }
 
 // The module generated code imports a file of the project's code as, for languages that import by

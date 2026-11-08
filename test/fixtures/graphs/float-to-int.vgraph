@@ -1,0 +1,588 @@
+{
+  "schemaVersion": 3,
+  "name": "Float To Int",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [
+    {
+      "id": "v_count",
+      "name": "Count",
+      "type": {
+        "id": "int"
+      },
+      "defaultValue": 0
+    }
+  ],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "half",
+          "type": "core:math.add",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {
+            "pin:a": 5,
+            "pin:b": 2.5
+          }
+        },
+        {
+          "id": "set_count",
+          "type": "core:variable.set",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "properties": {
+            "variable": "v_count"
+          }
+        },
+        {
+          "id": "get_count",
+          "type": "core:variable.get",
+          "position": {
+            "x": 800,
+            "y": 0
+          },
+          "properties": {
+            "variable": "v_count"
+          }
+        },
+        {
+          "id": "print_count",
+          "type": "core:console.print",
+          "position": {
+            "x": 1000,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "whole",
+          "type": "core:function.call",
+          "position": {
+            "x": 1200,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Whole"
+          }
+        },
+        {
+          "id": "print_whole",
+          "type": "core:console.print",
+          "position": {
+            "x": 1400,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "toward_zero",
+          "type": "core:function.call",
+          "position": {
+            "x": 1600,
+            "y": 0
+          },
+          "properties": {
+            "graph": "TowardZero",
+            "pin:value": -2.5
+          }
+        },
+        {
+          "id": "print_toward_zero",
+          "type": "core:console.print",
+          "position": {
+            "x": 1800,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "call_show",
+          "type": "core:call.event",
+          "position": {
+            "x": 2000,
+            "y": 0
+          },
+          "properties": {
+            "event": "Show"
+          }
+        },
+        {
+          "id": "show",
+          "type": "core:event.custom",
+          "position": {
+            "x": 2200,
+            "y": 0
+          },
+          "properties": {
+            "name": "Show",
+            "inputs": [
+              {
+                "id": "n",
+                "name": "N",
+                "kind": "data",
+                "type": {
+                  "id": "int"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "print_show",
+          "type": "core:console.print",
+          "position": {
+            "x": 2400,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "one_half",
+          "type": "core:math.add",
+          "position": {
+            "x": 2600,
+            "y": 0
+          },
+          "properties": {
+            "pin:a": 1,
+            "pin:b": 0.5
+          }
+        },
+        {
+          "id": "loop",
+          "type": "core:flow.for-loop",
+          "position": {
+            "x": 2800,
+            "y": 0
+          },
+          "properties": {
+            "pin:firstIndex": 0
+          }
+        },
+        {
+          "id": "print_index",
+          "type": "core:console.print",
+          "position": {
+            "x": 3000,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "do_n",
+          "type": "core:flow.do-n",
+          "position": {
+            "x": 3200,
+            "y": 0
+          },
+          "properties": {
+            "pin:n": 1.5
+          }
+        },
+        {
+          "id": "print_once",
+          "type": "core:console.print",
+          "position": {
+            "x": 3400,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "once"
+          }
+        },
+        {
+          "id": "switch",
+          "type": "core:flow.switch-int",
+          "position": {
+            "x": 3600,
+            "y": 0
+          },
+          "properties": {
+            "start": 6,
+            "pins": 3
+          }
+        },
+        {
+          "id": "print_seven",
+          "type": "core:console.print",
+          "position": {
+            "x": 3800,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "seven"
+          }
+        },
+        {
+          "id": "print_default",
+          "type": "core:console.print",
+          "position": {
+            "x": 4000,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "default"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "half",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c2",
+          "fromNode": "half",
+          "fromPin": "execOut",
+          "toNode": "set_count",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c3",
+          "fromNode": "half",
+          "fromPin": "result",
+          "toNode": "set_count",
+          "toPin": "value"
+        },
+        {
+          "id": "c4",
+          "fromNode": "set_count",
+          "fromPin": "execOut",
+          "toNode": "print_count",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c5",
+          "fromNode": "get_count",
+          "fromPin": "value",
+          "toNode": "print_count",
+          "toPin": "value"
+        },
+        {
+          "id": "c6",
+          "fromNode": "print_count",
+          "fromPin": "execOut",
+          "toNode": "whole",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c7",
+          "fromNode": "half",
+          "fromPin": "result",
+          "toNode": "whole",
+          "toPin": "value"
+        },
+        {
+          "id": "c8",
+          "fromNode": "whole",
+          "fromPin": "execOut",
+          "toNode": "print_whole",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c9",
+          "fromNode": "whole",
+          "fromPin": "result",
+          "toNode": "print_whole",
+          "toPin": "value"
+        },
+        {
+          "id": "c10",
+          "fromNode": "print_whole",
+          "fromPin": "execOut",
+          "toNode": "toward_zero",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c11",
+          "fromNode": "toward_zero",
+          "fromPin": "execOut",
+          "toNode": "print_toward_zero",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c12",
+          "fromNode": "toward_zero",
+          "fromPin": "result",
+          "toNode": "print_toward_zero",
+          "toPin": "value"
+        },
+        {
+          "id": "c13",
+          "fromNode": "print_toward_zero",
+          "fromPin": "execOut",
+          "toNode": "call_show",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c14",
+          "fromNode": "half",
+          "fromPin": "result",
+          "toNode": "call_show",
+          "toPin": "n"
+        },
+        {
+          "id": "c15",
+          "fromNode": "show",
+          "fromPin": "execOut",
+          "toNode": "print_show",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c16",
+          "fromNode": "show",
+          "fromPin": "n",
+          "toNode": "print_show",
+          "toPin": "value"
+        },
+        {
+          "id": "c17",
+          "fromNode": "call_show",
+          "fromPin": "execOut",
+          "toNode": "one_half",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c18",
+          "fromNode": "one_half",
+          "fromPin": "execOut",
+          "toNode": "loop",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c19",
+          "fromNode": "one_half",
+          "fromPin": "result",
+          "toNode": "loop",
+          "toPin": "lastIndex"
+        },
+        {
+          "id": "c20",
+          "fromNode": "loop",
+          "fromPin": "loopBody",
+          "toNode": "print_index",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c21",
+          "fromNode": "loop",
+          "fromPin": "index",
+          "toNode": "print_index",
+          "toPin": "value"
+        },
+        {
+          "id": "c22",
+          "fromNode": "print_index",
+          "fromPin": "execOut",
+          "toNode": "do_n",
+          "toPin": "enter"
+        },
+        {
+          "id": "c23",
+          "fromNode": "do_n",
+          "fromPin": "exit",
+          "toNode": "print_once",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c24",
+          "fromNode": "loop",
+          "fromPin": "completed",
+          "toNode": "switch",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c25",
+          "fromNode": "half",
+          "fromPin": "result",
+          "toNode": "switch",
+          "toPin": "selection"
+        },
+        {
+          "id": "c26",
+          "fromNode": "switch",
+          "fromPin": "case1",
+          "toNode": "print_seven",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c27",
+          "fromNode": "switch",
+          "fromPin": "default",
+          "toNode": "print_default",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "Whole",
+      "name": "Whole",
+      "kind": "function",
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "value",
+            "name": "Value",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "Result",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ]
+      },
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Whole"
+          }
+        },
+        {
+          "id": "return",
+          "type": "core:function.return",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Whole"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "return",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "entry",
+          "fromPin": "value",
+          "toNode": "return",
+          "toPin": "result"
+        }
+      ]
+    },
+    {
+      "id": "TowardZero",
+      "name": "Toward Zero",
+      "kind": "function",
+      "comments": [],
+      "signature": {
+        "inputs": [
+          {
+            "id": "value",
+            "name": "Value",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "Result",
+            "kind": "data",
+            "type": {
+              "id": "int"
+            }
+          }
+        ]
+      },
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "TowardZero"
+          }
+        },
+        {
+          "id": "return",
+          "type": "core:function.return",
+          "position": {
+            "x": 300,
+            "y": 0
+          },
+          "properties": {
+            "graph": "TowardZero"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "return",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "entry",
+          "fromPin": "value",
+          "toNode": "return",
+          "toPin": "result"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: a float wired into an int is truncated toward zero (docs/semantics.md, Values): into a variable, a function's input, a function's output, a custom event's input, For Loop's Last Index, Do N's N and Switch on Int's Selection.",
+    "expectedOutput": [
+      "7",
+      "7",
+      "-2",
+      "7",
+      "0",
+      "once",
+      "1",
+      "seven"
+    ]
+  }
+}

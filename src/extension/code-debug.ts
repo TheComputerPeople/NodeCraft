@@ -101,6 +101,14 @@ export class CodeDebugService implements vscode.Disposable {
     }
     // The compile above mirrors the breakpoints; they must be in place before the code starts.
     await this.mirror(uri);
+    const generated = this.compiler.generatedFile(uri);
+    const silent = generated ? await this.breakpointsWithoutCode(generated) : [];
+    if (silent.length) {
+      const names = [...new Set(silent)].join(', ');
+      void vscode.window.showWarningMessage(
+        `${silent.length === 1 ? 'A breakpoint' : `${silent.length} breakpoints`} won't stop when debugging the generated code (${names}): compiling left no code for ${silent.length === 1 ? 'its node' : 'their nodes'}, because ${silent.length === 1 ? "it's" : "they're"} on a branch that never runs or nothing reads ${silent.length === 1 ? 'its value' : 'their values'}. Simulate still stops there.`
+      );
+    }
     const command = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {})[pack!.id];
     const cwd = path.dirname(outcome.outputPath);
     const options = {
@@ -226,6 +234,26 @@ export class CodeDebugService implements vscode.Disposable {
       for (const line of breakpointLines(graph, b.nodeId, generated.nodeLines, resolve)) lines.set(line, (lines.get(line) ?? false) || b.enabled);
     }
     return lines;
+  }
+
+  // The nodes of enabled breakpoints that have no generated line: compiling removed their code (a
+  // branch on a constant's other side, a value nothing reads), so they can't stop.
+  private async breakpointsWithoutCode(generated: GeneratedFile): Promise<string[]> {
+    const doc = await this.graphDocument(generated.graph);
+    if (!doc) return [];
+    const resolver = createResolver(this.registry, doc);
+    const names: string[] = [];
+    for (const b of this.marks.breakpoints.get(generated.graph)) {
+      const graph = doc.graphs.find((g) => g.id === b.graphId);
+      const node = graph?.nodes.find((n) => n.id === b.nodeId);
+      if (!b.enabled || !graph || !node) continue;
+      const resolve = (id: string) => {
+        const other = graph.nodes.find((n) => n.id === id);
+        return other && resolver(other);
+      };
+      if (!breakpointLines(graph, b.nodeId, generated.nodeLines, resolve).length) names.push(definitionFor(node, resolver).displayName);
+    }
+    return names;
   }
 
   // A mirrored breakpoint removed in VS Code (the Breakpoints view, the editor's margin) removes the

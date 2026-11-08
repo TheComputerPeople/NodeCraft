@@ -134,6 +134,7 @@
     "toText.float": "String({{value}})",
     "toText.bool": "String({{value}})",
     "toText": "formatValue({{value}})",
+    "toInt": "Math.trunc({{value}})",
     "toNumber": "Number({{value}} ?? 0)",
     "toBoolean": "Boolean({{value}})",
     "concat": "{{#each parts \" + \"}}{{this}}{{/each}}",

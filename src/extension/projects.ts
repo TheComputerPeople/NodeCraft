@@ -343,7 +343,25 @@ export function nearestProject(dir: string, stopDir: string, language: string): 
 // needs (docs/project-integration.md, part 2). Generation goes on: the project may build with a
 // newer toolchain than it declares.
 export function projectVersionDiagnostics(pack: LanguagePack, graphDir: string, stopDir: string): CompileDiagnostic[] {
-  const declaredVersion = pack.requires && nearestProject(graphDir, stopDir, pack.id)?.versions[pack.id];
+  return projectVersionCheck(pack, graphDir, stopDir)?.diagnostics ?? [];
+}
+
+// The same for the graph's project, with the file and line (0-based) that declare the version, so
+// the warning can be shown once, on the project, rather than on each of its graphs.
+export interface ProjectVersionCheck {
+  root: string;
+  diagnostics: CompileDiagnostic[];
+  file?: string;
+  line?: number;
+}
+
+export function projectVersionCheck(pack: LanguagePack, graphDir: string, stopDir: string): ProjectVersionCheck | undefined {
+  const project = nearestProject(graphDir, stopDir, pack.id);
+  if (!project) return undefined;
+  const declaredVersion = pack.requires ? project.versions[pack.id] : undefined;
   const message = declaredVersion && versionWarning(pack.displayName, pack.requires!, declaredVersion);
-  return message ? [{ severity: 'warning', code: 'project-version', message }] : [];
+  if (!message) return { root: project.root, diagnostics: [] };
+  const file = path.join(project.root, declaredVersion.source);
+  const line = Math.max(0, (read(file) ?? '').split(/\r?\n/).findIndex((l) => l.includes(declaredVersion.declared)));
+  return { root: project.root, diagnostics: [{ severity: 'warning', code: 'project-version', message }], file, line };
 }

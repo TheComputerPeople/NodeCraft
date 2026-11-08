@@ -282,7 +282,8 @@ export function scanCSharp(source: string): CSharpScan {
         // too (docs/node-authoring.md, gap 2), unless it's static or generic.
         const instance = (kind === 'class' || (kind === 'record' && !at(j, 'struct'))) && accessible && !generic && !modifiers.includes('static');
         const header = text(generic ? skipAngles(j + 2) : j + 2, k).replace(/\bwhere\b[\s\S]*$/, '');
-        const baseText = /^\s*(?:\([^)]*\))?\s*:\s*([^,]+)/.exec(header)?.[1].trim();
+        // The base, without the arguments a primary constructor passes it (`: Counter(start * 10)`).
+        const baseText = /^\s*(?:\([^)]*\))?\s*:\s*([^,(]+)/.exec(header)?.[1].trim();
         const base = baseText && !/^I[A-Z]/.test(baseText) ? mapCSharpType(baseText) : undefined;
         const cls: ScannedClass | undefined = instance
           ? {
@@ -290,6 +291,14 @@ export function scanCSharp(source: string): CSharpScan {
               ...(base?.id.startsWith('native:') ? { base } : {}), ...(modifiers.includes('abstract') ? { abstract: true } : {}), methods: [], properties: []
             }
           : undefined;
+        // A primary constructor (C# 12, and a record's positional parameters): the class's own marker
+        // exposes it, as it exposes a class without a constructor. A constructor in the body, marked,
+        // comes after it and wins.
+        const primary = generic ? skipAngles(j + 2) : j + 2;
+        if (cls && at(primary, '(')) {
+          const params = parseParams(primary + 1, skipGroup(primary) - 1);
+          if (!('reason' in params)) cls.init = { name, line: tokens[i].line, params, returns: null, doc: cls.doc };
+        }
         if (kind !== 'enum' && kind !== 'interface') classMembers(k + 1, close - 1, namespace ? `${namespace}.${name}` : name, accessible, generic, cls);
         if (cls) (result.classes ??= []).push(cls);
         i = close;
@@ -492,7 +501,7 @@ export function scanCSharp(source: string): CSharpScan {
       const declEnd = eq < 0 ? b : s + eq;
       const nameToken = tokens[declEnd - 1];
       if (!nameToken || nameToken.kind !== 'name' || declEnd - s < 2) return { reason: 'its parameters couldn\'t be read' };
-      const type = mapCSharpType(typeText(s, declEnd - 1));
+      const type = mapCSharpParameterType(typeText(s, declEnd - 1));
       const param: ScannedParam = { name: nameToken.text.replace(/^@/, ''), ...(type ? { type } : {}) };
       if (eq >= 0) {
         const value = literal(tokens.slice(declEnd + 1, b));
@@ -568,6 +577,23 @@ export function mapCSharpType(text: string): TypeRef | undefined {
     }
   }
   return { id: `native:${t}` };
+}
+
+// A parameter's type: as mapCSharpType, and also the collection interfaces that a graph's List,
+// HashSet and Dictionary are passed to as they are (IReadOnlyList<T>, IEnumerable<T>, ...), which
+// analyzers ask public APIs to take (CA1002). A return of one stays native: it isn't a List.
+const PARAMETER_COLLECTIONS: Record<string, string> = {
+  IEnumerable: 'List', IReadOnlyList: 'List', IReadOnlyCollection: 'List', IList: 'List', ICollection: 'List',
+  ISet: 'HashSet', IReadOnlySet: 'HashSet', IDictionary: 'Dictionary', IReadOnlyDictionary: 'Dictionary'
+};
+
+export function mapCSharpParameterType(text: string): TypeRef | undefined {
+  const t = normalize(text).replace(/^System\./, '').replace(/^global::/, '');
+  const collection = /^(?:Collections\.Generic\.)?(\w+)<(.*)>$/.exec(t);
+  const concrete = collection && PARAMETER_COLLECTIONS[collection[1]];
+  if (!collection || !concrete) return mapCSharpType(text);
+  const mapped = mapCSharpType(`${concrete}<${collection[2]}>`);
+  return mapped?.id.startsWith('native:') ? { id: `native:${t}` } : mapped;
 }
 
 function normalize(text: string): string {

@@ -7,7 +7,7 @@ import { Fighter } from "./Fighter.vgraph.ts";
 export class Knight extends Fighter {
   override attackPower(): number {
     // Return Node (ret)
-    return this.knight_math_multiply(super.attackPower(), 2);
+    return Math.trunc(this.knight_math_multiply(super.attackPower(), 2));
   }
 
   private knight_math_multiply(a: number, b: number): number {

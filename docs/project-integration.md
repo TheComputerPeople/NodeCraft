@@ -82,7 +82,7 @@ What doesn't:
   | Ruby | `.ruby-version`, the `Gemfile`'s `ruby`, a gemspec's `required_ruby_version` |
   | PHP | `composer.json` `require.php` |
 
-- **When it's older**, compiling a graph in that project gives a warning in Compiler Results (once per project): "This project declares Java 11 (pom.xml); generated code needs Java 17." Set Up in This Project lists it under **Can't** (Part 5). Generation goes on: the project may build with a newer toolchain than it declares.
+- **When it's older**, compiling a graph in that project gives a warning, once per project in Problems (on the file that declares the version) and in the graph's Compiler Results: "This project declares Java 11 (pom.xml); generated code needs Java 17." Set Up in This Project lists it under **Can't** (Part 5). Generation goes on: the project may build with a newer toolchain than it declares.
 - **Without a declaration**, nothing is said.
 
 **Built (step 2: Parts 1 and 2).**
@@ -113,7 +113,7 @@ What doesn't:
 - **Declared versions** become the lowest version they allow (`lowestVersion`): `>=3.8`, `^3.8`, `~> 3.8` and `3.8.*` give 3.8, `^7.4 || ^8.0` gives 7.4, and `<4` gives none.
   - Some read in a language's own scale: an ES target is a year, `LuaJIT` is 5.1, Java's `1.8` is 8, and Cargo without an edition is 2015.
   - A `.csproj` without `LangVersion` uses its target framework's default (`net6.0` is C# 10, `netstandard2.0` and `net48` are 7.3).
-- **The warning** (`projectVersionDiagnostics`, code `project-version`) goes with the graph's other placement warnings. For example: "This project declares 11 in pom.xml, but generated Java needs Java 17 (switch rules, pattern matching in instanceof and HexFormat). Older versions may not build or run it." Generation goes on.
+- **The warning** (`projectVersionDiagnostics`, code `project-version`) goes with the graph's other placement warnings in Compiler Results. (Since the step 3 follow-up, Problems shows it once, on the project's file, rather than on each graph.) For example: "This project declares 11 in pom.xml, but generated Java needs Java 17 (switch rules, pattern matching in instanceof and HexFormat). Older versions may not build or run it." Generation goes on.
 - **Multi-root.** New Graph, New Node, Test Node Library and Add Blueprint Package work in the workspace folder of what they're run on, then of the active editor's file (a graph editor counts), then the only folder, then one the user picks (src/extension/workspace-folders.ts). Compiling already used the graph's own folder.
 - **Scanning.** Every workspace scan (source files, graphs, node files, package manifests and their entries) stops at the `blueprintVisualScripting.scanLimit` setting (5000). A scan that reaches it says so once, with Open Settings, instead of leaving files out silently. It doesn't choose which files to keep; VS Code's search order decides.
 - **Tests.**
@@ -169,7 +169,7 @@ What doesn't:
   - **Indexing:** a For Each's element, and 15 nodes' snippets (First, Last, Get, Min, Max, Median, Random Item, Shuffle, Swap, Capitalize, Format, the case conversions and Slugify), get TypeScript versions that tell `noUncheckedIndexedAccess` the index is in range (`items[0]!`). JavaScript keeps its snippets.
   - The hash nodes reach Node.js through `any`, as the other Node.js snippets do, so a project without Node.js's types (a browser app) type-checks them.
 - **Python:**
-  - **A float wired into an int is truncated toward zero**, as C# and Java do (docs/semantics.md): stores, calls' arguments, struct fields and return values. Python's ints and floats are different types: a float can't index a list.
+  - **A float wired into an int is truncated toward zero**, as C# and Java do (docs/semantics.md): stores, calls' arguments, struct fields and return values. Python's ints and floats are different types: a float can't index a list. (The follow-up below makes this hold in Simulate and every language.)
   - Snippets' nested functions are annotated, `Any` is imported wherever a helper uses it, an enum prints as `str`, and the format helper casts what `isinstance` found to known types (for Pyright), but not to `isinstance`'s own type (which mypy would call a redundant cast). The async helper is left out when nothing awaits.
   - **Imports are of what the code uses**, as in TypeScript.
   - **The test file imports its class by its full module name** (`tests.calc_vgraph`) when it's in a package, from the folder above the top package: type checkers resolve that, not a module found through a folder put on `sys.path`. `GenerateOptions.module` carries the name.
@@ -212,6 +212,39 @@ What doesn't:
   - **Node.js tools.** `npm run corpus:tools` installs them (TypeScript 5, ESLint, typescript-eslint, Node.js's types) into a folder outside the repository (`%LOCALAPPDATA%\blueprint-corpus\node`, `~/.cache/blueprint-corpus/node`, or `BLUEPRINT_CORPUS_TOOLS`). It's linked in above the layouts as their `node_modules`. TypeScript 5 is what most projects pin, and typescript-eslint doesn't support the TypeScript 7 the repository builds with.
 - **Known limit:** generated TypeScript imports another workspace package's code by a relative path. That works where the app type-checks without emitting (a bundler, as in the corpus), but not under a `rootDir` or project references, which want the package's name. Set Up reports it (step 6).
 - **Tests:** unit tests for the folding (test/unit/compiler.test.ts) and for each rule above (test/unit/checkers.test.ts); the corpus, 12 layouts.
+
+**Built (step 3, follow-up: what a review of steps 1 to 3 found).**
+
+- **A float wired into an int is truncated toward zero everywhere** (docs/semantics.md, "Values"). Before, Simulate, TypeScript, JavaScript, Lua, Ruby and PHP kept the fraction, and Python missed some places.
+  - **Simulate** truncates a number that an int pin reads (`inputValue`).
+  - **The generated code:**
+    - TypeScript and JavaScript use `Math.trunc`, Lua `vg.trunc` (from its support module), Ruby `.truncate`, PHP `(int)` and GDScript `int()`.
+    - Python now converts at the calls it missed: dispatchers, interface, parent and object calls, For Loop's bounds and containers' elements.
+    - The packs find a call's parameters through shared helpers: `broadcastParams`, `targetCallParams` and `dataPins` in ir.ts.
+  - **Declarative packs** get a `toInt` template. Without one, the value goes in as it is, so existing packs keep building.
+  - **Compiling:**
+    - Do N's N and MultiGate's Start Index pass through an int slot, so their comparisons see the truncated value.
+    - Switch on Int's constant fold truncates.
+  - **Tests:** a conformance fixture, float-to-int.vgraph. It wires a float into a variable, a function's input and output, a custom event's input, For Loop's Last Index, Do N's N and Switch on Int's Selection. events.vgraph now calls its dispatcher with 3.5 and 4.5. Every pack passes both, the declarative and C example packs included.
+- **Breakpoints that can't stop.** Debug says which breakpoints are on nodes that left no code (a Branch's dead side, a value nothing reads). Before, they stayed silent.
+- **The version warning, once per project.** Problems shows it on the line of the project file that declares the version (`projectVersionCheck`), and clears it when a compile finds it fixed. Each graph's Compiler Results still has it.
+- **One compile for Compile and the corpus.**
+  - src/extension/graph-compile.ts (`compileGraphFile`) is the sequence Compile ran inline: the graph's language, a shared type's other languages, writing, removing stale outputs, build registration, and the placement and version checks. CompileService gives it VS Code's file system and OutputPlans.
+  - The corpus gives it `fs`, and registers generated files as if the user accepted every hook (`applyAcceptedPlan`), which step 4's C++ and Rust layouts need.
+  - What a graph file gives other graphs, with where each of its languages generates it, is `graphFileNodes` in placement.ts. The graph libraries and the corpus both use it.
+  - This found drift: the corpus registered a shared struct without its other languages' outputs, so a Python graph imported it from the TypeScript file. The extension had it right.
+- **The corpus covers what users write**, 13 layouts:
+  - **Project code beyond plain functions.** In each language's body layout, the project's code has a class and a subclass, a function with several results, a generic function and an async one, each in that project's style. Four graphs use them (the conformance suite's builders), and the entry point runs them.
+  - **Tests.** A graph of Test Case events runs with the project's test runner: `node --test` (ts-vite-app, js-esm) and `unittest` (py-src-layout). C# and Java write no test files.
+  - **A browser app.** ts-vite-app has no Node.js types now, as Vite's template doesn't. The generated test file's `node:test` import carries `// @ts-ignore`, so `test` is untyped there and the file still type-checks.
+  - **Two languages.** ts-py-shared is a TypeScript `web/` and a Python `api/` sharing a struct in `shared/`. Each side has a graph that makes one and prints it, and each passes its checker and runs.
+  - **Stricter results.** Compile's warnings fail a layout. A layout with skipped steps is reported as todo, not passed, and `BLUEPRINT_CORPUS_REQUIRE_TOOLS` makes a missing tool fail it. Elsewhere than Windows, each command leads its own process group, so a timeout ends everything it started.
+- **Found by the new layouts, and fixed:**
+  - **Python wrote `_delay`** when a graph only awaited project code, and Pyright strict reports an unused function. It's written only with a Delay now.
+  - **Python's latent runner was private**, so a project's code couldn't run a graph's Delays and async calls without reaching into it. It's `run_latent_actions()` now, beside C#'s and Java's public `RunLatentActions()` / `runLatentActions()` (docs/code-as-nodes.md).
+  - **The C# scanner** reads primary constructors as the class's constructor, exposed by the class's marker, and a base without the arguments passed to it.
+  - **Collection interfaces** as parameters are containers in C#: `IReadOnlyList<T>`, `IEnumerable<T>`, `ISet<T>`, `IReadOnlyDictionary<K, V>` and the rest. A project whose analyzers enforce CA1002 takes those, and a graph's `List` passes as it is. Returns of them stay native.
+- **The project model reads project files on each compile**, rather than caching and watching them as the design said. They're the few small files on the way up from the graph, and reading never goes stale. Placement still keeps its own lookups (above).
 
 ## Part 4: New Project
 

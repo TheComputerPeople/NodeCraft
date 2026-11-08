@@ -19,6 +19,8 @@ const BREAK_MARK = '\u0001B\u0001';
 const END_MARK = '\u0001E\u0001';
 const MARKS = /\u0001N(\d+)\u0001|\u0001([BE])\u0001/g;
 
+const INT: TypeRef = { id: 'int' };
+
 // Defaults for templates a pack may leave out.
 const DEFAULTS: Record<string, string> = {
   'literal.int': '{{text}}',
@@ -313,7 +315,7 @@ export class DeclarativeEmitter {
         return this.use(['while'], { condition: this.expr(s.condition), body: this.statements(s.body, key) });
       case 'for':
         return this.use(['for'], {
-          counter: this.storage('slot', s.counter), first: this.expr(s.first), last: this.expr(s.last),
+          counter: this.storage('slot', s.counter), first: this.value(s.first, INT), last: this.value(s.last, INT),
           stop: s.stop ? this.storage('slot', s.stop) : '', body: this.statements(s.body, key)
         });
       case 'forEach':
@@ -511,6 +513,12 @@ export class DeclarativeEmitter {
     }
     if (type && typeKey(type) !== 'any' && from?.id === 'any' && this.has(`unbox.${typeKey(type)}`)) {
       return this.use([`unbox.${typeKey(type)}`], { value: this.expr(e) });
+    }
+    // A float into an int is truncated toward zero (docs/semantics.md, "Values"): a literal here, the
+    // rest by the pack's `toInt` template. A pack without one passes the value as it is.
+    if (type?.id === 'int' && !type.container && from?.id === 'float' && !from.container) {
+      if (e.kind === 'literal' && typeof e.value === 'number') return this.literal(Math.trunc(e.value), false);
+      if (this.has('toInt')) return this.use(['toInt'], { value: this.expr(e) });
     }
     if (e.kind !== 'literal') return this.expr(e);
     if (typeof e.value === 'number' && type?.id === 'float' && !type.container) return this.literal(e.value, true);

@@ -194,6 +194,49 @@ describe('C# classes', () => {
       'Game.Player:new', 'Game.Player:Heal', 'Game.Player:get:Health', 'Game.Player:set:Health', 'Game.Player:get:Name', 'Game.Player:get:Alive', 'Game.Player:get:Level', 'Game.Player:set:Level'
     ]);
   });
+
+  test("a primary constructor is the class's constructor, exposed by the class's marker; its base's arguments aren't the base", () => {
+    const scan = scanCSharp([
+      'namespace Game;',
+      '/// <summary>A count.</summary>',
+      '/// @blueprint',
+      'public class Counter(double start)',
+      '{',
+      '    /// @blueprint',
+      '    public double Count { get; set; } = start;',
+      '}',
+      '/// @blueprint',
+      'public class BigCounter(double start) : Counter(start * 10)',
+      '{',
+      '}',
+      ''
+    ].join('\n'));
+    assert.deepEqual(scan.classes!.map((c) => [c.name, c.init?.params.map((p) => `${p.name}:${JSON.stringify(p.type)}`), c.base]), [
+      ['Game.Counter', ['start:{"id":"float"}'], undefined],
+      ['Game.BigCounter', ['start:{"id":"float"}'], { id: 'native:Counter' }]
+    ]);
+    const { definitions } = exposeFunctions(scan, CS);
+    assert.deepEqual(definitions.map((d) => d.type.slice(d.type.indexOf('#') + 1)), ['Game.Counter:new', 'Game.Counter:get:Count', 'Game.Counter:set:Count', 'Game.BigCounter:new']);
+  });
+});
+
+// Collection interfaces (CA1002 asks public APIs to take them): a graph's List, HashSet and
+// Dictionary are passed to them as they are, so as parameters they are containers; as returns they
+// stay native (they aren't the concrete types).
+describe('C# scanner: collection interfaces', () => {
+  test('IReadOnlyList<T>, IEnumerable<T>, ISet<T> and IReadOnlyDictionary<K, V> parameters are containers', () => {
+    const [def] = nodes(`
+      namespace Game;
+      public static class Lists
+      {
+          /// @blueprint
+          public static int Count(IReadOnlyList<int> scores, IEnumerable<string> names, ISet<int> seen, IReadOnlyDictionary<string, double> totals) => 0;
+      }`);
+    assert.deepEqual(pins(def), [
+      'scores:{"id":"int","container":"array"}', 'names:{"id":"string","container":"array"}', 'seen:{"id":"int","container":"set"}', 'totals:{"id":"string","container":"map","valueType":{"id":"float"}}'
+    ]);
+    assert.deepEqual(mapCSharpType('IReadOnlyList<int>'), { id: 'native:IReadOnlyList<int>' }, 'a return of one stays native');
+  });
 });
 
 // Several outputs (docs/node-authoring.md, gap 3): out parameters, after the value returned, and

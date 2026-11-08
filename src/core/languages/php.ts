@@ -2,7 +2,7 @@
 // IR. Files require each other with require_once; the support file (php-runtime.ts) is a companion
 // next to every generated file. Containers are the support file's VgList, VgMap and VgSet, shared by
 // reference, since PHP copies its arrays on assignment.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
@@ -24,6 +24,8 @@ const RESERVED_CLASSES = new Set([
 ]);
 // Variables, methods and properties can take PHP's keywords; these are the ones generated code uses.
 const RESERVED = new Set(['this', 'GLOBALS', '_SERVER', '_GET', '_POST', 'argv', 'argc', '__construct', '__destruct', 'vgFields']);
+
+const INT: TypeRef = { id: 'int' };
 
 function mapType(type: TypeRef): string {
   if (type.container === 'array') return 'VgList';
@@ -494,7 +496,7 @@ class PhpEmitter {
         out.line('}');
         break;
       case 'store':
-        out.line(`${this.slotRef(s.slot)} = ${this.expr(s.value)};`);
+        out.line(`${this.slotRef(s.slot)} = ${this.value(s.value, this.program.slots.find((x) => x.id === s.slot)?.type)};`);
         break;
       case 'setMember':
         out.line(`${this.memberRef(s.member)} = ${this.value(s.value, this.program.members.find((m) => m.id === s.member)?.type)};`);
@@ -518,8 +520,8 @@ class PhpEmitter {
       }
       case 'for': {
         const counter = this.slotRef(s.counter);
-        out.line(`${counter} = ${this.expr(s.first)};`);
-        out.line(`while (${counter} <= ${this.operand(s.last)}${s.stop ? ` && !${this.slotRef(s.stop)}` : ''}) {`);
+        out.line(`${counter} = ${this.value(s.first, INT)};`);
+        out.line(`while (${counter} <= ${this.intOperand(s.last)}${s.stop ? ` && !${this.slotRef(s.stop)}` : ''}) {`);
         out.indent();
         this.statements(s.body);
         out.line(`${counter}++;`);
@@ -587,7 +589,7 @@ class PhpEmitter {
         out.line(`${this.dispatcherRef(s)}->clear();`);
         break;
       case 'broadcast':
-        out.line(`${this.dispatcherRef(s)}->broadcast(${s.args.map((a) => this.expr(a)).join(', ')});`);
+        out.line(`${this.dispatcherRef(s)}->broadcast(${this.args(s.args, broadcastParams(this.program, s)).join(', ')});`);
         break;
       case 'await': {
         // An async function (docs/node-authoring.md, gap 4): its Fiber, resumed by the latent queue;
@@ -644,13 +646,13 @@ class PhpEmitter {
         break;
       case 'interfaceCall': {
         const iface = interfaceInfo(this.program, s.type);
-        const call = `${this.targetRef(s.target)}->${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(s.target)}->${iface ? this.interfaceNames(iface).functions.get(s.function) : s.function}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
         if (s.results.length) this.results(s.results, call);
         else out.line(`${call};`);
         break;
       }
       case 'parentCall': {
-        const call = s.start ? 'parent::start()' : `parent::${this.parentFunctionName(s.function!)}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = s.start ? 'parent::start()' : `parent::${this.parentFunctionName(s.function!)}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
         if (s.results.length) this.results(s.results, call);
         else out.line(`${call};`);
         break;
@@ -665,7 +667,7 @@ class PhpEmitter {
       case 'objectCall': {
         const names = this.membersOf(s.type);
         const name = s.function !== undefined ? names?.functions.get(s.function) : names?.events.get(s.event!);
-        const call = `${this.targetRef(s.target)}->${name}(${s.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(s.target)}->${name}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
         if (s.results.length) this.results(s.results, call);
         else out.line(`${call};`);
         break;
@@ -742,13 +744,13 @@ class PhpEmitter {
       case 'interfaceCall': {
         const iface = interfaceInfo(this.program, e.type);
         const outputs = iface?.functions.find((f) => f.id === e.function)?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `${this.targetRef(e.target)}->${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(e.target)}->${iface ? this.interfaceNames(iface).functions.get(e.function) : e.function}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'parentCall': {
         const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `parent::${this.parentFunctionName(e.function)}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `parent::${this.parentFunctionName(e.function)}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'isValid':
@@ -757,24 +759,25 @@ class PhpEmitter {
         return `${this.targetRef(e.target)}->${this.membersOf(e.type)?.variables.get(e.variable)}`;
       case 'objectCall': {
         const fn = classInfo(this.program, e.type)?.functions.find((f) => f.id === e.function);
-        const call = `${this.targetRef(e.target)}->${this.membersOf(e.type)?.functions.get(e.function)}(${e.args.map((a) => this.expr(a)).join(', ')})`;
+        const call = `${this.targetRef(e.target)}->${this.membersOf(e.type)?.functions.get(e.function)}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'makeContainer': {
-        const items = `[${e.items.map((item) => this.expr(item)).join(', ')}]`;
+        const items = `[${e.items.map((item, i) => this.value(item, e.type.container === 'map' && i % 2 ? e.type.valueType : { id: e.type.id })).join(', ')}]`;
         return `new ${e.type.container === 'map' ? 'VgMap' : e.type.container === 'set' ? 'VgSet' : 'VgList'}(${items})`;
       }
     }
   }
 
   private functionCall(id: string, args: IrExpr[]): string {
-    return `${this.library ? 'self::' : '$this->'}${this.functionNames.get(id)!}(${args.map((a) => this.expr(a)).join(', ')})`;
+    return `${this.library ? 'self::' : '$this->'}${this.functionNames.get(id)!}(${this.args(args, this.program.functions.find((f) => f.id === id)?.params ?? []).join(', ')})`;
   }
 
   // `extra` arguments follow the inputs (parameters by reference).
   private call(callee: IrCallee, args: IrExpr[], extra: string[] = []): string {
-    const list = [...args.map((a) => this.expr(a)), ...extra].join(', ');
+    const params = calleeSignature(callee, this.program)?.params ?? [];
+    const list = [...this.args(args, params), ...extra].join(', ');
     if (callee.kind === 'helper') return `self::${this.helperNames.get(callee.id)}(${list})`;
     const member = this.program.imports.find((i) => i.id === callee.id)?.member;
     if (!member) return `${this.importNames.get(callee.id)}(${list})`;
@@ -782,11 +785,27 @@ class PhpEmitter {
     if (member.kind === 'construct') return `new ${this.importNames.get(callee.id)}(${list})`;
     const [target, ...rest] = args;
     const object = `(${this.expr(target)})`;
-    const values = [...rest.map((a) => this.expr(a)), ...extra].join(', ');
+    const values = [...this.args(rest, params.slice(1)), ...extra].join(', ');
     return member.kind === 'get' ? `${object}->${member.name}` : member.kind === 'set' ? `${object}->${member.name} = ${values}` : `${object}->${member.name}(${values})`;
   }
 
+  // Arguments for parameters of these types, in order.
+  private args(args: IrExpr[], params: { type?: TypeRef }[]): string[] {
+    return args.map((a, i) => this.value(a, params[i]?.type));
+  }
+
+  // An int operand: a float is truncated first.
+  private intOperand(e: IrExpr): string {
+    const type = this.typeOf(e);
+    return type?.id === 'float' && !type.container ? this.value(e, INT) : this.operand(e);
+  }
+
   private value(e: IrExpr, type: TypeRef | undefined): string {
+    // A float wired into an int is truncated toward zero (docs/semantics.md, "Values").
+    const from = this.typeOf(e);
+    if (type?.id === 'int' && !type.container && from?.id === 'float' && !from.container) {
+      return e.kind === 'literal' && typeof e.value === 'number' ? String(Math.trunc(e.value)) : `(int) ${this.operand(e)}`;
+    }
     if (e.kind !== 'literal' || !type?.container || !Array.isArray(e.value)) return this.expr(e);
     if (type.container === 'map') {
       const pairs = e.value.filter((p): p is unknown[] => Array.isArray(p) && p.length === 2);

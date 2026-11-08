@@ -160,6 +160,7 @@ The emitter decides names, which conversions are needed and where each node's co
 | `field` | `name`: a variable or stored output of the class (locals are written by name) |
 | `add`, `binary`, `binary.<op>`, `binary.<op>.<type>`, `not` | `left`, `right`, `op`; or `value`. Operands that are themselves operations come in parentheses |
 | `toText`, `toNumber`, `toBoolean` (each also `.<type>`) | `value`. Text needs no conversion, a float no `toNumber`, a bool no `toBoolean`; an int needs `toNumber.int` only if the pack has it |
+| `toInt` | `value`: a float into an int, truncated toward zero (`Math.trunc({{value}})`, `(long long)({{value}})`). A literal is truncated for you. Without it, the value goes in as it is |
 | `concat` | `parts` (each already text), `count` |
 | `call`, `import`, `callFunction`, `callBlock` | `name`, `args`; `import` also `module` and `path` |
 | `makeContainer.array`, `.set`, `.map` | `items`, `pairs` (`key`, `value`), `count`, `T`, `K`, `V` |

@@ -1,5 +1,9 @@
 package corpus.game;
 
+import corpus.game.graphs.Counting;
+import corpus.game.graphs.Dividing;
+import corpus.game.graphs.Fetching;
+import corpus.game.graphs.Firsts;
 import corpus.game.graphs.Greeting;
 
 public final class Main {
@@ -8,5 +12,11 @@ public final class Main {
 
     public static void main(String[] args) {
         System.out.println(Greeting.greet("ada"));
+        new Counting().start();
+        new Dividing().start();
+        new Firsts().start();
+        new Fetching().start();
+        // Fetching waits for fetchDouble: its Completed runs with the graphs' other latent actions.
+        Fetching.runLatentActions();
     }
 }

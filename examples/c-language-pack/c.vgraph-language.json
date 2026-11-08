@@ -244,6 +244,7 @@
     "toText.float": "vg_text_float({{value}})",
     "toText.bool": "({{value}} ? \"true\" : \"false\")",
     "toText.any": "vg_text_any({{value}})",
+    "toInt": "(long long)({{value}})",
     "toNumber.bool": "({{value}} ? 1.0 : 0.0)",
     "toNumber.string": "vg_to_number({{value}})",
     "toNumber.any": "vg_as_float({{value}})",

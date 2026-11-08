@@ -5,7 +5,8 @@
     "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "types": ["node"],
+    // Vite's template has "vite/client" here: a browser app, without Node.js's types.
+    "types": [],
     "skipLibCheck": true,
 
     /* Bundler mode */

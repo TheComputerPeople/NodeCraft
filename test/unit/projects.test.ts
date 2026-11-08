@@ -7,7 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { compareVersionNumbers, lowestVersion, versionWarning } from '../../src/core/versions';
-import { defaultCsharp, findProjects, nearestProject, projectAt, projectVersionDiagnostics } from '../../src/extension/projects';
+import { defaultCsharp, findProjects, nearestProject, projectAt, projectVersionCheck, projectVersionDiagnostics } from '../../src/extension/projects';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vg-projects-'));
 after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -147,5 +147,16 @@ describe('the project model', () => {
     const current = tree({ 'pom.xml': '<project><properties><maven.compiler.release>21</maven.compiler.release></properties></project>' });
     assert.deepEqual(projectVersionDiagnostics(java, current, current), []);
     assert.deepEqual(projectVersionDiagnostics(java, root, root), [], 'no project, no warning');
+  });
+
+  test('the version warning names the file and line that declare the version, to show once per project', () => {
+    const java = builtinLanguagePacks().get('java')!;
+    const old = tree({ 'pom.xml': '<project>\n  <properties>\n    <maven.compiler.release>11</maven.compiler.release>\n  </properties>\n</project>\n', 'src/main/java/game/x.txt': '' });
+    const check = projectVersionCheck(java, path.join(old, 'src', 'main', 'java', 'game'), old);
+    assert.equal(check?.root, old);
+    assert.equal(check?.file, path.join(old, 'pom.xml'));
+    assert.equal(check?.line, 2);
+    const current = tree({ 'pom.xml': '<project><properties><maven.compiler.release>21</maven.compiler.release></properties></project>' });
+    assert.deepEqual(projectVersionCheck(java, current, current), { root: current, diagnostics: [] }, 'a project without the problem: its warning is cleared');
   });
 });

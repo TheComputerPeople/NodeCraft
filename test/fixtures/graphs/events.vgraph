@@ -222,7 +222,7 @@
           },
           "properties": {
             "dispatcher": "onScored",
-            "pin:points": 3
+            "pin:points": 3.5
           }
         },
         {
@@ -245,7 +245,7 @@
           },
           "properties": {
             "dispatcher": "onScored",
-            "pin:points": 4
+            "pin:points": 4.5
           }
         },
         {
@@ -530,7 +530,7 @@
     }
   ],
   "metadata": {
-    "description": "Conformance fixture: custom events called directly and through an event dispatcher (bind, bind twice, unbind, unbind all), an event input read from another flow, and an event called from a function.",
+    "description": "Conformance fixture: custom events called directly and through an event dispatcher (bind, bind twice, unbind, unbind all), an event input read from another flow, an event called from a function, and a float passed to a dispatcher's int input, which is truncated.",
     "expectedOutput": [
       "5",
       "8",
