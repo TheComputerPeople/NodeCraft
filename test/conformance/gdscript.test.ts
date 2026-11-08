@@ -168,6 +168,6 @@ describe('GDScript async functions', () => {
       if (error instanceof ToolNotFoundError) return t.skip(error.message);
       throw error;
     }
-    assert.deepEqual(run.stdout.trim().split(/\r?\n/).filter((l) => !/^Godot Engine|^$/.test(l)), LATENT_CODE_OUTPUT, run.stderr);
+    assert.deepEqual(run.stdout.trim().split(/\r?\n/).filter((l) => !/^Godot Engine|^$/.test(l)), LATENT_CODE_OUTPUT, `exit code ${run.exitCode}${run.timedOut ? ' (timed out)' : ''}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`);
   });
 });

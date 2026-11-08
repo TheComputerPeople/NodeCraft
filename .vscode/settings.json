@@ -1,0 +1,5 @@
+{
+  // The C# projects under test/fixtures are corpus inputs, copied and built elsewhere by the tests.
+  // Opening them here would restore them into obj/ and bin/ inside the fixtures.
+  "dotnet.defaultSolution": "disable"
+}
