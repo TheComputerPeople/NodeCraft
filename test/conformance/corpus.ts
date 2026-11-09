@@ -311,9 +311,9 @@ async function runStep(step: CorpusStep, root: string, tools: string): Promise<S
     // A program the project built ("./build/corpus"), in the step's folder.
     : step.command[0].startsWith('./') ? [path.join(root, step.cwd ?? '', step.command[0]), ...step.command.slice(1)]
     // One of the corpus's PHP tools ("phar/phpstan.phar"), which PHP runs.
-    : step.command[0].startsWith('phar/') ? ['php', path.join(tools, step.command[0]), ...step.command.slice(1)] : step.command;
+    : step.command[0].startsWith('phar/') ? ['php', ...phpExtensions(), path.join(tools, step.command[0]), ...step.command.slice(1)] : step.command;
   const probe = step.probe ?? (step.command[0].startsWith('node_modules/') ? [process.execPath, path.join(tools, step.command[0]), '--version']
-    : step.command[0].startsWith('phar/') ? ['php', path.join(tools, step.command[0]), '--version'] : [step.command[0], '--version']);
+    : step.command[0].startsWith('phar/') ? ['php', ...phpExtensions(), path.join(tools, step.command[0]), '--version'] : [step.command[0], '--version']);
   const key = probe.join(' ');
   if (!available.has(key)) available.set(key, (await run(probe, root, {}, 120000)).exitCode === 0);
   if (!available.get(key)) return { step: step.name, status: 'skipped', message: `${step.name}: ${probe[1]?.startsWith(tools) ? `${posix(path.relative(tools, probe[1]))} isn't installed (npm run corpus:tools)` : `${probe.slice(0, -1).join(' ')} isn't installed`}` };
@@ -329,6 +329,17 @@ async function runStep(step: CorpusStep, root: string, tools: string): Promise<S
   const missing = (step.includes ?? []).filter((t) => !text.includes(t));
   if (missing.length) return { step: step.name, status: 'failed', message: `${step.name} didn't print ${missing.map((m) => JSON.stringify(m)).join(', ')}:\n${text.slice(0, 4000)}` };
   return { step: step.name, status: 'passed' };
+}
+
+// What PHP's tools need loaded that the installed PHP has but doesn't load: Composer won't start
+// without openssl (even to write the autoloader, which needs no network). The php.ini stays as it is.
+let phpExtensionArgs: string[] | undefined;
+function phpExtensions(): string[] {
+  if (!phpExtensionArgs) {
+    const loaded = (args: string[]) => spawnSync('php', [...args, '-r', 'echo extension_loaded("openssl") ? 1 : 0;'], { encoding: 'utf8', windowsHide: true, env: { ...process.env, XDEBUG_MODE: 'off' } }).stdout?.trim() === '1';
+    phpExtensionArgs = !loaded([]) && loaded(['-d', 'extension=openssl']) ? ['-d', 'extension=openssl'] : [];
+  }
+  return phpExtensionArgs;
 }
 
 interface Outcome {
