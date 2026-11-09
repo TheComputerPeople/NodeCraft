@@ -28,7 +28,7 @@ export interface CompileOutcome {
   // Project source files compiled with the generated file to run it (C#, C++, Rust).
   sources?: string[];
   // Rust: the project crate the code calls into.
-  crate?: { src: string; modules: string[] };
+  crate?: { src: string; modules: string[]; name?: string };
   // Go: the project's module.
   goModule?: { path: string; dir: string };
   // GDScript: the graph's Godot project.

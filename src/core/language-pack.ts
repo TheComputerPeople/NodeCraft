@@ -55,6 +55,10 @@ export interface GenerateOptions {
   namespace?: string;
   // Go: the import path of the generated file's package, so calls within it aren't qualified.
   packagePath?: string;
+  // Rust: the name of the generated file's crate. Modules are then named with their crate
+  // ("corpus_core::text"): its own are `crate::`, another crate's by its name. Without it, modules
+  // are of the generated file's crate.
+  crate?: string;
   // Python: the generated module's name as the project imports it, with its packages
   // ("game.graphs.inventory_vgraph"), when it's in a package. Its test file imports it so, which
   // type checkers can follow.
@@ -108,7 +112,7 @@ export interface RunContext {
   sources?: string[];
   // Rust: the crate the code calls into, as its src folder and the top-level modules its root
   // declares, for the scaffold to declare the same way (`crate::game::combat` resolves as in the crate).
-  crate?: { src: string; modules: string[] };
+  crate?: { src: string; modules: string[]; name?: string };
   // Go: the project's module (its path and folder), which Run's scratch module requires so the code
   // can import the project's packages.
   goModule?: { path: string; dir: string };

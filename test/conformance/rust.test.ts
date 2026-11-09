@@ -14,7 +14,8 @@ import { RUST_BLOCK, rustPlacement } from '../../src/core/languages/rust';
 import { RUST_RUNTIME } from '../../src/core/languages/rust-runtime';
 import { withBlock } from '../../src/core/output-plan';
 import { NodeRegistry } from '../../src/core/registry';
-import { rustCrateModules, rustRunSources } from '../../src/extension/placement';
+import { applyAcceptedPlan } from '../../src/extension/graph-compile';
+import { codeModuleFor, generateOptionsFor, rustCrateModules, rustRunSources } from '../../src/extension/placement';
 import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/extension/runner';
 import { doc, node, wire } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
@@ -46,23 +47,30 @@ describe('Rust placement', () => {
     assert.deepEqual(plan.ownedFiles, [{ path: 'src/vgraph_runtime.rs', text: RUST_RUNTIME }]);
     assert.equal(plan.hooks?.length, 1);
     assert.equal(plan.hooks![0].file, 'src/lib.rs', 'the library root, when there is one');
-    assert.equal(plan.hooks![0].block.text, 'pub mod vgraph_runtime;\npub mod duel_vgraph;\n#[path = "graphs/fighter_vgraph.rs"]\npub mod fighter_vgraph;');
+    // Sorted, as rustfmt sorts them, and each skipped by rustfmt.
+    assert.equal(plan.hooks![0].block.text, '#[rustfmt::skip]\npub mod duel_vgraph;\n#[path = "graphs/fighter_vgraph.rs"]\n#[rustfmt::skip]\npub mod fighter_vgraph;\n#[rustfmt::skip]\npub mod vgraph_runtime;');
     assert.deepEqual(plan.diagnostics, []);
+  });
+
+  test('two graphs of one name in a crate: the first is declared, and the compile says why', () => {
+    const plan = rustPlacement(context({ 'Cargo.toml': '', 'src/main.rs': '' }, ['src/a/fighter_vgraph.rs', 'src/b/fighter_vgraph.rs'], 'src/b/fighter_vgraph.rs'));
+    assert.equal(plan.hooks![0].block.text, '#[path = "a/fighter_vgraph.rs"]\n#[rustfmt::skip]\npub mod fighter_vgraph;\n#[rustfmt::skip]\npub mod vgraph_runtime;');
+    assert.match(plan.diagnostics![0].message, /src\/a\/fighter_vgraph\.rs and src\/b\/fighter_vgraph\.rs are both module fighter_vgraph/);
   });
 
   test('a new block goes after the root\'s module declarations', () => {
     const plan = rustPlacement(context({ 'Cargo.toml': '', 'src/main.rs': '' }, ['src/duel_vgraph.rs']));
     const main = '//! App.\nmod game;\nuse std::fmt;\n\nmod inline {\n    use super::*;\n}\n\nfn main() {}\n';
     const placed = withBlock(main, plan.hooks![0].block);
-    assert.ok(placed.startsWith(`//! App.\nmod game;\nuse std::fmt;\n${RUST_BLOCK.begin}\npub mod vgraph_runtime;\npub mod duel_vgraph;\n${RUST_BLOCK.end}\n\nmod inline {`), placed);
+    assert.ok(placed.startsWith(`//! App.\nmod game;\nuse std::fmt;\n${RUST_BLOCK.begin}\n#[rustfmt::skip]\npub mod duel_vgraph;\n#[rustfmt::skip]\npub mod vgraph_runtime;\n${RUST_BLOCK.end}\n\nmod inline {`), placed);
   });
 
   test('each crate of a workspace gets its own; a crate whose graphs are gone keeps an emptied block', () => {
     const files = { 'Cargo.toml': '[workspace]\nmembers = ["crates/app", "crates/old/"]\n', 'crates/app/Cargo.toml': '', 'crates/app/src/main.rs': '', 'crates/old/Cargo.toml': '', 'crates/old/src/lib.rs': '', 'crates/old/src/vgraph_runtime.rs': '' };
     const plan = rustPlacement(context(files, ['crates/app/src/menu_vgraph.rs']));
     assert.deepEqual(plan.hooks!.map((h) => [h.file, h.block.text]), [
-      ['crates/app/src/main.rs', 'pub mod vgraph_runtime;\npub mod menu_vgraph;'],
-      ['crates/old/src/lib.rs', 'pub mod vgraph_runtime;']
+      ['crates/app/src/main.rs', '#[rustfmt::skip]\npub mod menu_vgraph;\n#[rustfmt::skip]\npub mod vgraph_runtime;'],
+      ['crates/old/src/lib.rs', '#[rustfmt::skip]\npub mod vgraph_runtime;']
     ]);
   });
 
@@ -371,5 +379,52 @@ describe('Rust async functions', () => {
     assert.notEqual(outcome.exitCode, 0);
     assert.match(outcome.stderr, /no double for 4/);
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['started']);
+  });
+});
+
+// A workspace's crates (docs/project-integration.md, part 3): a graph in one crate calls code in
+// another by that crate's name, which the build resolves through the dependency and Run through its
+// scratch crate (where the code's crate is the scratch crate itself).
+describe('Rust code in another crate of the workspace', () => {
+  const TEXT = '//! Names.\n\n/// @blueprint pure\n#[must_use]\npub fn title(name: &str) -> String {\n    name.to_uppercase()\n}\n';
+
+  test('a graph calls it by the crate\'s name; the workspace builds, and Run runs it', async (t) => {
+    const project = path.join(workDir, 'crates');
+    const files: Record<string, string> = {
+      'Cargo.toml': '[workspace]\nresolver = "2"\nmembers = ["core", "app"]\n',
+      'core/Cargo.toml': '[package]\nname = "corpus-core"\nversion = "0.1.0"\nedition = "2021"\n',
+      'core/src/lib.rs': '//! Core.\npub mod text;\n',
+      'core/src/text.rs': TEXT,
+      'app/Cargo.toml': '[package]\nname = "app"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\ncorpus-core = { path = "../core" }\n',
+      'app/src/main.rs': 'fn main() {\n    crate::shout_vgraph::Shout::new().start();\n}\n'
+    };
+    for (const [name, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(project, name)), { recursive: true });
+      fs.writeFileSync(path.join(project, name), text);
+    }
+    const module = codeModuleFor('rust', path.join(project, 'core/src/text.rs'), project);
+    assert.equal(module, 'corpus_core::text', 'named with its crate, "-" as "_"');
+    const registry = new NodeRegistry();
+    registry.registerMany(exposeFunctions(scanRust(TEXT), { language: 'rust', path: 'core/src/text.rs', module, exposeAll: false }).definitions);
+    const graphDir = path.join(project, 'app/src');
+    const options = generateOptionsFor('rust', 'Shout.vgraph', graphDir, project);
+    assert.equal(options.crate, 'app');
+    const d = doc([node('s', 'core:event.start'), node('title', 'fn:rust:core/src/text.rs#title', { 'pin:name': 'ada' }), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'p', 'execIn'), wire('title', 'returnValue', 'p', 'value')]);
+    const result = compileDocument({ ...d, name: 'Shout', language: 'rust' }, { registry, languages: builtinLanguagePacks(), generate: options });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    assert.match(output.text, /corpus_core::text::title\(&arg\d+\)/, 'by the crate\'s name, passing a borrow for &str');
+    const file = path.join(graphDir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    applyAcceptedPlan(builtinLanguagePacks().get('rust')!, project, [file], file);
+    const build = await runCommand(['cargo', 'build', '--quiet'], { cwd: project, env: { CARGO_TERM_COLOR: 'never' }, timeoutMs: 300000 });
+    if (!build) return t.skip('Cargo isn\'t available here');
+    assert.equal(build.exitCode, 0, build.stderr);
+    const sources = rustRunSources(file, project, output.importedFiles ?? []);
+    assert.equal(sources.crate?.name, 'corpus_core');
+    const outcome = await runGeneratedCode(builtinLanguagePacks().get('rust')!.generator!.runner!, file, output.className, { cwd: project, sources: sources.generated, crate: sources.crate, timeoutMs: 300000 });
+    assert.equal(outcome.stderr, '');
+    assert.deepEqual(outcome.stdout.trim().split(/\r?\n/), ['ADA']);
   });
 });

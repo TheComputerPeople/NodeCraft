@@ -9,3 +9,4 @@ test/fixtures/projects/**/obj/
 test/fixtures/projects/**/bin/
 test/fixtures/projects/**/.gradle/
 test/fixtures/projects/**/build/
+test/fixtures/projects/**/target/

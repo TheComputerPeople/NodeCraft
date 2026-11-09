@@ -264,7 +264,8 @@ export const ENCODING_UTILITIES: UtilityNode[] = [
         `if (text.size() % 4 != 0 || !std::regex_match(text, std::regex("[A-Za-z0-9+/]*={0,2}"))) throw std::invalid_argument("${NOT_BASE64}");`,
         `static const std::string digits = "${BASE64_DIGITS}";`,
         'std::string result;',
-        'unsigned long bits = 0;',
+        // std::size_t, what find gives (unsigned long is 32 bits on Windows: -Wconversion).
+        'std::size_t bits = 0;',
         'int count = 0;',
         'for (char c : text) {',
         "    if (c == '=') break;",
@@ -273,7 +274,7 @@ export const ENCODING_UTILITIES: UtilityNode[] = [
         '    if (count >= 8) {',
         '        count -= 8;',
         '        result += static_cast<char>(bits >> count & 0xFF);',
-        '        bits &= (1UL << count) - 1;',
+        '        bits &= (std::size_t{1} << count) - 1;',
         '    }',
         '}',
         CPP_IS_UTF8,

@@ -67,6 +67,17 @@ describe('C++ placement', () => {
     assert.deepEqual(cppPlacement(context({})), {}, 'no build system: nothing to register');
   });
 
+  test('a Makefile\'s $(wildcard) sources take in the generated files they match; the others are named', () => {
+    assert.deepEqual(cppPlacement(context({ Makefile: 'SRC := $(wildcard *.cpp) $(wildcard ui/*.cpp)\n' })), {});
+    assert.match(cppPlacement(context({ Makefile: 'SRC := $(wildcard ./*.cpp)\n# $(wildcard ui/*.cpp)\n' })).diagnostics![0].message, /Makefile's sources: ui\/Menu\.vgraph\.cpp\.$/);
+  });
+
+  test('two graphs of one name: one class in the global namespace, so the first is listed and the compile says why', () => {
+    const plan = cppPlacement({ ...context({ 'CMakeLists.txt': 'add_executable(game main.cpp)\n' }, ['a/Fighter.vgraph.cpp', 'b/Fighter.vgraph.cpp']), outputFile: 'b/Fighter.vgraph.cpp' });
+    assert.doesNotMatch(plan.ownedFiles![0].text, /b\/Fighter/);
+    assert.match(plan.diagnostics![0].message, /a\/Fighter\.vgraph\.cpp and b\/Fighter\.vgraph\.cpp define classes of one name/);
+  });
+
   test('a CMake project registered this way builds and runs the generated class', async (t) => {
     const dir = path.join(workDir, 'cmake');
     fs.mkdirSync(dir, { recursive: true });

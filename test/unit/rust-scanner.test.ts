@@ -70,7 +70,9 @@ describe('Rust scanner', () => {
 
   test('pub functions, in inline modules, with parameters, types and docs', () => {
     const fns = Object.fromEntries(scan.functions.map((f) => [`${f.container ? `${f.container}::` : ''}${f.name}`, f]));
-    assert.deepEqual(Object.keys(fns).sort(), ['damage', 'greeting', 'is_critical', 'later', 'lookup', 'scores::best']);
+    assert.deepEqual(Object.keys(fns).sort(), ['damage', 'greeting', 'is_critical', 'later', 'lookup', 'scores::best', 'shout']);
+    // A shared borrow of a text or a list is a pin of it, which generated code passes borrowed.
+    assert.deepEqual(fns.shout.params, [{ name: 'text', type: { id: 'string' }, borrowed: true }]);
     // An async fn is a latent node (docs/node-authoring.md, gap 4).
     assert.deepEqual([fns.later.latent, fns.later.returns], [true, null]);
     assert.deepEqual(fns.damage.params, [{ name: 'strength', type: { id: 'float' } }, { name: 'level', type: { id: 'int' } }]);
@@ -85,14 +87,26 @@ describe('Rust scanner', () => {
 
   test('functions that can\'t be nodes are reported with the reason; methods and test code aren\'t free functions', () => {
     const skipped = Object.fromEntries(scan.skipped.map((s) => [s.name, s.reason]));
-    assert.match(skipped.shout, /reference parameters/);
-    // A lifetime isn't a type parameter: the reference is why.
-    assert.match(skipped.label, /reference parameters/);
+    // A lifetime isn't a type parameter: the returned reference is why.
+    assert.match(skipped.label, /returning references/);
     assert.match(skipped.private_helper, /isn't pub/);
     assert.match(skipped.twice, /more than two type parameters/);
     assert.equal(skipped.level, undefined);
     assert.equal(skipped.helper, undefined);
     assert.ok(!scan.functions.some((f) => f.name === 'level' || f.name === 'helper'));
+  });
+
+  test('slices and Vec references are borrowed lists; other references, and &mut, aren\'t pins yet', () => {
+    const borrowed = scanRust('/// @blueprint\npub fn total(items: &[i64], more: &Vec<f64>, name: &String) -> i64 { 0 }\n/// @blueprint\npub fn bump(x: &mut i64) {}\n/// @blueprint\npub fn count(c: &Counter) {}\n');
+    assert.deepEqual(borrowed.functions[0].params, [
+      { name: 'items', type: { id: 'int', container: 'array' }, borrowed: true },
+      { name: 'more', type: { id: 'float', container: 'array' }, borrowed: true },
+      { name: 'name', type: { id: 'string' }, borrowed: true }
+    ]);
+    assert.deepEqual(borrowed.skipped.map((s) => s.name), ['bump', 'count']);
+    assert.ok(borrowed.skipped.every((s) => /reference parameters/.test(s.reason)));
+    const exposed = exposeFunctions(borrowed, { language: 'rust', path: 'src/sum.rs', module: 'sum', exposeAll: false });
+    assert.deepEqual((exposed.definitions[0].implementation as { borrowed?: string[] }).borrowed, ['items', 'more', 'name']);
   });
 
   test('marked functions become nodes that generated code calls through their module in the crate', () => {

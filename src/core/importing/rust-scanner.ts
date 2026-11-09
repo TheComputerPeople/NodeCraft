@@ -412,7 +412,7 @@ export function scanRust(source: string): ModuleScan {
       if (tokens[s]?.kind !== 'name' || !at(s + 1, ':')) return { reason: 'self and pattern parameters can\'t be pins' };
       const mapped = mapParam(substituteTypeParameters(text(s + 2, b), typeParameters));
       if ('reason' in mapped) return mapped;
-      params.push({ name: tokens[s].text, ...(mapped.type ? { type: mapped.type } : {}) });
+      params.push({ name: tokens[s].text, ...(mapped.type ? { type: mapped.type } : {}), ...('borrowed' in mapped && mapped.borrowed ? { borrowed: true } : {}) });
     }
     return params;
   };
@@ -502,11 +502,20 @@ function mapReturn(text: string): { type: TypeRef | null | undefined } | { reaso
   return { type: mapRustType(t) };
 }
 
-// Parameters are owned values, as generated code passes them (i64, f64, bool, String, Vec<T>);
-// references would need generated code to borrow, which it doesn't yet.
-function mapParam(text: string): { type: TypeRef | undefined } | { reason: string } {
+// Parameters are owned values, as generated code passes them (i64, f64, bool, String, Vec<T>), or a
+// shared borrow of a text or a list (&str, &String, &[T], &Vec<T>), which generated code passes as
+// a borrow of the value it has. Other references aren't pins yet.
+function mapParam(text: string): { type: TypeRef | undefined; borrowed?: boolean } | { reason: string } {
   const t = normalize(text);
-  if (t.startsWith('&')) return { reason: `reference parameters can't be pins yet (take an owned value, such as String instead of &str)` };
+  if (t.startsWith('&') && !/^&('\w+ )?mut /.test(t)) {
+    // A lifetime (&'a str) changes nothing here.
+    const target = t.slice(1).replace(/^'\w+\s*/, '');
+    const slice = /^\[(.*)\]$/.exec(target);
+    const owned = target === 'str' ? 'String' : slice ? `Vec<${slice[1]}>` : target;
+    const type = owned === 'String' || /^(?:std::vec::)?Vec<.*>$/.test(owned) ? mapRustType(owned) : undefined;
+    if (type && !type.id.startsWith('native:')) return { type, borrowed: true };
+  }
+  if (t.startsWith('&')) return { reason: `reference parameters other than &str and &[T] can't be pins yet (take an owned value)` };
   if (t.startsWith('impl ')) return { reason: 'impl Trait parameters can\'t be pins' };
   return { type: mapRustType(t) };
 }

@@ -28,7 +28,7 @@ export interface RunOptions {
   // Project source files compiled with the generated file (RunContext.sources).
   sources?: string[];
   // The project crate the code calls into (RunContext.crate, Rust).
-  crate?: { src: string; modules: string[] };
+  crate?: { src: string; modules: string[]; name?: string };
   // The project's module (RunContext.goModule, Go).
   goModule?: { path: string; dir: string };
   // The graph's Godot project (RunContext.projectDir, GDScript).

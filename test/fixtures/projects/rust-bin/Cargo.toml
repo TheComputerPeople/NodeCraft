@@ -1,0 +1,12 @@
+[package]
+name = "corpus_game"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }

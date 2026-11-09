@@ -14,8 +14,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { auditCases, auditGraph } from '../../src/conformance/audit';
 import { builtinNodeDefinitions } from '../../src/core/builtins';
-import { exposeFunctions } from '../../src/core/importing/symbols';
-import { LanguagePackRegistry } from '../../src/core/language-pack';
+import { SymbolFunction, scanSymbols } from '../../src/core/importing/language-server';
+import { ModuleScan, exposeFunctions } from '../../src/core/importing/symbols';
+import { LanguagePack, LanguagePackRegistry } from '../../src/core/language-pack';
 import { libraryNodeType } from '../../src/core/libraries';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { GraphDocument, NodeDefinition } from '../../src/core/model';
@@ -40,7 +41,8 @@ export function corpusToolsFolder(): string {
 export interface CorpusStep {
   // What it is, as the test reports it: "tsc", "ESLint", "mypy --strict", "run".
   name: string;
-  // The command. "node_modules/..." runs a script of the corpus's Node.js tools with Node.js.
+  // The command. "node_modules/..." runs a script of the corpus's Node.js tools with Node.js, and
+  // "./..." a program the project built, in the step's folder.
   command: string[];
   // Its folder, relative to the project (the project by default).
   cwd?: string;
@@ -83,6 +85,9 @@ export interface Layout {
   // Where the node audit's program and the conformance fixtures go, relative to the project: one
   // folder for each (audit, graphs, programs, tests).
   body?: string;
+  // The body's programs (PROGRAMS by default): in C++, one target can't have both, whose classes
+  // share names in the global namespace.
+  programs?: string[];
   steps: CorpusStep[];
 }
 
@@ -101,6 +106,8 @@ export interface LayoutResult {
   compileErrors: string[];
   // Compile's warnings: placement, the project's version, build registration (they fail it too).
   warnings: string[];
+  // Graphs of the body that use what the language doesn't have, and why.
+  notApplicable: string[];
   // Generated files, relative to the project.
   generated: string[];
   steps: StepResult[];
@@ -122,11 +129,11 @@ export function corpusWorkDir(): string {
 export async function runLayout(layout: Layout, workDir: string): Promise<LayoutResult> {
   const root = path.join(workDir, layout.name);
   // Without build output a tool or IDE may have left in the repository's copy (a C# restore's obj/,
-  // a Gradle import's .gradle/ and build/).
+  // a Gradle import's .gradle/ and build/, Cargo's target/).
   const source = path.join(repoRoot, 'test/fixtures/projects', layout.name);
-  fs.cpSync(source, root, { recursive: true, filter: (file) => !['obj', 'bin', '.gradle', 'build'].includes(path.basename(file)) || !fs.statSync(file).isDirectory() });
+  fs.cpSync(source, root, { recursive: true, filter: (file) => !['obj', 'bin', '.gradle', 'build', 'target'].includes(path.basename(file)) || !fs.statSync(file).isDirectory() });
   const tools = corpusToolsFolder();
-  const result: LayoutResult = { compileErrors: [], warnings: [], generated: [], steps: [] };
+  const result: LayoutResult = { compileErrors: [], warnings: [], notApplicable: [], generated: [], steps: [] };
   await generate(layout, root, result);
   if (result.compileErrors.length) return result;
   // A step after one that didn't pass needs what that one makes (a build before its run).
@@ -144,7 +151,7 @@ async function generate(layout: Layout, root: string, result: LayoutResult): Pro
   for (const file of ['sample/visual-nodes/Math/Double.node.json', 'test/fixtures/nodes/Fail.node.json']) registry.register(parseNodeDefinition(fs.readFileSync(path.join(repoRoot, file), 'utf8'))!);
   const code: NodeDefinition[] = [];
   for (const file of layout.code) {
-    const scan = pack.importer!.scan!(fs.readFileSync(path.join(root, file), 'utf8'));
+    const scan = scanCode(layout.language, fs.readFileSync(path.join(root, file), 'utf8'));
     code.push(...exposeFunctions(scan, { language: pack.id, path: file, module: codeModuleFor(pack.id, path.join(root, file), root), exposeAll: false }).definitions);
   }
   registry.registerMany(code);
@@ -154,8 +161,8 @@ async function generate(layout: Layout, root: string, result: LayoutResult): Pro
     return found;
   };
   const context: GraphContext = { code: byName, definitions: code, library: (graphPath, graphId) => libraryNodeType(graphPath, graphId) };
-  const graphs: { file: string; doc: GraphDocument }[] = layout.graphs.map((g) => ({ file: path.join(root, g.path), doc: { ...g.build(context), language: g.language ?? layout.language } }));
-  if (layout.body) graphs.push(...body(layout, root));
+  const graphs: { file: string; doc: GraphDocument; body?: boolean }[] = layout.graphs.map((g) => ({ file: path.join(root, g.path), doc: { ...g.build(context), language: g.language ?? layout.language } }));
+  if (layout.body) graphs.push(...body(layout, root).map((g) => ({ ...g, body: true })));
   // Types and libraries first, as the workspace knows them, then each graph compiled.
   const all = new LanguagePackRegistry(languages.all());
   for (const { file, doc } of graphs) registry.registerMany(graphFileNodes(doc, file, root, all) ?? []);
@@ -170,17 +177,90 @@ async function generate(layout: Layout, root: string, result: LayoutResult): Pro
     },
     remove: async (file) => fs.rmSync(file, { force: true }),
     // As OutputPlans lists them: each graph of the pack's language, by its output file.
-    register: async (other, folder, outputFile) => applyAcceptedPlan(other, folder, graphs.filter((g) => g.doc.language === other.id).map((g) => path.join(path.dirname(g.file), other.generator!.outputFileName(path.basename(g.file)))), outputFile)
+    register: async (other, folder, outputFile) => applyAcceptedPlan(other, folder, outputsOf(other), outputFile)
   };
-  for (const { file, doc } of graphs) {
+  // Graphs left out: not applicable, or in a program that isn't.
+  const dropped = new Set<string>();
+  const outputsOf = (other: LanguagePack): string[] => graphs.filter((g) => g.doc.language === other.id && !dropped.has(g.file))
+    .map((g) => path.join(path.dirname(g.file), other.generator!.outputFileName(path.basename(g.file))));
+  for (const { file, doc, body: inBody } of graphs) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
     const compiled = await compileGraphFile(doc, file, root, host);
     const where = posix(path.relative(root, file));
     const errors = compiled.diagnostics.filter((d) => d.severity === 'error');
+    // A conformance fixture using what the language doesn't have (inheritance in Go) isn't
+    // applicable, as the conformance suite reports it.
+    if (inBody && errors.length && errors.every((d) => d.code === 'unsupported' || d.code === 'missing-snippet')) {
+      result.notApplicable.push(`${where}: ${errors[0].message}`);
+      dropped.add(file);
+      continue;
+    }
     if (errors.length || !compiled.outputPath) result.compileErrors.push(`${where}: ${errors.map((d) => d.message).join('; ')}`);
     result.warnings.push(...compiled.diagnostics.filter((d) => d.severity === 'warning').map((d) => `${where}: ${d.message}`));
   }
+  // A program of the body (its classes use each other) with a graph that isn't applicable isn't
+  // either: its folder goes.
+  for (const program of PROGRAMS) {
+    const folder = layout.body && posix(path.join(layout.body, program));
+    if (!folder || !result.notApplicable.some((g) => g.startsWith(`${folder}/`))) continue;
+    fs.rmSync(path.join(root, folder), { recursive: true, force: true });
+    result.generated = result.generated.filter((f) => !f.startsWith(`${folder}/`));
+    result.notApplicable.push(`${folder}: a program with a graph that isn't applicable`);
+    for (const g of graphs) if (posix(path.relative(root, g.file)).startsWith(`${folder}/`)) dropped.add(g.file);
+    // Nor do warnings about its files (Rust's modules of one name, beside another program's).
+    result.warnings = result.warnings.filter((w) => !w.includes(`${folder}/`));
+    // The build no longer lists its files.
+    result.warnings.push(...applyAcceptedPlan(pack, root, outputsOf(pack)).map((d) => `${folder}: ${d.message}`));
+  }
+}
+
+// The body's programs, whose graphs use each other (the others' graphs stand alone).
+const PROGRAMS = ['arena', 'duel'];
+
+// A file of the project's code as the extension reads it: with the pack's scanner, or (Go) from what
+// the language server reports, which goSymbols reads from the text as gopls would give it.
+function scanCode(language: string, text: string): ModuleScan {
+  const pack = languages.get(language)!;
+  if (pack.importer?.scan) return pack.importer.scan(text);
+  if (language === 'go') return scanSymbols(text, goSymbols(text), pack.importer!.languageServer!, (type) => pack.mapType(type));
+  throw new Error(`the corpus can't read ${language} code`);
+}
+
+// gopls's document symbols and hovers for a Go file: its functions, its methods (their owner the
+// receiver's type) and its structs' fields. A hover writes each parameter and named result with its
+// type, as gopls does ("a, b int" is "a int, b int").
+export function goSymbols(text: string): SymbolFunction[] {
+  const symbols: SymbolFunction[] = [];
+  let struct: string | undefined;
+  const typed = (list: string): string => {
+    const parts = list.split(',').map((p) => p.trim()).filter((p) => p);
+    if (parts.every((p) => !/\s/.test(p))) return parts.join(', ');
+    let type = '';
+    return parts.reverse().map((p) => {
+      const named = /^(\w+)\s+(.+)$/.exec(p);
+      if (named) type = named[2];
+      return named ? p : `${p} ${type}`;
+    }).reverse().join(', ');
+  };
+  text.split(/\r?\n/).forEach((line, i) => {
+    const at = { line: i, nameLine: i, containers: [] };
+    const start = /^type (\w+) struct \{$/.exec(line);
+    if (start) struct = start[1];
+    else if (struct && line === '}') struct = undefined;
+    else if (struct) {
+      const field = /^\t(\w+)\s+(\S.*)$/.exec(line);
+      if (field) symbols.push({ name: field[1], owner: struct, field: { type: field[2] }, ...at });
+    } else {
+      const fn = /^func (?:\((\w+) (\*?\w+)\) )?(\w+)\(([^)]*)\)\s*(.*?)\s*\{$/.exec(line);
+      if (!fn) return;
+      const [, receiver, owner, name, params, results] = fn;
+      const result = results.startsWith('(') ? `(${typed(results.slice(1, -1))})` : results;
+      const signature = `func ${owner ? `(${receiver} ${owner}) ` : ''}${name}(${typed(params)})${result ? ` ${result}` : ''}`;
+      symbols.push({ name, ...(owner ? { owner } : {}), ...at, hover: '```go\n' + signature + '\n```' });
+    }
+  });
+  return symbols;
 }
 
 // The node audit's program and the conformance fixtures, each in a folder of the layout's body (a
@@ -193,8 +273,8 @@ function body(layout: Layout, root: string): { file: string; doc: GraphDocument 
   const groups: Record<string, { name: string; doc: GraphDocument }[]> = {
     audit: [{ name: 'Audit.vgraph', doc: auditGraph(auditCases(builtinNodeDefinitions(), pack), layout.language) }],
     graphs: [read(path.join(repoRoot, 'sample/demo.vgraph')), ...vgraphs('test/fixtures/graphs')],
-    arena: vgraphs('sample/arena'),
-    duel: vgraphs('test/fixtures/programs/duel'),
+    ...((layout.programs ?? PROGRAMS).includes('arena') ? { arena: vgraphs('sample/arena') } : {}),
+    ...((layout.programs ?? PROGRAMS).includes('duel') ? { duel: vgraphs('test/fixtures/programs/duel') } : {}),
     tests: vgraphs('test/fixtures/tests')
   };
   if (layout.language === 'python') {
@@ -210,7 +290,9 @@ const available = new Map<string, boolean>();
 
 async function runStep(step: CorpusStep, root: string, tools: string): Promise<StepResult> {
   const command = step.command[0].startsWith('node_modules/') ? [process.execPath, path.join(tools, step.command[0]), ...step.command.slice(1)]
-    : step.command[0] === 'node' ? [process.execPath, ...step.command.slice(1)] : step.command;
+    : step.command[0] === 'node' ? [process.execPath, ...step.command.slice(1)]
+    // A program the project built ("./build/corpus"), in the step's folder.
+    : step.command[0].startsWith('./') ? [path.join(root, step.cwd ?? '', step.command[0]), ...step.command.slice(1)] : step.command;
   const probe = step.probe ?? (step.command[0].startsWith('node_modules/') ? [process.execPath, path.join(tools, step.command[0]), '--version'] : [step.command[0], '--version']);
   const key = probe.join(' ');
   if (!available.has(key)) available.set(key, (await run(probe, root, {}, 120000)).exitCode === 0);
@@ -333,21 +415,28 @@ export function greetingLibrary(title: NodeDefinition): GraphDocument {
   };
 }
 
-// The graphs of what the project's code offers beyond plain functions (docs/code-as-nodes.md): a
-// class and its subclass, several outputs, a generic function and an async one, from the shared
-// conformance builders, each in `dir`. Each class prints as its builder says.
-export function featureGraphs(dir: string, language: string): CorpusGraph[] {
-  return [
-    { path: `${dir}/Counting.vgraph`, build: ({ definitions }) => codeClassGraph(definitions, language) },
-    { path: `${dir}/Dividing.vgraph`, build: ({ definitions }) => severalOutputsGraph(definitions, language) },
-    { path: `${dir}/Firsts.vgraph`, build: ({ definitions }) => genericsGraph(definitions, language) },
-    { path: `${dir}/Fetching.vgraph`, build: ({ definitions }) => latentCodeGraph(definitions, language) }
-  ];
+// What the project's code offers beyond plain functions (docs/code-as-nodes.md), each with the
+// shared conformance builder's graph and what it prints. A language has those its pack supports.
+const FEATURES = {
+  classes: { file: 'Counting', build: codeClassGraph, output: CODE_CLASS_OUTPUT },
+  outputs: { file: 'Dividing', build: severalOutputsGraph, output: SEVERAL_OUTPUTS_OUTPUT },
+  generics: { file: 'Firsts', build: genericsGraph, output: GENERICS_OUTPUT },
+  latent: { file: 'Fetching', build: latentCodeGraph, output: LATENT_CODE_OUTPUT }
+};
+export type Feature = keyof typeof FEATURES;
+export const ALL_FEATURES: Feature[] = ['classes', 'outputs', 'generics', 'latent'];
+
+// The graphs of the project's code's features, each in `dir`: a class and its subclass, several
+// outputs, a generic function and an async one.
+export function featureGraphs(dir: string, language: string, features: Feature[] = ALL_FEATURES): CorpusGraph[] {
+  return features.map((f) => ({ path: `${dir}/${FEATURES[f].file}.vgraph`, build: ({ definitions }) => FEATURES[f].build(definitions, language) }));
 }
 
-// What an entry point that greets, then starts each feature graph in turn, prints: Fetching's
-// Completed comes last, after the code that started it.
-export const FEATURES_OUTPUT = [...CODE_CLASS_OUTPUT, ...SEVERAL_OUTPUTS_OUTPUT, ...GENERICS_OUTPUT, ...LATENT_CODE_OUTPUT];
+// What an entry point that starts each feature graph in turn prints: Fetching's Completed comes
+// last, after the code that started it.
+export function featuresOutput(features: Feature[] = ALL_FEATURES): string[] {
+  return features.flatMap((f) => FEATURES[f].output);
+}
 
 // A graph of tests for the project's test runner: its Test Case calls the Greeting library (at
 // `library`) and asserts what it gives.

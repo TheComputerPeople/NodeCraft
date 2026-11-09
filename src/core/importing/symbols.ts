@@ -15,6 +15,8 @@ export interface ScannedParam {
   type?: TypeRef;
   // A literal default value, when the parameter has one.
   defaultValue?: unknown;
+  // Taken by shared reference (Rust's &str, &[T]): generated code passes a borrow.
+  borrowed?: boolean;
 }
 
 export interface ScannedFunction {
@@ -179,7 +181,8 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
     outputs: [...exec('output'), ...outputs],
     implementation: {
       kind: 'function', language: options.language, path: options.path, name: fn.name, ...(moduleOf(fn, options) ? { module: moduleOf(fn, options) } : {}),
-      ...(fn.results ? { results: fn.results } : {}), ...(execs ? { execs: 'bool' as const } : enumExecs ? { execs: 'enum' as const } : {})
+      ...(fn.results ? { results: fn.results } : {}), ...(execs ? { execs: 'bool' as const } : enumExecs ? { execs: 'enum' as const } : {}),
+      ...(fn.params.some((p) => p.borrowed) ? { borrowed: fn.params.filter((p) => p.borrowed).map((p) => p.name) } : {})
     },
     ...metadata.node,
     ...(fn.latent ? { latent: true } : {})

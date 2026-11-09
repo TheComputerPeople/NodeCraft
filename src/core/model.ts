@@ -125,6 +125,9 @@ export interface FunctionImplementation {
   // A function of the project's code with several outputs (docs/node-authoring.md, gap 3): how the
   // code gives them.
   results?: CodeResults;
+  // The input pins the code takes by shared reference (Rust's &str and &[T]): generated code passes
+  // a borrow of the value.
+  borrowed?: string[];
   // Unreal's ExpandBoolAsExecs and ExpandEnumAsExecs (`@execs`, gap 6): the bool or graph enum it
   // returns picks one of its exec outputs, which stand for its Return Value. 'enum' is asked for (a
   // return type that may be a graph enum); { enum } is the enum it turned out to be

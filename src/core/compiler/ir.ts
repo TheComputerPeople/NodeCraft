@@ -189,7 +189,8 @@ export interface IrImport {
   path: string;
   // Python: the module's import name.
   module?: string;
-  params: { pinId: string; type?: TypeRef }[];
+  // Each argument; `borrowed` when the code takes it by shared reference (FunctionImplementation).
+  params: { pinId: string; type?: TypeRef; borrowed?: boolean }[];
   returns?: TypeRef;
   // A function with several outputs (a graph library's): its result holds them, shaped as the
   // language returns several values (an object, a tuple, a named tuple).
