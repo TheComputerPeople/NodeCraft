@@ -14,7 +14,7 @@ import { DEFAULT_TERMS, LanguageTerms, localizeDefinition, typeText } from '../c
 import { TypeRef, setClassHierarchy } from '../core/types';
 import { listUserTypes } from '../core/user-types';
 import { VARIABLE_GET, VARIABLE_SET, createResolver } from '../core/resolve';
-import { primaryGraph } from '../core/serializer';
+import { syncGraphTabs } from './graph-tabs';
 import { isTypeDocument, renderTypeEditor } from './type-editor';
 import { markCompileDirty, renderLanguagePicker } from './compile-results';
 import { dom, setStatus } from './dom';
@@ -241,14 +241,15 @@ export function applySettings(message: HostMessage): void {
 
 // Shows `doc`, staying on the same graph when it still exists (e.g. after an undo).
 export function loadDocument(doc: GraphDocument, preserveView = false): void {
-  const previousGraphId = state.graph?.id;
   const language = state.document?.language;
   state.document = copyDocument(doc);
   forgetPreviews();
   if (state.document.language !== language) applyTerms();
   else updateClassHierarchy();
-  state.graph = state.document.graphs.find((g) => g.id === previousGraphId) ?? primaryGraph(state.document) ?? null;
-  dom.graphName.textContent = state.graph ? `${state.document.name} › ${state.graph.name}` : state.document.name;
+  // The tabs follow the graphs (an undo may remove one): the graph shown stays when it's still
+  // there; on opening, the tab the file had shown last time is (src/webview/graph-tabs.ts).
+  const shown = syncGraphTabs();
+  state.graph = state.document.graphs.find((g) => g.id === shown) ?? null;
   // A structure or enumeration has no graphs: its fields or values are edited instead.
   const typeDocument = isTypeDocument(state.document);
   dom.typeEditor.hidden = !typeDocument;

@@ -12,6 +12,7 @@ import { addNode } from './actions';
 import { documentAncestors, documentInterfaceFunctions, lookupDefinition, markDirty, languageCapabilities, shownType } from './document';
 import { dom, eventElement, setStatus } from './dom';
 import { MenuItem, showFloatingMenu } from './floating-menu';
+import { graphShown, renderGraphTabs, syncGraphTabs } from './graph-tabs';
 import { newConnectionId } from './host';
 import { renderInspector, renderPalette } from './panels';
 import { render, syncSelectionClasses } from './render';
@@ -28,6 +29,8 @@ const GRAPH_SECTIONS: { kind: GraphKind; title: string; add: string }[] = [
 export function renderMyBlueprint(): void {
   const root = dom.myBlueprint;
   root.innerHTML = '';
+  // The tabs list the same graphs, by the same names.
+  renderGraphTabs();
   const doc = state.document;
   if (!doc) return;
   const allowed = edits.allowedGraphKinds(doc);
@@ -218,8 +221,9 @@ function emptyItem(text: string): HTMLElement {
   return el;
 }
 
-// Shows a graph on the canvas, remembering each graph's pan and zoom.
-export function openGraph(graphId: string): void {
+// Shows a graph on the canvas in its tab, remembering each graph's pan and zoom. `recorded`: the
+// tabs already know (Back, Forward or closing a tab chose the graph).
+export function openGraph(graphId: string, recorded = false): void {
   const doc = state.document;
   const graph = doc?.graphs.find((g) => g.id === graphId);
   if (!doc || !graph) return;
@@ -230,7 +234,7 @@ export function openGraph(graphId: string): void {
   state.zoom = view?.zoom ?? 1;
   state.selectedNodeIds.clear();
   state.selectedNodeId = null;
-  dom.graphName.textContent = `${doc.name} › ${graph.name}`;
+  graphShown(graph.id, recorded);
   applyTransform();
   render();
   renderMyBlueprint();
@@ -278,7 +282,6 @@ export function startRename(kind: 'graph' | 'variable' | 'dispatcher', id: strin
       if (error) setStatus(error);
       else {
         markDirty();
-        if (kind === 'graph' && state.graph?.id === id) dom.graphName.textContent = `${doc.name} › ${state.graph.name}`;
         // Variable nodes show the variable's name.
         render();
         renderPalette();
@@ -318,7 +321,9 @@ function removeGraph(graphId: string): void {
     return;
   }
   markDirty();
-  if (state.graph?.id === graphId) openGraph(doc.graphs[0].id);
+  // Its tab closes; if it was shown, the tab shown before it is.
+  const shown = syncGraphTabs();
+  if (shown && shown !== state.graph?.id) openGraph(shown, true);
   else renderMyBlueprint();
 }
 

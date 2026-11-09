@@ -139,6 +139,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     vscode.commands.registerCommand('blueprintVisualScripting.registerGeneratedFiles', async () => {
       for (const folder of vscode.workspace.workspaceFolders ?? []) await outputPlans.offerAgain(folder.uri.fsPath);
     }),
+    // Back and Forward through the graphs shown in the focused graph editor's tabs.
+    vscode.commands.registerCommand('blueprintVisualScripting.graphBack', () => provider.postToActive({ type: 'navigateGraph', direction: 'back' })),
+    vscode.commands.registerCommand('blueprintVisualScripting.graphForward', () => provider.postToActive({ type: 'navigateGraph', direction: 'forward' })),
     vscode.commands.registerCommand('blueprintVisualScripting.findInAll', () => {
       if (!provider.postToActive({ type: 'openFind', findAll: true })) void vscode.commands.executeCommand('workbench.action.findInFiles');
     }),

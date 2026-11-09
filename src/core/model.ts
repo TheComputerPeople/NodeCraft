@@ -419,7 +419,11 @@ export interface UIMessage {
   // every node of `nodeType` in the workspace (answered by 'findResults').
   // previewNode: the code a node of `nodeType` with `properties` becomes in `document`'s language
   // (answered by 'nodePreview'; docs/language-context.md, part 3).
-  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'debug' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues' | 'pickFunctionLibrary' | 'saveLibrary' | 'goToDefinition' | 'findReferences' | 'previewNode';
+  // graphHistory: whether the graph tabs' Back and Forward can go anywhere (`canGoBack`,
+  // `canGoForward`), for the host's Alt+Left and Alt+Right.
+  type: 'ready' | 'applyDocument' | 'compile' | 'run' | 'simulate' | 'debug' | 'findInAll' | 'reveal' | 'setBreakpoints' | 'setWatches' | 'debugAction' | 'readValues' | 'pickFunctionLibrary' | 'saveLibrary' | 'goToDefinition' | 'findReferences' | 'previewNode' | 'graphHistory';
+  canGoBack?: boolean;
+  canGoForward?: boolean;
   document?: GraphDocument;
   nodeType?: string;
   properties?: Record<string, unknown>;
@@ -446,6 +450,8 @@ export interface HostMessage {
     | 'findResults'
     | 'reveal'
     | 'openFind'
+    // Back or Forward through the graphs shown (`direction`), from Alt+Left and Alt+Right.
+    | 'navigateGraph'
     // Refresh every project function node whose code changed (Unreal's Refresh All Nodes).
     | 'refreshAll'
     // The file's breakpoints (also part of 'init').
@@ -485,6 +491,7 @@ export interface HostMessage {
   results?: FileSearchHit[];
   // openFind: search every file (Find in All Blueprints) rather than this one.
   findAll?: boolean;
+  direction?: 'back' | 'forward';
   target?: RevealTarget;
   message?: string;
 }

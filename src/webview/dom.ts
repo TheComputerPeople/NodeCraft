@@ -18,6 +18,11 @@ export const dom = {
   inspector: element<HTMLDivElement>('inspector-content'),
   status: element<HTMLSpanElement>('status'),
   graphName: element<HTMLSpanElement>('graph-name'),
+  // The open graphs' tabs, and Back and Forward (src/webview/graph-tabs.ts).
+  graphTabs: element<HTMLElement>('graph-tabs'),
+  tabList: element<HTMLDivElement>('tab-list'),
+  graphBack: element<HTMLButtonElement>('graph-back'),
+  graphForward: element<HTMLButtonElement>('graph-forward'),
   contextMenu: element<HTMLDivElement>('context-menu'),
   compileButton: element<HTMLButtonElement>('compile'),
   runButton: element<HTMLButtonElement>('run'),

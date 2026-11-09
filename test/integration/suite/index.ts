@@ -65,6 +65,23 @@ test('registers the New Graph command', async () => {
   assert.ok(commands.includes('blueprintVisualScripting.createGraph'));
 });
 
+// docs/unreal-conventions.md, "Graph tabs": Alt+Left and Alt+Right go through a graph editor's
+// graphs only while there's one to go to, and are VS Code's Go Back and Go Forward otherwise.
+test("the graph tabs' Back and Forward are commands, keyed only while they can go somewhere", async () => {
+  const commands = await vscode.commands.getCommands(true);
+  const extension = vscode.extensions.getExtension(EXTENSION_ID)!;
+  const keys = (extension.packageJSON as { contributes: { keybindings: { command: string; key: string; when: string }[] } }).contributes.keybindings;
+  for (const [command, key, context] of [['graphBack', 'alt+left', 'graphCanGoBack'], ['graphForward', 'alt+right', 'graphCanGoForward']]) {
+    assert.ok(commands.includes(`blueprintVisualScripting.${command}`), command);
+    const binding = keys.find((k) => k.command === `blueprintVisualScripting.${command}`);
+    assert.equal(binding?.key, key);
+    assert.match(binding?.when ?? '', new RegExp(`activeCustomEditorId == blueprintVisualScripting\\.graphEditor && blueprintVisualScripting\\.${context}$`));
+  }
+  // With a graph editor focused, the commands reach it without failing.
+  await vscode.commands.executeCommand('blueprintVisualScripting.graphBack');
+  await vscode.commands.executeCommand('blueprintVisualScripting.graphForward');
+});
+
 // docs/multi-language.md, gap 1: a repository with a TypeScript web/ and a Python api/.
 test("a new graph takes its folder's language, and the folder's setting wins", async () => {
   const folder = workspaceFile('multi').fsPath;

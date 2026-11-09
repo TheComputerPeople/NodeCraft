@@ -84,7 +84,11 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
 
     // Listeners scoped to this panel; released when it closes rather than at deactivation.
     const disposables: vscode.Disposable[] = [];
+    webviewPanel.onDidChangeViewState(() => {
+      if (webviewPanel.active) this.showGraphHistory(webviewPanel);
+    }, undefined, disposables);
     webviewPanel.onDidDispose(() => {
+      this.graphHistory.delete(webviewPanel);
       panels?.delete(webviewPanel);
       if (!panels?.size) this.panelsByDocument.delete(key);
       disposables.forEach((d) => d.dispose());
@@ -137,6 +141,10 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
           }
           case 'debugAction':
             if (message.action) this.debugAction(message.action);
+            break;
+          case 'graphHistory':
+            this.graphHistory.set(webviewPanel, { back: !!message.canGoBack, forward: !!message.canGoForward });
+            if (webviewPanel.active) this.showGraphHistory(webviewPanel);
             break;
           case 'findInAll':
             this.post(webviewPanel, { type: 'findResults', results: await this.findInAll(message.query ?? '', key) });
@@ -306,6 +314,16 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     if (open?.size) open.forEach((panel) => this.post(panel, { type: 'reveal', target }));
     else this.pendingReveals.set(key, target);
     await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+  }
+
+  // Whether each editor's graph tabs can go Back or Forward: Alt+Left and Alt+Right go through its
+  // graphs only then, and are VS Code's Go Back and Go Forward otherwise (package.json).
+  private readonly graphHistory = new Map<vscode.WebviewPanel, { back: boolean; forward: boolean }>();
+
+  private showGraphHistory(panel: vscode.WebviewPanel): void {
+    const history = this.graphHistory.get(panel);
+    setContext('graphCanGoBack', !!history?.back);
+    setContext('graphCanGoForward', !!history?.forward);
   }
 
   // Sends a message to the graph editor that has focus, if any.

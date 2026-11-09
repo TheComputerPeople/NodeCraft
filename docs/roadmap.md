@@ -483,6 +483,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Visuals | Title styles for event/function/pure/macro; compact variable getters | ✅ | — |
 | Panels | Details panel (node details, variable settings) | ✅ | — |
 | Panels | My Blueprint panel: graphs, functions, macros, variables, local variables, event dispatchers | ✅ | — |
+| Panels | Graph tabs: each event graph, function and macro opened in its own tab, closed and moved as tabs are, with Back and Forward (arrows, the mouse's buttons, Alt+Left/Right) | ✅ (asked for on 2026-11-09; no torn-off tabs: Split Editor instead) | — |
 | Variables | Get/Set nodes bound to a variable | ✅ | — |
 | Variables | Ctrl-drag → Get, Alt-drag → Set, drag onto a pin | ✅ | — |
 | Variables | Promote pin to variable | ✅ | — |

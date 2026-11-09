@@ -8,6 +8,7 @@ import { dom, eventElement, nodeElement, setStatus } from './dom';
 import { postToHost } from './host';
 import './layout';
 import { openFind, reveal, showResults } from './find';
+import { goBack, goForward } from './graph-tabs';
 import { AlignEdge, alignSelection, straightenConnections } from './align';
 import { showDebugState } from './debugger';
 import { receiveValues, setWatches } from './values';
@@ -118,6 +119,10 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       break;
     case 'openFind':
       openFind(message.findAll ?? false);
+      break;
+    case 'navigateGraph':
+      if (message.direction === 'back') goBack();
+      else if (message.direction === 'forward') goForward();
       break;
     case 'documentChanged': {
       if (!message.document) break;

@@ -15,6 +15,27 @@ Sources:
 | Zoom | Mouse wheel | Epic |
 | Zoom to fit the selection (or the whole graph when nothing is selected) | Home | Epic |
 
+## Graph tabs
+
+Unreal's Blueprint editor shows each event graph, function and macro opened in a document tab above the graph, with Back and Forward arrows beside them. The source is Unreal's editor itself (its tab bar and navigation history); the keyboard keys are VS Code's.
+
+| Action | Gesture | Source |
+|---|---|---|
+| Show a graph in its tab, opening a tab at the end if it has none | Click the graph in My Blueprint; Go to Definition on a function or macro node (double-click or F12); a Find result; a debugger stack frame | Unreal's editor |
+| Close a tab | The tab's ×; middle-click; its menu's Close Tab, Close Other Tabs or Close Tabs to the Right | Unreal's editor |
+| Move a tab | Drag it along the tab strip | Unreal's editor |
+| Back / Forward through the graphs shown | The ← and → beside the tabs; the mouse's Back and Forward buttons; Alt+Left / Alt+Right (Ctrl+- / Ctrl+Shift+- on macOS) | Unreal's editor (arrows and mouse); VS Code (keys) |
+| Move between tabs from the keyboard / close the focused tab | Left, Right, Home, End / Delete, with a tab focused | WAI-ARIA tabs |
+
+Differences from Unreal:
+
+- One click in My Blueprint opens a graph (Unreal's opens on a double-click), as the panel did before tabs.
+- The last tab can't close: the canvas always shows a graph.
+- Back reopens the tab of a graph that was closed, and a deleted graph leaves the tabs and the history.
+- Alt+Left and Alt+Right go through the graphs only while there's a graph to go to; otherwise they're VS Code's Go Back and Go Forward between editors.
+- Tabs aren't torn off or docked; VS Code's Split Editor shows another graph of the file beside the first, each view with its own tabs.
+- Each editor keeps its tabs, the graph shown and the history while it's open, and VS Code restores them with the editor.
+
 ## Selection
 
 | Action | Gesture | Source |

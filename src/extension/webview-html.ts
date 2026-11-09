@@ -45,6 +45,11 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
       <span id="graph-name">Untitled</span>
       <span id="status">Ready</span>
     </div>
+    <nav id="graph-tabs" aria-label="Open graphs">
+      <button id="graph-back" class="graph-nav" title="Back to the previous graph (Alt+Left, or the mouse's Back button)" aria-label="Back" disabled>&#x2190;</button>
+      <button id="graph-forward" class="graph-nav" title="Forward to the next graph (Alt+Right, or the mouse's Forward button)" aria-label="Forward" disabled>&#x2192;</button>
+      <div id="tab-list" role="tablist" aria-label="Open graphs"></div>
+    </nav>
     <div id="canvas-wrap">
       <svg id="edges" aria-hidden="true"></svg>
       <div id="world"></div>

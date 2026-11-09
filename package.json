@@ -132,6 +132,16 @@
         "category": "Blueprint Visual Scripting"
       },
       {
+        "command": "blueprintVisualScripting.graphBack",
+        "title": "Back to the Previous Graph",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.graphForward",
+        "title": "Forward to the Next Graph",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
         "command": "blueprintVisualScripting.refreshAllNodes",
         "title": "Refresh All Nodes",
         "category": "Blueprint Visual Scripting"
@@ -307,12 +317,32 @@
           "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
         },
         {
+          "command": "blueprintVisualScripting.graphBack",
+          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
+        },
+        {
+          "command": "blueprintVisualScripting.graphForward",
+          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
+        },
+        {
           "command": "blueprintVisualScripting.refreshAllNodes",
           "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
         }
       ]
     },
     "keybindings": [
+      {
+        "command": "blueprintVisualScripting.graphBack",
+        "key": "alt+left",
+        "mac": "ctrl+-",
+        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.graphCanGoBack"
+      },
+      {
+        "command": "blueprintVisualScripting.graphForward",
+        "key": "alt+right",
+        "mac": "ctrl+shift+-",
+        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.graphCanGoForward"
+      },
       {
         "command": "blueprintVisualScripting.findInAll",
         "key": "ctrl+shift+f",

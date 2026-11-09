@@ -281,7 +281,6 @@ function renderFunctionDetails(graph: Graph): void {
       name.value = graph.name;
       return;
     }
-    dom.graphName.textContent = `${doc.name} › ${graph.name}`;
     renderMyBlueprint();
     refresh();
   });

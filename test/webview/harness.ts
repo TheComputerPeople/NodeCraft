@@ -27,11 +27,23 @@ export async function launchBrowser(): Promise<Browser | string> {
   return 'No Edge or Chrome found; install one or set BLUEPRINT_TEST_BROWSER to a Chromium executable';
 }
 
+// The webview's markup, written again whenever it changes. Test files run in parallel and write the
+// same text, each through a rename, so none reads a half-written page.
 function harnessUrl(): string {
   const file = path.join(__dirname, 'editor.html');
-  if (!fs.existsSync(file)) {
-    const asset = (name: string): string => pathToFileURL(path.join(bundleDir, name)).href;
-    fs.writeFileSync(file, renderEditorHtml({ cspSource: 'file:', nonce: 'test-nonce', scriptUri: asset('editor.js'), styleUri: asset('editor.css') }));
+  const asset = (name: string): string => pathToFileURL(path.join(bundleDir, name)).href;
+  const html = renderEditorHtml({ cspSource: 'file:', nonce: 'test-nonce', scriptUri: asset('editor.js'), styleUri: asset('editor.css') });
+  const current = (): string | undefined => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined);
+  if (current() !== html) {
+    const temp = `${file}.${process.pid}`;
+    fs.writeFileSync(temp, html);
+    try {
+      fs.renameSync(temp, file);
+    } catch (error) {
+      // Another test file replaced it at the same moment (Windows refuses the second rename).
+      fs.rmSync(temp, { force: true });
+      if (current() !== html) throw error;
+    }
   }
   return pathToFileURL(file).href;
 }
@@ -65,10 +77,15 @@ export class EditorPage {
   static async open(browser: Browser): Promise<EditorPage> {
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
     const editor = new EditorPage(page);
+    // The webview's state (getState and setState) lasts across a reload, as VS Code keeps it.
     await page.addInitScript(() => {
       const w = window as unknown as { __posted: unknown[]; acquireVsCodeApi: () => unknown };
       w.__posted = [];
-      w.acquireVsCodeApi = () => ({ postMessage: (m: unknown) => w.__posted.push(JSON.parse(JSON.stringify(m))) });
+      w.acquireVsCodeApi = () => ({
+        postMessage: (m: unknown) => w.__posted.push(JSON.parse(JSON.stringify(m))),
+        getState: () => JSON.parse(sessionStorage.getItem('vscodeState') ?? 'null') as unknown,
+        setState: (state: unknown) => sessionStorage.setItem('vscodeState', JSON.stringify(state))
+      });
     });
     await page.goto(harnessUrl());
     return editor;
