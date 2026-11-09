@@ -1,0 +1,16 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/app/Graphs/Greeting.vgraph.php';
+
+use App\Graphs\Greeting;
+
+// `php artisan greet <name>`, as a console command of the app would be.
+if (($argv[1] ?? '') !== 'greet' || !isset($argv[2])) {
+    fwrite(STDERR, "Usage: php artisan greet <name>\n");
+    exit(1);
+}
+echo Greeting::greet($argv[2]), "\n";

@@ -246,6 +246,46 @@ What doesn't:
   - **Collection interfaces** as parameters are containers in C#: `IReadOnlyList<T>`, `IEnumerable<T>`, `ISet<T>`, `IReadOnlyDictionary<K, V>` and the rest. A project whose analyzers enforce CA1002 takes those, and a graph's `List` passes as it is. Returns of them stay native.
 - **The project model reads project files on each compile**, rather than caching and watching them as the design said. They're the few small files on the way up from the graph, and reading never goes stale. Placement still keeps its own lookups (above).
 
+**Built (step 4: C++, Rust, Go, Lua, GDScript, Ruby, PHP).**
+
+- **The corpus has 26 layouts.** Each language's entry point calls its graphs, then its latent runner, which every language now has from the project's code (docs/code-as-nodes.md).
+
+  | Layout | Its checkers and run |
+  |---|---|
+  | go-module | internal packages; `go build`, `go vet`, staticcheck, `go run ./cmd/corpus` |
+  | go-workspace | a `go.work` of two modules; the app's graph calls the other module |
+  | rust-bin | clippy `-D warnings` with the pedantic group, `unsafe_code` forbidden, `cargo fmt --check`, `cargo run` |
+  | rust-workspace | two crates; the app's graph calls the library crate |
+  | cpp-cmake | a library subproject; `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror`; CMake with MinGW's make on Windows |
+  | cpp-make | a Makefile whose `$(wildcard)` sources take in the generated files |
+  | ruby-gem | RuboCop, `gem build`, `ruby -w` with no warnings |
+  | ruby-rails-shaped | Rails' folders loaded as its autoloader would; RuboCop, `ruby -w` |
+  | php-composer-lib | Composer's PSR-4 autoloader, PHPStan level 9, PSR-12 through PHP_CodeSniffer, PHP with every error reported |
+  | php-laravel-shaped | Laravel's folders and an `artisan` command |
+  | lua-rock | a rockspec, `.luarc.json`'s `runtime.path` in `src/`; luacheck, `lua` |
+  | lua-scripts | a script folder with a `.luarc.json`; luacheck, `lua` |
+  | gd-addon | an addon with the code the graphs call; `godot --import`, every script compiled with Godot's default warnings as errors, the main scene |
+
+  - The body (the node audit and the conformance fixtures) is in go-module, rust-bin, cpp-cmake, ruby-gem, php-composer-lib, lua-rock and gd-addon. A body program using what a language lacks (inheritance in Go, Rust and Lua) is reported as not applicable, as the conformance suite reports it. C++ takes only the arena program, whose classes share names with the duel's in the global namespace.
+  - A step that only checks (a linter, a type checker) doesn't hold up the steps after it when its tool is missing; a step whose stderr must be empty fails on an interpreter's warnings.
+  - **PHP's tools** (Composer, PHPStan, PHP_CodeSniffer) are `.phar` files `npm run corpus:tools` downloads. They weren't run when this was built, so php-composer-lib and php-laravel-shaped are partly checked: their entry points were run with a stand-in for Composer's autoloader, with every error reported, and every file passed `php -l`. luacheck wasn't installed either.
+- **Found by the layouts, and fixed:**
+  - **Go:** the standard `// Code generated … DO NOT EDIT.` header, which staticcheck's style checks, gopls and code review honor; a literal list in For Each was `*&[]T{…}` (staticcheck SA4001).
+  - **Rust:**
+    - A graph using another graph's types wrote them unqualified: placement gave Rust no module. And a graph calling another crate of a workspace called it through `crate::`. Modules are now named with their crate (`GenerateOptions.crate`), and Run's scratch crate takes the code's crate's name.
+    - `&str`, `&String`, `&[T]` and `&Vec<T>` parameters are pins, passed as a borrow (`FunctionImplementation.borrowed`), as clippy's pedantic lints ask project code to take them.
+    - The latent queue's waker has no unsafe code, for crates that forbid it. Generated files allow clippy's pedantic, nursery and restriction groups and `missing_docs`, are marked `@generated`, and are declared `#[rustfmt::skip]` in a sorted block.
+    - Two graphs of one name in a crate are one module; placement declares the first and says so. C++ placement does the same for classes of one name in a target.
+  - **C++:** a Makefile with `$(wildcard)` sources needs no registration; Base64 decoding passed `-Wconversion`.
+  - **Lua:** modules were required from the workspace folder; a rock requires them from `src/`. The require root comes from `.luarc.json` (`luaRequireRoot`), the support module goes there, and Run's `package.path` starts there.
+  - **GDScript:** under warnings as errors, the support script shadowed `Object.call` and the built-in `sign`, a fallback return and a failure check followed a Branch whose sides both return (unreachable code), and a timestamp was divided as integers.
+  - **Ruby:** generated files start with `# frozen_string_literal: true` (RuboCop asks for it on the first line, and generated code changes no literal), then the header.
+  - **Every language:** generated files are recognized by their header among their first lines and in Lua's comments too. Before, Lua's (`--`) and PHP's (after `<?php`) weren't, so renaming a graph or removing a stale output didn't find them.
+- **Markers for style linters:** `# rubocop:disable all` (Ruby), `-- luacheck: ignore` (Lua), `// phpcs:ignoreFile` (PHP), each after the header's first lines, which now say `@generated` too.
+- **Known limits:**
+  - PSR-4 doesn't autoload generated PHP classes, whose files are named after their graphs (`Greeting.vgraph.php`): the project requires them, and each requires what it uses. Set Up can offer a Composer `classmap` entry (step 6).
+  - Generated PHP has no parameter or return types, which PHPStan level 9 is likely to ask for.
+
 ## Part 4: New Project
 
 **Design.** **Blueprint: New Project…** asks for a language and a folder (an empty one, or a new one in it). It writes a minimal project in that language's usual layout, with a first class graph that prints "Hello from Blueprint" and runs:

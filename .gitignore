@@ -5,8 +5,11 @@ dist/
 .DS_Store
 out/
 # Build output a tool or IDE leaves in the corpus layouts (the corpus builds in a copy).
-test/fixtures/projects/**/obj/
-test/fixtures/projects/**/bin/
-test/fixtures/projects/**/.gradle/
-test/fixtures/projects/**/build/
-test/fixtures/projects/**/target/
+test/fixtures/projects/cs-*/**/obj/
+test/fixtures/projects/cs-*/**/bin/
+test/fixtures/projects/java-*/**/.gradle/
+test/fixtures/projects/java-*/**/build/
+test/fixtures/projects/java-*/**/target/
+test/fixtures/projects/cpp-*/**/build/
+test/fixtures/projects/rust-*/**/target/
+test/fixtures/projects/gd-*/.godot/

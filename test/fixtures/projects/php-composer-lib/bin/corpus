@@ -1,0 +1,24 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/../vendor/autoload.php';
+// Generated files are named after their graphs (Greeting.vgraph.php), which PSR-4 doesn't find:
+// each is required, and requires what it uses.
+require_once __DIR__ . '/../src/Graphs/Greeting.vgraph.php';
+require_once __DIR__ . '/../src/Graphs/Counting.vgraph.php';
+require_once __DIR__ . '/../src/Graphs/Dividing.vgraph.php';
+require_once __DIR__ . '/../src/Graphs/Fetching.vgraph.php';
+
+use Corpus\Graphs\Counting;
+use Corpus\Graphs\Dividing;
+use Corpus\Graphs\Fetching;
+use Corpus\Graphs\Greeting;
+
+echo Greeting::greet('ada'), "\n";
+(new Counting())->start();
+(new Dividing())->start();
+(new Fetching())->start();
+// Delays and fibers the graphs wait on.
+\Vgraph\Vg::runLatentActions();

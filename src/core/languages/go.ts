@@ -1041,13 +1041,13 @@ function canComplete(statements: IrStatement[]): boolean {
   return true;
 }
 
-// A JSON value as a Go literal (an untyped constant where it can be).
 // The slice a pointer to one points to: a literal's address is the literal itself (staticcheck's
 // SA4001 rejects `*&[]int{...}`).
 function deref(pointer: string): string {
   return /^&\[\][\w.*]+\{.*\}$/s.test(pointer) ? pointer.slice(1) : `*${pointer}`;
 }
 
+// A JSON value as a Go literal (an untyped constant where it can be).
 function literal(value: unknown): string {
   if (value === null || value === undefined) return 'nil';
   if (typeof value === 'boolean') return value ? 'true' : 'false';

@@ -54,7 +54,8 @@ The generated pair always goes next to the graph. Only registration differs.
    - **MSBuild (`.vcxproj`):** the extension owns `vgraph.targets`, with item globs for its generated files. The one-time hook is an `<Import Project="vgraph.targets" />`.
    - **Meson:** Meson deliberately has no globbing. The extension owns `vgraph/meson.build`, which defines a `files()` list. The one-time hook adds `subdir('vgraph')` and the list to the target's sources.
    - **Unreal:** the build tool compiles every file under a module's `Source` folder, so nothing is needed. Only the naming rule above matters.
-   - **Bazel, Make and others:** no automatic edits. Compiler Results lists the files to add.
+   - **Bazel, Make and others:** no automatic edits. Compiler Results lists the files to add. A Makefile whose sources are `$(wildcard …)` patterns that match the generated files needs nothing (since Phase 11), as a CMake glob doesn't.
+   - Generated classes are named after their graphs in the global namespace, so two graphs of one name in a target would define one class twice: the CMake list takes the first, and the compile says so.
 4. **C's runtime library** is vendored once into a project-level folder and registered the same way as generated files.
 5. **Includes:** generated sources include their own header by relative path, so the include paths don't change. Making generated headers visible to other user code is the user's build decision.
 
@@ -96,7 +97,7 @@ The same machinery covers edge cases in the first three languages: a TypeScript 
 - **C++:** an owned `vgraph.cmake` and a block in `CMakeLists.txt` ([language-breadth.md](language-breadth.md), "C++").
 - **Rust** differs from the design above:
   - Generated files always stay next to their graphs; there's no `src/vgraph/` folder.
-  - Every generated module is declared at the crate root, with `#[path]`, not in its parent module. Generated code then refers to other graphs and to the runtime as `crate::name_vgraph` and `crate::vgraph_runtime` wherever the file is, as it does in Run's scaffold.
+  - Every generated module is declared at the crate root, with `#[path]`, not in its parent module. Generated code then refers to other graphs and to the runtime as `crate::name_vgraph` and `crate::vgraph_runtime` wherever the file is, as it does in Run's scaffold. Since Phase 11 the declarations are sorted, as rustfmt sorts them, and each is `#[rustfmt::skip]`, so `cargo fmt --check` passes (stable rustfmt formats files marked `@generated`); two graphs of one name in a crate would be one module, so placement declares the first and says so.
   - The extension owns `src/vgraph_runtime.rs`; the block goes in `src/lib.rs`, else `src/main.rs`.
   - Probing reads `Cargo.toml` files, not `cargo metadata`.
   - Details are in [language-breadth.md](language-breadth.md), "Rust".

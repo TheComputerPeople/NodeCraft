@@ -1,0 +1,14 @@
+{
+    "name": "corpus/app",
+    "description": "The corpus's Laravel-shaped app, without Laravel.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    }
+}

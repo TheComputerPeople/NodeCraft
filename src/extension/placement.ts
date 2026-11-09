@@ -10,6 +10,7 @@ import { graphFileDefinitions } from '../core/graph-files';
 import type { GraphDocument, NodeDefinition } from '../core/model';
 import { generatedLanguages } from '../core/user-types';
 import { scanCSharp } from '../core/importing/csharp-scanner';
+import { luaModuleIn, luaRequireRoot } from '../core/languages/lua';
 import { RUST_BLOCK } from '../core/languages/rust';
 import { findBlock } from '../core/output-plan';
 
@@ -27,7 +28,8 @@ export function generateOptionsFor(language: string | undefined, graphFileName: 
     namespace: language === 'java' ? javaProject(graphDir, root).package : go ? go.name : language === 'php' ? phpNamespace(graphDir, root) : csharpNamespace(graphDir, root),
     ...(go?.path ? { packagePath: go.path } : {}),
     ...(python?.includes('.') ? { module: python } : {}),
-    ...(language === 'rust' && rustCrateName(graphDir, root) ? { crate: rustCrateName(graphDir, root) } : {})
+    ...(language === 'rust' && rustCrateName(graphDir, root) ? { crate: rustCrateName(graphDir, root) } : {}),
+    ...(language === 'lua' ? { requireRoot: luaRoot(path.join(graphDir, graphFileName), root) } : {})
   };
 }
 
@@ -40,7 +42,8 @@ export function graphOutputFor(language: string, graphFile: string, root: string
   // Rust's generated modules are declared at the crate root (rustPlacement), by their file's name,
   // and named with their crate (GenerateOptions.crate).
   const module = language === 'python' ? pythonModule(generated, root).module : language === 'csharp' ? csharpNamespace(dir, root) : language === 'java' ? javaProject(dir, root).package : go ? go.path ?? go.name : language === 'php' ? phpNamespace(dir, root)
-    : language === 'rust' ? withCrate(rustCrateName(dir, root), generator.moduleName?.(path.basename(generated), { sourceFileName: path.basename(graphFile) }) ?? '') : undefined;
+    : language === 'rust' ? withCrate(rustCrateName(dir, root), generator.moduleName?.(path.basename(generated), { sourceFileName: path.basename(graphFile) }) ?? '')
+    : language === 'lua' ? luaModuleIn(toPosix(path.relative(root, generated)), luaRoot(generated, root)) : undefined;
   return { generatedPath: toPosix(path.relative(root, generated)), ...(module ? { module } : {}) };
 }
 
@@ -68,7 +71,19 @@ export function graphFileNodes(doc: GraphDocument, graphFile: string, root: stri
 export function codeModuleFor(language: string, file: string, root: string): string | undefined {
   return language === 'python' ? pythonModule(file, root).module
     : language === 'rust' ? rustCodeModule(file, root)
+    : language === 'lua' ? luaModuleIn(toPosix(path.relative(root, file)), luaRoot(file, root))
     : language === 'go' ? goPackage(path.dirname(file), root).path : undefined;
+}
+
+// The folder a Lua file's `require` names start from, relative to the workspace folder (luaRequireRoot).
+function luaRoot(file: string, root: string): string {
+  return luaRequireRoot(toPosix(path.relative(root, file)), (f) => {
+    try {
+      return fs.readFileSync(path.join(root, f), 'utf8');
+    } catch {
+      return undefined;
+    }
+  });
 }
 
 // A Rust file's module named with its crate ("corpus_core::text"; the crate root is the crate's

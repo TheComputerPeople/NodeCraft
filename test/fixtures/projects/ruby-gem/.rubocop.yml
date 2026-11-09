@@ -1,0 +1,11 @@
+AllCops:
+  TargetRubyVersion: 3.3
+  NewCops: enable
+  SuggestExtensions: false
+
+Layout/EndOfLine:
+  EnforcedStyle: lf
+
+# Arithmetic.divide(a, b), as the corpus's graph names its pins.
+Naming/MethodParameterName:
+  AllowedNames: [a, b]

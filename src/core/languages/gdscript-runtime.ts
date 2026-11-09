@@ -142,11 +142,11 @@ static func delay(seconds: float, action: Callable) -> void:
 
 # An async function (a coroutine; docs/node-authoring.md, gap 4): call awaits it, and its Completed
 # joins the queue with the value when it finishes. Meanwhile the queue lets Godot's main loop run.
-static func await_latent(call: Callable, completed: Callable) -> void:
+static func await_latent(work: Callable, completed: Callable) -> void:
 	var state := _state()
 	state["waiting"] += 1
 	var finish := func():
-		var value = await call.call()
+		var value = await work.call()
 		state["waiting"] -= 1
 		delay(0.0, completed.bind(value))
 	finish.call()
@@ -187,7 +187,7 @@ static func format_number(x) -> String:
 	if x == 0:
 		return "0"
 	var text := String.num_scientific(absf(x))
-	var sign := "-" if x < 0 else ""
+	var minus := "-" if x < 0 else ""
 	var exponent := 0
 	var e := text.find("e")
 	if e >= 0:
@@ -206,13 +206,13 @@ static func format_number(x) -> String:
 	if digits.is_empty():
 		return "0"
 	if digits.length() <= point and point <= 21:
-		return sign + digits + "0".repeat(point - digits.length())
+		return minus + digits + "0".repeat(point - digits.length())
 	if 0 < point and point <= 21:
-		return sign + digits.substr(0, point) + "." + digits.substr(point)
+		return minus + digits.substr(0, point) + "." + digits.substr(point)
 	if -6 < point and point <= 0:
-		return sign + "0." + "0".repeat(-point) + digits
+		return minus + "0." + "0".repeat(-point) + digits
 	var mantissa := digits if digits.length() == 1 else digits.substr(0, 1) + "." + digits.substr(1)
-	return sign + mantissa + "e" + ("+" if point > 0 else "-") + str(absi(point - 1))
+	return minus + mantissa + "e" + ("+" if point > 0 else "-") + str(absi(point - 1))
 
 
 static func _quote(text: String) -> String:

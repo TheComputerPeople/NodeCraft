@@ -3,7 +3,7 @@
 // (gdscript-runtime.ts) by its name: a copy goes next to every generated file. GDScript has no
 // exceptions, so a failure is recorded (vg.fail) and generated code returns after any statement that
 // may have failed.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
@@ -449,7 +449,8 @@ class GdscriptEmitter {
       for (const m of locals) this.out.line(`var ${this.memberNames.get(m.id)} = ${this.value(m.initial, m.type)}`);
       for (const x of slots) this.out.line(`var ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)}`);
       this.statements(fn.body);
-      if (fn.outputs.length && fn.body[fn.body.length - 1]?.kind !== 'return') this.out.line(this.failReturn);
+      // Only where it can be reached: Godot rejects unreachable code (UNREACHABLE_CODE).
+      if (fn.outputs.length && canComplete(fn.body)) this.out.line(this.failReturn);
     });
     this.failReturn = 'return';
   }
@@ -493,7 +494,8 @@ class GdscriptEmitter {
   private statements(statements: IrStatement[]): void {
     for (const s of statements) {
       this.statement(s);
-      if (mayFail(s) && s.kind !== 'return') this.out.line(`if vg.failed(): ${this.failReturn}`);
+      // Not after a statement that always returns (a Branch whose sides both do): it can't be reached.
+      if (mayFail(s) && canComplete([s])) this.out.line(`if vg.failed(): ${this.failReturn}`);
     }
   }
 

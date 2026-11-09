@@ -51,6 +51,11 @@ export interface CorpusStep {
   stdout?: string[];
   // Text its output (stdout and stderr) must have: a test runner's count of passed tests.
   includes?: string[];
+  // Its stderr must be empty: an interpreter's warnings (Ruby's -w, PHP's E_ALL) fail it.
+  quiet?: boolean;
+  // It only checks (a linter, a type checker): the steps after it need nothing it makes, so they
+  // still run when its tool is missing.
+  check?: boolean;
   // Whether its tool is there: a command that succeeds when it is (the command's first word with
   // --version by default).
   probe?: string[];
@@ -128,20 +133,32 @@ export function corpusWorkDir(): string {
 // Copies the layout into `workDir` and generates its graphs; then runs its steps.
 export async function runLayout(layout: Layout, workDir: string): Promise<LayoutResult> {
   const root = path.join(workDir, layout.name);
-  // Without build output a tool or IDE may have left in the repository's copy (a C# restore's obj/,
-  // a Gradle import's .gradle/ and build/, Cargo's target/).
   const source = path.join(repoRoot, 'test/fixtures/projects', layout.name);
-  fs.cpSync(source, root, { recursive: true, filter: (file) => !['obj', 'bin', '.gradle', 'build', 'target'].includes(path.basename(file)) || !fs.statSync(file).isDirectory() });
+  fs.cpSync(source, root, { recursive: true, filter: (file) => !buildOutput(file) });
   const tools = corpusToolsFolder();
   const result: LayoutResult = { compileErrors: [], warnings: [], notApplicable: [], generated: [], steps: [] };
   await generate(layout, root, result);
   if (result.compileErrors.length) return result;
-  // A step after one that didn't pass needs what that one makes (a build before its run).
-  for (const step of layout.steps) {
-    const before = result.steps.find((s) => s.status !== 'passed');
-    result.steps.push(before ? { step: step.name, status: 'skipped', message: `${step.name}: ${before.step} didn't pass` } : await runStep(step, root, tools));
+  // A step after one that didn't pass needs what that one makes (a build before its run), unless that
+  // one only checks and its tool is missing.
+  for (const [i, step] of layout.steps.entries()) {
+    const before = result.steps.find((s, j) => s.status === 'failed' || (s.status === 'skipped' && !layout.steps[j].check));
+    result.steps.push(before && i > 0 ? { step: step.name, status: 'skipped', message: `${step.name}: ${before.step} didn't pass` } : await runStep(step, root, tools));
   }
   return result;
+}
+
+// Build output a tool or IDE may have left in the repository's copy of a layout: a folder named as
+// a build system names its output, beside that build system's file (a C# restore's obj/ and bin/,
+// Gradle's .gradle/ and build/, CMake's build/, Cargo's and Maven's target/, Godot's .godot/). A Ruby
+// project's bin/ is its own.
+const BUILD_OUTPUT: Record<string, RegExp> = {
+  obj: /\.csproj$/, bin: /\.csproj$/, '.gradle': /^(build|settings)\.gradle(\.kts)?$/,
+  build: /^(build\.gradle(\.kts)?|CMakeLists\.txt)$/, target: /^(Cargo\.toml|pom\.xml)$/, '.godot': /^project\.godot$/
+};
+function buildOutput(file: string): boolean {
+  const beside = BUILD_OUTPUT[path.basename(file)];
+  return !!beside && fs.statSync(file).isDirectory() && fs.readdirSync(path.dirname(file)).some((f) => beside.test(f));
 }
 
 // The layout's graphs and body, compiled as Compile compiles them.
@@ -292,11 +309,14 @@ async function runStep(step: CorpusStep, root: string, tools: string): Promise<S
   const command = step.command[0].startsWith('node_modules/') ? [process.execPath, path.join(tools, step.command[0]), ...step.command.slice(1)]
     : step.command[0] === 'node' ? [process.execPath, ...step.command.slice(1)]
     // A program the project built ("./build/corpus"), in the step's folder.
-    : step.command[0].startsWith('./') ? [path.join(root, step.cwd ?? '', step.command[0]), ...step.command.slice(1)] : step.command;
-  const probe = step.probe ?? (step.command[0].startsWith('node_modules/') ? [process.execPath, path.join(tools, step.command[0]), '--version'] : [step.command[0], '--version']);
+    : step.command[0].startsWith('./') ? [path.join(root, step.cwd ?? '', step.command[0]), ...step.command.slice(1)]
+    // One of the corpus's PHP tools ("phar/phpstan.phar"), which PHP runs.
+    : step.command[0].startsWith('phar/') ? ['php', path.join(tools, step.command[0]), ...step.command.slice(1)] : step.command;
+  const probe = step.probe ?? (step.command[0].startsWith('node_modules/') ? [process.execPath, path.join(tools, step.command[0]), '--version']
+    : step.command[0].startsWith('phar/') ? ['php', path.join(tools, step.command[0]), '--version'] : [step.command[0], '--version']);
   const key = probe.join(' ');
   if (!available.has(key)) available.set(key, (await run(probe, root, {}, 120000)).exitCode === 0);
-  if (!available.get(key)) return { step: step.name, status: 'skipped', message: `${step.name}: ${probe[0] === process.execPath ? `${probe[1]} isn't installed (npm run corpus:tools)` : `${probe.slice(0, -1).join(' ')} isn't installed`}` };
+  if (!available.get(key)) return { step: step.name, status: 'skipped', message: `${step.name}: ${probe[1]?.startsWith(tools) ? `${posix(path.relative(tools, probe[1]))} isn't installed (npm run corpus:tools)` : `${probe.slice(0, -1).join(' ')} isn't installed`}` };
   const outcome = await run(command, path.join(root, step.cwd ?? ''), step.env ?? {}, step.timeoutMs ?? 600000);
   const text = `${outcome.stdout}\n${outcome.stderr}`.trim();
   if (outcome.timedOut) return { step: step.name, status: 'failed', message: `${step.name} timed out.\n${text.slice(-4000)}` };
@@ -305,6 +325,7 @@ async function runStep(step: CorpusStep, root: string, tools: string): Promise<S
     const lines = outcome.stdout.replace(/\r\n/g, '\n').split('\n').map((l) => l.trimEnd()).filter((l) => l);
     if (JSON.stringify(lines) !== JSON.stringify(step.stdout)) return { step: step.name, status: 'failed', message: `${step.name} printed ${JSON.stringify(lines)}, not ${JSON.stringify(step.stdout)}.\n${outcome.stderr.slice(0, 4000)}` };
   }
+  if (step.quiet && outcome.stderr.trim()) return { step: step.name, status: 'failed', message: `${step.name} warned:\n${outcome.stderr.slice(0, 4000)}` };
   const missing = (step.includes ?? []).filter((t) => !text.includes(t));
   if (missing.length) return { step: step.name, status: 'failed', message: `${step.name} didn't print ${missing.map((m) => JSON.stringify(m)).join(', ')}:\n${text.slice(0, 4000)}` };
   return { step: step.name, status: 'passed' };

@@ -55,6 +55,9 @@ export interface GenerateOptions {
   namespace?: string;
   // Go: the import path of the generated file's package, so calls within it aren't qualified.
   packagePath?: string;
+  // Lua: the folder `require` names start from (luaRequireRoot), relative to the workspace folder
+  // ("" for the folder itself).
+  requireRoot?: string;
   // Rust: the name of the generated file's crate. Modules are then named with their crate
   // ("corpus_core::text"): its own are `crate::`, another crate's by its name. Without it, modules
   // are of the generated file's crate.

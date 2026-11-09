@@ -5,10 +5,10 @@ import { CorpusGraph, CorpusStep, Feature, Layout, PYTHON, featureGraphs, featur
 
 const HELLO = ['Hello, Ada!'];
 const tsc = (project = '.'): CorpusStep => ({ name: 'tsc', command: ['node_modules/typescript/bin/tsc', '-p', project] });
-const eslint: CorpusStep = { name: 'ESLint', command: ['node_modules/eslint/bin/eslint.js', '.'] };
+const eslint: CorpusStep = { name: 'ESLint', command: ['node_modules/eslint/bin/eslint.js', '.'], check: true };
 // Node.js's test runner on a generated test file, which has one passing test.
 const nodeTest = (file: string): CorpusStep => ({ name: 'node --test', command: ['node', '--test', '--test-reporter=tap', file], includes: ['# pass 1', '# fail 0'] });
-const python = (name: string, ...args: string[]): CorpusStep => ({ name, command: [PYTHON, '-m', ...args], probe: [PYTHON, '-m', args[0], '--version'] });
+const python = (name: string, ...args: string[]): CorpusStep => ({ name, command: [PYTHON, '-m', ...args], probe: [PYTHON, '-m', args[0], '--version'], check: true });
 // dotnet without the build servers that outlive the build.
 const dotnet = (...args: string[]): string[] => ['dotnet', ...args, '-nologo', '-nodeReuse:false', '-p:UseSharedCompilation=false'];
 // The Greeting library at `file`, calling the project's `title` function.
@@ -25,6 +25,22 @@ const MAKE = process.platform === 'win32' ? 'mingw32-make' : 'make';
 const exe = (file: string) => `./${file}${process.platform === 'win32' ? '.exe' : ''}`;
 // C++ has no generics in its pack yet.
 const CPP_FEATURES: Feature[] = ['classes', 'outputs', 'latent'];
+// PHP without Xdebug's messages; its tools from the corpus's tools (npm run corpus:tools). Composer
+// only writes the autoloader, which the project's own entry point then loads.
+const PHP_ENV = { XDEBUG_MODE: 'off' };
+const composer: CorpusStep[] = [{ name: 'composer dump-autoload', command: ['phar/composer.phar', 'dump-autoload', '--no-interaction'], env: PHP_ENV }];
+const phpstan: CorpusStep = { name: 'PHPStan (level 9)', command: ['phar/phpstan.phar', 'analyse', '--no-progress', '--memory-limit=2G'], env: PHP_ENV, check: true };
+const phpcs: CorpusStep = { name: 'PHP_CodeSniffer', command: ['phar/phpcs.phar'], env: PHP_ENV, check: true };
+// With every error, warning and deprecation reported, which must be none.
+const php = (...args: string[]): CorpusStep => ({ name: 'run', command: ['php', '-d', 'error_reporting=-1', '-d', 'display_errors=stderr', ...args], probe: ['php', '--version'], env: PHP_ENV, quiet: true });
+// Lua's linter on the project (the generated files mark themselves to be left alone), and Lua.
+const luacheck: CorpusStep = { name: 'luacheck', command: ['luacheck', '.'], probe: ['luacheck', '--version'], check: true };
+const LUA_PROBE = ['lua', '-v'];
+// Godot: the GDScript tests' GODOT, else on the PATH. Its pack has classes and async functions.
+const GODOT = process.env.GODOT ?? 'godot';
+const GDSCRIPT_FEATURES: Feature[] = ['classes', 'latent'];
+// Ruby, Lua and PHP have no generics to speak of.
+const DYNAMIC_FEATURES: Feature[] = ['classes', 'outputs', 'latent'];
 // Go has no generics in its pack yet.
 const GO_FEATURES: Feature[] = ['classes', 'outputs', 'latent'];
 
@@ -135,7 +151,7 @@ export const LAYOUTS: Layout[] = [
     graphs: [greeting('internal/graphs/Greeting.vgraph', 'Title'), ...featureGraphs('internal/graphs', 'go', GO_FEATURES)],
     steps: [
       go('build', './...'), go('vet', './...'),
-      { name: 'staticcheck', command: ['staticcheck', './...'], probe: ['staticcheck', '-version'], env: GO_ENV },
+      { name: 'staticcheck', command: ['staticcheck', './...'], probe: ['staticcheck', '-version'], env: GO_ENV, check: true },
       { ...go('run', './cmd/corpus'), name: 'run', stdout: [...HELLO, ...featuresOutput(GO_FEATURES)] }
     ]
   },
@@ -145,7 +161,7 @@ export const LAYOUTS: Layout[] = [
     graphs: [greeting('app/graphs/Greeting.vgraph', 'Title')],
     steps: [
       { ...go('build', './...'), cwd: 'app', env: GO_WORK_ENV }, { ...go('vet', './...'), cwd: 'app', env: GO_WORK_ENV },
-      { name: 'staticcheck', command: ['staticcheck', './...'], probe: ['staticcheck', '-version'], cwd: 'app', env: GO_WORK_ENV },
+      { name: 'staticcheck', command: ['staticcheck', './...'], probe: ['staticcheck', '-version'], cwd: 'app', env: GO_WORK_ENV, check: true },
       { ...go('run', '.'), name: 'run', cwd: 'app', env: GO_WORK_ENV, stdout: HELLO }
     ]
   },
@@ -190,6 +206,69 @@ export const LAYOUTS: Layout[] = [
     steps: [
       { name: 'make', command: [MAKE], probe: [MAKE, '--version'] },
       { name: 'run', command: [exe('corpus')], probe: [MAKE, '--version'], stdout: HELLO }
+    ]
+  },
+  // ---- Ruby ----
+  {
+    name: 'ruby-gem', language: 'ruby', body: 'lib/corpus_game/blueprint',
+    code: ['lib/corpus_game/text.rb', 'lib/corpus_game/features.rb'],
+    graphs: [greeting('lib/corpus_game/graphs/Greeting.vgraph', 'title'), ...featureGraphs('lib/corpus_game/graphs', 'ruby', DYNAMIC_FEATURES)],
+    steps: [
+      { name: 'RuboCop', command: ['rubocop', '--format', 'quiet'], probe: ['rubocop', '--version'], check: true },
+      { name: 'gem build', command: ['gem', 'build', 'corpus_game.gemspec'], probe: ['gem', '--version'] },
+      // With Ruby's warnings, which must be none.
+      { name: 'run', command: ['ruby', '-w', '-Ilib', 'exe/corpus_game'], probe: ['ruby', '--version'], quiet: true, stdout: [...HELLO, ...featuresOutput(DYNAMIC_FEATURES)] }
+    ]
+  },
+  {
+    // Rails' folders, loaded as its autoloader would: a graph in app/graphs calls a service.
+    name: 'ruby-rails-shaped', language: 'ruby', code: ['app/services/name_formatter.rb'],
+    graphs: [greeting('app/graphs/Greeting.vgraph', 'title')],
+    steps: [
+      { name: 'RuboCop', command: ['rubocop', '--format', 'quiet'], probe: ['rubocop', '--version'], check: true },
+      { name: 'run', command: ['ruby', '-w', 'bin/greet', 'ada'], probe: ['ruby', '--version'], quiet: true, stdout: HELLO }
+    ]
+  },
+  // ---- PHP ----
+  {
+    // PSR-4 autoloading from Composer; PHPStan at level 9 and PSR-12.
+    name: 'php-composer-lib', language: 'php', body: 'src/Blueprint',
+    code: ['src/Text/Names.php', 'src/Features/Counter.php', 'src/Features/BigCounter.php', 'src/Features/Arithmetic.php', 'src/Features/Remote.php'],
+    graphs: [greeting('src/Graphs/Greeting.vgraph', 'title'), ...featureGraphs('src/Graphs', 'php', DYNAMIC_FEATURES)],
+    steps: [...composer, phpstan, phpcs, { ...php('bin/corpus'), stdout: [...HELLO, ...featuresOutput(DYNAMIC_FEATURES)] }]
+  },
+  {
+    // Laravel's folders and console entry: a graph in app/Graphs calls a service.
+    name: 'php-laravel-shaped', language: 'php', code: ['app/Services/NameFormatter.php'],
+    graphs: [greeting('app/Graphs/Greeting.vgraph', 'title')],
+    steps: [...composer, phpstan, phpcs, { ...php('artisan', 'greet', 'ada'), stdout: HELLO }]
+  },
+  // ---- Lua ----
+  {
+    // A rock whose modules are required from src/ (.luarc.json's runtime.path).
+    name: 'lua-rock', language: 'lua', body: 'src/corpus_game/blueprint',
+    code: ['src/corpus_game/text.lua', 'src/corpus_game/features.lua'],
+    graphs: [greeting('src/corpus_game/graphs/Greeting.vgraph', 'title'), ...featureGraphs('src/corpus_game/graphs', 'lua', DYNAMIC_FEATURES)],
+    steps: [luacheck, { name: 'run', command: ['lua', 'bin/corpus_game.lua'], probe: LUA_PROBE, quiet: true, stdout: [...HELLO, ...featuresOutput(DYNAMIC_FEATURES)] }]
+  },
+  {
+    // A folder of scripts with a .luarc.json, the graph beside them.
+    name: 'lua-scripts', language: 'lua', code: ['names.lua'],
+    graphs: [greeting('Greeting.vgraph', 'title')],
+    steps: [luacheck, { name: 'run', command: ['lua', 'main.lua', 'ada'], probe: LUA_PROBE, quiet: true, stdout: HELLO }]
+  },
+  // ---- GDScript ----
+  {
+    // A Godot project whose addon has the code the graphs call, with its warnings as errors.
+    name: 'gd-addon', language: 'gdscript', body: 'scenes/blueprint',
+    code: ['addons/corpus_tools/text.gd', 'addons/corpus_tools/counter.gd', 'addons/corpus_tools/big_counter.gd', 'addons/corpus_tools/remote.gd'],
+    graphs: [greeting('scenes/graphs/Greeting.vgraph', 'title'), ...featureGraphs('scenes/graphs', 'gdscript', GDSCRIPT_FEATURES)],
+    steps: [
+      // As a CI job does first: the import registers the class_name scripts.
+      { name: 'godot --import', command: [GODOT, '--headless', '--path', '.', '--import'], probe: [GODOT, '--version'], timeoutMs: 300000 },
+      // A script that doesn't compile can leave Godot running; the timeout ends it.
+      { name: 'scripts compile', command: [GODOT, '--headless', '--no-header', '--path', '.', '--script', 'res://tools/check_scripts.gd'], probe: [GODOT, '--version'], timeoutMs: 120000 },
+      { name: 'run', command: [GODOT, '--headless', '--no-header', '--path', '.'], probe: [GODOT, '--version'], timeoutMs: 120000, stdout: [...HELLO, ...featuresOutput(GDSCRIPT_FEATURES)] }
     ]
   }
 ];

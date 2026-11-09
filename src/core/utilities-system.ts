@@ -111,7 +111,7 @@ export const SYSTEM_UTILITIES: UtilityNode[] = [
       gdscript: [
         'var total := floori(ms)',
         'var millis := posmod(total, 1000)',
-        'return Time.get_datetime_string_from_unix_time((total - millis) / 1000) + ".%03dZ" % millis'
+        'return Time.get_datetime_string_from_unix_time(int((total - millis) / 1000.0)) + ".%03dZ" % millis'
       ].join('\n'),
       ruby: 'total = ms.floor\nreturn Time.at(total.div(1000), total % 1000, :millisecond).utc.strftime("%Y-%m-%dT%H:%M:%S.%LZ")',
       php: [

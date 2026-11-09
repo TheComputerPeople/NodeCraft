@@ -2,8 +2,9 @@
 // part 3; test/conformance/corpus.test.ts) into a folder of their own, outside the repository:
 // TypeScript 5 (what most projects pin; the repository itself builds with TypeScript 7), ESLint with
 // typescript-eslint, and Node.js's types. Each layout links the folder in as its node_modules, as a
-// project with its devDependencies installed has them. The other languages' checkers (mypy, Pyright,
-// Ruff, dotnet, javac, Maven, Gradle) are found on the PATH.
+// project with its devDependencies installed has them. Also PHP's tools, as .phar files in its phar
+// folder (Composer, PHPStan, PHP_CodeSniffer). The other languages' checkers (mypy, Pyright, Ruff,
+// dotnet, javac, Maven, Gradle, cargo, go, staticcheck, RuboCop, ...) are found on the PATH.
 //
 //   npm run corpus:tools
 //
@@ -23,3 +24,25 @@ const manifest = path.join(folder, 'package.json');
 if (!fs.existsSync(manifest)) fs.writeFileSync(manifest, JSON.stringify({ name: 'blueprint-corpus-tools', private: true }, null, 2) + '\n');
 console.log(`Installing ${PACKAGES.join(', ')} into ${folder}`);
 execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--save-dev', '--no-audit', '--no-fund', ...PACKAGES], { cwd: folder, stdio: 'inherit', shell: process.platform === 'win32' });
+
+// PHP's tools, each a single .phar that PHP runs (no extensions beyond PHP's usual ones; Composer
+// only writes the autoloader, which needs no network): Composer, PHPStan and PHP_CodeSniffer.
+const PHARS = {
+  'composer.phar': 'https://getcomposer.org/download/latest-stable/composer.phar',
+  'phpstan.phar': 'https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar',
+  'phpcs.phar': 'https://github.com/PHPCSStandards/PHP_CodeSniffer/releases/latest/download/phpcs.phar'
+};
+(async () => {
+  const phar = path.join(folder, 'phar');
+  fs.mkdirSync(phar, { recursive: true });
+  for (const [name, url] of Object.entries(PHARS)) {
+    console.log(`Downloading ${url}`);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`${url}: ${response.status} ${response.statusText}`);
+    fs.writeFileSync(path.join(phar, name), Buffer.from(await response.arrayBuffer()));
+  }
+  console.log(`PHP's tools are in ${phar}`);
+})().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

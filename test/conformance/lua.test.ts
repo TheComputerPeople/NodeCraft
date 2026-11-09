@@ -9,7 +9,7 @@ import { compileDocument } from '../../src/core/compiler';
 import { scanLua } from '../../src/core/importing/lua-scanner';
 import { exposeFunctions } from '../../src/core/importing/symbols';
 import { builtinLanguagePacks } from '../../src/core/languages';
-import { luaPack, luaPlacement } from '../../src/core/languages/lua';
+import { luaModuleIn, luaPack, luaPlacement, luaRequireRoot } from '../../src/core/languages/lua';
 import { LUA_RUNTIME_FILE, luaRuntime } from '../../src/core/languages/lua-runtime';
 import { NodeRegistry } from '../../src/core/registry';
 import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/extension/runner';
@@ -53,6 +53,23 @@ describe('Lua projects', () => {
     assert.deepEqual(luaPlacement(context([])).ownedFiles, [{ path: LUA_RUNTIME_FILE, text: '' }], 'the last Lua graph gone: it goes too');
     files.set(LUA_RUNTIME_FILE, '-- the project\'s own\n');
     assert.deepEqual(luaPlacement(context([])), {}, "a file of that name that isn't the extension's stays");
+  });
+
+  test('modules are required from the root .luarc.json\'s runtime.path names, where the support module goes', () => {
+    const files: Record<string, string> = {
+      'rock/.luarc.json': '{ "runtime.path": ["src/?.lua", "src/?/init.lua"] }',
+      'nested/.luarc.json': '{ "Lua": { "runtime": { "path": ["lua/?.lua"] } } }',
+      'scripts/.luarc.json': '{ "runtime.version": "Lua 5.4" }'
+    };
+    const read = (file: string) => files[file];
+    assert.equal(luaRequireRoot('rock/src/game/graphs/a_vgraph.lua', read), 'rock/src');
+    assert.equal(luaRequireRoot('nested/lua/x_vgraph.lua', read), 'nested/lua');
+    assert.equal(luaRequireRoot('scripts/tools/x_vgraph.lua', read), 'scripts', 'no runtime.path: its folder');
+    assert.equal(luaRequireRoot('rock/tests/x_vgraph.lua', read), 'rock', 'outside its pattern: the .luarc.json\'s folder');
+    assert.equal(luaRequireRoot('other/x_vgraph.lua', read), '', 'no .luarc.json: the workspace folder');
+    assert.equal(luaModuleIn('rock/src/game/graphs/a_vgraph.lua', 'rock/src'), 'game.graphs.a_vgraph');
+    const plan = luaPlacement({ generatedFiles: ['rock/src/game/a_vgraph.lua', 'other/b_vgraph.lua'], readFile: read, exists: (f) => f in files });
+    assert.deepEqual(plan.ownedFiles?.map((f) => f.path), [LUA_RUNTIME_FILE, `rock/src/${LUA_RUNTIME_FILE}`]);
   });
 
   test('a graph calls a project function, and runs with Run and with a plain lua', async (t) => {
