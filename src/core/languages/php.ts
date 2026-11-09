@@ -2,7 +2,7 @@
 // IR. Files require each other with require_once; the support file (php-runtime.ts) is a companion
 // next to every generated file. Containers are the support file's VgList, VgMap and VgSet, shared by
 // reference, since PHP copies its arrays on assignment.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
@@ -26,6 +26,18 @@ const RESERVED_CLASSES = new Set([
 const RESERVED = new Set(['this', 'GLOBALS', '_SERVER', '_GET', '_POST', 'argv', 'argc', '__construct', '__destruct', 'vgFields']);
 
 const INT: TypeRef = { id: 'int' };
+
+// A PHP type as PHP declares it and as PHPDoc writes it (they differ for generic containers).
+interface PhpType {
+  native: string;
+  doc: string;
+}
+const MIXED: PhpType = { native: 'mixed', doc: 'mixed' };
+const VOID: PhpType = { native: 'void', doc: 'void' };
+interface PhpParam {
+  name: string;
+  type: PhpType;
+}
 
 function mapType(type: TypeRef): string {
   if (type.container === 'array') return 'VgList';
@@ -173,6 +185,8 @@ class PhpEmitter {
   private readonly importNames = new Map<string, string>();
   private readonly types: Map<string, UserType>;
   private readonly classNames = new Map<string, ClassMemberNames>();
+  // A class of the project's code (its type, "native:Counter") by its qualified name.
+  private readonly codeClasses = new Map<string, string>();
 
   constructor(private readonly program: IrProgram, private readonly options: GenerateOptions) {
     this.library = !!program.library;
@@ -191,6 +205,7 @@ class PhpEmitter {
       // graph libraries, as C# names them); a function by its namespace (ending with \) and name.
       else if (i.module?.endsWith('\\')) this.importNames.set(i.id, `\\${i.module}${i.name}`);
       else this.importNames.set(i.id, i.module ? `\\${i.module.replace(/\./g, '\\')}::${i.name}` : `\\${i.name}`);
+      if (i.member && !i.userType) this.codeClasses.set(i.member.type, this.importNames.get(i.id)!);
     }
     const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'camel')}_` : '_';
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'camel', internal));
@@ -213,7 +228,7 @@ class PhpEmitter {
       body.line('{');
       body.indent();
       for (const fn of this.program.functions) this.functionMethod(fn);
-      for (const block of this.program.blocks) this.method(this.blockNames.get(block.id)!, [], () => this.statements(block.body), 'private');
+      for (const block of this.program.blocks) this.method(this.blockNames.get(block.id)!, [], () => this.statements(block.body), 'private', true, VOID);
       for (const helper of this.program.helpers) this.helperMethod(helper);
       body.trimTrailingBlank();
       body.dedent();
@@ -227,9 +242,9 @@ class PhpEmitter {
     body.indent();
     const members = this.program.members.filter((m) => !m.function);
     const slots = this.program.slots.filter((s) => !s.function);
-    for (const m of members) body.line(`public $${this.memberNames.get(m.id)};`);
-    for (const d of this.program.dispatchers ?? []) body.line(`public $${this.dispatcherNames.get(d.id)};`);
-    for (const x of slots) body.line(`public $${this.slotNames.get(x.id)};`);
+    for (const m of members) this.property(this.memberNames.get(m.id)!, m.type);
+    for (const d of this.program.dispatchers ?? []) body.line(`public VgDispatcher $${this.dispatcherNames.get(d.id)};`);
+    for (const x of slots) this.property(this.slotNames.get(x.id)!, x.type);
     if (members.length || slots.length || this.program.dispatchers?.length) body.line();
     // Property defaults must be constants in PHP, so the constructor sets them.
     this.method('__construct', [], () => {
@@ -238,21 +253,21 @@ class PhpEmitter {
       for (const d of this.program.dispatchers ?? []) body.line(`$this->${this.dispatcherNames.get(d.id)} = new VgDispatcher();`);
       for (const x of slots) body.line(`$this->${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
     });
-    if (!parent || this.program.hasStart) this.method('start', [], () => this.statements(this.program.start));
+    if (!parent || this.program.hasStart) this.method('start', [], () => this.statements(this.program.start), 'public', false, VOID);
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const { type, stubs } of this.program.interfaces ?? []) {
       for (const fn of stubs) {
         const scope = new NameScope(RESERVED);
-        const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => `$${scope.claim(p.name, 'camel')}`);
+        const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => this.param(scope.claim(p.name, 'camel'), p.type));
         const outputs = fn.outputs.filter((p) => p.kind === 'data');
         this.method(this.interfaceNames(type).functions.get(fn.id)!, params, () => {
           if (outputs.length) body.line(`return ${outputs.length === 1 ? this.defaultFor(outputs[0].type) : `[${outputs.map((o) => this.defaultFor(o.type)).join(', ')}]`};`);
-        });
+        }, 'public', false, outputs.length ? this.phpTypes(outputs.map((o) => o.type)) : VOID);
       }
     }
     this.tests = (this.program.tests ?? []).map((t) => ({ name: t.name, method: this.names.claim(`test ${t.name}`, 'camel') }));
-    this.program.tests?.forEach((t, i) => this.method(this.tests[i].method, [], () => this.statements(t.body)));
-    for (const block of this.program.blocks) this.method(this.blockNames.get(block.id)!, [], () => this.statements(block.body), 'private');
+    this.program.tests?.forEach((t, i) => this.method(this.tests[i].method, [], () => this.statements(t.body), 'public', false, VOID));
+    for (const block of this.program.blocks) this.method(this.blockNames.get(block.id)!, [], () => this.statements(block.body), 'private', false, VOID);
     for (const helper of this.program.helpers) this.helperMethod(helper);
     body.trimTrailingBlank();
     body.dedent();
@@ -271,8 +286,12 @@ class PhpEmitter {
       body.line('{');
       for (const fn of declaration.type.functions) {
         const scope = new NameScope(RESERVED);
-        const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => `$${scope.claim(p.name, 'camel')}`);
-        body.line(`    public function ${names.functions.get(fn.id)}(${params.join(', ')});`);
+        const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => this.param(scope.claim(p.name, 'camel'), p.type));
+        const outputs = fn.outputs.filter((p) => p.kind === 'data');
+        const returns = outputs.length ? this.phpTypes(outputs.map((o) => o.type)) : VOID;
+        const docs = [...params.filter((p) => p.type.doc !== p.type.native).map((p) => `@param ${p.type.doc} $${p.name}`), ...(returns.doc !== returns.native ? [`@return ${returns.doc}`] : [])];
+        if (docs.length) body.line(`    /** ${docs.join(' ')} */`);
+        body.line(`    public function ${names.functions.get(fn.id)}(${params.map((p) => `${p.type.native} $${p.name}`).join(', ')}): ${returns.native};`);
       }
       body.line('}');
       return this.finish();
@@ -287,17 +306,27 @@ class PhpEmitter {
     }
     const type = declaration.type;
     const fields = phpFieldNames(type);
-    body.line(`final class ${this.className}`);
+    body.line(`final class ${this.className} implements VgStruct`);
     body.line('{');
     body.indent();
-    for (const f of type.fields) body.line(`public $${fields.get(f.id)};`);
+    for (const f of type.fields) this.property(fields.get(f.id)!, f.type);
     body.line();
-    body.line(`public function __construct(${type.fields.map((f) => `$${fields.get(f.id)} = null`).join(', ')})`);
+    // Each field given, else its default.
+    const nullable = (t: PhpType): PhpType => (t.native === 'mixed' || t.native.startsWith('?') ? t : { native: `?${t.native}`, doc: `?${t.doc}` });
+    const params = type.fields.map((f) => this.param(fields.get(f.id)!, f.type)).map((p) => ({ ...p, type: nullable(p.type) }));
+    const docs = params.filter((p) => p.type.doc !== p.type.native).map((p) => `@param ${p.type.doc} $${p.name}`);
+    if (docs.length) {
+      body.line('/**');
+      for (const doc of docs) body.line(` * ${doc}`);
+      body.line(' */');
+    }
+    body.line(`public function __construct(${params.map((p) => `${p.type.native} $${p.name} = null`).join(', ')})`);
     body.line('{');
     type.fields.forEach((f, i) => body.line(`    $this->${fields.get(f.id)} = $${fields.get(f.id)} ?? ${this.value(declaration.initial[i], f.type)};`));
     body.line('}');
     body.line();
     body.line('// As Print shows it: each field by name, in order.');
+    body.line('/** @return list<array{string, mixed}> */');
     body.line('public function vgFields(): array');
     body.line('{');
     body.line(`    return [${type.fields.map((f) => `[${phpString(f.name)}, $this->${fields.get(f.id)}]`).join(', ')}];`);
@@ -319,7 +348,7 @@ class PhpEmitter {
       header.line(`namespace ${this.options.namespace};`);
     }
     header.line();
-    header.line('use Vgraph\\{Vg, VgDispatcher, VgList, VgMap, VgSet};');
+    header.line('use Vgraph\\{Vg, VgDispatcher, VgList, VgMap, VgSet, VgStruct};');
     header.line();
     header.line(`require_once __DIR__ . ${phpString(`/${PHP_RUNTIME_FILE}`)};`);
     const files = [...new Set(this.program.imports.map((i) => relativeSpecifier(this.options.outputDir ?? '', i.userType?.source?.generatedPath ?? i.path).replace(/^\.\//, '')))].sort();
@@ -401,9 +430,51 @@ class PhpEmitter {
 
   // ---- Members --------------------------------------------------------------------------------
 
-  private method(name: string, params: string[], body: () => void, visibility: 'public' | 'private' = 'public', isStatic = this.library): void {
+  // A value's PHP type (docs/project-integration.md, part 3: PHPStan at level 9): what PHP declares,
+  // and what PHPDoc says beyond it (a container's element types, VgList<int>). A struct is its
+  // class, an enum its values' text, an object its class or null; anything else is mixed.
+  private phpType(type: TypeRef | undefined): PhpType {
+    if (!type || type.id === 'any') return MIXED;
+    if (type.container) {
+      const element = this.phpType({ id: type.id }).doc;
+      if (type.container === 'array') return { native: 'VgList', doc: `VgList<${element}>` };
+      if (type.container === 'set') return { native: 'VgSet', doc: `VgSet<${element}>` };
+      return { native: 'VgMap', doc: `VgMap<${element}, ${this.phpType(type.valueType).doc}>` };
+    }
+    if (['bool', 'int', 'float', 'string'].includes(type.id)) return { native: type.id, doc: type.id };
+    const user = this.types.get(type.id);
+    if (user?.kind === 'enum') return { native: 'string', doc: 'string' };
+    if (user?.kind === 'struct') return { native: this.userTypeName(user.id), doc: this.userTypeName(user.id) };
+    const name = user?.kind === 'class' || user?.kind === 'interface' || type.id === `object:${this.program.className}` ? this.userTypeName(type.id) : this.codeClasses.get(type.id);
+    return name && name !== 'null' ? { native: `?${name}`, doc: `?${name}` } : MIXED;
+  }
+
+  // Several values returned at once: a list of their types.
+  private phpTypes(types: (TypeRef | undefined)[]): PhpType {
+    if (types.length === 1) return this.phpType(types[0]);
+    return { native: 'array', doc: `array{${types.map((t) => this.phpType(t).doc).join(', ')}}` };
+  }
+
+  // A parameter's declaration: its type and name.
+  private param(name: string, type: TypeRef | undefined): PhpParam {
+    return { name, type: this.phpType(type) };
+  }
+
+  private method(name: string, params: (string | PhpParam)[], body: () => void, visibility: 'public' | 'private' = 'public', isStatic = this.library, returns?: PhpType): void {
     this.out.endNode();
-    this.out.line(`${visibility}${isStatic ? ' static' : ''} function ${name}(${params.join(', ')})`);
+    // PHPDoc where PHP's own types say less (containers' elements, several results).
+    const docs = [
+      ...params.filter((p): p is PhpParam => typeof p !== 'string' && p.type.doc !== p.type.native).map((p) => `@param ${p.type.doc} $${p.name}`),
+      ...(returns && returns.doc !== returns.native ? [`@return ${returns.doc}`] : [])
+    ];
+    if (docs.length === 1) this.out.line(`/** ${docs[0]} */`);
+    else if (docs.length) {
+      this.out.line('/**');
+      for (const doc of docs) this.out.line(` * ${doc}`);
+      this.out.line(' */');
+    }
+    const list = params.map((p) => (typeof p === 'string' ? p : `${p.type.native} $${p.name}`));
+    this.out.line(`${visibility}${isStatic ? ' static' : ''} function ${name}(${list.join(', ')})${returns ? `: ${returns.native}` : ''}`);
     this.out.line('{');
     this.out.indent();
     body();
@@ -417,7 +488,7 @@ class PhpEmitter {
     const params = fn.params.map((p) => {
       const name = scope.claim(p.name, 'camel');
       this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
-      return `$${name}`;
+      return this.param(name, p.type);
     });
     const locals = this.program.members.filter((m) => m.function === fn.id);
     for (const m of locals) this.memberNames.set(m.id, scope.claim(m.name, 'camel'));
@@ -429,8 +500,8 @@ class PhpEmitter {
       for (const m of locals) this.out.line(`$${this.memberNames.get(m.id)} = ${this.value(m.initial, m.type)};`);
       for (const x of slots) this.out.line(`$${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
       this.statements(fn.body);
-      if (fn.outputs.length && fn.body[fn.body.length - 1]?.kind !== 'return') this.out.line(`return ${this.returned(fn, [])};`);
-    });
+      if (fn.outputs.length && canComplete(fn.body)) this.out.line(`return ${this.returned(fn, [])};`);
+    }, 'public', this.library, fn.outputs.length ? this.phpTypes(fn.outputs.map((o) => o.type)) : VOID);
   }
 
   private returned(fn: IrFunction, values: IrExpr[]): string {
@@ -444,9 +515,23 @@ class PhpEmitter {
     const params = helper.params.map((p, i) => ({ pinId: p.pinId, name: /^[A-Za-z_]\w*$/.test(p.pinId) && !RESERVED.has(p.pinId) ? scope.claim(p.pinId) : scope.claim(`pin${i}`) }));
     const byPin = new Map(params.map((p) => [p.pinId, p.name]));
     const code = helper.code.replace(/\$\{([^}]+)\}/g, (_m, pin: string) => byPin.get(pin) ?? pin);
-    this.method(this.helperNames.get(helper.id)!, params.map((p) => `$${p.name}`), () => {
-      for (const line of dedent(code)) this.out.line(line);
-    }, 'private', true);
+    const types = new Map(helper.params.map((p) => [p.pinId, p.type]));
+    const returns = helper.returns ? this.phpType(helper.returns) : VOID;
+    this.method(this.helperNames.get(helper.id)!, params.map((p) => this.param(p.name, types.get(p.pinId))), () => {
+      for (const line of dedent(code)) {
+        // A result made empty (new VgMap()) takes the helper's type: PHPStan can't infer it.
+        const empty = /^(\s*)\$result = new (VgList|VgSet|VgMap)\(\);$/.exec(line);
+        if (empty && returns.native === empty[2]) this.out.line(`${empty[1]}/** @var ${returns.doc} $result */`);
+        this.out.line(line);
+      }
+    }, 'private', true, returns);
+  }
+
+  // A typed property, with its PHPDoc type where that says more.
+  private property(name: string, type: TypeRef | undefined): void {
+    const php = this.phpType(type);
+    if (php.doc !== php.native) this.out.line(`/** @var ${php.doc} */`);
+    this.out.line(`public ${php.native} $${name};`);
   }
 
   private slotRef(id: string): string {
@@ -464,8 +549,10 @@ class PhpEmitter {
     return `$this->${this.dispatcherNames.get(s.dispatcher)}`;
   }
 
+  // An object to use: one held by a reference that may be empty is checked ("Accessed None").
   private targetRef(e: IrExpr): string {
-    return e.kind === 'self' ? '$this' : this.operand(e);
+    if (e.kind === 'self') return '$this';
+    return this.phpType(this.typeOf(e)).native.startsWith('?') ? `Vg::object(${this.expr(e)})` : this.operand(e);
   }
 
   // ---- Statements ---------------------------------------------------------------------------
@@ -493,9 +580,13 @@ class PhpEmitter {
         out.line(`echo ${this.text(s.value)}, "\\n";`);
         break;
       case 'assert':
-        out.line(`if (!(${this.expr(s.condition)})) {`);
-        out.line(`    throw new \\RuntimeException(${this.expr(s.message)});`);
-        out.line('}');
+        // Two constants that differ (Assert Equal): it fails whatever happens.
+        if (s.condition.kind === 'literal' && !s.condition.value) out.line(`Vg::fail(${this.expr(s.message)});`);
+        else {
+          out.line(`if (!(${this.expr(s.condition)})) {`);
+          out.line(`    throw new \\RuntimeException(${this.expr(s.message)});`);
+          out.line('}');
+        }
         break;
       case 'store':
         out.line(`${this.slotRef(s.slot)} = ${this.value(s.value, this.program.slots.find((x) => x.id === s.slot)?.type)};`);
@@ -596,7 +687,9 @@ class PhpEmitter {
       case 'await': {
         // An async function (docs/node-authoring.md, gap 4): its Fiber, resumed by the latent queue;
         // Completed runs with what it returns.
-        out.line(`Vg::awaitLatent(${this.call(s.callee, s.args)}, function ($value) {`);
+        // Its value has the result's type (the Fiber's TReturn, which PHPStan matches).
+        const result = s.resultSlot ? this.phpType(this.program.slots.find((x) => x.id === s.resultSlot)?.type) : MIXED;
+        out.line(`Vg::awaitLatent(${this.call(s.callee, s.args)}, function (${result.native} $value): void {`);
         out.indent();
         if (s.resultSlot) out.line(`${this.slotRef(s.resultSlot)} = $value;`);
         this.statements(s.then);
@@ -611,7 +704,7 @@ class PhpEmitter {
           const started = `$started${generation.replace(/^\$this->_*/, '').replace(/^./, (c) => c.toUpperCase())}`;
           out.line(`${generation}++;`);
           out.line(`${started} = ${generation};`);
-          out.line(`Vg::delay(${this.expr(s.duration)}, function () use (${started}) {`);
+          out.line(`Vg::delay(${this.expr(s.duration)}, function () use (${started}): void {`);
           out.indent();
           out.line(`if (${started} !== ${generation}) {`);
           out.line('    return;');
@@ -621,7 +714,7 @@ class PhpEmitter {
           out.line(`if (!${pending}) {`);
           out.indent();
           out.line(`${pending} = true;`);
-          out.line(`Vg::delay(${this.expr(s.duration)}, function () {`);
+          out.line(`Vg::delay(${this.expr(s.duration)}, function (): void {`);
           out.indent();
           out.line(`${pending} = false;`);
         }
@@ -766,8 +859,14 @@ class PhpEmitter {
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'makeContainer': {
-        const items = `[${e.items.map((item, i) => this.value(item, e.type.container === 'map' && i % 2 ? e.type.valueType : { id: e.type.id })).join(', ')}]`;
-        return `new ${e.type.container === 'map' ? 'VgMap' : e.type.container === 'set' ? 'VgSet' : 'VgList'}(${items})`;
+        const element: TypeRef = { id: e.type.id };
+        if (e.type.container === 'map') {
+          // Its keys and values come in turn; the map takes them in pairs.
+          const pairs: string[] = [];
+          for (let i = 0; i + 1 < e.items.length; i += 2) pairs.push(`[${this.value(e.items[i], element)}, ${this.value(e.items[i + 1], e.type.valueType)}]`);
+          return `new VgMap([${pairs.join(', ')}])`;
+        }
+        return `new ${e.type.container === 'set' ? 'VgSet' : 'VgList'}([${e.items.map((item) => this.value(item, element)).join(', ')}])`;
       }
     }
   }
@@ -786,7 +885,7 @@ class PhpEmitter {
     // A class's member (docs/node-authoring.md, gap 2), on the Target pin's object.
     if (member.kind === 'construct') return `new ${this.importNames.get(callee.id)}(${list})`;
     const [target, ...rest] = args;
-    const object = `(${this.expr(target)})`;
+    const object = this.phpType(this.typeOf(target)).native.startsWith('?') ? `Vg::object(${this.expr(target)})` : `(${this.expr(target)})`;
     const values = [...this.args(rest, params.slice(1)), ...extra].join(', ');
     return member.kind === 'get' ? `${object}->${member.name}` : member.kind === 'set' ? `${object}->${member.name} = ${values}` : `${object}->${member.name}(${values})`;
   }
@@ -808,12 +907,13 @@ class PhpEmitter {
     if (type?.id === 'int' && !type.container && from?.id === 'float' && !from.container) {
       return e.kind === 'literal' && typeof e.value === 'number' ? String(Math.trunc(e.value)) : `(int) ${this.operand(e)}`;
     }
+    if (e.kind === 'literal' && !type?.container) return literalOf(e.value, type);
     if (e.kind !== 'literal' || !type?.container || !Array.isArray(e.value)) return this.expr(e);
     if (type.container === 'map') {
       const pairs = e.value.filter((p): p is unknown[] => Array.isArray(p) && p.length === 2);
-      return `new VgMap([${pairs.map(([k, v]) => `${literal(k)}, ${literal(v)}`).join(', ')}])`;
+      return `new VgMap([${pairs.map(([k, v]) => `[${literalOf(k, { id: type.id })}, ${literalOf(v, type.valueType)}]`).join(', ')}])`;
     }
-    return `new ${type.container === 'set' ? 'VgSet' : 'VgList'}([${e.value.map(literal).join(', ')}])`;
+    return `new ${type.container === 'set' ? 'VgSet' : 'VgList'}([${e.value.map((v) => literalOf(v, { id: type.id })).join(', ')}])`;
   }
 
   private operand(e: IrExpr): string {
@@ -852,6 +952,13 @@ class PhpEmitter {
     const type = exprType(e, this.program);
     return type?.id === 'any' ? undefined : type;
   }
+}
+
+// A JSON value as a PHP literal of a type: a whole number for a float keeps its point (-1.0), so
+// PHP (and PHPStan) take it as one.
+function literalOf(value: unknown, type: TypeRef | undefined): string {
+  const text = literal(value);
+  return type?.id === 'float' && !type.container && typeof value === 'number' && /^-?\d+$/.test(text) ? `${text}.0` : text;
 }
 
 // A JSON value as a PHP literal.

@@ -111,7 +111,7 @@ export const MAP_UTILITIES: UtilityNode[] = [
       lua: 'if source:contains(key) then return source:get(key) end\nreturn fallback',
       gdscript: 'return source.get(key, fallback)',
       ruby: 'return source.fetch(key, fallback)',
-      php: 'return $source->has($key) ? $source->get($key) : $fallback;'
+      php: 'return $source->has($key) ? $source->at($key) : $fallback;'
     }
   },
   {
@@ -260,7 +260,7 @@ export const ARRAY_UTILITIES: UtilityNode[] = [
       lua: 'local result = vg.array_of(items, items.n)\ntable.sort(result, vg.less)\nreturn result',
       gdscript: 'var result = items.duplicate()\nresult.sort()\nreturn result',
       ruby: 'return Vg.sorted(items)',
-      php: '$result = $items->items;\nsort($result, $result !== [] && is_string($result[0]) ? SORT_STRING : SORT_REGULAR);\nreturn new VgList($result);'
+      php: 'return new VgList(Vg::sorted($items->items));'
     }
   },
   {

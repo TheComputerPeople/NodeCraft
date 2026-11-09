@@ -69,7 +69,8 @@ describe('PHP projects', () => {
     assert.deepEqual(result.diagnostics, []);
     const text = result.output!.text;
     assert.match(text, /^namespace App\\Game;$/m);
-    assert.match(text, /\\App\\Util\\Scores::triple\(14\)/);
+    // A float parameter gets a float literal.
+    assert.match(text, /\\App\\Util\\Scores::triple\(14\.0\)/);
     assert.match(text, /\\App\\Util\\shout\('done'\)/);
     assert.match(text, /^require_once __DIR__ \. '\/\.\.\/Util\/Scores\.php';$/m);
     const file = path.join(workDir, 'src', 'Game', result.output!.fileName);
@@ -139,7 +140,9 @@ describe('PHP code classes', () => {
     registry.registerMany(definitions);
     const result = compileDocument(codeClassGraph(definitions, 'php'), { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Counting.vgraph', outputDir: 'src/Game' } });
     assert.deepEqual(result.diagnostics, []);
-    assert.match(result.output!.text, /new \\App\\Count\\Counter\(5\)/);
+    assert.match(result.output!.text, /new \\App\\Count\\Counter\(5\.0\)/);
+    // A reference that may be empty is checked where it's used ("Accessed None").
+    assert.match(result.output!.text, /Vg::object\(\$this->_cReturnValue\)->add\(3\.0\)/);
     const file = path.join(dir, 'src', 'Game', result.output!.fileName);
     fs.writeFileSync(file, result.output!.text);
     for (const companion of result.output!.companionFiles ?? []) fs.writeFileSync(path.join(dir, 'src', 'Game', companion.fileName), companion.text);
@@ -256,7 +259,7 @@ describe('PHP async functions', () => {
 
   test('a graph waits for a Fiber and reads its value on Completed', async (t) => {
     const { run: outcome, skipped, text } = await run('latent', remote('return $value * 2'));
-    assert.match(text, /Vg::awaitLatent\(.*fetchDouble\(4\), function \(\$value\) \{/);
+    assert.match(text, /Vg::awaitLatent\(.*fetchDouble\(4\), function \(int \$value\): void \{/);
     if (!outcome) return t.skip(skipped);
     assert.deepEqual(outcome.stdout.trim().split(/\r?\n/), LATENT_CODE_OUTPUT, outcome.stderr);
   });

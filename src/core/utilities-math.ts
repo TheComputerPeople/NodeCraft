@@ -20,7 +20,8 @@ const A = float('value', 'A');
 
 // Ruby's and PHP's integer nodes return a value that isn't finite as it is, as Floor does.
 const RB_NOT_FINITE = 'return value unless value.to_f.finite?';
-const PHP_NOT_FINITE = 'if (!is_finite((float) $value)) {\n    return $value;\n}';
+// An int can't hold NaN or an infinity: as Round To says (and Python raises).
+const PHP_NOT_FINITE = "if (!is_finite((float) $value)) {\n    throw new \\InvalidArgumentException('Value must be a finite number');\n}";
 
 // Map Range: where Value is between In Range A and B (0 to 1, or beyond), applied to Out Range A
 // and B. An empty in range is 1 at or past it and 0 before it, as in Unreal.

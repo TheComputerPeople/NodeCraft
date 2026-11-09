@@ -115,7 +115,7 @@ export const LANGUAGE_UTILITIES: UtilityNode[] = [
       go: 'return regexp.MustCompile(pattern).ReplaceAllLiteralString(text, replacement)',
       gdscript: 'var result := ""\nvar at := 0\nfor found in RegEx.create_from_string(pattern).search_all(text):\n\tresult += text.substr(at, found.get_start() - at) + replacement\n\tat = found.get_end()\nreturn result + text.substr(at)',
       ruby: 'return text.gsub(Regexp.new(pattern)) { replacement }',
-      php: `return preg_replace_callback(${PHP_PATTERN}, fn ($match) => $replacement, $text);`
+      php: `return (string) preg_replace_callback(${PHP_PATTERN}, fn (array $match): string => $replacement, $text);`
     }
   },
   {

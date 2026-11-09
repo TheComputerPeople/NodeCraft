@@ -268,7 +268,7 @@ What doesn't:
 
   - The body (the node audit and the conformance fixtures) is in go-module, rust-bin, cpp-cmake, ruby-gem, php-composer-lib, lua-rock and gd-addon. A body program using what a language lacks (inheritance in Go, Rust and Lua) is reported as not applicable, as the conformance suite reports it. C++ takes only the arena program, whose classes share names with the duel's in the global namespace.
   - A step that only checks (a linter, a type checker) doesn't hold up the steps after it when its tool is missing; a step whose stderr must be empty fails on an interpreter's warnings.
-  - **PHP's tools** (Composer, PHPStan, PHP_CodeSniffer) are `.phar` files `npm run corpus:tools` downloads. They weren't run when this was built, so php-composer-lib and php-laravel-shaped are partly checked: their entry points were run with a stand-in for Composer's autoloader, with every error reported, and every file passed `php -l`. luacheck wasn't installed either.
+  - **PHP's tools** (Composer, PHPStan, PHP_CodeSniffer) are `.phar` files `npm run corpus:tools` downloads. Composer won't start without PHP's openssl extension, even to write the autoloader (which needs no network), so the corpus loads it for them (`-d extension=openssl`) when the installed PHP has it but doesn't load it; the php.ini stays as it is. luacheck wasn't installed when this was built, so the Lua layouts are partly checked.
 - **Found by the layouts, and fixed:**
   - **Go:** the standard `// Code generated … DO NOT EDIT.` header, which staticcheck's style checks, gopls and code review honor; a literal list in For Each was `*&[]T{…}` (staticcheck SA4001).
   - **Rust:**
@@ -282,9 +282,16 @@ What doesn't:
   - **Ruby:** generated files start with `# frozen_string_literal: true` (RuboCop asks for it on the first line, and generated code changes no literal), then the header.
   - **Every language:** generated files are recognized by their header among their first lines and in Lua's comments too. Before, Lua's (`--`) and PHP's (after `<?php`) weren't, so renaming a graph or removing a stale output didn't find them.
 - **Markers for style linters:** `# rubocop:disable all` (Ruby), `-- luacheck: ignore` (Lua), `// phpcs:ignoreFile` (PHP), each after the header's first lines, which now say `@generated` too.
+- **Generated PHP passes PHPStan at level 9.** Measured first: 2,766 errors in php-composer-lib, 2,648 of them missing types.
+  - **Typed:** every property, parameter and return is declared from its pin's type: `int`, `float`, `string`, `bool`, a struct's class, an enum's values as `string`, an object as its class or `null`, anything else `mixed`. PHPDoc adds what PHP can't say: a container's element types (`VgList<int>`, `VgMap<string, float>`) and several results (`array{int, bool}`).
+  - **The support file is typed:** `VgList<T>`, `VgSet<T>` and `VgMap<K, V>` are generic in their PHPDoc, and every function has its types. Structures implement `VgStruct` (their fields for Print), Map Find reads through `VgMap::at`, Sort through `Vg::sorted`, and a Fiber's value keeps its type through `Vg::awaitLatent`.
+  - **An empty reference** is checked where an object is used: `Vg::object($x)` gives it or stops the run with "Accessed None" (docs/semantics.md), as C++'s runtime does.
+  - **Literals:** a whole number for a float is written with its point (`14.0`), and a map literal is a list of key-value pairs.
+  - **Found and fixed for every language, in compiling:** a loop's Break flag is kept only when something is wired to Break, and MultiGate's Start Index and Loop are decided when they're constants. Checkers called the conditions they left always true.
+  - **Snippets:** Round, Floor, Ceil and Truncate stop the run on a value that isn't finite ("Value must be a finite number", as Round To does): an int can't hold one. Load File, Get Environment Variable, Base64 Decode, Format String, Regex Replace and the whitespace nodes handle PHP's `false` and `null` results. An Assert Equal of two constants that differ fails through `Vg::fail`.
+  - **The scanner** reads PHPStan's `Fiber<TStart, TResume, TReturn, TSuspend>` as well as `Fiber<T>`.
 - **Known limits:**
   - PSR-4 doesn't autoload generated PHP classes, whose files are named after their graphs (`Greeting.vgraph.php`): the project requires them, and each requires what it uses. Set Up can offer a Composer `classmap` entry (step 6).
-  - Generated PHP has no parameter or return types, which PHPStan level 9 is likely to ask for.
 
 ## Part 4: New Project
 

@@ -355,7 +355,8 @@ const RUBY: Record<string, string> = {
 // (code points), and == compares as the semantics do (Vg::equal: 1 equals 1.0, nothing else converts).
 // Floor of NaN or Infinity can't be an int, so they pass through.
 const PHP_DIVIDE_BY_ZERO = "if ($b == 0) {\n    throw new \\DivisionByZeroError('Divide by zero');\n}";
-const PHP_NOT_FINITE = 'if (!is_finite((float) $value)) {\n    return $value;\n}';
+// An int can't hold NaN or an infinity: as Round To says (and Python raises).
+const PHP_NOT_FINITE = "if (!is_finite((float) $value)) {\n    throw new \\InvalidArgumentException('Value must be a finite number');\n}";
 const PHP: Record<string, string> = {
   'core:math.subtract': 'return $a - $b;',
   'core:math.multiply': 'return $a * $b;',
@@ -393,7 +394,7 @@ const PHP: Record<string, string> = {
   'core:string.to-int': `return preg_match('/${INTEGER}$/D', $text) ? (int) trim($text) : 0;`,
   'core:utilities.is-valid': 'return $value !== null;',
   'core:utilities.select': 'return $pickA ? $a : $b;',
-  'core:file.load-to-string': 'return file_get_contents($filename);',
+  'core:file.load-to-string': '$text = @file_get_contents($filename);\nif ($text === false) {\n    throw new \\RuntimeException("Can\'t read " . $filename);\n}\nreturn $text;',
   'core:file.save-string': 'file_put_contents($filename, $text);'
 };
 

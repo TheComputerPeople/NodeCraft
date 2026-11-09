@@ -1151,9 +1151,12 @@ class Lowerer {
       return [[store(slot, value)], read(slot)];
     };
 
+    // A loop's Break only when something is wired to it: else its stop flag is never set, and
+    // checkers report the condition that reads it as always true.
+    const breakWired = info.graph.connections.some((c) => c.toNode === node.id && c.toPin === 'break');
     switch (nativeOperation(def)) {
       case 'for-loop': {
-        const stop = def.inputs.some((p) => p.id === 'break') ? state('stop', 'bool') : undefined;
+        const stop = def.inputs.some((p) => p.id === 'break') && breakWired ? state('stop', 'bool') : undefined;
         if (entry === 'break') return stop ? [store(stop, bool(true))] : [];
         return [
           ...(stop ? [store(stop, bool(false))] : []),
@@ -1164,7 +1167,7 @@ class Lowerer {
       case 'while-loop':
         return [{ kind: 'while', condition: truthy(input('condition')), body: next('loopBody'), source }, ...next('completed')];
       case 'for-each': {
-        const stop = def.inputs.some((p) => p.id === 'break') ? state('stop', 'bool') : undefined;
+        const stop = def.inputs.some((p) => p.id === 'break') && breakWired ? state('stop', 'bool') : undefined;
         if (entry === 'break') return stop ? [store(stop, bool(true))] : [];
         return [
           ...(stop ? [store(stop, bool(false))] : []),
@@ -1216,17 +1219,29 @@ class Lowerer {
         if (entry === 'reset') return [store(initialized, bool(false))];
         const outputs = def.outputs.filter((p) => p.kind === 'exec').map((p) => p.id);
         const current = state('current', 'int');
-        const [readStart, startIndex] = asInt(input('startIndex'), 'startIndex');
+        // An unconnected Start Index or Loop is decided here, as Branch's condition is.
+        const start = input('startIndex');
+        const [readStart, startIndex] = asInt(start, 'startIndex');
+        const first = start.kind === 'literal'
+          ? (Math.trunc(toNumber(start.value)) >= 0 ? [store(position, int(Math.trunc(toNumber(start.value))))] : [])
+          : [...readStart, when({ kind: 'binary', op: '>=', left: startIndex, right: int(0) }, [store(position, startIndex)])];
+        const loop = truthy(input('loop'));
+        const wrapped: IrExpr = { kind: 'binary', op: '>=', left: read(position), right: int(outputs.length) };
+        const restart = loop.kind === 'literal'
+          ? (loop.value ? [when(wrapped, [store(position, int(0))])] : [])
+          : [when({ kind: 'binary', op: '&&', left: wrapped, right: loop }, [store(position, int(0))])];
         // out0 if current is 0, else out1 if 1, …
         const dispatch = outputs.reduceRight<IrStatement[]>((otherwise, out, i) => [when({ kind: 'binary', op: '==', left: read(current), right: int(i) }, next(out), otherwise)], []);
+        const go: IrStatement[] = [
+          store(current, read(position)),
+          store(position, { kind: 'binary', op: '+', left: read(position), right: int(1) }),
+          ...dispatch
+        ];
         return [
-          initOnce([store(position, int(0)), ...readStart, when({ kind: 'binary', op: '>=', left: startIndex, right: int(0) }, [store(position, startIndex)])]),
-          when({ kind: 'binary', op: '&&', left: { kind: 'binary', op: '>=', left: read(position), right: int(outputs.length) }, right: truthy(input('loop')) }, [store(position, int(0))]),
-          when({ kind: 'binary', op: '<', left: read(position), right: int(outputs.length) }, [
-            store(current, read(position)),
-            store(position, { kind: 'binary', op: '+', left: read(position), right: int(1) }),
-            ...dispatch
-          ])
+          initOnce([store(position, int(0)), ...first]),
+          ...restart,
+          // Looping, an output is always left after the restart.
+          ...(loop.kind === 'literal' && loop.value ? go : [when({ kind: 'binary', op: '<', left: read(position), right: int(outputs.length) }, go)])
         ];
       }
       case 'switch': {

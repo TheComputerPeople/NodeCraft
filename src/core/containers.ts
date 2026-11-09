@@ -314,7 +314,7 @@ const PHP: Record<string, string> = {
   'core:map.add': '$target->put($key, $value);',
   'core:map.remove': 'return $target->remove($key);',
   'core:map.clear': '$target->clear();',
-  'core:map.find': "if (!$target->has($key)) {\n    throw new \\OutOfBoundsException('Key not found');\n}\nreturn $target->get($key);",
+  'core:map.find': 'return $target->at($key);',
   'core:map.contains': 'return $target->has($key);',
   'core:map.length': 'return $target->count();',
   'core:map.keys': 'return new VgList($target->keys);',

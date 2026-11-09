@@ -553,7 +553,7 @@ export const TEXT_UTILITIES: UtilityNode[] = [
         'end'
       ].join('\n'),
       php: [
-        "return preg_replace_callback('/\\{([0-9]+)\\}/', function ($match) use ($items) {",
+        "return (string) preg_replace_callback('/\\{([0-9]+)\\}/', function (array $match) use ($items): string {",
         '    $digits = $match[1];',
         '    if (strlen($digits) > 9 || (int) $digits >= count($items->items)) {',
         `        throw new \\OutOfRangeException('${NO_ARGUMENT}' . $digits . '}');`,

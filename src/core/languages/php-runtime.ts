@@ -3,6 +3,9 @@
 // semantics' number formatting and conversions, event dispatchers and the latent queue. A copy sits
 // next to every generated file (a companion file); its classes are declared once, by the first copy
 // loaded, so copies in different folders share them.
+//
+// It's typed for PHPStan at level 9 (docs/project-integration.md, part 3): the containers are
+// generic in their PHPDoc (VgList<int>), as generated code declares them.
 export const PHP_RUNTIME_FILE = 'vgraph_runtime.php';
 
 export function phpRuntime(): string {
@@ -16,34 +19,52 @@ const PHP_RUNTIME = String.raw`<?php
 namespace Vgraph;
 
 if (!class_exists(Vg::class, false)) {
-    // A graph's array: shared by reference, as graphs share containers. Nodes use $items directly.
+    /**
+     * A graph's array: shared by reference, as graphs share containers. Nodes use $items directly.
+     *
+     * @template T
+     */
     final class VgList
     {
+        /** @var list<T> */
         public array $items;
 
+        /** @param array<T> $items */
         public function __construct(array $items = [])
         {
             $this->items = array_values($items);
         }
     }
 
-    // A map that keeps its keys in the order they were added, and each key as it was given (PHP's
-    // arrays turn "1" into 1 and 1.5 into 1).
+    /**
+     * A map that keeps its keys in the order they were added, and each key as it was given (PHP's
+     * arrays turn "1" into 1 and 1.5 into 1).
+     *
+     * @template K
+     * @template V
+     */
     final class VgMap
     {
+        /** @var array<int, K> */
         public array $keys = [];
+        /** @var array<int, V> */
         public array $values = [];
+        /** @var array<string, int> */
         private array $index = [];
 
-        // new VgMap([key1, value1, key2, value2, ...])
+        /**
+         * new VgMap([[key1, value1], [key2, value2], ...])
+         *
+         * @param list<array{K, V}> $pairs
+         */
         public function __construct(array $pairs = [])
         {
-            for ($i = 0; $i + 1 < count($pairs); $i += 2) {
-                $this->put($pairs[$i], $pairs[$i + 1]);
+            foreach ($pairs as [$key, $value]) {
+                $this->put($key, $value);
             }
         }
 
-        public static function slot($key): string
+        public static function slot(mixed $key): string
         {
             return match (true) {
                 is_string($key) => 's' . $key,
@@ -54,7 +75,11 @@ if (!class_exists(Vg::class, false)) {
             };
         }
 
-        public function put($key, $value): void
+        /**
+         * @param K $key
+         * @param V $value
+         */
+        public function put(mixed $key, mixed $value): void
         {
             $slot = self::slot($key);
             if (!array_key_exists($slot, $this->index)) {
@@ -66,18 +91,39 @@ if (!class_exists(Vg::class, false)) {
             $this->values[$this->index[$slot]] = $value;
         }
 
-        public function has($key): bool
+        /** @param K $key */
+        public function has(mixed $key): bool
         {
             return array_key_exists(self::slot($key), $this->index);
         }
 
-        public function get($key)
+        /**
+         * @param K $key
+         * @return V|null
+         */
+        public function get(mixed $key): mixed
         {
             $slot = self::slot($key);
             return array_key_exists($slot, $this->index) ? $this->values[$this->index[$slot]] : null;
         }
 
-        public function remove($key): bool
+        /**
+         * The key's value; there must be one.
+         *
+         * @param K $key
+         * @return V
+         */
+        public function at(mixed $key): mixed
+        {
+            $slot = self::slot($key);
+            if (!array_key_exists($slot, $this->index)) {
+                throw new \OutOfBoundsException('Key not found');
+            }
+            return $this->values[$this->index[$slot]];
+        }
+
+        /** @param K $key */
+        public function remove(mixed $key): bool
         {
             $slot = self::slot($key);
             if (!array_key_exists($slot, $this->index)) {
@@ -106,11 +152,17 @@ if (!class_exists(Vg::class, false)) {
         }
     }
 
-    // A set: no order of its own, so it prints and turns into an array in ascending order.
+    /**
+     * A set: no order of its own, so it prints and turns into an array in ascending order.
+     *
+     * @template T
+     */
     final class VgSet
     {
+        /** @var array<string, T> */
         public array $items = [];
 
+        /** @param array<T> $items */
         public function __construct(array $items = [])
         {
             foreach ($items as $item) {
@@ -118,12 +170,14 @@ if (!class_exists(Vg::class, false)) {
             }
         }
 
-        public function add($item): void
+        /** @param T $item */
+        public function add(mixed $item): void
         {
             $this->items[VgMap::slot($item)] = $item;
         }
 
-        public function remove($item): bool
+        /** @param T $item */
+        public function remove(mixed $item): bool
         {
             $slot = VgMap::slot($item);
             if (!array_key_exists($slot, $this->items)) {
@@ -133,11 +187,13 @@ if (!class_exists(Vg::class, false)) {
             return true;
         }
 
-        public function contains($item): bool
+        /** @param T $item */
+        public function contains(mixed $item): bool
         {
             return array_key_exists(VgMap::slot($item), $this->items);
         }
 
+        /** @return VgList<T> */
         public function sorted(): VgList
         {
             $items = array_values($this->items);
@@ -146,9 +202,17 @@ if (!class_exists(Vg::class, false)) {
         }
     }
 
+    // A structure, which prints as its fields by name, in order.
+    interface VgStruct
+    {
+        /** @return list<array{string, mixed}> */
+        public function vgFields(): array;
+    }
+
     // Bound events (an object and its method's name) run in the order they were bound, each once.
     final class VgDispatcher
     {
+        /** @var list<array{object, string}> */
         private array $handlers = [];
 
         public function bind(object $object, string $method): void
@@ -176,10 +240,13 @@ if (!class_exists(Vg::class, false)) {
             $this->handlers = [];
         }
 
-        public function broadcast(...$args): void
+        public function broadcast(mixed ...$args): void
         {
             foreach ($this->handlers as [$object, $method]) {
-                $object->$method(...$args);
+                $handler = [$object, $method];
+                if (is_callable($handler)) {
+                    $handler(...$args);
+                }
             }
         }
     }
@@ -188,10 +255,12 @@ if (!class_exists(Vg::class, false)) {
     {
         // Delay's actions, of every class, run from one queue in the order they fall due, once Start
         // (and Main) have returned.
+        /** @var list<array{due: int, order: int, action: \Closure(): mixed}> */
         private static array $pending = [];
         private static int $order = 0;
 
-        public static function delay($seconds, \Closure $action): void
+        /** @param \Closure(): mixed $action */
+        public static function delay(int|float $seconds, \Closure $action): void
         {
             self::$order++;
             self::$pending[] = ['due' => hrtime(true) + (int) (max(0.0, (float) $seconds) * 1e9), 'order' => self::$order, 'action' => $action];
@@ -200,8 +269,14 @@ if (!class_exists(Vg::class, false)) {
         // An async function's Fiber (docs/node-authoring.md, gap 4): started at once if it isn't, then
         // resumed once on each latent turn until it ends; its Completed then joins the queue with
         // what it returned. An exception in it stops the run.
+        /** @var list<array{\Fiber<mixed, mixed, mixed, mixed>, \Closure(mixed): mixed}> */
         private static array $waiting = [];
 
+        /**
+         * @template T
+         * @param \Fiber<mixed, mixed, T, mixed> $fiber
+         * @param \Closure(T): mixed $completed
+         */
         public static function awaitLatent(\Fiber $fiber, \Closure $completed): void
         {
             if (!$fiber->isStarted()) {
@@ -233,7 +308,7 @@ if (!class_exists(Vg::class, false)) {
                     usleep(1000);
                     continue;
                 }
-                usort(self::$pending, fn ($a, $b) => [$a['due'], $a['order']] <=> [$b['due'], $b['order']]);
+                usort(self::$pending, fn (array $a, array $b): int => [$a['due'], $a['order']] <=> [$b['due'], $b['order']]);
                 $wait = self::$pending[0]['due'] - hrtime(true);
                 if ($wait > 0) {
                     // While fibers wait, resume them again soon.
@@ -245,6 +320,41 @@ if (!class_exists(Vg::class, false)) {
             }
         }
 
+        // An Assert that fails whatever happens (two constants that differ): the run stops. Declared
+        // void, not never, so the code after it isn't unreachable to a checker.
+        public static function fail(string $message): void
+        {
+            throw new \RuntimeException($message);
+        }
+
+        /**
+         * The object of a reference, which must have one (docs/semantics.md: "Accessed None").
+         *
+         * @template T of object
+         * @param T|null $object
+         * @return T
+         */
+        public static function object(?object $object): object
+        {
+            if ($object === null) {
+                throw new \RuntimeException('Accessed None');
+            }
+            return $object;
+        }
+
+        /**
+         * Items in ascending order: text as text (PHP would compare numeric text as numbers).
+         *
+         * @template T
+         * @param list<T> $items
+         * @return list<T>
+         */
+        public static function sorted(array $items): array
+        {
+            usort($items, fn (mixed $a, mixed $b): int => is_string($a) && is_string($b) ? strcmp($a, $b) : $a <=> $b);
+            return $items;
+        }
+
         public static function reset(): void
         {
             self::$pending = [];
@@ -252,13 +362,13 @@ if (!class_exists(Vg::class, false)) {
         }
 
         // Equal as the semantics compare: numbers by value (1 equals 1.0), anything else exactly.
-        public static function equal($a, $b): bool
+        public static function equal(mixed $a, mixed $b): bool
         {
             return (is_int($a) || is_float($a)) && (is_int($b) || is_float($b)) ? $a == $b : $a === $b;
         }
 
         // Numbers as text by JavaScript's rules: PHP's shortest digits, laid out as JavaScript does.
-        public static function formatNumber($x): string
+        public static function formatNumber(int|float $x): string
         {
             if (is_int($x)) {
                 return (string) $x;
@@ -273,7 +383,7 @@ if (!class_exists(Vg::class, false)) {
                 return '0';
             }
             $sign = $x < 0 ? '-' : '';
-            $parts = explode('e', strtolower(json_encode(abs($x))));
+            $parts = explode('e', strtolower((string) json_encode(abs($x))));
             $mantissa = $parts[0];
             $exponent = isset($parts[1]) ? (int) $parts[1] : 0;
             $pieces = explode('.', $mantissa);
@@ -297,16 +407,16 @@ if (!class_exists(Vg::class, false)) {
 
         private static function quote(string $text): string
         {
-            return json_encode($text, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return (string) json_encode($text, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
 
-        private static function keyText($key): string
+        private static function keyText(mixed $key): string
         {
             return is_string($key) ? $key : self::format($key);
         }
 
         // Containers and structs print as JSON: sets in ascending order, maps in the order keys were added.
-        public static function json($value): string
+        public static function json(mixed $value): string
         {
             if ($value === null) {
                 return 'null';
@@ -324,7 +434,7 @@ if (!class_exists(Vg::class, false)) {
                 return self::quote($value);
             }
             if ($value instanceof VgList) {
-                return '[' . implode(',', array_map([self::class, 'json'], $value->items)) . ']';
+                return '[' . implode(',', array_map(fn (mixed $item): string => self::json($item), $value->items)) . ']';
             }
             if ($value instanceof VgSet) {
                 return self::json($value->sorted());
@@ -336,17 +446,17 @@ if (!class_exists(Vg::class, false)) {
                 }
                 return '{' . implode(',', $parts) . '}';
             }
-            if (is_object($value) && method_exists($value, 'vgFields')) {
+            if ($value instanceof VgStruct) {
                 $parts = [];
                 foreach ($value->vgFields() as [$name, $item]) {
                     $parts[] = self::quote($name) . ':' . self::json($item);
                 }
                 return '{' . implode(',', $parts) . '}';
             }
-            return self::quote(is_object($value) ? (new \ReflectionClass($value))->getShortName() : (string) $value);
+            return self::quote(is_object($value) ? (new \ReflectionClass($value))->getShortName() : get_debug_type($value));
         }
 
-        public static function format($value): string
+        public static function format(mixed $value): string
         {
             if ($value === null) {
                 return '';
@@ -364,7 +474,7 @@ if (!class_exists(Vg::class, false)) {
         }
 
         // Text as a number, as JavaScript's Number() reads it: blank is 0, anything else not a number NaN.
-        public static function toNumber($value)
+        public static function toNumber(mixed $value): int|float
         {
             if ($value === null || $value === false) {
                 return 0.0;
@@ -395,7 +505,7 @@ if (!class_exists(Vg::class, false)) {
         }
 
         // Truth as the semantics define it: false, null, 0, NaN and empty text are false.
-        public static function toBoolean($value): bool
+        public static function toBoolean(mixed $value): bool
         {
             if ($value === null || $value === false) {
                 return false;

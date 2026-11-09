@@ -80,9 +80,11 @@ export function scanPhp(source: string): ModuleScan {
           // A namespace alone ends with \, so generated code calls a function, not a static method.
           const container = inClass ? qualify(classes[classes.length - 1].name) : namespace ? `${namespace}\\` : undefined;
           // A function returning a Fiber is async (docs/node-authoring.md, gap 4): a latent node, whose
-          // value is what the Fiber returns (typed by `@return Fiber<int>`, else any value).
+          // value is what the Fiber returns (typed by `@return Fiber<int>`, or PHPStan's
+          // `Fiber<TStart, TResume, TReturn, TSuspend>`, else any value).
           const fiber = returnText && /^\\?Fiber$/.test(returnText.trim()) && !references.length;
-          const fiberValue = fiber ? /^\\?Fiber<\s*([^>]+)>/.exec(doc.tags.find((t) => t.name === 'return')?.text.trim() ?? '')?.[1] : undefined;
+          const fiberTypes = fiber ? /^\\?Fiber<\s*([^>]+)>/.exec(doc.tags.find((t) => t.name === 'return')?.text.trim() ?? '')?.[1].split(',').map((t) => t.trim()) : undefined;
+          const fiberValue = fiberTypes?.length === 4 ? fiberTypes[2] : fiberTypes?.[0];
           const returns = fiber ? (fiberValue ? mapPhpType(fiberValue) : undefined) : returnText ? mapPhpType(returnText) : undefined;
           const several = fiber ? { latent: true } : severalOutputs(doc, returns, references);
           if (member && name === '__construct') member.init = { name, line: where, params: scanned, returns: null, doc };

@@ -147,3 +147,14 @@ describe('PHP several outputs', () => {
     assert.deepEqual(fns.pair.results, { kind: 'tuple', names: ['count', 'label'] });
   });
 });
+
+// Async functions (docs/node-authoring.md, gap 4): a Fiber's value, from @return Fiber<int> or
+// PHPStan's Fiber<TStart, TResume, TReturn, TSuspend> (docs/project-integration.md, part 3).
+describe('PHP scanner: Fibers', () => {
+  const fiber = (tag: string) => scanPhp(['<?php', 'final class Remote', '{', '    /**', '     * @blueprint', `     * @return ${tag}`, '     */', '    public static function fetch(): \Fiber', '    {', '    }', '}', ''].join('\n')).functions[0];
+
+  test('the value is Fiber<T>\'s T, or PHPStan\'s TReturn', () => {
+    assert.deepEqual([fiber('\Fiber<int>').latent, fiber('\Fiber<int>').returns], [true, { id: 'int' }]);
+    assert.deepEqual(fiber('\Fiber<mixed, mixed, string, mixed>').returns, { id: 'string' });
+  });
+});

@@ -1554,12 +1554,13 @@ $padding = $missing > 0 ? str_repeat($fill, $missing) : '';
 return ` + (left ? '$padding . $text;' : '$text . $padding;');
 
 // Items of $left that pass `keep`, each once, in order.
+// Unique keeps every item it hasn't seen (no condition: checkers reject one that's always true).
 const phpUnique = (keep: string) => String.raw`$result = [];
 foreach ($left->items as $item) {
-    if (!(` + keep + String.raw`)) {
+` + (keep === 'true' ? '' : String.raw`    if (!(` + keep + String.raw`)) {
         continue;
     }
-    foreach ($result as $x) {
+`) + String.raw`    foreach ($result as $x) {
         if (Vg::equal($x, $item)) {
             continue 2;
         }
@@ -1572,7 +1573,7 @@ const phpIn = (list: string) => `array_filter(${list}->items, fn ($x) => Vg::equ
 const PHP: Record<string, string> = {
   'core:string.is-empty': "return $text === '';",
   'core:string.is-blank': "return trim($text) === '';",
-  'core:string.normalize-whitespace': "return implode(' ', preg_split('/\\s+/', trim($text), -1, PREG_SPLIT_NO_EMPTY));",
+  'core:string.normalize-whitespace': "return implode(' ', preg_split('/\\s+/', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: []);",
   'core:string.truncate': String.raw`if ($maxLength < 0) {
     throw new \InvalidArgumentException("Max Length can't be negative");
 }
@@ -1587,7 +1588,7 @@ return mb_substr($text, 0, max(0, $maxLength - mb_strlen($suffix))) . mb_substr(
   'core:string.slugify': `${PHP_WORDS}\nreturn implode('-', $words);`,
   'core:string.pad-left': phpPad(true),
   'core:string.pad-right': phpPad(false),
-  'core:string.word-count': "return count(preg_split('/\\s+/', trim($text), -1, PREG_SPLIT_NO_EMPTY));",
+  'core:string.word-count': "return count(preg_split('/\\s+/', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: []);",
   'core:string.mask': String.raw`if ($visibleStart < 0 || $visibleEnd < 0) {
     throw new \InvalidArgumentException("Visible counts can't be negative");
 }
@@ -1668,7 +1669,7 @@ return count($sorted) % 2 === 1 ? $sorted[$middle] : ($sorted[$middle - 1] + $so
   'core:map.pick': String.raw`$result = new VgMap();
 foreach ($keys->items as $key) {
     if ($source->has($key) && !$result->has($key)) {
-        $result->put($key, $source->get($key));
+        $result->put($key, $source->at($key));
     }
 }
 return $result;`,
@@ -1682,7 +1683,7 @@ foreach ($source->keys as $i => $key) {
     $result->put($key, $source->values[$i]);
 }
 return $result;`,
-  'core:utilities.get-env': 'return getenv($name) === false ? $fallback : getenv($name);',
+  'core:utilities.get-env': '$value = getenv($name);\nreturn $value === false ? $fallback : $value;',
   'core:file.normalize-path': String.raw`$rest = str_replace('\\', '/', $path);
 $drive = '';
 if (preg_match('/^[A-Za-z]:/', $rest)) {
