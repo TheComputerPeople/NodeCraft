@@ -316,6 +316,17 @@ What doesn't:
 - **Versions** are what generated code needs, or newer when the installed toolchain is, written in the project's files (so Part 2 reads them back).
 - **It opens the graph, compiles it, and offers Run.**
 
+**Built (step 5).**
+
+- **Blueprint Visual Scripting: New Project...** (src/extension/new-project-command.ts) asks for the language, the folder (the project goes in it when it's empty, else in a new folder named after the project) and the name. It writes the project, opens its graph in the graph editor, compiles it and offers Run. A folder outside the workspace is offered to open or to add to it.
+- **The project** (src/extension/new-project.ts, free of the vscode API): the files of the table above, with an entry point in every language, so the project runs without VS Code too (`node src/main.ts`, `python -m name`, `dotnet run`, `cargo run`, `go run .`, `lua main.lua`, `php bin/main.php`, ...). Each one runs the graph's Start, then the language's latent runner where it has one.
+  - The graph compiles when the project is written, and its generated files are registered with the build as if every hook were accepted: a CMake project gets the `vgraph.cmake` include, a Rust crate its module block.
+  - `.gitattributes` marks `*.vgraph.*`, the language's own pattern (`*_vgraph.py`, from its pack's output file name) and the support files as `linguist-generated`.
+  - The README says how to run it in VS Code and without it.
+- **Versions.** Settings that pin a toolchain take the installed one's version when it's newer than what generated code needs: .NET's target framework (`net10.0` with the .NET 10 SDK), Java's release, Go's `go` line, Godot's feature, `.ruby-version` and Lua's runtime. Floors keep what generated code needs (`requires-python = ">=3.8"`, PHP's `>=8.1`), so older interpreters still work. The tool's version is read with its `--version`.
+- **Java** uses Maven, with its plugins pinned (as Maven asks), or Gradle when Gradle is on the PATH and Maven isn't.
+- **Tests:** test/conformance/new-project.test.ts makes the project in each of the 12 languages (and Java with Gradle) and runs its checkers and entry point with the corpus's step runner: `tsc`, mypy `--strict`, `dotnet build -warnaserror`, CMake with `-Wall -Wextra -Werror`, clippy and `cargo fmt --check`, Maven and Gradle, `go vet`, Godot's import, `ruby -w`, PHPStan at level 9, and each prints "Hello from Blueprint". Each project's declared version reads back without a warning. The integration suite runs the command.
+
 ## Part 5: Set Up in This Project
 
 **Design.** **Blueprint: Set Up in This Project** runs on an existing codebase (the workspace folder, or a folder picked in the Explorer) and shows a report in a webview, one section per project found (Part 1):

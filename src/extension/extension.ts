@@ -24,6 +24,7 @@ import { BlueprintVisualScriptingApi } from '../core/api';
 import { ProjectFunctions } from './project-functions';
 import { watchWorkspaceLanguagePacks } from './workspace-packs';
 import { commandFolder } from './workspace-folders';
+import { NewProjectAnswers, newProject } from './new-project-command';
 
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
@@ -176,6 +177,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       await vscode.commands.executeCommand('vscode.open', target);
     })
   );
+  // New Project (docs/project-integration.md, part 4): a project in a language's usual layout, with a
+  // first graph that runs.
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newProject', (given?: NewProjectAnswers) => newProject(given)));
   // New Node (docs/node-authoring.md, gap 8): a snippet node to start from, in the folder picked in
   // the Explorer (else the workspace's nodes folder), with a snippet for each language its graphs use.
   context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newNode', async (folder?: vscode.Uri, given?: { name: string; category: string }): Promise<vscode.Uri | undefined> => {

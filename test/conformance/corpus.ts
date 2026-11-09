@@ -135,17 +135,23 @@ export async function runLayout(layout: Layout, workDir: string): Promise<Layout
   const root = path.join(workDir, layout.name);
   const source = path.join(repoRoot, 'test/fixtures/projects', layout.name);
   fs.cpSync(source, root, { recursive: true, filter: (file) => !buildOutput(file) });
-  const tools = corpusToolsFolder();
   const result: LayoutResult = { compileErrors: [], warnings: [], notApplicable: [], generated: [], steps: [] };
   await generate(layout, root, result);
   if (result.compileErrors.length) return result;
-  // A step after one that didn't pass needs what that one makes (a build before its run), unless that
-  // one only checks and its tool is missing.
-  for (const [i, step] of layout.steps.entries()) {
-    const before = result.steps.find((s, j) => s.status === 'failed' || (s.status === 'skipped' && !layout.steps[j].check));
-    result.steps.push(before && i > 0 ? { step: step.name, status: 'skipped', message: `${step.name}: ${before.step} didn't pass` } : await runStep(step, root, tools));
-  }
+  result.steps = await runSteps(layout.steps, root);
   return result;
+}
+
+// Runs a project's steps in its folder. A step after one that didn't pass needs what that one makes
+// (a build before its run), unless that one only checks and its tool is missing.
+export async function runSteps(steps: CorpusStep[], root: string): Promise<StepResult[]> {
+  const tools = corpusToolsFolder();
+  const results: StepResult[] = [];
+  for (const [i, step] of steps.entries()) {
+    const before = results.find((s, j) => s.status === 'failed' || (s.status === 'skipped' && !steps[j].check));
+    results.push(before && i > 0 ? { step: step.name, status: 'skipped', message: `${step.name}: ${before.step} didn't pass` } : await runStep(step, root, tools));
+  }
+  return results;
 }
 
 // Build output a tool or IDE may have left in the repository's copy of a layout: a folder named as

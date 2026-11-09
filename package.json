@@ -27,6 +27,7 @@
   "activationEvents": [
     "onCustomEditor:blueprintVisualScripting.graphEditor",
     "onCommand:blueprintVisualScripting.createGraph",
+    "onCommand:blueprintVisualScripting.newProject",
     "onCommand:blueprintVisualScripting.newNode",
     "onCommand:blueprintVisualScripting.testNodeLibrary",
     "onCommand:blueprintVisualScripting.addBlueprintPackage"
@@ -57,6 +58,11 @@
       {
         "command": "blueprintVisualScripting.createGraph",
         "title": "New Graph",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.newProject",
+        "title": "New Project...",
         "category": "Blueprint Visual Scripting"
       },
       {

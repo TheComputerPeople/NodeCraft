@@ -347,6 +347,24 @@ test('a marked function that cannot be a node warns in its file; Expose adds the
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 });
 
+test('New Project writes a project in a new folder of a folder that has files, opens its graph and compiles it', async () => {
+  const parent = workspaceFile('new-projects');
+  await vscode.workspace.fs.writeFile(workspaceFile('new-projects/notes.txt'), new TextEncoder().encode('not empty\n'));
+  try {
+    const graph = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.newProject', { language: 'javascript', folder: parent, name: 'Hello Game' });
+    assert.equal(graph?.toString(), workspaceFile('new-projects/hello-game/src/Main.vgraph').toString());
+    for (const file of ['package.json', 'src/main.js', 'src/Main.vgraph.js', '.gitignore', '.gitattributes', 'README.md']) {
+      await vscode.workspace.fs.stat(workspaceFile(`new-projects/hello-game/${file}`));
+    }
+    const tab = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    assert.ok(tab instanceof vscode.TabInputCustom && tab.uri.toString() === graph!.toString(), 'the graph is open in the graph editor');
+    assert.match(await readText(workspaceFile('new-projects/hello-game/src/Main.vgraph.js')), /Hello from Blueprint/);
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    await vscode.workspace.fs.delete(parent, { recursive: true });
+  }
+});
+
 test('New Node writes a node file to start from; node files show their problems', async () => {
   const created = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.newNode', workspaceFile('lib'), { name: 'Clamp Health', category: 'Combat' });
   assert.equal(created?.toString(), workspaceFile('lib/ClampHealth.node.json').toString());
