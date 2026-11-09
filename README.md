@@ -113,6 +113,8 @@ sample/node-authoring has marked TypeScript and Python code, used from graphs in
 
 To start one, run **Blueprint Visual Scripting: New Project...** and pick a language and a folder. It writes a small project in that language's usual layout (a `package.json`, `pyproject.toml`, `.csproj`, `CMakeLists.txt`, `Cargo.toml`, `pom.xml`, `go.mod`, `project.godot`, ...) with a first graph that prints "Hello from Blueprint", an entry point that runs it, a `.gitignore`, a `.gitattributes` marking generated files, and a README saying how to run it with and without VS Code. Then it opens the graph and offers Run.
 
+In a codebase you have, **Blueprint Visual Scripting: Set Up in This Project** (also in a folder's menu in the Explorer) reports each project it finds: its build, its language version against what generated code needs, where graphs would generate, and its checkers. It also lists what generated code needs before it builds (a CMake include, a Rust module block), what can't be done and why, and optional changes (`.gitattributes`, Ruff's and Prettier's ignores, a Composer classmap, a first graph). Each change has **Show Change** and **Apply**, and nothing changes until you apply it.
+
 A graph's generated file sits next to it, in the project's own style, and the project's code uses it like any other module ([docs/project-integration.md](docs/project-integration.md)):
 
 ```ts

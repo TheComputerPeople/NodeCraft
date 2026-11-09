@@ -365,6 +365,28 @@ test('New Project writes a project in a new folder of a folder that has files, o
   }
 });
 
+test('Set Up in This Project reports a folder\'s project; its first graph and .gitattributes apply as undoable edits', async () => {
+  const folder = workspaceFile('setup-project');
+  await vscode.workspace.fs.writeFile(workspaceFile('setup-project/package.json'), new TextEncoder().encode('{ "name": "setup-app", "type": "module" }\n'));
+  await vscode.workspace.fs.writeFile(workspaceFile('setup-project/src/index.js'), new TextEncoder().encode('export const ready = true;\n'));
+  try {
+    const report = await vscode.commands.executeCommand<{ root: string; items: { kind: string; title: string; change?: { id: string } }[] }[]>('blueprintVisualScripting.setUpProject', folder);
+    const optional = report?.flatMap((p) => p.items).filter((i) => i.kind === 'optional') ?? [];
+    const first = optional.find((i) => /first graph/.test(i.title));
+    const attributes = optional.find((i) => /gitattributes/.test(i.title));
+    assert.ok(first?.change && attributes?.change, JSON.stringify(report));
+    await waitFor(() => vscode.window.tabGroups.all.some((g) => g.tabs.some((t) => t.label === 'Set Up in This Project')), 'the report open');
+    assert.equal(await vscode.commands.executeCommand('blueprintVisualScripting.applySetupChange', first.change.id), true);
+    const output = workspaceFile('setup-project/src/Hello.vgraph.js').fsPath;
+    await waitFor(() => fs.existsSync(output) && /Hello from Blueprint/.test(fs.readFileSync(output, 'utf8')), 'the first graph compiled', 20000);
+    assert.equal(await vscode.commands.executeCommand('blueprintVisualScripting.applySetupChange', attributes.change.id), true);
+    assert.match(await readText(workspaceFile('setup-project/.gitattributes')), /^\*\.vgraph\.\* linguist-generated$/m);
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    await vscode.workspace.fs.delete(folder, { recursive: true });
+  }
+});
+
 test('New Node writes a node file to start from; node files show their problems', async () => {
   const created = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.newNode', workspaceFile('lib'), { name: 'Clamp Health', category: 'Combat' });
   assert.equal(created?.toString(), workspaceFile('lib/ClampHealth.node.json').toString());

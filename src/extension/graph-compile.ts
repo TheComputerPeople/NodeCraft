@@ -96,8 +96,9 @@ export function outputPathsFor(languages: LanguagePackRegistry, graphPath: strin
 
 // A pack's output plan applied as if the user accepted every hook: the files it owns written, and
 // each hook's block put in its build file. What the extension does once the user says yes; the
-// corpus registers generated files this way.
-export function applyAcceptedPlan(pack: LanguagePack, root: string, generatedFiles: string[], outputFile?: string): CompileDiagnostic[] {
+// corpus registers generated files this way. Without `hooks`, only the owned files: what the
+// extension writes before the user has answered.
+export function applyAcceptedPlan(pack: LanguagePack, root: string, generatedFiles: string[], outputFile?: string, hooks = true): CompileDiagnostic[] {
   const placement = pack.generator?.placement;
   if (!placement) return [];
   const read = (file: string): string | undefined => {
@@ -117,7 +118,7 @@ export function applyAcceptedPlan(pack: LanguagePack, root: string, generatedFil
     }
   }
   const diagnostics: CompileDiagnostic[] = [...(plan.diagnostics ?? [])];
-  for (const hook of plan.hooks ?? []) {
+  for (const hook of hooks ? plan.hooks ?? [] : []) {
     const text = read(hook.file);
     if (text === undefined) diagnostics.push({ severity: 'warning', code: 'build-registration', message: `${hook.file} doesn't exist, so the generated code isn't registered with the build (${hook.description}).` });
     else if (!hasBlock(text, hook.block)) fs.writeFileSync(path.join(root, hook.file), withBlock(text, hook.block));

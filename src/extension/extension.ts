@@ -25,6 +25,7 @@ import { ProjectFunctions } from './project-functions';
 import { watchWorkspaceLanguagePacks } from './workspace-packs';
 import { commandFolder } from './workspace-folders';
 import { NewProjectAnswers, newProject } from './new-project-command';
+import { SetupView } from './setup-view';
 
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
@@ -180,6 +181,18 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   // New Project (docs/project-integration.md, part 4): a project in a language's usual layout, with a
   // first graph that runs.
   context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newProject', (given?: NewProjectAnswers) => newProject(given)));
+  // Set Up in This Project (docs/project-integration.md, part 5): a report on the folder picked in the
+  // Explorer (else the workspace folder), with each change it offers to make.
+  const setupView = new SetupView(languages);
+  context.subscriptions.push(
+    setupView,
+    vscode.commands.registerCommand('blueprintVisualScripting.setUpProject', async (folder?: vscode.Uri) => {
+      const target = folder ?? await commandFolder();
+      return target ? setupView.show(target.fsPath) : undefined;
+    }),
+    // The report's Apply, by the change's id (the tests apply through it).
+    vscode.commands.registerCommand('blueprintVisualScripting.applySetupChange', (id: string) => setupView.apply(id))
+  );
   // New Node (docs/node-authoring.md, gap 8): a snippet node to start from, in the folder picked in
   // the Explorer (else the workspace's nodes folder), with a snippet for each language its graphs use.
   context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newNode', async (folder?: vscode.Uri, given?: { name: string; category: string }): Promise<vscode.Uri | undefined> => {

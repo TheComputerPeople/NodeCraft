@@ -341,6 +341,16 @@ What doesn't:
 
 Register Generated Files with the Build stays, and its hooks move into the report.
 
+**Built (step 6).**
+
+- **Blueprint Visual Scripting: Set Up in This Project** (the command palette, or a folder's menu in the Explorer) opens the report for the folder (src/extension/setup-view.ts). Each project found has its Needs, Can't, Found and Optional items. A change is a set of files' new text: **Show Change** opens a diff of each file, and **Apply** makes it as one undoable workspace edit, saving the files it changed unless they had unsaved changes of their own. **Refresh** reads the folder again.
+- **The report** (src/extension/setup.ts, free of the vscode API) uses the project model and the packs' placement, as compiling does:
+  - **Found:** the build system and its files; each language's declared version against what generated code needs; where a graph generates in the folders the project's graphs are in (else where its first one would go), with the module other code imports it as; the checkers configured.
+  - **Needs:** each hook of the project's graphs not yet in its build file (CMake's include, Rust's module block, ...), with the files the extension keeps beside it (vgraph.cmake, a crate's support module). A project without graphs needs nothing yet: a hook for a graph that doesn't exist would name a missing file.
+  - **Can't:** a declared version older than generated code needs (with the file to raise it in), a build file a hook needs that doesn't exist, placement's warnings (a Makefile without wildcards), Meson, Bazel and Unreal's build, and TypeScript in a workspace whose tsconfig has a `rootDir` or project references (generated code imports another package's code by a relative path).
+  - **Optional:** `.gitattributes` lines for the project's languages; Ruff's `extend-exclude` for the generated files (in `pyproject.toml`'s `[tool.ruff]` or `ruff.toml`), since its PGH004 rejects their blanket `noqa`; a `.prettierignore` for Prettier; for ESLint, the `ignores` entry to add (a flat config is code, so it's shown rather than edited); for PHP, a Composer `classmap` of the graphs' folders, so the autoloader finds the generated classes; the "Expose as Blueprint node" quick fix; and a first graph in the project's usual source folder, which opens and compiles once it's made.
+- **Tests:** test/conformance/setup.test.ts runs the report on the corpus, compiled without registering anything. Applying the needs of cpp-cmake, rust-bin and rust-workspace makes them build and run, and the report then needs nothing more. java-maven with `maven.compiler.release` 11 is reported as needing 17. Ruff's exclude leaves Ruff passing, and the classmap lets Composer's autoloader load a generated class. A project without graphs is offered a first graph and `.gitattributes`. The integration suite runs the command and applies a first graph and `.gitattributes`.
+
 ## Exit check
 
 - The corpus passes: in every layout, generated code builds and passes the project's own checkers, runs from the project's own entry point, and calls and is called by the project's code.

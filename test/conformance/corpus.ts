@@ -132,14 +132,22 @@ export function corpusWorkDir(): string {
 
 // Copies the layout into `workDir` and generates its graphs; then runs its steps.
 export async function runLayout(layout: Layout, workDir: string): Promise<LayoutResult> {
+  const { root, result } = await prepareLayout(layout, workDir);
+  if (result.compileErrors.length) return result;
+  result.steps = await runSteps(layout.steps, root);
+  return result;
+}
+
+// Copies the layout into `workDir` and compiles its graphs into it, registering the generated files
+// with the build as if every hook were accepted, or (register false) as if none had been answered
+// yet: what Set Up in This Project finds in a project.
+export async function prepareLayout(layout: Layout, workDir: string, options: { register?: boolean } = {}): Promise<{ root: string; result: LayoutResult }> {
   const root = path.join(workDir, layout.name);
   const source = path.join(repoRoot, 'test/fixtures/projects', layout.name);
   fs.cpSync(source, root, { recursive: true, filter: (file) => !buildOutput(file) });
   const result: LayoutResult = { compileErrors: [], warnings: [], notApplicable: [], generated: [], steps: [] };
-  await generate(layout, root, result);
-  if (result.compileErrors.length) return result;
-  result.steps = await runSteps(layout.steps, root);
-  return result;
+  await generate(layout, root, result, options.register ?? true);
+  return { root, result };
 }
 
 // Runs a project's steps in its folder. A step after one that didn't pass needs what that one makes
@@ -168,7 +176,7 @@ function buildOutput(file: string): boolean {
 }
 
 // The layout's graphs and body, compiled as Compile compiles them.
-async function generate(layout: Layout, root: string, result: LayoutResult): Promise<void> {
+async function generate(layout: Layout, root: string, result: LayoutResult, register: boolean): Promise<void> {
   const pack = languages.get(layout.language)!;
   const registry = new NodeRegistry();
   for (const file of ['sample/visual-nodes/Math/Double.node.json', 'test/fixtures/nodes/Fail.node.json']) registry.register(parseNodeDefinition(fs.readFileSync(path.join(repoRoot, file), 'utf8'))!);
@@ -200,7 +208,7 @@ async function generate(layout: Layout, root: string, result: LayoutResult): Pro
     },
     remove: async (file) => fs.rmSync(file, { force: true }),
     // As OutputPlans lists them: each graph of the pack's language, by its output file.
-    register: async (other, folder, outputFile) => applyAcceptedPlan(other, folder, outputsOf(other), outputFile)
+    register: async (other, folder, outputFile) => applyAcceptedPlan(other, folder, outputsOf(other), outputFile, register)
   };
   // Graphs left out: not applicable, or in a program that isn't.
   const dropped = new Set<string>();
@@ -234,7 +242,7 @@ async function generate(layout: Layout, root: string, result: LayoutResult): Pro
     // Nor do warnings about its files (Rust's modules of one name, beside another program's).
     result.warnings = result.warnings.filter((w) => !w.includes(`${folder}/`));
     // The build no longer lists its files.
-    result.warnings.push(...applyAcceptedPlan(pack, root, outputsOf(pack)).map((d) => `${folder}: ${d.message}`));
+    result.warnings.push(...applyAcceptedPlan(pack, root, outputsOf(pack), undefined, register).map((d) => `${folder}: ${d.message}`));
   }
 }
 

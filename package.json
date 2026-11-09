@@ -28,6 +28,7 @@
     "onCustomEditor:blueprintVisualScripting.graphEditor",
     "onCommand:blueprintVisualScripting.createGraph",
     "onCommand:blueprintVisualScripting.newProject",
+    "onCommand:blueprintVisualScripting.setUpProject",
     "onCommand:blueprintVisualScripting.newNode",
     "onCommand:blueprintVisualScripting.testNodeLibrary",
     "onCommand:blueprintVisualScripting.addBlueprintPackage"
@@ -63,6 +64,11 @@
       {
         "command": "blueprintVisualScripting.newProject",
         "title": "New Project...",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.setUpProject",
+        "title": "Set Up in This Project",
         "category": "Blueprint Visual Scripting"
       },
       {
@@ -238,6 +244,11 @@
         }
       ],
       "explorer/context": [
+        {
+          "command": "blueprintVisualScripting.setUpProject",
+          "when": "explorerResourceIsFolder",
+          "group": "blueprint@0"
+        },
         {
           "command": "blueprintVisualScripting.newNode",
           "when": "explorerResourceIsFolder",

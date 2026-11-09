@@ -41,9 +41,9 @@ export function projectNames(name: string): { slug: string; snake: string; pasca
 }
 
 // The first graph: Start prints "Hello from Blueprint".
-export function helloGraph(language: string): GraphDocument {
+export function helloGraph(language: string, name = 'Main'): GraphDocument {
   return {
-    schemaVersion: 3, name: 'Main', kind: 'class', language, variables: [],
+    schemaVersion: 3, name, kind: 'class', language, variables: [],
     graphs: [{
       id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
       nodes: [
