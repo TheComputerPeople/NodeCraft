@@ -41,7 +41,7 @@ async function assertPasses(steps: CorpusStep[], root: string, t: { skip(message
 }
 
 describe('Set Up in This Project', { concurrency: 3 }, () => {
-  for (const name of ['cpp-cmake', 'rust-bin', 'rust-workspace']) {
+  for (const name of ['cpp-cmake', 'cpp-vcxproj', 'rust-bin', 'rust-workspace']) {
     test(`${name}: its hooks are the report's needs, and applying them makes it build`, async (t) => {
       const { root, report } = await unregistered(name);
       const needs = items(report, 'needs');

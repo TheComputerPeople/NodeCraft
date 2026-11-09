@@ -64,6 +64,60 @@ async function main(): Promise<void> {
       console.warn(`The test workspace ${workspace} wasn't removed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+  // A multi-root workspace of two projects in different languages (docs/project-integration.md,
+  // "Exit check"), opened as its .code-workspace file.
+  const multi = createMultiRootWorkspace();
+  try {
+    await runTests({
+      version: minimumVsCodeVersion(),
+      extensionDevelopmentPath: repoRoot,
+      extensionTestsPath: path.join(__dirname, 'multiroot'),
+      launchArgs: [path.join(multi, 'multi.code-workspace'), '--disable-extensions', '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes']
+    });
+  } finally {
+    fs.rmSync(multi, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
+  }
+}
+
+// A TypeScript web app and a Python API, each with a function marked @blueprint and a graph that
+// greets with it: Start prints "Hello, " + title("ada") + "!".
+function createMultiRootWorkspace(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'blueprint-vscode-multi-'));
+  const greet = (language: string, title: string) => JSON.stringify({
+    schemaVersion: 3, name: 'Greet', kind: 'class', language, variables: [],
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [
+        { id: 'start', type: 'core:event.start', position: { x: 0, y: 0 }, properties: {} },
+        { id: 'title', type: title, position: { x: 0, y: 120 }, properties: { 'pin:name': 'ada' } },
+        { id: 'hello', type: 'core:string.append', position: { x: 200, y: 120 }, properties: { 'pin:a': 'Hello, ' } },
+        { id: 'bang', type: 'core:string.append', position: { x: 400, y: 120 }, properties: { 'pin:b': '!' } },
+        { id: 'print', type: 'core:console.print', position: { x: 600, y: 0 }, properties: {} }
+      ],
+      connections: [
+        { id: 'c1', fromNode: 'start', fromPin: 'execOut', toNode: 'print', toPin: 'execIn' },
+        { id: 'c2', fromNode: 'title', fromPin: 'returnValue', toNode: 'hello', toPin: 'b' },
+        { id: 'c3', fromNode: 'hello', fromPin: 'returnValue', toNode: 'bang', toPin: 'a' },
+        { id: 'c4', fromNode: 'bang', fromPin: 'returnValue', toNode: 'print', toPin: 'value' }
+      ]
+    }]
+  }, null, 2);
+  const files: Record<string, string> = {
+    'multi.code-workspace': JSON.stringify({ folders: [{ path: 'web' }, { path: 'api' }] }, null, 2),
+    'web/package.json': JSON.stringify({ name: 'web', private: true, type: 'module' }, null, 2),
+    'web/tsconfig.json': JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'nodenext', strict: true, noEmit: true, allowImportingTsExtensions: true }, include: ['src'] }, null, 2),
+    'web/src/text.ts': '/**\n * Capitalizes a name.\n * @blueprint pure\n */\nexport function title(name: string): string {\n  return name.charAt(0).toUpperCase() + name.slice(1);\n}\n',
+    'web/src/Greet.vgraph': greet('typescript', 'fn:typescript:src/text.ts#title'),
+    'api/pyproject.toml': '[project]\nname = "api"\nversion = "0.1.0"\nrequires-python = ">=3.8"\n',
+    'api/app/__init__.py': '',
+    'api/app/text.py': 'def title(name: str) -> str:\n    """Capitalizes a name.\n\n    @blueprint pure\n    """\n    return name[:1].upper() + name[1:]\n',
+    'api/app/Greet.vgraph': greet('python', 'fn:python:app/text.py#title')
+  };
+  for (const [file, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), text);
+  }
+  return root;
 }
 
 main().catch((error) => {

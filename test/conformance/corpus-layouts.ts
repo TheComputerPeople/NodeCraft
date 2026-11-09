@@ -1,6 +1,9 @@
 // The corpus's layouts (docs/project-integration.md, part 3; run by corpus.test.ts): each a folder of
 // test/fixtures/projects, the graphs a user would put in it, and the project's own build, checkers,
 // tests and entry point.
+import { spawnSync } from 'node:child_process';
+import * as path from 'node:path';
+import { GraphDocument } from '../../src/core/model';
 import { CorpusGraph, CorpusStep, Feature, Layout, PYTHON, featureGraphs, featuresOutput, greetingLibrary, greetingTests, sharedScore, showScore } from './corpus';
 
 const HELLO = ['Hello, Ada!'];
@@ -23,6 +26,30 @@ const cargo = (...args: string[]): CorpusStep => ({ name: `cargo ${args[0]}`, co
 const CMAKE_GENERATOR = process.platform === 'win32' ? ['-G', 'MinGW Makefiles'] : [];
 const MAKE = process.platform === 'win32' ? 'mingw32-make' : 'make';
 const exe = (file: string) => `./${file}${process.platform === 'win32' ? '.exe' : ''}`;
+// Visual Studio's MSBuild, found by its installer's vswhere (Windows); elsewhere `msbuild` on the
+// PATH, if any.
+const MSBUILD = msbuildPath();
+function msbuildPath(): string {
+  if (process.platform !== 'win32') return 'msbuild';
+  const vswhere = path.join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Microsoft Visual Studio', 'Installer', 'vswhere.exe');
+  const found = spawnSync(vswhere, ['-latest', '-products', '*', '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64', '-find', 'MSBuild\\**\\Bin\\MSBuild.exe'], { encoding: 'utf8', windowsHide: true });
+  return found.status === 0 && found.stdout.trim() ? found.stdout.trim().split(/\r?\n/)[0] : 'msbuild';
+}
+// A class graph whose Start prints a project function's result.
+function printCall(name: string, type: string, pins: Record<string, unknown>): GraphDocument {
+  const n = (id: string, nodeType: string, properties: Record<string, unknown> = {}) => ({ id, type: nodeType, position: { x: 0, y: 0 }, properties });
+  return {
+    schemaVersion: 3, name, kind: 'class', language: '', variables: [],
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [n('start', 'core:event.start'), n('call', type, pins), n('print', 'core:console.print')],
+      connections: [
+        { id: 'a', fromNode: 'start', fromPin: 'execOut', toNode: 'print', toPin: 'execIn' },
+        { id: 'b', fromNode: 'call', fromPin: 'returnValue', toNode: 'print', toPin: 'value' }
+      ]
+    }]
+  };
+}
 // C++ has no generics in its pack yet.
 const CPP_FEATURES: Feature[] = ['classes', 'outputs', 'latent'];
 // PHP without Xdebug's messages; its tools from the corpus's tools (npm run corpus:tools). Composer
@@ -206,6 +233,25 @@ export const LAYOUTS: Layout[] = [
     steps: [
       { name: 'make', command: [MAKE], probe: [MAKE, '--version'] },
       { name: 'run', command: [exe('corpus')], probe: [MAKE, '--version'], stdout: HELLO }
+    ]
+  },
+  {
+    // A graph calls a C file's function, whose header has no extern "C" of its own.
+    name: 'cpp-c-sources', language: 'cpp', code: ['src/measure.h'],
+    graphs: [{ path: 'src/graphs/Room.vgraph', build: ({ code }) => printCall('Room', code('area').type, { 'pin:width': 3, 'pin:height': 2.5 }) }],
+    steps: [
+      { name: 'cmake', command: ['cmake', '-S', '.', '-B', 'build', ...CMAKE_GENERATOR, '-DCMAKE_C_COMPILER=gcc', '-DCMAKE_CXX_COMPILER=g++'], probe: ['cmake', '--version'] },
+      { name: 'cmake --build', command: ['cmake', '--build', 'build'], probe: ['cmake', '--version'] },
+      { name: 'run', command: [exe('build/corpus')], probe: ['cmake', '--version'], stdout: ['7.5'] }
+    ]
+  },
+  {
+    // A Visual Studio project, built by MSBuild at warning level 4 with warnings as errors.
+    name: 'cpp-vcxproj', language: 'cpp', code: ['names.h'], body: 'blueprint', programs: ['arena'],
+    graphs: [greeting('graphs/Greeting.vgraph', 'title')],
+    steps: [
+      { name: 'MSBuild', command: [MSBUILD, 'Game.vcxproj', '/p:Configuration=Debug', '/p:Platform=x64', '/nologo', '/v:minimal', '/nodeReuse:false'], probe: [MSBUILD, '-version'], timeoutMs: 900000 },
+      { name: 'run', command: ['./x64/Debug/Game.exe'], probe: [MSBUILD, '-version'], stdout: HELLO }
     ]
   },
   // ---- Ruby ----

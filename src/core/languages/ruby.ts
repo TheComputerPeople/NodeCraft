@@ -1,7 +1,7 @@
 // Ruby pack (docs/more-languages.md, "Ruby"): generates a Ruby file (one class per graph) from Visual
 // IR. Files require each other with require_relative, and the support file (ruby-runtime.ts) is a
 // companion: a copy goes next to every generated file.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, dataPins, targetCallParams } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, dataPins, targetCallParams, canComplete } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
@@ -399,7 +399,8 @@ class RubyEmitter {
       for (const m of locals) this.out.line(`${this.memberNames.get(m.id)} = ${this.value(m.initial, m.type)}`);
       for (const x of slots) this.out.line(`${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)}`);
       this.statements(fn.body);
-      if (fn.outputs.length && fn.body[fn.body.length - 1]?.kind !== 'return') this.out.line(`return ${this.returned(fn, [])}`);
+      // Only where it can be reached (a Branch whose sides both return can't complete).
+      if (fn.outputs.length && canComplete(fn.body)) this.out.line(`return ${this.returned(fn, [])}`);
     });
   }
 

@@ -1363,6 +1363,7 @@ class Lowerer {
       ...(implementation.member ? { member: implementation.member } : {}),
       ...(implementation.member?.kind === 'construct' ? { bases: this.codeBases(implementation.member.type) } : {}),
       ...(implementation.results ? { results: implementation.results } : {}),
+      ...(target === implementation && implementation.linkage ? { linkage: implementation.linkage } : {}),
       params: dataInputs(def).map((p) => ({ pinId: p.id, type: p.type, ...(target === implementation && implementation.borrowed?.includes(p.id) ? { borrowed: true } : {}) })),
       // A function with @execs returns a bool or an enum, which its exec outputs stand for.
       returns: implementation.execs === 'bool' ? { id: 'bool' } : typeof implementation.execs === 'object' ? { id: implementation.execs.enum } : def.outputs.find((p) => p.kind === 'data')?.type

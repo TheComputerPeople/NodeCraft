@@ -84,6 +84,19 @@ export function markerEdit(source: string, line: number, marker: string, style: 
   return { start: top, end: top, lines: [`${indent}/** ${marker} */`] };
 }
 
+// Several declarations of a file marked at once (Expose Functions as Nodes): the file's new text,
+// in its own line endings. Each edit is placed from the bottom up, so the lines above stay put.
+export function withMarkers(source: string, candidates: ExposeCandidate[], marker: string, style: DocStyle): string {
+  const eol = source.includes('\r\n') ? '\r\n' : '\n';
+  let lines = source.replace(/\r\n/g, '\n').split('\n');
+  for (const candidate of [...candidates].sort((a, b) => b.line - a.line)) {
+    // A field's marker is "@blueprint" alone, as the quick fix gives it.
+    const edit = markerEdit(lines.join('\n'), candidate.line, candidate.kind === 'property' || candidate.kind === 'constructor' ? '@blueprint' : marker, style, candidate.kind);
+    if (edit) lines = [...lines.slice(0, edit.start), ...edit.lines, ...lines.slice(edit.end)];
+  }
+  return lines.join(eol);
+}
+
 // Python: the docstring after the header (a def's, or an attribute's), in which the marker goes.
 function docstringEdit(lines: string[], at: number, indent: string, marker: string): LineEdit | undefined {
   // The header ends at the line whose colon closes it, outside brackets.

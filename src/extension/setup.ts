@@ -62,7 +62,7 @@ export function setupReport(root: string, languages: LanguagePackRegistry): Proj
   for (const pack of languages.all()) {
     const generated = graphs.filter((g) => g.language === pack.id).map((g) => posix(path.join(path.dirname(g.file), pack.generator!.outputFileName(path.basename(g.file)))));
     if (!generated.length || !pack.generator?.placement) continue;
-    plans.set(pack.id, pack.generator.placement({ generatedFiles: generated.sort(), readFile: (f) => read(path.join(root, f)), exists: (f) => fs.existsSync(path.join(root, f)) }));
+    plans.set(pack.id, pack.generator.placement({ generatedFiles: generated.sort(), readFile: (f) => read(path.join(root, f)), exists: (f) => fs.existsSync(path.join(root, f)), list: (dir) => listDir(path.join(root, dir)) }));
   }
   const projects = findProjects(root);
   // A hook goes to the innermost project holding its file.
@@ -285,6 +285,14 @@ function graphFiles(root: string): GraphFile[] {
   };
   walk(root, 0);
   return found;
+}
+
+function listDir(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
 }
 
 function isInside(file: string, folder: string): boolean {

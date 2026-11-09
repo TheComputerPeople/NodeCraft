@@ -29,6 +29,7 @@
     "onCommand:blueprintVisualScripting.createGraph",
     "onCommand:blueprintVisualScripting.newProject",
     "onCommand:blueprintVisualScripting.setUpProject",
+    "onCommand:blueprintVisualScripting.exposeFunctions",
     "onCommand:blueprintVisualScripting.newNode",
     "onCommand:blueprintVisualScripting.testNodeLibrary",
     "onCommand:blueprintVisualScripting.addBlueprintPackage"
@@ -69,6 +70,11 @@
       {
         "command": "blueprintVisualScripting.setUpProject",
         "title": "Set Up in This Project",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.exposeFunctions",
+        "title": "Expose Functions as Nodes...",
         "category": "Blueprint Visual Scripting"
       },
       {
@@ -250,6 +256,11 @@
           "group": "blueprint@0"
         },
         {
+          "command": "blueprintVisualScripting.exposeFunctions",
+          "when": "!explorerResourceIsFolder && resourceExtname =~ /^\\.(ts|mts|cts|js|mjs|cjs|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
+          "group": "blueprint@0"
+        },
+        {
           "command": "blueprintVisualScripting.newNode",
           "when": "explorerResourceIsFolder",
           "group": "blueprint@0"
@@ -273,6 +284,13 @@
           "command": "blueprintVisualScripting.runTests",
           "when": "resourceExtname == .vgraph",
           "group": "blueprint@3"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "blueprintVisualScripting.exposeFunctions",
+          "when": "resourceExtname =~ /^\\.(ts|mts|cts|js|mjs|cjs|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
+          "group": "blueprint@0"
         }
       ],
       "commandPalette": [

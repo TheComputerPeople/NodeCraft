@@ -1,7 +1,7 @@
 // Lua pack (docs/more-languages.md, "Lua"): generates a Lua 5.4 module (one class per graph) from
 // Visual IR. Containers, formatting, classes, dispatchers and the latent queue come from the support
 // module (lua-runtime.ts), which generated code requires as "vgraph_runtime".
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams, canComplete } from '../compiler/ir';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
@@ -512,7 +512,8 @@ class LuaEmitter {
       for (const x of slots) this.out.line(`local ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)}`);
       this.statements(fn.body);
       // Reaching the end without a Return Node returns the outputs' defaults.
-      if (fn.outputs.length && fn.body[fn.body.length - 1]?.kind !== 'return') this.out.line(`return ${fn.outputs.map((o) => this.defaultFor(o.type)).join(', ')}`);
+      // Only where it can be reached (a Branch whose sides both return can't complete).
+      if (fn.outputs.length && canComplete(fn.body)) this.out.line(`return ${fn.outputs.map((o) => this.defaultFor(o.type)).join(', ')}`);
     });
   }
 

@@ -915,7 +915,20 @@ return int(result)`
       typescript: 'const value = (globalThis as any).process.env[name];\nreturn value === undefined ? fallback : (value as string);',
       python: 'import os\nreturn os.environ.get(name, fallback)',
       csharp: 'return Environment.GetEnvironmentVariable(name) ?? fallback;',
-      cpp: 'const char* value = std::getenv(name.c_str());\nreturn value ? std::string(value) : fallback;',
+      // MSVC's SDL checks reject getenv as unsafe (C4996): its _dupenv_s instead.
+      cpp: [
+        '#ifdef _MSC_VER',
+        'char* value = nullptr;',
+        'std::size_t size = 0;',
+        'if (_dupenv_s(&value, &size, name.c_str()) != 0 || value == nullptr) return fallback;',
+        'std::string result(value);',
+        'std::free(value);',
+        'return result;',
+        '#else',
+        'const char* value = std::getenv(name.c_str());',
+        'return value ? std::string(value) : fallback;',
+        '#endif'
+      ].join('\n'),
       rust: 'return std::env::var(&name).unwrap_or(fallback);',
       java: 'String value = System.getenv(name);\nreturn value != null ? value : fallback;',
       go: 'if value, ok := os.LookupEnv(name); ok {\n\treturn value\n}\nreturn fallback'

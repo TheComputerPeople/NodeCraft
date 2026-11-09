@@ -128,6 +128,9 @@ export interface FunctionImplementation {
   // The input pins the code takes by shared reference (Rust's &str and &[T]): generated code passes
   // a borrow of the value.
   borrowed?: string[];
+  // C++: a C function, in a header without extern "C" of its own: generated code includes the
+  // header in extern "C", so the call links to the C object file.
+  linkage?: 'c';
   // Unreal's ExpandBoolAsExecs and ExpandEnumAsExecs (`@execs`, gap 6): the bool or graph enum it
   // returns picks one of its exec outputs, which stand for its Return Value. 'enum' is asked for (a
   // return type that may be a graph enum); { enum } is the enum it turned out to be

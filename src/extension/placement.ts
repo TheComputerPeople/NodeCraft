@@ -332,13 +332,29 @@ export function rustCrateModules(file: string, stopDir: string): { src: string; 
   return undefined;
 }
 
+// Whether a C++ header declares C functions: a C file implements it (no C++ file beside it), and
+// it has no extern "C" of its own. Generated C++ then includes it in extern "C" (ExposeOptions.linkage).
+export function cppHeaderLinkage(header: string): 'c' | undefined {
+  if (!/\.(h|hh)$/i.test(header)) return undefined;
+  const stem = header.replace(/\.(h|hh)$/i, '');
+  if (!fs.existsSync(`${stem}.c`) || ['.cpp', '.cc', '.cxx'].some((ext) => fs.existsSync(stem + ext))) return undefined;
+  let text = '';
+  try {
+    text = fs.readFileSync(header, 'utf8');
+  } catch {
+    return undefined;
+  }
+  return /extern\s+"C"/.test(text) ? undefined : 'c';
+}
+
 // The C++ sources Run compiles with a generated file: the generated files it includes, theirs in
 // turn, and the implementation file next to each project header they include (.cpp, .cc or .cxx).
 export function cppRunSources(outputFile: string): string[] {
   const sources = new Set<string>();
   const seen = new Set<string>();
   const pending = [path.resolve(outputFile)];
-  const sibling = (header: string) => ['.cpp', '.cc', '.cxx'].map((ext) => header.replace(/\.(h|hpp|hh|hxx)$/i, ext)).find((file) => fs.existsSync(file));
+  // A header's implementation: its C++ file, else its C file (which Run compiles as C).
+  const sibling = (header: string) => ['.cpp', '.cc', '.cxx', '.c'].map((ext) => header.replace(/\.(h|hpp|hh|hxx)$/i, ext)).find((file) => fs.existsSync(file));
   while (pending.length) {
     const file = pending.pop()!;
     if (seen.has(file.toLowerCase())) continue;

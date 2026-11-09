@@ -191,6 +191,8 @@ export interface IrImport {
   module?: string;
   // Each argument; `borrowed` when the code takes it by shared reference (FunctionImplementation).
   params: { pinId: string; type?: TypeRef; borrowed?: boolean }[];
+  // C++: a C function, whose header is included in extern "C" (FunctionImplementation.linkage).
+  linkage?: 'c';
   returns?: TypeRef;
   // A function with several outputs (a graph library's): its result holds them, shaped as the
   // language returns several values (an object, a tuple, a named tuple).

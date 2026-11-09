@@ -26,6 +26,7 @@ import { watchWorkspaceLanguagePacks } from './workspace-packs';
 import { commandFolder } from './workspace-folders';
 import { NewProjectAnswers, newProject } from './new-project-command';
 import { SetupView } from './setup-view';
+import { ExposeAnswers, exposeFunctions } from './expose-command';
 
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
@@ -193,6 +194,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     // The report's Apply, by the change's id (the tests apply through it).
     vscode.commands.registerCommand('blueprintVisualScripting.applySetupChange', (id: string) => setupView.apply(id))
   );
+  // Expose Functions as Nodes (docs/code-as-nodes.md): a file's functions, picked, marked @blueprint
+  // (a C or C++ source's through its header).
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.exposeFunctions', (uri?: vscode.Uri, given?: ExposeAnswers) => exposeFunctions(projectFunctions, uri instanceof vscode.Uri ? uri : undefined, given)));
   // New Node (docs/node-authoring.md, gap 8): a snippet node to start from, in the folder picked in
   // the Explorer (else the workspace's nodes folder), with a snippet for each language its graphs use.
   context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newNode', async (folder?: vscode.Uri, given?: { name: string; category: string }): Promise<vscode.Uri | undefined> => {

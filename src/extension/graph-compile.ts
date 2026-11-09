@@ -94,6 +94,14 @@ export function outputPathsFor(languages: LanguagePackRegistry, graphPath: strin
     : []));
 }
 
+function listDir(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
 // A pack's output plan applied as if the user accepted every hook: the files it owns written, and
 // each hook's block put in its build file. What the extension does once the user says yes; the
 // corpus registers generated files this way. Without `hooks`, only the owned files: what the
@@ -108,7 +116,7 @@ export function applyAcceptedPlan(pack: LanguagePack, root: string, generatedFil
       return undefined;
     }
   };
-  const plan: OutputPlan = placement({ outputFile: outputFile && posix(path.relative(root, outputFile)), generatedFiles: generatedFiles.map((f) => posix(path.relative(root, f))).sort(), readFile: read, exists: (file) => fs.existsSync(path.join(root, file)) });
+  const plan: OutputPlan = placement({ outputFile: outputFile && posix(path.relative(root, outputFile)), generatedFiles: generatedFiles.map((f) => posix(path.relative(root, f))).sort(), readFile: read, exists: (file) => fs.existsSync(path.join(root, file)), list: (dir) => listDir(path.join(root, dir)) });
   for (const owned of plan.ownedFiles ?? []) {
     const file = path.join(root, owned.path);
     if (owned.text === '') fs.rmSync(file, { force: true });

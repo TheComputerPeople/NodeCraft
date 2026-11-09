@@ -42,7 +42,14 @@ export class OutputPlans implements vscode.Disposable {
           return undefined;
         }
       },
-      exists: (file) => fs.existsSync(path.join(root, file))
+      exists: (file) => fs.existsSync(path.join(root, file)),
+      list: (dir) => {
+        try {
+          return fs.readdirSync(path.join(root, dir));
+        } catch {
+          return [];
+        }
+      }
     });
     for (const owned of plan.ownedFiles ?? []) await writeOwned(path.join(root, owned.path), owned.text);
     const diagnostics = [...(plan.diagnostics ?? [])];

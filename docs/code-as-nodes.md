@@ -72,6 +72,17 @@ The setting `blueprintVisualScripting.exposeAllFunctions` exposes every public f
 
 **Feedback in the code.** A marked function that can't be a node gets a warning on its declaration, in the Problems panel too: "Not a Blueprint node: rest parameters can't be pins". On a function, method, constructor or property that could be one, the lightbulb offers **Expose as Blueprint node** and **Expose as pure Blueprint node**. Each adds the marker to the documentation comment in the language's style (`/** … */`, `///`, `//`, `---`, `##`, `#`, a Python docstring), creating it when there is none. A Lua field is marked on its own `---@field` line. Go's declarations come from its language server's symbols.
 
+**A whole file at once.** **Expose Functions as Nodes...** (a source file's menu in the Explorer, the editor's context menu, or the command palette on the active file) lists the file's functions, methods, constructors and properties that could be nodes but aren't, all picked, then asks for nodes or pure nodes. The markers go in as one edit, which opens in the Refactor Preview to apply or discard. It works on every language's files: TypeScript, JavaScript, Python, C#, C++ headers, Rust, Java, Go, Lua, GDScript, Ruby and PHP.
+
+**C and C++ source files.** Generated C++ calls a function through the header that declares it, so on a `.c`, `.cpp`, `.cc` or `.cxx` file the command works through its header (the one beside it of its name: `.h`, `.hpp`, `.hh` or `.hxx`):
+
+- a function the header declares is marked there;
+- one it doesn't is declared there, marked, from its definition (`double area(double width, double height);`), in its namespace, before the header's closing `extern "C"` guard or its include guard's `#endif`;
+- with no header, one is made: `#pragma once`, the standard headers its declarations name, and for a C file `extern "C"` guards, so C++ calls link to the C functions; the source then includes it;
+- `static` functions (they belong to their file), `main` and a class's members defined outside it aren't offered.
+
+**C functions from C++ graphs.** A header that a C file implements (a `.c` beside it, no C++ file) and that has no `extern "C"` of its own is included by generated C++ inside `extern "C" { … }`, and Run compiles the C file as C (`-x c`), so the calls link. The project's own build compiles it as the project says (CMake's `project(name C CXX)`).
+
 ## What becomes a node
 
 - **Which functions:** exported top-level function declarations, and exported `const` arrow functions or function expressions, in TypeScript and JavaScript. Top-level `def` in Python. Members of classes: see [Classes](#classes).

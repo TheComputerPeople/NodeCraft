@@ -387,6 +387,32 @@ test('Set Up in This Project reports a folder\'s project; its first graph and .g
   }
 });
 
+test('Expose Functions as Nodes marks a file\'s picked functions, which become nodes; a C file\'s through a new header', async () => {
+  const api = (vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi).testing;
+  const source = workspaceFile('lib/expose-me.ts');
+  await vscode.workspace.fs.writeFile(source, new TextEncoder().encode('export function shout(text: string): string {\n  return text.toUpperCase();\n}\n\nexport function whisper(text: string): string {\n  return text.toLowerCase();\n}\n'));
+  const native = workspaceFile('native/expose-me.c');
+  await vscode.workspace.fs.writeFile(native, new TextEncoder().encode('double area(double width, double height) {\n    return width * height;\n}\n'));
+  try {
+    const changed = await vscode.commands.executeCommand<string[]>('blueprintVisualScripting.exposeFunctions', source, { names: ['shout'], pure: true });
+    assert.deepEqual(changed?.map((f) => path.basename(f)), ['expose-me.ts']);
+    assert.match(await readText(source), /^\/\*\* @blueprint pure \*\/\nexport function shout/m);
+    assert.doesNotMatch(await readText(source), /@blueprint pure \*\/\nexport function whisper/, 'only what was picked');
+    await waitFor(() => !!api.registry.get('fn:typescript:lib/expose-me.ts#shout'), 'the Shout node', 20000);
+
+    const header = workspaceFile('native/expose-me.h');
+    const fromC = await vscode.commands.executeCommand<string[]>('blueprintVisualScripting.exposeFunctions', native, {});
+    assert.deepEqual(fromC?.map((f) => path.basename(f)).sort(), ['expose-me.c', 'expose-me.h']);
+    const headerText = await readText(header);
+    assert.match(headerText, /extern "C" \{[\s\S]*\/\/\/ @blueprint\r?\ndouble area\(double width, double height\);/);
+    assert.match(await readText(native), /^#include "expose-me\.h"\r?\n/);
+    await waitFor(() => !!api.registry.get('fn:cpp:native/expose-me.h#area'), 'the Area node, from the header', 20000);
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    for (const file of [source, native, workspaceFile('native/expose-me.h')]) await vscode.workspace.fs.delete(file).then(undefined, () => undefined);
+  }
+});
+
 test('New Node writes a node file to start from; node files show their problems', async () => {
   const created = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.newNode', workspaceFile('lib'), { name: 'Clamp Health', category: 'Combat' });
   assert.equal(created?.toString(), workspaceFile('lib/ClampHealth.node.json').toString());

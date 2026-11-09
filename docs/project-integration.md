@@ -293,6 +293,14 @@ What doesn't:
 - **Known limits:**
   - PSR-4 doesn't autoload generated PHP classes, whose files are named after their graphs (`Greeting.vgraph.php`): the project requires them, and each requires what it uses. Set Up can offer a Composer `classmap` entry (step 6).
 
+**Built (step 4, follow-up: the project's own code from the Explorer, C sources, Visual Studio projects).**
+
+- **Expose Functions as Nodes...** on a source file of any of the 12 languages (src/extension/expose-command.ts): its candidates (as the quick fix finds them, Go's through gopls) to pick, marked in one edit shown in the Refactor Preview. On a C or C++ source, through its header (src/core/importing/c-sources.ts): declarations marked or added, or a header made, with `extern "C"` for a C file (docs/code-as-nodes.md).
+- **C functions from C++ graphs:** a C header without `extern "C"` (`cppHeaderLinkage`) is included in `extern "C"`, and Run compiles `.c` implementation files as C.
+- **Visual Studio projects:** placement gives each `.vcxproj` an owned `vgraph.targets` and an import block (`PlacementContext.list` finds them; `FencedBlock`'s `before` anchor puts the block before `</Project>`). Set Up reports and applies it like the others.
+- **Found by building every node's C++ with MSVC** (`/W4 /WX`, SDL checks): Get Environment Variable used `getenv`, which MSVC rejects as unsafe (`_dupenv_s` there now); and C++, Lua, Ruby and Rust still wrote a fallback return after a Branch whose sides both return (MSVC's C4702), which `canComplete` now leaves out, as the other languages do.
+- **The corpus** has cpp-c-sources (CMake with C and C++: a graph calls a C file's function) and cpp-vcxproj (MSBuild at warning level 4 with warnings as errors, with every node's code); Set Up's tests apply cpp-vcxproj's hook and build it. test/conformance/expose.test.ts exposes a function in each language and checks it becomes a node; the integration suite runs the command on a TypeScript file and a C file.
+
 ## Part 4: New Project
 
 **Design.** **Blueprint: New Project…** asks for a language and a folder (an empty one, or a new one in it). It writes a minimal project in that language's usual layout, with a first class graph that prints "Hello from Blueprint" and runs:

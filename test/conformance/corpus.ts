@@ -23,7 +23,7 @@ import { GraphDocument, NodeDefinition } from '../../src/core/model';
 import { NodeRegistry, parseNodeDefinition } from '../../src/core/registry';
 import { parseDocument } from '../../src/core/serializer';
 import { GraphCompileHost, applyAcceptedPlan, compileGraphFile } from '../../src/extension/graph-compile';
-import { codeModuleFor, graphFileNodes } from '../../src/extension/placement';
+import { codeModuleFor, cppHeaderLinkage, graphFileNodes } from '../../src/extension/placement';
 import { repoRoot } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
 import { GENERICS_OUTPUT, genericsGraph } from './generics';
@@ -183,7 +183,8 @@ async function generate(layout: Layout, root: string, result: LayoutResult, regi
   const code: NodeDefinition[] = [];
   for (const file of layout.code) {
     const scan = scanCode(layout.language, fs.readFileSync(path.join(root, file), 'utf8'));
-    code.push(...exposeFunctions(scan, { language: pack.id, path: file, module: codeModuleFor(pack.id, path.join(root, file), root), exposeAll: false }).definitions);
+    const linkage = pack.id === 'cpp' ? cppHeaderLinkage(path.join(root, file)) : undefined;
+    code.push(...exposeFunctions(scan, { language: pack.id, path: file, module: codeModuleFor(pack.id, path.join(root, file), root), exposeAll: false, ...(linkage ? { linkage } : {}) }).definitions);
   }
   registry.registerMany(code);
   const byName = (name: string): NodeDefinition => {

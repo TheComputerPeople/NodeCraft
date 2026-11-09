@@ -29,9 +29,10 @@ export interface FencedBlock {
   end: string;
   // The lines between the markers.
   text: string;
-  // Where a new block goes: at the end (the default), at the start, or after the last line that
-  // matches the pattern (a regular expression's source).
-  anchor?: 'end' | 'start' | { after: string };
+  // Where a new block goes: at the end (the default), at the start, after the last line that
+  // matches the pattern (a regular expression's source), or before the last line that matches it
+  // (a .vcxproj's </Project>).
+  anchor?: 'end' | 'start' | { after: string } | { before: string };
 }
 
 // What placement knows about the project (read-only, static: nothing runs project tooling).
@@ -43,6 +44,9 @@ export interface PlacementContext {
   generatedFiles: string[];
   readFile(path: string): string | undefined;
   exists(path: string): boolean;
+  // The names of a folder's files (relative to the workspace folder, "" for it), when the host can
+  // list them: placement finds a project file whose name it can't know (a .vcxproj).
+  list?(dir: string): string[];
 }
 
 // The block's place in the text, if the text has it.
@@ -72,8 +76,9 @@ export function withBlock(text: string, block: FencedBlock): string {
   if (anchor === 'start') return whole + text;
   if (anchor !== 'end') {
     const lines = text.split(/(?<=\n)/);
-    const pattern = new RegExp(anchor.after);
+    const pattern = new RegExp('after' in anchor ? anchor.after : anchor.before);
     const last = lines.map((line) => pattern.test(line)).lastIndexOf(true);
+    if (last >= 0 && !('after' in anchor)) return `${lines.slice(0, last).join('')}${whole}${lines.slice(last).join('')}`;
     if (last >= 0) {
       const before = lines.slice(0, last + 1).join('');
       return `${before}${before.endsWith('\n') ? '' : eol}${whole}${lines.slice(last + 1).join('')}`;

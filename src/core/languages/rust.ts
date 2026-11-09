@@ -2,7 +2,7 @@
 // through a small Cargo project. Objects are Rc<Self> whose fields are each a RefCell, read and
 // written through vgraph::get and vgraph::set so no borrow outlives a call: an object can be called
 // back (a dispatcher's handler, an event) while one of its methods runs.
-import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, classInfo, exprType, programClassSpec, userTypes } from '../compiler/ir';
+import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, classInfo, exprType, programClassSpec, userTypes, canComplete } from '../compiler/ir';
 import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
@@ -529,7 +529,8 @@ class RustEmitter {
       for (const m of locals) this.out.line(`let mut ${this.memberNames.get(m.id)}: ${this.typeName(m.type)} = ${this.coerce(m.initial, m.type)};`);
       for (const x of slots) this.out.line(`let mut ${this.slotNames.get(x.id)}: ${this.typeName(x.type)} = ${this.defaultFor(x.type)};`);
       this.statements(fn.body);
-      if (fn.outputs.length && fn.body[fn.body.length - 1]?.kind !== 'return') this.out.line(`return ${this.tuple(fn.outputs.map((o) => this.defaultFor(o.type)))};`);
+      // Only where it can be reached (a Branch whose sides both return can't complete).
+      if (fn.outputs.length && canComplete(fn.body)) this.out.line(`return ${this.tuple(fn.outputs.map((o) => this.defaultFor(o.type)))};`);
     }, params.map((p) => p.name));
   }
 

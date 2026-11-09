@@ -102,6 +102,9 @@ export interface ExposeOptions {
   module?: string;
   // Expose every function, not only those marked @blueprint (blueprintVisualScripting.exposeAllFunctions).
   exposeAll: boolean;
+  // C++: the header declares functions a C file implements, without extern "C" of its own
+  // (cppHeaderLinkage), so generated C++ includes it in extern "C".
+  linkage?: 'c';
 }
 
 export interface ExposedFunctions {
@@ -182,7 +185,8 @@ function definitionFor(fn: ScannedFunction, options: ExposeOptions, defaultCateg
     implementation: {
       kind: 'function', language: options.language, path: options.path, name: fn.name, ...(moduleOf(fn, options) ? { module: moduleOf(fn, options) } : {}),
       ...(fn.results ? { results: fn.results } : {}), ...(execs ? { execs: 'bool' as const } : enumExecs ? { execs: 'enum' as const } : {}),
-      ...(fn.params.some((p) => p.borrowed) ? { borrowed: fn.params.filter((p) => p.borrowed).map((p) => p.name) } : {})
+      ...(fn.params.some((p) => p.borrowed) ? { borrowed: fn.params.filter((p) => p.borrowed).map((p) => p.name) } : {}),
+      ...(options.linkage ? { linkage: options.linkage } : {})
     },
     ...metadata.node,
     ...(fn.latent ? { latent: true } : {})

@@ -11,7 +11,7 @@ import { scanCpp } from '../../src/core/importing/cpp-scanner';
 import { exposeFunctions } from '../../src/core/importing/symbols';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { NodeRegistry } from '../../src/core/registry';
-import { cppRunSources } from '../../src/extension/placement';
+import { cppHeaderLinkage, cppRunSources } from '../../src/extension/placement';
 import { ToolNotFoundError, runCommand, runGeneratedCode } from '../../src/extension/runner';
 import { cppPlacement } from '../../src/core/languages/cpp';
 import { withBlock } from '../../src/core/output-plan';
@@ -135,6 +135,67 @@ describe('C++ project functions', () => {
     }
     assert.equal(outcome.stderr, '');
     assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').trim().split('\n'), ['42', 'Red: 3']);
+  });
+
+  // C functions (docs/code-as-nodes.md): a header a C file implements, without extern "C" of its
+  // own, is included in extern "C", and Run compiles the C file as C, so the call links.
+  test('a graph calls a C file\'s function; its header is included in extern "C", and Run compiles the C file as C', async (t) => {
+    const dir = path.join(workDir, 'c-functions');
+    fs.mkdirSync(path.join(dir, 'native'), { recursive: true });
+    const header = '#ifndef MEASURE_H\n#define MEASURE_H\n\n/// @blueprint pure\ndouble area(double width, double height);\n\n#endif\n';
+    fs.writeFileSync(path.join(dir, 'native/measure.h'), header);
+    fs.writeFileSync(path.join(dir, 'native/measure.c'), '#include "measure.h"\n\ndouble area(double width, double height) { return width * height; }\n');
+    const linkage = cppHeaderLinkage(path.join(dir, 'native/measure.h'));
+    assert.equal(linkage, 'c');
+    const registry = new NodeRegistry();
+    registry.registerMany(exposeFunctions(scanCpp(header), { language: 'cpp', path: 'native/measure.h', exposeAll: false, linkage }).definitions);
+    const d = doc([node('s', 'core:event.start'), node('area', 'fn:cpp:native/measure.h#area', { 'pin:width': 3, 'pin:height': 2.5 }), node('p', 'core:console.print')],
+      [wire('s', 'execOut', 'p', 'execIn'), wire('area', 'returnValue', 'p', 'value')]);
+    const result = compileDocument({ ...doc([], []), ...d, name: 'Room', language: 'cpp' }, { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Room.vgraph', outputDir: '' } });
+    assert.deepEqual(result.diagnostics, []);
+    const output = result.output!;
+    assert.match(output.text, /^extern "C" \{\n#include "native\/measure\.h"\n\}$/m);
+    const file = path.join(dir, output.fileName);
+    fs.writeFileSync(file, output.text);
+    for (const companion of output.companionFiles ?? []) fs.writeFileSync(path.join(dir, companion.fileName), companion.text);
+    assert.deepEqual(cppRunSources(file), [path.join(dir, 'native/measure.c')], 'the C file, beside its header');
+    let outcome;
+    try {
+      outcome = await runGeneratedCode(builtinLanguagePacks().get('cpp')!.generator!.runner!, file, output.className, { cwd: dir, sources: cppRunSources(file), timeoutMs: 120000 });
+    } catch (error) {
+      if (error instanceof ToolNotFoundError) return t.skip(error.message);
+      throw error;
+    }
+    assert.equal(outcome.exitCode, 0, outcome.stderr);
+    assert.deepEqual(outcome.stdout.trim().split(/\r?\n/), ['7.5']);
+    // A header with extern "C" of its own (as Expose Functions as Nodes makes one) needs nothing.
+    fs.writeFileSync(path.join(dir, 'native/measure.h'), `#ifdef __cplusplus\nextern "C" {\n#endif\n${header}#ifdef __cplusplus\n}\n#endif\n`);
+    assert.equal(cppHeaderLinkage(path.join(dir, 'native/measure.h')), undefined);
+  });
+});
+
+// Visual Studio projects (docs/output-placement.md, "C and C++"): an owned vgraph.targets lists the
+// generated files, and a block in the .vcxproj imports it, before </Project>.
+describe('C++ placement in Visual Studio projects', () => {
+  const VCXPROJ = '<?xml version="1.0" encoding="utf-8"?>\r\n<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">\r\n  <Import Project="$(VCTargetsPath)\\Microsoft.Cpp.targets" />\r\n</Project>\r\n';
+  const context = (files: Record<string, string>, generatedFiles: string[]) => ({
+    generatedFiles, readFile: (f: string) => files[f], exists: (f: string) => f in files,
+    list: (dir: string) => Object.keys(files).filter((f) => (f.includes('/') ? f.slice(0, f.lastIndexOf('/')) : '') === dir).map((f) => f.split('/').pop()!)
+  });
+
+  test('each generated file goes to the nearest .vcxproj above it', () => {
+    const plan = cppPlacement(context({ 'Game/Game.vcxproj': VCXPROJ, 'Tools/Tools.vcxproj': VCXPROJ }, ['Game/graphs/Main.vgraph.cpp', 'Tools/Menu.vgraph.cpp']));
+    assert.deepEqual(plan.ownedFiles?.map((f) => f.path), ['Game/vgraph.targets', 'Tools/vgraph.targets']);
+    assert.match(plan.ownedFiles![0].text, /<ClCompile Include="\$\(MSBuildThisFileDirectory\)graphs\\Main\.vgraph\.cpp">\r\n {6}<LanguageStandard>stdcpp20<\/LanguageStandard>/);
+    assert.match(plan.ownedFiles![0].text, /<ClInclude Include="\$\(MSBuildThisFileDirectory\)graphs\\Main\.vgraph\.h" \/>/);
+    assert.deepEqual(plan.hooks?.map((h) => h.file), ['Game/Game.vcxproj', 'Tools/Tools.vcxproj']);
+    const placed = withBlock(VCXPROJ, plan.hooks![0].block);
+    assert.match(placed, /<!-- vgraph:begin \(managed by Blueprint Visual Scripting\) -->\r\n {2}<Import Project="vgraph\.targets" \/>\r\n<!-- vgraph:end -->\r\n<\/Project>\r\n$/);
+  });
+
+  test('without a way to list folders, or a .vcxproj, it falls back to the other build systems', () => {
+    assert.deepEqual(cppPlacement({ generatedFiles: ['Main.vgraph.cpp'], readFile: () => undefined, exists: () => false }), {});
+    assert.deepEqual(cppPlacement(context({ 'Makefile': 'SRC := $(wildcard *.cpp)\n' }, ['Main.vgraph.cpp'])), {});
   });
 });
 
