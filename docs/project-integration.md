@@ -366,6 +366,23 @@ Register Generated Files with the Build stays, and its hooks move into the repor
 - Set Up in This Project reports correctly on the corpus (including a project declaring an older version than generated code needs), and applying its hooks makes the C++ and Rust layouts build.
 - A multi-root workspace of two projects in different languages works from both folders.
 
+**Met (step 7).** Each part is a test that runs with `npm test` or `npm run test:integration`:
+
+- **The corpus** (test/conformance/corpus.test.ts): 28 layouts, at least two in each of the 12 languages and one of two languages. In each, the project's build and checkers pass on the generated code, its entry point runs it, and its graphs call and are called by its code. In the layouts with the body, every node's generated code and every conformance fixture build under the project's checkers too. Where a checker wasn't installed when this was checked (luacheck), its layouts are reported as partly checked, by name.
+- **New Project** (test/conformance/new-project.test.ts): in each of the 12 languages, and Java with Gradle, the project compiles its graph without warnings, passes its checkers and prints "Hello from Blueprint" from its entry point.
+- **Set Up in This Project** (test/conformance/setup.test.ts): applying its needs builds and runs cpp-cmake, cpp-vcxproj, rust-bin and rust-workspace; java-maven declaring Java 11 is reported as needing 17; its optional changes do what they say.
+- **Multi-root** (test/integration/multiroot): a `.code-workspace` of a TypeScript and a Python project. From each folder, its code becomes nodes, its graph compiles there in its language and runs, and Set Up reports its project.
+
+**Left for later** (each said where it applies):
+
+- Generated code for a project's older language version, and Lua 5.1 and LuaJIT (below).
+- ESLint's ignores are shown, not edited: a flat config is code.
+- Generated TypeScript calls another workspace package by a relative path, which a `rootDir` or project references reject; Set Up says so.
+- PSR-4 doesn't autoload generated PHP classes (named after their graphs); Set Up offers a classmap.
+- In Rust and C++, two graphs of one name in a crate or target clash; placement declares the first and says so.
+- A Lua project's require root comes from `.luarc.json`; a rockspec's module map isn't read.
+- The corpus's layouts are shaped as each ecosystem's projects are; the scaffolding tools' own output (`create-vite`, `cargo new`, `dotnet new`, ...) isn't run.
+
 ## Steps
 
 One commit each; large steps may take several.
@@ -376,7 +393,7 @@ One commit each; large steps may take several.
 4. The corpus: C++, Rust, Go, Lua, GDScript, Ruby, PHP.
 5. New Project.
 6. Set Up in This Project.
-7. The exit check, docs, the parity checklist and status.
+7. The exit check, docs, the parity checklist and status. (Before it: the project's own code into nodes from the Explorer, C sources and Visual Studio projects, from a review of how a C++ project would use them.)
 
 ## Deferred: older language versions
 

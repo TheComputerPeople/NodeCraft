@@ -11,5 +11,7 @@ test/fixtures/projects/java-*/**/.gradle/
 test/fixtures/projects/java-*/**/build/
 test/fixtures/projects/java-*/**/target/
 test/fixtures/projects/cpp-*/**/build/
+test/fixtures/projects/cpp-vcxproj/x64/
+test/fixtures/projects/cpp-vcxproj/.vs/
 test/fixtures/projects/rust-*/**/target/
 test/fixtures/projects/gd-*/.godot/

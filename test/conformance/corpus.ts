@@ -164,11 +164,11 @@ export async function runSteps(steps: CorpusStep[], root: string): Promise<StepR
 
 // Build output a tool or IDE may have left in the repository's copy of a layout: a folder named as
 // a build system names its output, beside that build system's file (a C# restore's obj/ and bin/,
-// Gradle's .gradle/ and build/, CMake's build/, Cargo's and Maven's target/, Godot's .godot/). A Ruby
+// Gradle's .gradle/ and build/, CMake's build/, Cargo's and Maven's target/, Godot's .godot/, Visual Studio's x64/ and .vs/). A Ruby
 // project's bin/ is its own.
 const BUILD_OUTPUT: Record<string, RegExp> = {
   obj: /\.csproj$/, bin: /\.csproj$/, '.gradle': /^(build|settings)\.gradle(\.kts)?$/,
-  build: /^(build\.gradle(\.kts)?|CMakeLists\.txt)$/, target: /^(Cargo\.toml|pom\.xml)$/, '.godot': /^project\.godot$/
+  build: /^(build\.gradle(\.kts)?|CMakeLists\.txt)$/, target: /^(Cargo\.toml|pom\.xml)$/, '.godot': /^project\.godot$/, x64: /\.vcxproj$/, '.vs': /\.(sln|vcxproj)$/
 };
 function buildOutput(file: string): boolean {
   const beside = BUILD_OUTPUT[path.basename(file)];
