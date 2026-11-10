@@ -165,6 +165,12 @@ test('Show Codebase Map draws the folder, and opening a box shows what it holds'
     assert.ok(vscode.window.tabGroups.activeTabGroup.activeTab?.label.startsWith('Codebase Map'), 'the map is the active tab');
     const opened = await api.codeMapPanels.toggleIn(folder, 'm:arena');
     assert.ok(opened?.boxes.some((b) => b.id === 'g:arena/Game.vgraph' && b.parent === 'm:arena'), "the folder's graphs are shown inside it");
+    // The structure: graph files list their graphs, and a graph class points at its parent.
+    const structure = await api.codeMapPanels.modeIn(folder, 'structure');
+    assert.equal(structure?.mode, 'structure');
+    assert.ok(structure?.boxes.find((b) => b.id === 'g:arena/Game.vgraph')?.members?.length, "the game's graphs are listed in its box");
+    assert.ok(structure?.arrows.some((a) => a.kind === 'inherits' && a.from === 'g:arena/Knight.vgraph' && a.to === 'g:arena/Fighter.vgraph'), 'Knight extends Fighter');
+    await api.codeMapPanels.modeIn(folder, 'architecture');
   } finally {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
   }
@@ -837,6 +843,11 @@ interface ExtensionInternals {
   };
   codeMapPanels: {
     toggleIn(folder: vscode.WorkspaceFolder, id: string): Promise<{ boxes: { id: string; kind: string; parent?: string; expanded: boolean }[] } | undefined>;
+    modeIn(folder: vscode.WorkspaceFolder, mode: 'architecture' | 'structure'): Promise<{
+      mode: string;
+      boxes: { id: string; members?: string[] }[];
+      arrows: { kind: string; from: string; to: string }[];
+    } | undefined>;
   };
 }
 

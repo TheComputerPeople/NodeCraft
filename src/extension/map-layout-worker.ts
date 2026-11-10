@@ -1,13 +1,12 @@
 // The Codebase Map's layout worker (map-layout.ts): a scene in, its boxes and arrows placed out.
 // Each open box's contents are laid out on their own (ELK's layered algorithm, top to bottom), which
-// keeps large maps fast. An arrow between boxes in different open boxes is lifted to the two boxes
-// holding its ends inside their nearest common box: the map draws those lifted arrows (summed, and
-// routed by ELK), so each level reads as what depends on what; a box's own arrows, unlifted, are
-// drawn when it's pointed at (`details`).
+// keeps large maps fast. The map draws the scene's lifted arrows (summed, between boxes side by side,
+// routed by ELK), so each level reads as what depends on what; a box's own arrows (`details`) are
+// drawn when it's pointed at. Inheritance is laid out from parents down to their children.
 import { parentPort } from 'node:worker_threads';
 import type { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk-api';
 import ELK from 'elkjs/lib/elk.bundled.js';
-import { LaidArrow, LaidBox, LaidScene, Scene, SceneArrow, boxSize } from '../core/codemap/scene';
+import { LaidArrow, LaidBox, LaidScene, Scene, SceneArrow, boxSize, laidOutReversed } from '../core/codemap/scene';
 
 const elk = new ELK();
 
@@ -31,54 +30,34 @@ const LAYERED: Record<string, string> = {
 const OPEN: Record<string, string> = { ...LAYERED, 'elk.padding': '[top=40,left=14,bottom=14,right=14]' };
 const ROOT = '__root';
 
+type Point = { x: number; y: number };
+
 export async function layoutScene(scene: Scene): Promise<LaidScene> {
   const nodes = new Map<string, ElkNode>();
   const root: ElkNode = { id: ROOT, layoutOptions: LAYERED, children: [], edges: [] };
   nodes.set(ROOT, root);
   for (const box of scene.boxes) nodes.set(box.id, box.expanded ? { id: box.id, layoutOptions: OPEN, children: [], edges: [] } : { id: box.id, ...boxSize(box) });
-  const parentOf = new Map<string, string>();
   for (const box of scene.boxes) {
-    const parent = box.parent && nodes.has(box.parent) ? box.parent : ROOT;
-    parentOf.set(box.id, parent);
-    nodes.get(parent)!.children!.push(nodes.get(box.id)!);
+    const parent = box.parent && nodes.has(box.parent) ? nodes.get(box.parent)! : root;
+    parent.children!.push(nodes.get(box.id)!);
   }
   for (const box of scene.boxes) {
     const node = nodes.get(box.id)!;
     if (box.expanded && !node.children?.length) Object.assign(node, boxSize(box), { children: undefined, edges: undefined });
   }
-
-  // Each arrow lifted, by kind, to its ends' ancestors that are siblings in their nearest common box.
-  const chain = (id: string): string[] => {
-    const ids = [id];
-    for (let p = parentOf.get(id); p; p = parentOf.get(p)) ids.push(p);
-    return ids;
-  };
-  const lifted = new Map<string, SceneArrow & { container: string }>();
-  for (const arrow of scene.arrows) {
-    const a = chain(arrow.from);
-    const bChain = chain(arrow.to);
-    const b = new Set(bChain);
-    const common = a.find((id) => b.has(id))!;
-    const from = a[a.indexOf(common) - 1];
-    const to = bChain[bChain.indexOf(common) - 1];
-    if (!from || !to || from === to) continue;
-    const id = `${arrow.kind}:${from}>${to}`;
-    const entry = lifted.get(id);
-    if (entry) {
-      entry.weight += arrow.weight;
-      entry.certain &&= arrow.certain;
-    } else {
-      lifted.set(id, { id, from, to, kind: arrow.kind, weight: arrow.weight, certain: arrow.certain, container: common });
-    }
+  // The lifted arrows, in the open box holding both ends; inheritance from parent to child.
+  for (const l of scene.lifted) {
+    const container = nodes.get(l.container || ROOT) ?? root;
+    const [source, target] = laidOutReversed(l) ? [l.to, l.from] : [l.from, l.to];
+    container.edges?.push({ id: l.id, sources: [source], targets: [target] });
   }
-  for (const l of lifted.values()) nodes.get(l.container)!.edges!.push({ id: l.id, sources: [l.from], targets: [l.to] });
   const laid = await elk.layout(root);
 
   // Absolute places: ELK gives each node relative to its parent, each edge relative to its box.
   const at = new Map<string, { x: number; y: number; width: number; height: number }>([[ROOT, { x: 0, y: 0, width: laid.width ?? 0, height: laid.height ?? 0 }]]);
   const boxes: LaidBox[] = [];
   const byId = new Map(scene.boxes.map((b) => [b.id, b]));
-  const routes = new Map<string, { x: number; y: number }[]>();
+  const routes = new Map<string, Point[]>();
   const place = (node: ElkNode, ox: number, oy: number): void => {
     for (const edge of (node.edges ?? []) as ElkExtendedEdge[]) {
       const section = edge.sections?.[0];
@@ -94,30 +73,32 @@ export async function layoutScene(scene: Scene): Promise<LaidScene> {
   };
   place(laid, 0, 0);
 
-  // A two-point arrow between boxes: bottom to top when the target is below, else from the side,
-  // around (a back arrow).
-  const between = (arrow: SceneArrow): LaidArrow | undefined => {
-    const from = at.get(arrow.from);
-    const to = at.get(arrow.to);
-    if (!from || !to) return undefined;
-    const down = to.y >= from.y + from.height;
+  // An arrow's points from its `from` to its `to`: ELK's route (reversed back for inheritance), or a
+  // curve between the boxes, down, or around the side when it runs against the layers.
+  const pointsOf = (arrow: SceneArrow, routed: Point[] | undefined): { points: Point[]; back?: boolean } | undefined => {
+    const reversed = laidOutReversed(arrow);
+    if (routed) return { points: reversed ? [...routed].reverse() : routed };
+    const top = at.get(reversed ? arrow.to : arrow.from);
+    const bottom = at.get(reversed ? arrow.from : arrow.to);
+    if (!top || !bottom) return undefined;
+    const down = bottom.y >= top.y + top.height;
     const points = down
-      ? [{ x: from.x + from.width / 2, y: from.y + from.height }, { x: to.x + to.width / 2, y: to.y }]
-      : [{ x: from.x, y: from.y + from.height / 2 }, { x: to.x, y: to.y + to.height / 2 }];
-    return { ...arrow, points, ...(down ? {} : { back: true }) };
+      ? [{ x: top.x + top.width / 2, y: top.y + top.height }, { x: bottom.x + bottom.width / 2, y: bottom.y }]
+      : [{ x: top.x, y: top.y + top.height / 2 }, { x: bottom.x, y: bottom.y + bottom.height / 2 }];
+    return { points: reversed ? points.reverse() : points, ...(down ? {} : { back: true }) };
   };
-  const arrows: LaidArrow[] = [...lifted.values()].flatMap(({ container: _container, ...arrow }) => {
-    const routed = routes.get(arrow.id);
-    const laidArrow = routed ? { ...arrow, points: routed } : between(arrow);
-    return laidArrow ? [laidArrow] : [];
+  const arrows: LaidArrow[] = scene.lifted.flatMap(({ container: _container, ...arrow }) => {
+    const placed = pointsOf(arrow, routes.get(arrow.id));
+    return placed ? [{ ...arrow, ...placed }] : [];
   });
+  const liftedById = new Map(scene.lifted.map((l) => [l.id, l]));
   const details: LaidArrow[] = scene.arrows.flatMap((arrow) => {
-    // An arrow between siblings is its own lifted arrow: the same route.
-    const routed = routes.get(`${arrow.kind}:${arrow.from}>${arrow.to}`);
-    const laidArrow = routed && lifted.get(`${arrow.kind}:${arrow.from}>${arrow.to}`)?.weight === arrow.weight ? { ...arrow, points: routed } : between(arrow);
-    return laidArrow ? [laidArrow] : [];
+    // An arrow between boxes side by side is its own lifted arrow: the same route.
+    const same = liftedById.get(arrow.id);
+    const placed = pointsOf(arrow, same && same.weight === arrow.weight ? routes.get(arrow.id) : undefined);
+    return placed ? [{ ...arrow, ...placed, ...(same?.cycle ? { cycle: true } : {}) }] : [];
   });
-  return { width: laid.width ?? 0, height: laid.height ?? 0, boxes, arrows, details };
+  return { mode: scene.mode, width: laid.width ?? 0, height: laid.height ?? 0, boxes, arrows, details };
 }
 
 parentPort?.on('message', (request: { id: number; scene: Scene }) => {

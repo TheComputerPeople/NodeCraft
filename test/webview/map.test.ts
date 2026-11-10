@@ -8,6 +8,7 @@ import { EditorPage, launchBrowser } from './harness';
 
 // A project open on two files: a.ts (closed, with a class inside) importing b.ts, and an external package.
 const SCENE: LaidScene = {
+  mode: 'architecture',
   width: 520, height: 330,
   boxes: [
     { id: 'p:', label: 'shop', kind: 'project', count: 4, expandable: true, expanded: true, x: 0, y: 0, width: 380, height: 220, path: '' },
@@ -97,6 +98,42 @@ describe('the Codebase Map webview', () => {
     await e.page.mouse.click(canvas.x + canvas.width - 20, canvas.y + canvas.height - 20);
     assert.equal(await e.count('.map-box.active'), 0);
     assert.equal(await e.count('.map-arrow.highlight'), 0);
+  });
+
+  test('the view switch shows the view drawn and asks for the other', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    assert.equal(await e.page.getAttribute('.map-mode[data-mode="architecture"]', 'aria-checked'), 'true');
+    await e.page.click('.map-mode[data-mode="architecture"]');
+    await e.page.click('.map-mode[data-mode="structure"]');
+    assert.deepEqual(await posted(e), [JSON.stringify({ type: 'mode', mode: 'structure' })], 'only a change of view is asked for');
+    const structure: LaidScene = {
+      mode: 'structure', width: 300, height: 200,
+      boxes: [
+        { id: 's:a.ts#Shape', label: 'Shape', kind: 'type', detail: 'class', count: 0, expandable: false, expanded: false, x: 0, y: 0, width: 160, height: 84, members: ['area()', 'name'] },
+        { id: 's:a.ts#Circle', label: 'Circle', kind: 'type', detail: 'class', count: 0, expandable: false, expanded: false, x: 0, y: 130, width: 160, height: 48 }
+      ],
+      arrows: [{ id: 'inherits:s:a.ts#Circle>s:a.ts#Shape', from: 's:a.ts#Circle', to: 's:a.ts#Shape', kind: 'inherits', weight: 1, certain: true, points: [{ x: 80, y: 130 }, { x: 80, y: 84 }] }],
+      details: []
+    };
+    await e.send({ type: 'scene', scene: structure } as never);
+    assert.equal(await e.page.getAttribute('.map-mode[data-mode="structure"]', 'aria-checked'), 'true');
+    assert.deepEqual(await e.page.$$eval('.map-box[data-id="s:a.ts#Shape"] .map-members li', (els) => els.map((el) => el.textContent)), ['area()', 'name']);
+    assert.equal(await e.count('.map-arrow.inherits'), 1);
+  });
+
+  test('import cycles are marked on their boxes and arrows', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const cyclic: LaidScene = {
+      ...SCENE,
+      boxes: SCENE.boxes.map((b) => (b.id === 'f:a.ts' || b.id === 'f:b.ts' ? { ...b, cycle: true } : b)),
+      arrows: SCENE.arrows.map((a) => (a.from.startsWith('f:') && a.to.startsWith('f:') ? { ...a, cycle: true } : a))
+    };
+    await e.send({ type: 'scene', scene: cyclic } as never);
+    assert.equal(await e.count('.map-box.cycle'), 2);
+    assert.equal(await e.count('.map-arrow.cycle'), 2);
+    assert.match((await e.page.getAttribute('.map-box[data-id="f:a.ts"]', 'title'))!, /import cycle/);
   });
 
   test('double-clicking a box opens or closes it; one with nothing inside opens its code', async (t) => {

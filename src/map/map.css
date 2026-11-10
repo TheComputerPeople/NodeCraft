@@ -9,6 +9,7 @@
   --imports: #7a8aa6;
   --calls: #d08a3c;
   --inherits: #a271d4;
+  --cycle: #e05252;
 }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--vscode-font-family, sans-serif); font-size: 12px; }
 #map-app { display: grid; grid-template-rows: 36px minmax(0, 1fr); height: 100vh; }
@@ -53,6 +54,14 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); c
 .map-arrow.calls { stroke: var(--calls); }
 .map-arrow.inherits { stroke: var(--inherits); }
 .map-arrow.guess { stroke-dasharray: 5 4; opacity: .55; }
+.map-arrow.cycle { stroke: var(--cycle); opacity: .9; }
+.map-box.cycle { box-shadow: 0 0 0 2px color-mix(in srgb, var(--cycle) 70%, transparent); }
+.map-members { list-style: none; margin: 4px 0 0; padding: 4px 8px 0; border-top: 1px solid var(--border); font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; line-height: 15px; }
+.map-members li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#map-modes { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+#map-modes .map-mode { border: 0; border-radius: 0; background: transparent; color: var(--fg); padding: 0 10px; }
+#map-modes .map-mode[aria-checked="true"] { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); }
+.legend-item.cycle::before { border-color: var(--cycle); }
 .map-arrowhead { fill: var(--imports); }
 .map-arrowhead.calls { fill: var(--calls); }
 .map-arrowhead.inherits { fill: none; stroke: var(--inherits); }
@@ -64,6 +73,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); c
 .map-box.linked { outline: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); }
 
 /* Levels of detail: zoomed out, the second line goes, then small boxes' names. */
-#map-canvas.far .map-detail, #map-canvas.far .map-count { display: none; }
+#map-canvas.far .map-detail, #map-canvas.far .map-count, #map-canvas.far .map-members { display: none; }
 #map-canvas.very-far .map-box:not(.open) .map-name { visibility: hidden; }
 #map-canvas.very-far .map-arrow { opacity: .4; }

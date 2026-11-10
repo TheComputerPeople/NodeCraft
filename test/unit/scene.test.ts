@@ -1,16 +1,17 @@
 // What the Codebase Map shows (src/core/codemap/scene.ts): boxes in view by what's open, counts,
-// arrows summed onto visible boxes, the limits, and external packages in one box.
+// arrows summed and lifted, the limits, external packages in one box, and the two views: the
+// architecture (imports, with cycles marked) and the structure (types, members, inheritance).
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CodeIndex, Entity } from '../../src/core/codemap/code-index';
-import { MAX_CHILDREN, buildScene, defaultView } from '../../src/core/codemap/scene';
+import { MAX_CHILDREN, MAX_MEMBERS, Scene, buildScene, defaultView } from '../../src/core/codemap/scene';
 
 function entity(id: string, kind: Entity['kind'], parent?: string, extra: Partial<Entity> = {}): Entity {
   return { id, kind, name: id.replace(/^.*[:/#.]/, ''), ...(parent ? { parent } : {}), ...extra };
 }
 
-// A project with two folders: ui/ (a.ts with class A and its method A.f) and core/ (b.ts with g), and
-// an external package.
+// A project with two folders: ui/ (a.ts with class A extending B, and its method A.f) and core/ (b.ts
+// with class B and function g), and an external package.
 function sample(): CodeIndex {
   return {
     entities: [
@@ -19,55 +20,80 @@ function sample(): CodeIndex {
       entity('s:ui/a.ts#A', 'type', 'f:ui/a.ts', { path: 'ui/a.ts', line: 1, detail: 'class' }),
       entity('s:ui/a.ts#A.f', 'function', 's:ui/a.ts#A', { path: 'ui/a.ts', line: 2, detail: 'method', entries: [{ kind: 'main', name: 'f' }] }),
       entity('m:core', 'module', 'p:'), entity('f:core/b.ts', 'file', 'm:core', { path: 'core/b.ts' }),
-      entity('s:core/b.ts#g', 'function', 'f:core/b.ts', { path: 'core/b.ts', line: 1 }),
+      entity('s:core/b.ts#B', 'type', 'f:core/b.ts', { path: 'core/b.ts', line: 1, detail: 'class' }),
+      entity('s:core/b.ts#g', 'function', 'f:core/b.ts', { path: 'core/b.ts', line: 5, detail: 'function' }),
       entity('x:npm:react', 'external')
     ],
     imports: [
       { from: 'f:ui/a.ts', to: 'f:core/b.ts', line: 1, source: '../core/b' },
       { from: 'f:ui/a.ts', to: 'x:npm:react', line: 2, source: 'react' }
     ],
-    calls: [
-      { from: 's:ui/a.ts#A.f', to: 's:core/b.ts#g', path: 'ui/a.ts', line: 3, column: 1, count: 2, certain: true },
-      { from: 's:ui/a.ts#A.f', to: 's:ui/a.ts#A.f', path: 'ui/a.ts', line: 4, column: 1, count: 1, certain: true }
-    ],
-    unresolved: [], unresolvedCalls: [], inherits: [], generated: []
+    calls: [{ from: 's:ui/a.ts#A.f', to: 's:core/b.ts#g', path: 'ui/a.ts', line: 3, column: 1, count: 2, certain: true }],
+    inherits: [{ from: 's:ui/a.ts#A', to: 's:core/b.ts#B', name: 'B', kind: 'extends' }],
+    unresolved: [], unresolvedCalls: [], generated: []
   };
 }
 
-const ids = (s: ReturnType<typeof buildScene>) => s.boxes.map((b) => b.id);
-const arrows = (s: ReturnType<typeof buildScene>) => s.arrows.map((a) => `${a.kind} ${a.from}>${a.to} ×${a.weight}${a.certain ? '' : ' ?'}`).sort();
+const ids = (s: Scene) => s.boxes.map((b) => b.id);
+const arrows = (s: Scene) => s.arrows.map((a) => `${a.kind} ${a.from}>${a.to} ×${a.weight}`).sort();
+const lifted = (s: Scene) => s.lifted.map((a) => `${a.kind} ${a.from}>${a.to} in "${a.container}"${a.cycle ? ' cycle' : ''}`).sort();
 
 describe('the scene', () => {
   test('a closed project shows itself and what it holds; externals are one box', () => {
     const scene = buildScene(sample(), { expanded: [] });
+    assert.equal(scene.mode, 'architecture');
     assert.deepEqual(ids(scene), ['p:', 'externals']);
-    const project = scene.boxes[0];
-    assert.deepEqual([project.count, project.expandable, project.expanded], [7, true, false]);
-    assert.deepEqual(scene.boxes[1].count, 1);
-    // The project's import of the package is drawn between the boxes that show them.
+    // The architecture's boxes stop at files: the project holds two folders and two files.
+    assert.deepEqual([scene.boxes[0].count, scene.boxes[0].expandable, scene.boxes[0].expanded], [4, true, false]);
     assert.deepEqual(arrows(scene), ['imports p:>externals ×1']);
   });
 
-  test('opening boxes shows their children; arrows inside one box aren\'t drawn', () => {
-    const scene = buildScene(sample(), { expanded: ['p:'] });
-    assert.deepEqual(ids(scene), ['p:', 'm:ui', 'm:core', 'externals']);
-    assert.deepEqual(scene.boxes.filter((b) => b.parent === 'p:').map((b) => b.id), ['m:ui', 'm:core']);
-    assert.deepEqual(arrows(scene), ['imports m:ui>externals ×1', 'imports m:ui>m:core ×1']);
+  test('the architecture: folders and files, with their imports summed and lifted; files don\'t open', () => {
+    const scene = buildScene(sample(), { expanded: ['p:', 'm:ui', 'm:core', 'f:ui/a.ts'] });
+    assert.deepEqual(ids(scene), ['p:', 'm:ui', 'f:ui/a.ts', 'm:core', 'f:core/b.ts', 'externals']);
+    assert.equal(scene.boxes.find((b) => b.id === 'f:ui/a.ts')!.expandable, false);
+    assert.deepEqual(arrows(scene), ['imports f:ui/a.ts>externals ×1', 'imports f:ui/a.ts>f:core/b.ts ×1']);
+    // Drawn between the boxes side by side: the folders in the project, the project and the packages.
+    assert.deepEqual(lifted(scene), ['imports m:ui>m:core in "p:"', 'imports p:>externals in ""']);
   });
 
-  test('calls are drawn between declarations, summed; a call to itself isn\'t drawn', () => {
-    const scene = buildScene(sample(), { expanded: ['p:', 'm:ui', 'f:ui/a.ts', 's:ui/a.ts#A', 'm:core', 'f:core/b.ts'] });
-    assert.ok(ids(scene).includes('s:ui/a.ts#A.f') && ids(scene).includes('s:core/b.ts#g'));
-    assert.deepEqual(arrows(scene).filter((a) => a.startsWith('calls')), ['calls s:ui/a.ts#A.f>s:core/b.ts#g ×1']);
-    // Between files, the import says it: no call arrow from a file box.
-    const files = buildScene(sample(), { expanded: ['p:', 'm:ui', 'm:core'] });
-    assert.deepEqual(arrows(files).filter((a) => a.startsWith('calls')), []);
+  test('import cycles are marked, among the boxes side by side', () => {
+    const index = sample();
+    index.imports.push({ from: 'f:core/b.ts', to: 'f:ui/a.ts', line: 3, source: '../ui/a' });
+    const scene = buildScene(index, { expanded: ['p:'] });
+    assert.deepEqual(lifted(scene), ['imports m:core>m:ui in "p:" cycle', 'imports m:ui>m:core in "p:" cycle', 'imports p:>externals in ""']);
+    assert.deepEqual(scene.boxes.filter((b) => b.cycle).map((b) => b.id), ['m:ui', 'm:core']);
+    // No cycle without it.
+    assert.deepEqual(buildScene(sample(), { expanded: ['p:'] }).boxes.filter((b) => b.cycle), []);
+  });
+
+  test('the structure: files open into their types and functions; a type lists its members; inheritance', () => {
+    const scene = buildScene(sample(), { mode: 'structure', expanded: ['p:', 'm:ui', 'm:core', 'f:ui/a.ts', 'f:core/b.ts'] });
+    assert.ok(ids(scene).includes('s:ui/a.ts#A') && ids(scene).includes('s:core/b.ts#g'));
+    // A's method is listed in its box, not a box of its own.
+    assert.ok(!ids(scene).includes('s:ui/a.ts#A.f'));
+    const a = scene.boxes.find((b) => b.id === 's:ui/a.ts#A')!;
+    assert.deepEqual([a.members, a.expandable], [['f()'], false]);
+    assert.deepEqual(arrows(scene), ['inherits s:ui/a.ts#A>s:core/b.ts#B ×1'], 'only inheritance: no imports or calls');
+    assert.deepEqual(lifted(scene), ['inherits m:ui>m:core in "p:"']);
+  });
+
+  test('a long member list ends with how many more', () => {
+    const index = sample();
+    for (let i = 0; i < MAX_MEMBERS + 4; i++) index.entities.push(entity(`s:core/b.ts#B.m${i}`, 'function', 's:core/b.ts#B', { detail: 'method' }));
+    const scene = buildScene(index, { mode: 'structure', expanded: ['p:', 'm:core', 'f:core/b.ts'] });
+    const members = scene.boxes.find((b) => b.id === 's:core/b.ts#B')!.members!;
+    assert.equal(members.length, MAX_MEMBERS);
+    assert.equal(members.at(-1), '+5 more');
   });
 
   test('a box shows its entry point, path and line', () => {
-    const scene = buildScene(sample(), { expanded: ['p:', 'm:ui', 'f:ui/a.ts', 's:ui/a.ts#A'] });
-    const f = scene.boxes.find((b) => b.id === 's:ui/a.ts#A.f')!;
-    assert.deepEqual([f.entry, f.path, f.line, f.detail], ['main: f', 'ui/a.ts', 2, 'method']);
+    const scene = buildScene(sample(), { mode: 'structure', expanded: ['p:', 'm:core', 'f:core/b.ts'] });
+    const g = scene.boxes.find((b) => b.id === 's:core/b.ts#g')!;
+    assert.deepEqual([g.path, g.line, g.detail], ['core/b.ts', 5, 'function']);
+    const index = sample();
+    index.entities.find((e) => e.id === 'f:ui/a.ts')!.entries = [{ kind: 'main' }];
+    assert.equal(buildScene(index, { expanded: ['p:', 'm:ui'] }).boxes.find((b) => b.id === 'f:ui/a.ts')!.entry, 'main');
   });
 
   test('a box shows its first children and "N more…"; opened, all of them', () => {
@@ -81,10 +107,10 @@ describe('the scene', () => {
     assert.equal(all.boxes.filter((b) => b.parent === 'm:core').length, MAX_CHILDREN + 6);
   });
 
-  test('a folder\'s map opens with its projects open when there are a few', () => {
-    assert.deepEqual(defaultView(sample()), { expanded: ['p:'] });
+  test("a folder's map opens on its architecture, with its projects open when there are a few", () => {
+    assert.deepEqual(defaultView(sample()), { mode: 'architecture', expanded: ['p:'] });
     const many = sample();
     for (let i = 0; i < 4; i++) many.entities.push(entity(`p:extra${i}`, 'project'));
-    assert.deepEqual(defaultView(many), { expanded: [] });
+    assert.deepEqual(defaultView(many), { mode: 'architecture', expanded: [] });
   });
 });

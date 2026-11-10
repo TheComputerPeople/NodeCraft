@@ -310,6 +310,28 @@ Across all four:
   - **The webview** in a browser: drawing, highlighting, opening and closing, opening code, pan, zoom and level of detail, keeping the view on a redraw.
   - **Integration:** the command opens the map inside VS Code, and opening a folder's box shows its graphs.
 7. Architecture and structure views.
+
+### Built (step 7)
+
+- **Two views,** switched in the toolbar. Each folder's map remembers its view along with its open boxes, and a new view starts fitted.
+- **Architecture** (the view a map opens with): projects, folders and files, with their imports and nothing else.
+  - **Layers:** importers sit above what they import, so entry points and applications come out on top and libraries and external packages at the bottom.
+  - **Files don't open** in this view. Their types are the structure view's.
+  - **Import cycles:** in each open box, boxes whose imports reach each other (Tarjan's strongly connected components, over the arrows drawn there) are outlined in red, with their arrows. A cycle between two folders is marked where the folders sit side by side.
+- **Structure:** files open into their types and functions, and namespaces into what they hold.
+  - **Members:** a type lists its members (methods with `()`, nested types) in its box, up to twelve, then "+N more". A graph file lists its graphs.
+  - **Inheritance** is the only arrow. It's laid out from parent to child, so parents sit above their children, and drawn from the child to its parent with a hollow head.
+  - **Graph classes** stand beside code classes, with their parents (Knight extends Fighter in the sample's arena).
+- **Lifting moves into core** (`liftArrows` in `scene.ts`): the cycles are found on the lifted arrows, which the layout worker now takes as they are.
+- **Tested:**
+  - **The scene:** each view's boxes and arrows, files opening only in the structure view, cycles marked and not marked, members and their limit.
+  - **The layout:** a chain of three classes stacks parent above child, with the arrows ending at the parents.
+  - **The webview:** the view switch, member lists, inheritance arrows, cycle marks.
+  - **Integration:** switching to the structure view inside VS Code lists the sample's graphs and draws Knight extending Fighter.
+  - **Looks:** I checked the structure view on this repository's `codemap` folder with a screenshot.
+- **Not yet:**
+  - TypeScript interfaces' fields and Python's attributes aren't in the index (only methods are), so such types list no members.
+  - The architecture's layers are by imports only. A file with no imports either way sits wherever ELK packs it.
 8. Call flow, with callers.
 9. Control flow.
 10. Interaction: Find, filters, focus, path, breadcrumb, minimap, the Explorer, editor and graph editor commands, the Blueprint bridges, and the accessible tree view.

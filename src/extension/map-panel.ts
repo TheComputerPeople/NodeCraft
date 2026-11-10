@@ -3,7 +3,7 @@
 // boxes are open is remembered per folder; the map is redrawn when the code changes.
 import * as vscode from 'vscode';
 import type { MapHostMessage, MapMessage } from '../core/codemap/map-protocol';
-import { LaidScene, MapView, buildScene, defaultView } from '../core/codemap/scene';
+import { LaidScene, MapMode, MapView, buildScene, defaultView } from '../core/codemap/scene';
 import { CodeMapService } from './code-map-service';
 import { renderMapHtml } from './map-html';
 import { MapLayout } from './map-layout';
@@ -67,6 +67,8 @@ export class CodeMapPanels implements vscode.Disposable {
         await this.toggle(map, message.id);
       } else if (message.type === 'open') {
         await this.open(map, message.id);
+      } else if (message.type === 'mode') {
+        await this.setMode(map, message.mode);
       }
     }, undefined, this.disposables);
     return firstScene;
@@ -90,6 +92,21 @@ export class CodeMapPanels implements vscode.Disposable {
     }
     await this.context.workspaceState.update(this.viewKey(map.folder), map.view);
     await this.render(map);
+  }
+
+  // Switches the map's view (each view keeps the same open boxes).
+  async setMode(map: OpenMap, mode: MapMode): Promise<void> {
+    map.view = { ...map.view, mode };
+    await this.context.workspaceState.update(this.viewKey(map.folder), map.view);
+    await this.render(map);
+  }
+
+  async modeIn(folder: vscode.WorkspaceFolder, mode: MapMode): Promise<LaidScene | undefined> {
+    const map = this.maps.get(folder.uri.toString());
+    if (!map) return undefined;
+    const next = new Promise<LaidScene>((resolve) => map.rendered.event(resolve));
+    await this.setMode(map, mode);
+    return next;
   }
 
   async toggleIn(folder: vscode.WorkspaceFolder, id: string): Promise<LaidScene | undefined> {

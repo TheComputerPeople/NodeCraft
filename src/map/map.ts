@@ -51,7 +51,7 @@ const KIND_NAMES: Record<string, string> = {
 
 function renderBox(box: LaidBox): HTMLElement {
   const el = document.createElement('div');
-  el.className = `map-box${box.expanded ? ' open' : ''}${box.entry ? ' entry' : ''}`;
+  el.className = `map-box${box.expanded ? ' open' : ''}${box.entry ? ' entry' : ''}${box.cycle ? ' cycle' : ''}`;
   el.dataset.id = box.id;
   el.dataset.kind = box.kind;
   el.style.left = `${box.x}px`;
@@ -62,7 +62,7 @@ function renderBox(box: LaidBox): HTMLElement {
   el.setAttribute('role', 'treeitem');
   if (box.expandable) el.setAttribute('aria-expanded', String(box.expanded));
   const what = box.detail && box.kind !== 'project' ? box.detail : KIND_NAMES[box.kind] ?? box.kind;
-  el.title = [box.label, what, box.path ? `${box.path}${box.line ? `:${box.line}` : ''}` : '', box.entry ? `entry point (${box.entry})` : '', box.expandable ? `${box.count} inside` : ''].filter(Boolean).join('\n');
+  el.title = [box.label, what, box.path ? `${box.path}${box.line ? `:${box.line}` : ''}` : '', box.entry ? `entry point (${box.entry})` : '', box.expandable ? `${box.count} inside` : '', box.cycle ? 'in an import cycle' : ''].filter(Boolean).join('\n');
   const head = document.createElement('div');
   head.className = 'map-head';
   if (box.expandable) {
@@ -105,6 +105,17 @@ function renderBox(box: LaidBox): HTMLElement {
     detail.className = 'map-detail';
     detail.textContent = what;
     el.appendChild(detail);
+  }
+  // A type's members (or a graph file's graphs), listed in its box.
+  if (box.members?.length) {
+    const list = document.createElement('ul');
+    list.className = 'map-members';
+    for (const member of box.members) {
+      const item = document.createElement('li');
+      item.textContent = member;
+      list.appendChild(item);
+    }
+    el.appendChild(list);
   }
   el.addEventListener('mouseenter', () => {
     hovered = box.id;
@@ -175,13 +186,13 @@ function arrowElement(arrow: LaidArrow, extra = ''): SVGPathElement {
   const ns = 'http://www.w3.org/2000/svg';
   const path = document.createElementNS(ns, 'path');
   path.setAttribute('d', arrowPath(arrow));
-  path.setAttribute('class', `map-arrow ${arrow.kind}${arrow.certain ? '' : ' guess'}${arrow.back ? ' back' : ''}${extra}`);
+  path.setAttribute('class', `map-arrow ${arrow.kind}${arrow.certain ? '' : ' guess'}${arrow.back ? ' back' : ''}${arrow.cycle ? ' cycle' : ''}${extra}`);
   path.setAttribute('stroke-width', String(1.2 + Math.log2(arrow.weight)));
   path.setAttribute('marker-end', `url(#head-${arrow.kind})`);
   path.dataset.from = arrow.from;
   path.dataset.to = arrow.to;
   const title = document.createElementNS(ns, 'title');
-  title.textContent = `${arrow.kind}${arrow.weight > 1 ? ` (${arrow.weight})` : ''}${arrow.certain ? '' : ', guessed'}`;
+  title.textContent = `${arrow.kind === 'inherits' ? 'extends' : arrow.kind}${arrow.weight > 1 ? ` (${arrow.weight})` : ''}${arrow.certain ? '' : ', guessed'}${arrow.cycle ? ', in an import cycle' : ''}`;
   path.appendChild(title);
   return path;
 }
@@ -261,6 +272,11 @@ canvas.addEventListener('wheel', (e) => {
   applyView();
 }, { passive: false });
 element<HTMLElement>('map-fit').addEventListener('click', fit);
+for (const button of document.querySelectorAll<HTMLElement>('.map-mode')) {
+  button.addEventListener('click', () => {
+    if (button.getAttribute('aria-checked') !== 'true') post({ type: 'mode', mode: button.dataset.mode as 'architecture' | 'structure' });
+  });
+}
 canvas.addEventListener('keydown', (e) => {
   if (e.key === 'Home') {
     fit();
@@ -271,8 +287,11 @@ canvas.addEventListener('keydown', (e) => {
 window.addEventListener('message', (event: MessageEvent<MapHostMessage>) => {
   const message = event.data;
   if (message.type === 'scene' && message.scene) {
+    // A new view starts fitted.
+    if (scene && scene.mode !== message.scene.mode) fitted = false;
     scene = message.scene;
     if (message.title) titleEl.textContent = message.title;
+    for (const button of document.querySelectorAll<HTMLElement>('.map-mode')) button.setAttribute('aria-checked', String(button.dataset.mode === scene.mode));
     render();
   } else if (message.type === 'status' && message.text !== undefined) {
     statusEl.textContent = message.text;

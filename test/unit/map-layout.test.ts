@@ -71,6 +71,30 @@ describe('the map layout', () => {
     }
   });
 
+  test('in the structure view, parents sit above their children, and the arrow points at the parent', async () => {
+    const entities: Entity[] = [
+      { id: 'p:', kind: 'project', name: 'p' }, { id: 'f:a.ts', kind: 'file', name: 'a.ts', parent: 'p:' },
+      { id: 's:a.ts#Base', kind: 'type', name: 'Base', parent: 'f:a.ts', detail: 'class' },
+      { id: 's:a.ts#Mid', kind: 'type', name: 'Mid', parent: 'f:a.ts', detail: 'class' },
+      { id: 's:a.ts#Leaf', kind: 'type', name: 'Leaf', parent: 'f:a.ts', detail: 'class' }
+    ];
+    const source: CodeIndex = {
+      entities, imports: [], unresolved: [], calls: [], unresolvedCalls: [], generated: [],
+      // Leaf extends Mid extends Base, declared child first.
+      inherits: [{ from: 's:a.ts#Leaf', to: 's:a.ts#Mid', name: 'Mid', kind: 'extends' }, { from: 's:a.ts#Mid', to: 's:a.ts#Base', name: 'Base', kind: 'extends' }]
+    };
+    const scene = await layout.layout(buildScene(source, { mode: 'structure', expanded: ['p:', 'f:a.ts'] }));
+    check(scene);
+    const y = (id: string) => scene.boxes.find((b) => b.id === id)!.y;
+    assert.ok(y('s:a.ts#Base') < y('s:a.ts#Mid') && y('s:a.ts#Mid') < y('s:a.ts#Leaf'), 'Base above Mid above Leaf');
+    for (const arrow of scene.arrows) {
+      const parent = scene.boxes.find((b) => b.id === arrow.to)!;
+      const end = arrow.points.at(-1)!;
+      assert.equal(arrow.kind, 'inherits');
+      assert.ok(Math.abs(end.y - (parent.y + parent.height)) <= 1, `${arrow.id} ends at its parent's bottom`);
+    }
+  });
+
   test('a large map lays out in a few seconds', async () => {
     const source = index(4, 12, 30);
     const expanded = source.entities.filter((e) => e.kind === 'project' || e.kind === 'module').map((e) => e.id);
