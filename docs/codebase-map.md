@@ -333,6 +333,32 @@ Across all four:
   - TypeScript interfaces' fields and Python's attributes aren't in the index (only methods are), so such types list no members.
   - The architecture's layers are by imports only. A file with no imports either way sits wherever ELK packs it.
 8. Call flow, with callers.
+
+### Built (step 8)
+
+- **Call flow** is the map's third view (`src/core/codemap/call-scene.ts`, pure). Its boxes are functions, methods, constructors (`new Counter`), graphs, graph files and files' top levels, each with a second line saying where it lives ("Counter · features.ts").
+- **Where it starts:**
+  - **A box you choose:** a box's ⤵ button starts the flow from it, in any view, and in the call flow itself.
+  - **Otherwise the folder's entry points:** functions, files and graphs marked as entry points that call something. A graph file whose graphs are entry points starts from those graphs.
+  - **The bar** in the toolbar says where the flow starts; its × goes back to the entry points.
+- **How far:** each start is explored two levels. A box with calls left shows how many, and opening it explores one more level (closing it hides that level again). The flow holds at most 400 boxes.
+- **Two directions:**
+  - *Calls made* puts the start on top.
+  - *Callers* shows everything that reaches it, from above, with the start at the bottom.
+
+  Arrows always run from caller to callee, so callers sit above what they call either way.
+- **Crossing between code and graphs:** a call to a graph file leads into its graphs, and on into what they call, so code calls a graph and the graph calls code in one picture. A graph's call to a library graph resolves the library's path from the graph's folder when it isn't from the workspace folder (as the sample's graphs name `libs/Scoring.vgraph`).
+- **What's marked:**
+  - **Recursion** (a function calling itself) and calls that come back round are marked like import cycles. Their arrows are kept through lifting.
+  - **Guessed calls** are dashed.
+  - **Unresolved calls** (more candidates than the index guesses among) are "?" boxes under their caller, saying how many candidates there were.
+- **Grouping by file:** the call boxes sit in boxes for the file (or graph file) each is in. Calls within a file stay together, calls between files are arrows between file boxes, and a file's boxes pack into rows. My first screenshot, of `buildCodeIndex`'s calls laid out loose, was a single layer 8,400 px wide.
+- **A render that fails** (ELK refused an arrow to a box that wasn't there, before library paths were resolved) now says so in the map, instead of leaving whatever was waiting for a scene waiting.
+- **Tested:**
+  - **The call flow's rules:** entry points, depth, opening and closing, callers, graph files leading into their graphs, grouping, recursion, unresolved calls.
+  - **The index:** a library graph found from another folder, and a missing one not called.
+  - **The webview:** the bar, its direction and its ×, the ⤵ button, a start without one.
+  - **Integration:** inside VS Code, the sample's game starts the flow from the entry points, and calls on from its event graph.
 9. Control flow.
 10. Interaction: Find, filters, focus, path, breadcrumb, minimap, the Explorer, editor and graph editor commands, the Blueprint bridges, and the accessible tree view.
 11. The exit check, docs, the parity checklist and status.

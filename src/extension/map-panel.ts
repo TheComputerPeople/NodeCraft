@@ -3,6 +3,7 @@
 // boxes are open is remembered per folder; the map is redrawn when the code changes.
 import * as vscode from 'vscode';
 import type { MapHostMessage, MapMessage } from '../core/codemap/map-protocol';
+import { buildCallScene } from '../core/codemap/call-scene';
 import { LaidScene, MapMode, MapView, buildScene, defaultView } from '../core/codemap/scene';
 import { CodeMapService } from './code-map-service';
 import { renderMapHtml } from './map-html';
@@ -19,7 +20,8 @@ interface OpenMap {
   // The newest render asked for: older ones that finish later are dropped.
   render: number;
   scene?: LaidScene;
-  rendered: vscode.EventEmitter<LaidScene>;
+  // Each render's outcome: its scene, or why it failed.
+  rendered: vscode.EventEmitter<LaidScene | Error>;
 }
 
 export class CodeMapPanels implements vscode.Disposable {
@@ -40,7 +42,7 @@ export class CodeMapPanels implements vscode.Disposable {
     const existing = this.maps.get(key);
     if (existing) {
       existing.panel.reveal();
-      return existing.scene ?? new Promise((resolve) => existing.rendered.event(resolve));
+      return existing.scene ?? nextScene(existing);
     }
     const panel = vscode.window.createWebviewPanel(VIEW_TYPE, `Codebase Map: ${folder.name}`, vscode.ViewColumn.Active, {
       enableScripts: true,
@@ -51,10 +53,10 @@ export class CodeMapPanels implements vscode.Disposable {
     const asset = (name: string) => panel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview', name)).toString();
     panel.webview.html = renderMapHtml({ cspSource: panel.webview.cspSource, nonce: createNonce(), scriptUri: asset('map.js'), styleUri: asset('map.css') });
     const saved = this.context.workspaceState.get<MapView>(this.viewKey(folder));
-    const map: OpenMap = { panel, folder, view: saved ?? { expanded: [] }, render: 0, rendered: new vscode.EventEmitter<LaidScene>() };
+    const map: OpenMap = { panel, folder, view: saved ?? { expanded: [] }, render: 0, rendered: new vscode.EventEmitter<LaidScene | Error>() };
     const first = !saved;
     this.maps.set(key, map);
-    const firstScene = new Promise<LaidScene>((resolve) => map.rendered.event(resolve));
+    const firstScene = nextScene(map);
     panel.onDidDispose(() => {
       this.maps.delete(key);
       map.rendered.dispose();
@@ -69,6 +71,10 @@ export class CodeMapPanels implements vscode.Disposable {
         await this.open(map, message.id);
       } else if (message.type === 'mode') {
         await this.setMode(map, message.mode);
+      } else if (message.type === 'calls') {
+        await this.showCalls(map, message.id);
+      } else if (message.type === 'direction') {
+        await this.update(map, { ...map.view, calls: { ...map.view.calls, direction: message.direction, explored: [] } });
       }
     }, undefined, this.disposables);
     return firstScene;
@@ -79,8 +85,36 @@ export class CodeMapPanels implements vscode.Disposable {
     return this.maps.get(folder.uri.toString())?.scene;
   }
 
-  // Opens or closes a box ("N more…" shows the rest of its box's children).
+  // The call flow from a box (none: from the entry points).
+  async showCalls(map: OpenMap, id?: string): Promise<void> {
+    await this.update(map, { ...map.view, mode: 'calls', calls: { direction: map.view.calls?.direction ?? 'callees', ...(id ? { root: id } : {}), explored: [] } });
+  }
+
+  async callsIn(folder: vscode.WorkspaceFolder, id?: string, direction?: 'callees' | 'callers'): Promise<LaidScene | undefined> {
+    const map = this.maps.get(folder.uri.toString());
+    if (!map) return undefined;
+    const next = nextScene(map);
+    if (direction) map.view = { ...map.view, calls: { ...map.view.calls, direction } };
+    await this.showCalls(map, id);
+    return next;
+  }
+
+  private async update(map: OpenMap, view: MapView): Promise<void> {
+    map.view = view;
+    await this.context.workspaceState.update(this.viewKey(map.folder), map.view);
+    await this.render(map);
+  }
+
+  // Opens or closes a box ("N more…" shows the rest of its box's children); in the call flow,
+  // explores a box one level further, or closes it again.
   async toggle(map: OpenMap, id: string): Promise<void> {
+    if (map.view.mode === 'calls') {
+      const explored = new Set(map.view.calls?.explored ?? []);
+      if (explored.has(id)) explored.delete(id);
+      else explored.add(id);
+      await this.update(map, { ...map.view, calls: { ...map.view.calls, explored: [...explored] } });
+      return;
+    }
     if (id.startsWith('more:')) {
       const parent = id.slice('more:'.length);
       map.view = { ...map.view, unlimited: [...new Set([...(map.view.unlimited ?? []), parent])] };
@@ -104,7 +138,7 @@ export class CodeMapPanels implements vscode.Disposable {
   async modeIn(folder: vscode.WorkspaceFolder, mode: MapMode): Promise<LaidScene | undefined> {
     const map = this.maps.get(folder.uri.toString());
     if (!map) return undefined;
-    const next = new Promise<LaidScene>((resolve) => map.rendered.event(resolve));
+    const next = nextScene(map);
     await this.setMode(map, mode);
     return next;
   }
@@ -112,7 +146,7 @@ export class CodeMapPanels implements vscode.Disposable {
   async toggleIn(folder: vscode.WorkspaceFolder, id: string): Promise<LaidScene | undefined> {
     const map = this.maps.get(folder.uri.toString());
     if (!map) return undefined;
-    const next = new Promise<LaidScene>((resolve) => map.rendered.event(resolve));
+    const next = nextScene(map);
     await this.toggle(map, id);
     return next;
   }
@@ -121,13 +155,14 @@ export class CodeMapPanels implements vscode.Disposable {
     const number = ++map.render;
     try {
       const index = await this.codeMap.codeIndex(map.folder);
-      const scene = await this.layout.layout(buildScene(index, map.view));
+      const scene = await this.layout.layout(map.view.mode === 'calls' ? buildCallScene(index, map.view) : buildScene(index, map.view));
       if (number !== map.render) return;
       map.scene = scene;
       const message: MapHostMessage = { type: 'scene', scene, title: `Codebase Map: ${map.folder.name}` };
       void map.panel.webview.postMessage(message);
       map.rendered.fire(scene);
     } catch (error) {
+      if (number === map.render) map.rendered.fire(error instanceof Error ? error : new Error(String(error)));
       const message: MapHostMessage = { type: 'status', text: `The map couldn't be drawn: ${error instanceof Error ? error.message : String(error)}` };
       void map.panel.webview.postMessage(message);
     }
@@ -160,4 +195,15 @@ export class CodeMapPanels implements vscode.Disposable {
     this.disposables.forEach((d) => d.dispose());
     void this.layout.dispose();
   }
+}
+
+// The map's next scene, or its render's error.
+function nextScene(map: OpenMap): Promise<LaidScene> {
+  return new Promise((resolve, reject) => {
+    const listener = map.rendered.event((outcome) => {
+      listener.dispose();
+      if (outcome instanceof Error) reject(outcome);
+      else resolve(outcome);
+    });
+  });
 }

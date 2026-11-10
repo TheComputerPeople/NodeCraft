@@ -170,6 +170,13 @@ test('Show Codebase Map draws the folder, and opening a box shows what it holds'
     assert.equal(structure?.mode, 'structure');
     assert.ok(structure?.boxes.find((b) => b.id === 'g:arena/Game.vgraph')?.members?.length, "the game's graphs are listed in its box");
     assert.ok(structure?.arrows.some((a) => a.kind === 'inherits' && a.from === 'g:arena/Knight.vgraph' && a.to === 'g:arena/Fighter.vgraph'), 'Knight extends Fighter');
+    // The call flow: from the entry points (the game's Start), and from the game's event graph down.
+    const entries = await api.codeMapPanels.callsIn(folder);
+    assert.equal(entries?.mode, 'calls');
+    assert.ok((entries?.calls?.starts ?? 0) > 0 && entries?.boxes.some((b) => b.id === 'g:arena/Game.vgraph#EventGraph'), 'the game starts the flow');
+    const fromGame = await api.codeMapPanels.callsIn(folder, 'g:arena/Game.vgraph#EventGraph');
+    assert.ok(fromGame?.boxes.some((b) => b.id === 'g:arena/Game.vgraph#EventGraph' && b.root));
+    assert.ok(fromGame?.arrows.some((a) => a.kind === 'calls' && a.from === 'g:arena/Game.vgraph#EventGraph'), 'the game calls on, down the map');
     await api.codeMapPanels.modeIn(folder, 'architecture');
   } finally {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -843,7 +850,13 @@ interface ExtensionInternals {
   };
   codeMapPanels: {
     toggleIn(folder: vscode.WorkspaceFolder, id: string): Promise<{ boxes: { id: string; kind: string; parent?: string; expanded: boolean }[] } | undefined>;
-    modeIn(folder: vscode.WorkspaceFolder, mode: 'architecture' | 'structure'): Promise<{
+    callsIn(folder: vscode.WorkspaceFolder, id?: string, direction?: 'callees' | 'callers'): Promise<{
+      mode: string;
+      calls?: { root?: string; starts: number };
+      boxes: { id: string; root?: boolean }[];
+      arrows: { kind: string; from: string; to: string }[];
+    } | undefined>;
+    modeIn(folder: vscode.WorkspaceFolder, mode: 'architecture' | 'structure' | 'calls'): Promise<{
       mode: string;
       boxes: { id: string; members?: string[] }[];
       arrows: { kind: string; from: string; to: string }[];

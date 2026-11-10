@@ -44,6 +44,8 @@ export function fit(): void {
 }
 
 const CODE_KINDS = new Set(['file', 'graph-file', 'graph', 'type', 'function']);
+// Boxes the call flow can start from.
+const CALLABLE_KINDS = new Set(['function', 'type', 'graph', 'graph-file', 'file']);
 
 const KIND_NAMES: Record<string, string> = {
   project: 'project', module: 'folder', file: 'file', 'graph-file': 'graph file', graph: 'graph', type: 'type', function: 'function', external: 'package', externals: 'packages', more: ''
@@ -51,7 +53,7 @@ const KIND_NAMES: Record<string, string> = {
 
 function renderBox(box: LaidBox): HTMLElement {
   const el = document.createElement('div');
-  el.className = `map-box${box.expanded ? ' open' : ''}${box.entry ? ' entry' : ''}${box.cycle ? ' cycle' : ''}`;
+  el.className = `map-box${box.expanded && scene?.mode !== 'calls' ? ' open' : ''}${box.entry ? ' entry' : ''}${box.cycle ? ' cycle' : ''}${box.root ? ' root' : ''}`;
   el.dataset.id = box.id;
   el.dataset.kind = box.kind;
   el.style.left = `${box.x}px`;
@@ -80,6 +82,19 @@ function renderBox(box: LaidBox): HTMLElement {
   name.className = 'map-name';
   name.textContent = box.label;
   head.appendChild(name);
+  // The call flow from a box (in the call flow itself, from another box).
+  if (CALLABLE_KINDS.has(box.kind) && !box.root) {
+    const calls = document.createElement('button');
+    calls.className = 'map-calls';
+    calls.textContent = '⤵';
+    calls.title = 'Show its call flow';
+    calls.setAttribute('aria-label', `Show the call flow of ${box.label}`);
+    calls.addEventListener('click', (e) => {
+      e.stopPropagation();
+      post({ type: 'calls', id: box.id });
+    });
+    head.appendChild(calls);
+  }
   // Boxes with code open it in an editor.
   if (box.path && CODE_KINDS.has(box.kind)) {
     const open = document.createElement('button');
@@ -272,9 +287,18 @@ canvas.addEventListener('wheel', (e) => {
   applyView();
 }, { passive: false });
 element<HTMLElement>('map-fit').addEventListener('click', fit);
+const callsBar = element<HTMLElement>('map-calls');
+const rootLabel = element<HTMLElement>('map-root-label');
+const rootClear = element<HTMLElement>('map-root-clear');
+rootClear.addEventListener('click', () => post({ type: 'calls' }));
+for (const button of document.querySelectorAll<HTMLElement>('.map-direction')) {
+  button.addEventListener('click', () => {
+    if (button.getAttribute('aria-checked') !== 'true') post({ type: 'direction', direction: button.dataset.direction as 'callees' | 'callers' });
+  });
+}
 for (const button of document.querySelectorAll<HTMLElement>('.map-mode')) {
   button.addEventListener('click', () => {
-    if (button.getAttribute('aria-checked') !== 'true') post({ type: 'mode', mode: button.dataset.mode as 'architecture' | 'structure' });
+    if (button.getAttribute('aria-checked') !== 'true') post({ type: 'mode', mode: button.dataset.mode as 'architecture' | 'structure' | 'calls' });
   });
 }
 canvas.addEventListener('keydown', (e) => {
@@ -292,6 +316,13 @@ window.addEventListener('message', (event: MessageEvent<MapHostMessage>) => {
     scene = message.scene;
     if (message.title) titleEl.textContent = message.title;
     for (const button of document.querySelectorAll<HTMLElement>('.map-mode')) button.setAttribute('aria-checked', String(button.dataset.mode === scene.mode));
+    // The call flow's bar: its direction and where it starts.
+    callsBar.hidden = scene.mode !== 'calls';
+    if (scene.calls) {
+      for (const button of document.querySelectorAll<HTMLElement>('.map-direction')) button.setAttribute('aria-checked', String(button.dataset.direction === scene.calls.direction));
+      rootLabel.textContent = scene.calls.rootLabel ? `${scene.calls.direction === 'callers' ? 'Callers of' : 'From'} ${scene.calls.rootLabel}` : `From the entry points (${scene.calls.starts})`;
+      rootClear.hidden = !scene.calls.root;
+    }
     render();
   } else if (message.type === 'status' && message.text !== undefined) {
     statusEl.textContent = message.text;

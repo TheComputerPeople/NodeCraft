@@ -48,7 +48,18 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); c
 .map-toggle:hover { color: var(--fg); }
 .map-open { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 2px; visibility: hidden; }
 .map-box:hover > .map-head > .map-open, .map-box:focus-within > .map-head > .map-open { visibility: visible; }
-.map-open:hover { color: var(--accent); }
+.map-open:hover, .map-calls:hover { color: var(--accent); }
+.map-calls { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 2px; visibility: hidden; }
+.map-box:hover > .map-head > .map-calls, .map-box:focus-within > .map-head > .map-calls { visibility: visible; }
+.map-box.root { box-shadow: 0 0 0 2px var(--accent); }
+.map-box[data-kind="unresolved"] { --kind: transparent; border-style: dashed; background: transparent; color: var(--muted); }
+#map-calls { display: inline-flex; align-items: center; gap: 8px; }
+#map-calls[hidden] { display: none; }
+#map-directions { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+#map-directions .map-direction { border: 0; border-radius: 0; background: transparent; color: var(--fg); padding: 0 8px; }
+#map-directions .map-direction[aria-checked="true"] { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+#map-root { color: var(--muted); }
+#map-root-clear { margin-left: 4px; height: 20px; padding: 0 6px; }
 
 .map-arrow { fill: none; stroke: var(--imports); opacity: .75; }
 .map-arrow.calls { stroke: var(--calls); }

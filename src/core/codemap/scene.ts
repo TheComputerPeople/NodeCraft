@@ -6,18 +6,22 @@
 import { CodeIndex, Entity, EntityKind } from './code-index';
 
 // architecture: projects, folders and files, with their imports (importers above what they import);
-// structure: the types in them with their members, and inheritance (parents above children).
-export type MapMode = 'architecture' | 'structure';
+// structure: the types in them with their members, and inheritance (parents above children);
+// calls: the call flow from a function or the entry points (call-scene.ts).
+export type MapMode = 'architecture' | 'structure' | 'calls';
 
 export interface MapView {
   mode?: MapMode;
+  // The call flow's start (absent: the entry points), its direction, and the boxes opened in it.
+  calls?: { root?: string; direction?: 'callees' | 'callers'; explored?: string[] };
   // Boxes the user opened.
   expanded: string[];
   // Boxes whose children are all shown, past the usual limit ("N more…" was opened).
   unlimited?: string[];
 }
 
-export type BoxKind = EntityKind | 'externals' | 'more';
+// unresolved: a call the index couldn't resolve (too many candidates), in the call flow.
+export type BoxKind = EntityKind | 'externals' | 'more' | 'unresolved';
 
 export interface SceneBox {
   id: string;
@@ -37,8 +41,18 @@ export interface SceneBox {
   line?: number;
   // A type's members (the structure view), or a graph file's graphs, listed in its box.
   members?: string[];
-  // In an import cycle with boxes beside it.
+  // In an import cycle with boxes beside it (in the call flow: recursion, calls that come back round).
   cycle?: boolean;
+  // The call flow's start.
+  root?: boolean;
+}
+
+// What the call flow shows: its direction, its start (absent: the entry points), how many starts.
+export interface CallFlowContext {
+  direction: 'callees' | 'callers';
+  root?: string;
+  rootLabel?: string;
+  starts: number;
 }
 
 export type ArrowKind = 'imports' | 'calls' | 'inherits';
@@ -65,6 +79,7 @@ export interface LiftedArrow extends SceneArrow {
 
 export interface Scene {
   mode: MapMode;
+  calls?: CallFlowContext;
   boxes: SceneBox[];
   // Every arrow between the boxes that show its ends.
   arrows: SceneArrow[];
@@ -195,7 +210,7 @@ export function buildScene(index: CodeIndex, view: MapView): Scene {
   if (mode === 'structure') for (const i of index.inherits) if (i.to) add('inherits', i.from, i.to, true);
   const sceneArrows = [...arrows.values()];
   const lifted = liftArrows(boxes, sceneArrows);
-  markCycles(boxes, lifted);
+  markCycles(boxes, lifted, 'imports');
   return { mode, boxes, arrows: sceneArrows, lifted };
 }
 
@@ -216,13 +231,19 @@ export function liftArrows(boxes: SceneBox[], arrows: SceneArrow[]): LiftedArrow
   };
   const lifted = new Map<string, LiftedArrow>();
   for (const arrow of arrows) {
+    // A box's arrow to itself (recursion) stays as it is, in the box's own parent.
+    if (arrow.from === arrow.to) {
+      if (!lifted.has(arrow.id)) lifted.set(arrow.id, { ...arrow, container: parentOf.get(arrow.from) ?? '' });
+      continue;
+    }
     const a = chain(arrow.from);
     const bChain = chain(arrow.to);
     const b = new Set(bChain);
     const common = a.find((id) => b.has(id)) ?? '';
     const from = a[a.indexOf(common) - 1] ?? a[a.length - 1];
     const to = bChain[bChain.indexOf(common) - 1] ?? bChain[bChain.length - 1];
-    if (!from || !to || from === to) continue;
+    // An arrow inside one box isn't drawn; a box's own arrow to itself (recursion) is.
+    if (!from || !to || (from === to && arrow.from !== arrow.to)) continue;
     const id = `${arrow.kind}:${from}>${to}`;
     const entry = lifted.get(id);
     if (entry) {
@@ -235,10 +256,11 @@ export function liftArrows(boxes: SceneBox[], arrows: SceneArrow[]): LiftedArrow
   return [...lifted.values()];
 }
 
-// Import cycles: in each open box, the boxes whose imports reach each other (Tarjan's strongly
-// connected components). Their arrows, and the boxes, are marked.
-function markCycles(boxes: SceneBox[], lifted: LiftedArrow[]): void {
-  const imports = lifted.filter((a) => a.kind === 'imports');
+// Cycles: among the boxes side by side, those whose arrows of a kind reach each other (Tarjan's
+// strongly connected components): imports in the architecture, calls in the call flow (a function
+// calling itself is one too). Their arrows, and the boxes, are marked.
+export function markCycles(boxes: SceneBox[], lifted: LiftedArrow[], kind: ArrowKind): void {
+  const imports = lifted.filter((a) => a.kind === kind);
   const out = new Map<string, string[]>();
   for (const a of imports) out.set(a.from, [...(out.get(a.from) ?? []), a.to]);
   const index = new Map<string, number>();
@@ -288,7 +310,8 @@ function markCycles(boxes: SceneBox[], lifted: LiftedArrow[]): void {
     }
   };
   for (const v of out.keys()) if (!index.has(v)) connect(v);
-  const inCycle = (id: string) => component.has(id) && sizes[component.get(id)!] > 1;
+  const selfLoops = new Set(imports.filter((a) => a.from === a.to).map((a) => a.from));
+  const inCycle = (id: string) => (component.has(id) && sizes[component.get(id)!] > 1) || selfLoops.has(id);
   for (const a of imports) if (inCycle(a.from) && component.get(a.from) === component.get(a.to)) a.cycle = true;
   for (const box of boxes) if (inCycle(box.id)) box.cycle = true;
 }
@@ -316,6 +339,7 @@ export interface LaidArrow extends SceneArrow {
 
 export interface LaidScene {
   mode: MapMode;
+  calls?: CallFlowContext;
   width: number;
   height: number;
   boxes: LaidBox[];

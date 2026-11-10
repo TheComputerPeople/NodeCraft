@@ -269,6 +269,17 @@ export function linkCalls(input: CallInput): { calls: CallEdge[]; unresolvedCall
     return (byFile.get(path) ?? []).find((r) => r.qualified === qualified)?.kind ?? 'namespace';
   }
 
+  // A library graph file named by a node: as written (from the workspace folder), else from the
+  // calling graph's folder, else the one graph file whose path ends with it.
+  const graphIds = new Map(input.graphs.map((g) => [g.path, new Set(g.document.graphs.map((x) => x.id))]));
+  const libraryFile = (written: string, caller: string): string | undefined => {
+    if (graphIds.has(written)) return written;
+    const beside = joinPosix(caller.slice(0, caller.lastIndexOf('/') + 1), written);
+    if (graphIds.has(beside)) return beside;
+    const ending = [...graphIds.keys()].filter((p) => p.endsWith(`/${written}`));
+    return ending.length === 1 ? ending[0] : undefined;
+  };
+
   // Graphs call their functions and macros, other graphs' library functions, and project code.
   for (const graph of input.graphs) {
     const fileId = `g:${graph.path}`;
@@ -282,7 +293,8 @@ export function linkCalls(input: CallInput): { calls: CallEdge[]; unresolvedCall
         }
         const library = /^lib:(.+)#(.+)$/.exec(node.type);
         if (library) {
-          addCall(from, `g:${library[1]}#${library[2]}`, graph.path, at, true);
+          const file = libraryFile(library[1], graph.path);
+          if (file && graphIds.get(file)?.has(library[2])) addCall(from, `g:${file}#${library[2]}`, graph.path, at, true);
           continue;
         }
         const code = /^fn:[^:]+:(.+)#(.+)$/.exec(node.type);
@@ -331,6 +343,17 @@ export function linkCalls(input: CallInput): { calls: CallEdge[]; unresolvedCall
   }
 
   return { calls: [...calls.values()], unresolvedCalls, inherits };
+}
+
+// "a/b/" + "../c.vgraph" → "a/c.vgraph".
+function joinPosix(dir: string, relative: string): string {
+  const out: string[] = [];
+  for (const part of `${dir}${relative}`.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') out.pop();
+    else out.push(part);
+  }
+  return out.join('/');
 }
 
 function stemOf(path: string): string {

@@ -279,8 +279,10 @@ describe('calls and inheritance', () => {
     const greet = graph('g/Greet.vgraph', ['fn:typescript:lib/text.ts#title', 'core:function.call', 'lib:libs/Math.vgraph#Square']);
     greet.document.graphs[0].nodes[1].properties = { graph: 'Helper' };
     greet.document.graphs.push({ id: 'Helper', name: 'Helper', kind: 'function', nodes: [], connections: [], comments: [] });
+    const math = graph('libs/Math.vgraph', []);
+    math.document.graphs.push({ id: 'Square', name: 'Square', kind: 'function', nodes: [], connections: [], comments: [] });
     const i = index({
-      graphs: [greet, graph('libs/Math.vgraph', [])],
+      graphs: [greet, math],
       files: [
         file('main.ts', 'typescript', [{ source: './g/Greet.vgraph' }], { declarations: decls('function main'), calls: calls('main > Greet.Helper') }),
         file('g/Greet.vgraph.ts', 'typescript', [{ source: '../lib/text' }], {
@@ -297,6 +299,14 @@ describe('calls and inheritance', () => {
       'g:g/Greet.vgraph#EventGraph > s:lib/text.ts#title',
       's:main.ts#main > g:g/Greet.vgraph#Helper'
     ]);
+  });
+
+  test("a library graph named by a path from elsewhere is found; one that isn't there isn't called", () => {
+    const dojo = graph('node-authoring/graphs/Dojo.vgraph', ['lib:libs/Scoring.vgraph#Bonus', 'lib:libs/Missing.vgraph#X']);
+    const scoring = graph('node-authoring/libs/Scoring.vgraph', []);
+    scoring.document.graphs.push({ id: 'Bonus', name: 'Bonus', kind: 'function', nodes: [], connections: [], comments: [] });
+    const i = index({ graphs: [dojo, scoring] });
+    assert.deepEqual(callEdges(i), ['g:node-authoring/graphs/Dojo.vgraph#EventGraph > g:node-authoring/libs/Scoring.vgraph#Bonus']);
   });
 
   test("support code that several graphs' generated files each carry isn't shown", () => {

@@ -122,6 +122,42 @@ describe('the Codebase Map webview', () => {
     assert.equal(await e.count('.map-arrow.inherits'), 1);
   });
 
+  test('the call flow: its bar shows where it starts and which way; boxes start their own', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    assert.equal(await e.page.isVisible('#map-calls'), false, 'no call bar in the architecture');
+    // Any function, type, graph or file box can start a call flow.
+    await e.page.hover('.map-box[data-id="f:a.ts"]');
+    await e.page.click('.map-box[data-id="f:a.ts"] .map-calls');
+    assert.equal(await e.count('.map-box[data-id="externals"] .map-calls'), 0, "a package has no calls of its own");
+    const flow: LaidScene = {
+      mode: 'calls', calls: { direction: 'callees', root: 's:a.ts#main', rootLabel: 'main', starts: 1 }, width: 300, height: 260,
+      boxes: [
+        { id: 's:a.ts#main', label: 'main', kind: 'function', detail: 'a.ts', count: 0, expandable: false, expanded: false, root: true, x: 0, y: 0, width: 140, height: 48 },
+        { id: 's:a.ts#run', label: 'run', kind: 'function', detail: 'a.ts', count: 2, expandable: true, expanded: false, cycle: true, x: 0, y: 100, width: 140, height: 48 },
+        { id: 'unresolved:s:a.ts#main>emit', label: 'emit?', kind: 'unresolved', detail: 'one of 8', count: 0, expandable: false, expanded: false, x: 160, y: 100, width: 120, height: 48 }
+      ],
+      arrows: [{ id: 'calls:s:a.ts#main>s:a.ts#run', from: 's:a.ts#main', to: 's:a.ts#run', kind: 'calls', weight: 1, certain: true, points: [{ x: 70, y: 48 }, { x: 70, y: 100 }] }],
+      details: []
+    };
+    await e.send({ type: 'scene', scene: flow } as never);
+    assert.equal(await e.page.isVisible('#map-calls'), true);
+    assert.equal(await e.page.textContent('#map-root-label'), 'From main');
+    assert.equal(await e.count('.map-box.root'), 1);
+    assert.equal(await e.count('.map-box[data-id="s:a.ts#main"] .map-calls'), 0, 'the start has no button to start from itself');
+    assert.equal(await e.page.getAttribute('.map-mode[data-mode="calls"]', 'aria-checked'), 'true');
+    await e.page.click('.map-direction[data-direction="callers"]');
+    await e.page.click('#map-root-clear');
+    await e.page.dblclick('.map-box[data-id="s:a.ts#run"] .map-name');
+    assert.deepEqual(await posted(e), [
+      JSON.stringify({ type: 'calls', id: 'f:a.ts' }), JSON.stringify({ type: 'direction', direction: 'callers' }), JSON.stringify({ type: 'calls' }), JSON.stringify({ type: 'toggle', id: 's:a.ts#run' })
+    ]);
+    // From the entry points, the bar says how many.
+    await e.send({ type: 'scene', scene: { ...flow, calls: { direction: 'callers', starts: 12 } } } as never);
+    assert.equal(await e.page.textContent('#map-root-label'), 'From the entry points (12)');
+    assert.equal(await e.page.isVisible('#map-root-clear'), false);
+  });
+
   test('import cycles are marked on their boxes and arrows', async (t) => {
     const e = await open(t);
     if (!e) return;

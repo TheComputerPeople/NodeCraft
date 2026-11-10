@@ -19,6 +19,14 @@ export function renderMapHtml({ cspSource, nonce, scriptUri, styleUri }: Webview
     <span id="map-modes" role="radiogroup" aria-label="View">
       <button class="map-mode" data-mode="architecture" role="radio" aria-checked="true" title="Projects, folders and files, and their imports: importers above what they import">Architecture</button>
       <button class="map-mode" data-mode="structure" role="radio" aria-checked="false" title="Types and their members, and inheritance: parents above their children">Structure</button>
+      <button class="map-mode" data-mode="calls" role="radio" aria-checked="false" title="What calls what, from the entry points or a function, flowing down">Call flow</button>
+    </span>
+    <span id="map-calls" hidden>
+      <span id="map-directions" role="radiogroup" aria-label="Direction">
+        <button class="map-direction" data-direction="callees" role="radio" aria-checked="true" title="The calls it makes, flowing down">Calls made</button>
+        <button class="map-direction" data-direction="callers" role="radio" aria-checked="false" title="Everything that reaches it, from above">Callers</button>
+      </span>
+      <span id="map-root"><span id="map-root-label">From the entry points</span><button id="map-root-clear" title="Start from the entry points" aria-label="Start from the entry points" hidden>×</button></span>
     </span>
     <button id="map-fit" title="Fit the map (Home)">Fit</button>
     <span class="map-legend" aria-label="Legend">
