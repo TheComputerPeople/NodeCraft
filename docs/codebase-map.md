@@ -13,13 +13,13 @@ Unreal has no equivalent for code. Its closest tools are the Reference Viewer (a
 
 A "Built" section after each design says what each step built.
 
-## Decisions to confirm before step 2
+## Decisions: the parser and the layout
 
-Two choices add the extension's first runtime dependencies. They're recommended here, and the alternatives are below each.
+Two choices add the extension's first runtime dependencies. The user confirmed both on 2026-11-09 ("Continue", after they were put to them), as recommended here; the alternatives are kept below each.
 
 1. **Parsing: tree-sitter** (`web-tree-sitter`, WebAssembly, MIT), with a grammar for each language: TypeScript and TSX, JavaScript, Python, C#, C, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP.
    - **Why:** the control-flow view needs each function's body as a syntax tree, in every language. The scanners read declarations with patterns, and language servers give symbols and (some of them) call hierarchies, but no server gives control flow. One parser for all 12 languages also gives imports and calls uniformly, works without any language extension installed, and works in Restricted Mode, because parsing runs nothing from the project.
-   - **Cost:** the grammars' `.wasm` files add an estimated 10 to 25 MB to the extension. Step 2 measures it and checks that a maintained grammar exists for each language (GDScript's is a community grammar).
+   - **Cost:** the grammars' `.wasm` files add an estimated 10 to 25 MB to the extension. Step 2 measures it and checks that a maintained grammar exists for each language (GDScript's is a community grammar). (Measured: 17.5 MB; see "Built (step 2)".)
    - **Alternatives:**
      - **Language servers only.** Call hierarchies exist for most languages but not all (Lua, GDScript, Ruby and PHP vary by extension). There's no control flow, and every user needs every language's extension.
      - **Hand-written parsers** in the scanners' style, for 12 languages. This is far more work and less accurate.
@@ -150,6 +150,29 @@ Across all four:
 
 1. This design, the roadmap entry and the decisions above.
 2. The parser foundation: `web-tree-sitter` and the 13 grammars loaded in a worker, their size measured, and their notices added.
+
+### Built (step 2)
+
+- **The grammars** are built by `npm run build:grammars` (scripts/build-grammars.js) into `grammars/`, one `.wasm` per grammar, and committed. The 14 grammars are 13 languages plus TSX.
+  - **How they're built:** the script fetches each grammar's npm package with `npm pack`, so no install script runs, and compiles its generated parser with tree-sitter CLI 0.27.1.
+  - **Why commit them:** only changing a grammar needs the build. The CLI must match the runtime, web-tree-sitter 0.27.1, so the two share one ABI; the script refuses a mismatch. The CLI also fetches wasi-sdk, about 600 MB, into its own cache the first time.
+  - **Versions:** the newest release of each grammar package at least two weeks old. Those are tree-sitter-typescript 0.23.2 (TypeScript and TSX), -javascript 0.25.0, -python 0.25.0, -c-sharp 0.23.5, -c 0.24.1, -cpp 0.23.4, -rust 0.24.0, -java 0.23.5, -go 0.25.0, @tree-sitter-grammars/tree-sitter-lua 0.4.1, tree-sitter-gdscript 6.1.0, tree-sitter-ruby 0.23.1 and tree-sitter-php 0.24.2. All are MIT-licensed.
+  - **No single prebuilt set would do:** neither VS Code's own `@vscode/tree-sitter-wasm` nor `tree-sitter-wasms` has all 13 languages, and GDScript's package ships no `.wasm`.
+  - **The manifest:** `grammars/grammars.json` records each grammar's package, version, CLI, license, size and SHA-256.
+  - **The notices:** the script writes the licenses into THIRD_PARTY_NOTICES.md, between markers.
+- **Size:** 17.5 MB in all, plus web-tree-sitter's own 0.2 MB.
+  - C# is 5.3 MB, C++ 3.4 MB and Ruby 2.1 MB.
+  - TypeScript and TSX are 1.4 MB each, Rust 1.1 MB and PHP 1.1 MB.
+  - C, Python, Java and JavaScript are 0.4 to 0.6 MB each, and GDScript, Go and Lua under 0.3 MB.
+- **The parser** is `src/extension/code-parser.ts`. It loads each grammar the first time a file needs it and summarizes a parse: its node count and its first syntax errors, with lines. It's in the extension, not in core, because core imports no packages. The table of which grammar parses which file is in core (`src/core/parsing/grammars.ts`); `.h` headers are parsed as C++.
+- **The worker:** `src/extension/parse-service.ts` runs the parser in a worker thread (`parse-worker.ts`), with no vscode API, as Simulate's session does. Trees stay in the worker, and only plain data comes back.
+- **Tested** (test/unit/parsing.test.ts):
+  - each grammar on a snippet of its language;
+  - the committed `.wasm` files against the manifest and the notices;
+  - without a single syntax error: all 105 source files of the 28 corpus layouts, every fixture's generated code in all 12 languages (over 300 files), and this repository's own 283 source files.
+  - One parser handles about 3.7 MB/s here: the repository's 3.4 MB parse in 0.9 s, loading the grammars included.
+- **A grammar bug found:** tree-sitter-typescript 0.23.2, its latest release, takes a member named `abstract` for the modifier. The test lists such bugs with an example that must keep failing, so a fixed grammar is noticed. tree-sitter's error recovery keeps the rest of such a file readable; step 3 has to rely on that.
+- **Packaging:** the extension's `dependencies` are web-tree-sitter only; ELK arrives with step 6.
 3. The code index: entities, imports with resolution through the module rules, containment, graph files, the cache and incremental updates, entry points.
 4. Calls and inheritance: call extraction and resolution, ambiguous and unresolved calls, and the language server's definition for one call on request.
 5. Control flow: the shared builder and the 12 languages' rules, with golden flowcharts.

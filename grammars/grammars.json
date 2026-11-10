@@ -1,0 +1,145 @@
+{
+  "runtime": "web-tree-sitter@0.27.1",
+  "grammars": [
+    {
+      "id": "typescript",
+      "file": "tree-sitter-typescript.wasm",
+      "package": "tree-sitter-typescript",
+      "version": "0.23.2",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 1415395,
+      "sha256": "90981e0e9b51770042747a54ff6341a71ef001951766bba5a49ab5be7bdabac0"
+    },
+    {
+      "id": "tsx",
+      "file": "tree-sitter-tsx.wasm",
+      "package": "tree-sitter-typescript",
+      "version": "0.23.2",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 1447318,
+      "sha256": "a583f79d5f35e561ab7a79373bb8527177b33a052078eea4b264b7cea8dcfd3f"
+    },
+    {
+      "id": "javascript",
+      "file": "tree-sitter-javascript.wasm",
+      "package": "tree-sitter-javascript",
+      "version": "0.25.0",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 413059,
+      "sha256": "45d6d221f16e24654ce2710bef70e7b6172e32ff7c0054e2a3d838b968f1c1e7"
+    },
+    {
+      "id": "python",
+      "file": "tree-sitter-python.wasm",
+      "package": "tree-sitter-python",
+      "version": "0.25.0",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 456718,
+      "sha256": "1d199b58339417119cc3af5f6982ced2380a278697a170049578e9f322ea2021"
+    },
+    {
+      "id": "c_sharp",
+      "file": "tree-sitter-c_sharp.wasm",
+      "package": "tree-sitter-c-sharp",
+      "version": "0.23.5",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 5328837,
+      "sha256": "58390f0417f4dc033acccc06ec842907b5040bdc0547dd19324a56ec64dc2392"
+    },
+    {
+      "id": "c",
+      "file": "tree-sitter-c.wasm",
+      "package": "tree-sitter-c",
+      "version": "0.24.1",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 625958,
+      "sha256": "9ef07987241c6520d9e8b2faf9893237c6cff0a6d919429af733762824b2e5e3"
+    },
+    {
+      "id": "cpp",
+      "file": "tree-sitter-cpp.wasm",
+      "package": "tree-sitter-cpp",
+      "version": "0.23.4",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 3435977,
+      "sha256": "77de70b873b2aa4ce85121501f37627c1dc030d54f7e30085dac795bf8c0d083"
+    },
+    {
+      "id": "rust",
+      "file": "tree-sitter-rust.wasm",
+      "package": "tree-sitter-rust",
+      "version": "0.24.0",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 1113149,
+      "sha256": "6203fac704c9ef97f18d27990aea2282b30770078d2daf814c23b63a958dda26"
+    },
+    {
+      "id": "java",
+      "file": "tree-sitter-java.wasm",
+      "package": "tree-sitter-java",
+      "version": "0.23.5",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 415228,
+      "sha256": "9ac4516011f0fe2b6bb1f28112b41bb4191c181161da13805363c2f52a1c9939"
+    },
+    {
+      "id": "go",
+      "file": "tree-sitter-go.wasm",
+      "package": "tree-sitter-go",
+      "version": "0.25.0",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 217759,
+      "sha256": "d6c2292d735010530659c273e37e971009928e8a5a1a5e157315c04f21321a28"
+    },
+    {
+      "id": "lua",
+      "file": "tree-sitter-lua.wasm",
+      "package": "@tree-sitter-grammars/tree-sitter-lua",
+      "version": "0.4.1",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 49568,
+      "sha256": "3679a1ab9349e181ab819de0e250f300cfcd6f2f5f652d90c43b87cdfa819295"
+    },
+    {
+      "id": "gdscript",
+      "file": "tree-sitter-gdscript.wasm",
+      "package": "tree-sitter-gdscript",
+      "version": "6.1.0",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 290468,
+      "sha256": "3339feb066adb430066d59043dab659f101a415bc22751e4159cbf15ddfa4149"
+    },
+    {
+      "id": "ruby",
+      "file": "tree-sitter-ruby.wasm",
+      "package": "tree-sitter-ruby",
+      "version": "0.23.1",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 2107106,
+      "sha256": "3bddf8c011846fd965bacb9659224d31118d3213e60ad29f33fffb58881ef1b6"
+    },
+    {
+      "id": "php",
+      "file": "tree-sitter-php.wasm",
+      "package": "tree-sitter-php",
+      "version": "0.24.2",
+      "cli": "0.27.1",
+      "license": "MIT",
+      "bytes": 1060805,
+      "sha256": "a8ef79bf32c6fbabb6e0c71d2cffe91356a1c85a9d94f24d8f35926fbf9e85cd"
+    }
+  ]
+}

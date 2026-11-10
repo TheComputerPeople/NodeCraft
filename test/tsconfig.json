@@ -21,6 +21,9 @@
     "../src/extension/npm-registry.ts",
     "../src/extension/projects.ts",
     "../src/extension/simulate-session.ts",
-    "../src/extension/simulate-worker.ts"
+    "../src/extension/simulate-worker.ts",
+    "../src/extension/code-parser.ts",
+    "../src/extension/parse-service.ts",
+    "../src/extension/parse-worker.ts"
   ]
 }

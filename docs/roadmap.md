@@ -419,7 +419,7 @@ Before it: declarations are read in all 12 languages (functions, classes, member
 - **Four views to drill through,** each laid out top to bottom: the architecture (projects, modules, files and their imports), the structure (types, inheritance, members), the call flow (from entry points down, or callers from above) and the control flow inside one function.
 - **Explore, with bridges into Blueprint:** read-only, with Find, filters, focus, paths, Back and Forward, opening the code, Expose as Node and Open Graph, and an accessible tree view of the same index. Blueprint graphs stay left to right.
 
-To confirm before building: tree-sitter as the parser for all 12 languages, and ELK for the layout (the extension's first runtime dependencies).
+Decided (2026-11-09): tree-sitter parses all 12 languages, and ELK lays the map out (the extension's first runtime dependencies).
 
 Design and steps: [codebase-map.md](codebase-map.md).
 

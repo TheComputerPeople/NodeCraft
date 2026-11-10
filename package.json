@@ -398,6 +398,7 @@
     "test:conformance": "npm run build:test && node --test \"out/test/conformance/**/*.test.js\"",
     "test:integration": "npm run compile && npm run build:test && node out/test/integration/runTest.js",
     "build:sdk": "node scripts/build-sdk.js",
+    "build:grammars": "node scripts/build-grammars.js",
     "corpus:tools": "node scripts/corpus-tools.js",
     "test:sdk": "node scripts/build-sdk.js && node packages/pack-sdk/dist/cli.js javascript --filter flow",
     "test:integration:debuggers": "npm run compile && npm run build:test && node out/test/integration/runTest.js --with-debuggers",
@@ -411,10 +412,12 @@
     "ajv": "^8.20.0",
     "esbuild": "^0.28.2",
     "playwright-core": "^1.64.0",
+    "tree-sitter-cli": "0.27.1",
     "typescript": "^7.0.2"
   },
   "files": [
     "dist/**",
+    "grammars/**",
     "src/**",
     "schemas/**",
     "docs/**",
@@ -425,5 +428,8 @@
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "tsconfig.json"
-  ]
+  ],
+  "dependencies": {
+    "web-tree-sitter": "0.27.1"
+  }
 }
