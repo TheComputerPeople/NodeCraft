@@ -7,6 +7,7 @@ import { Browser, Page, chromium } from 'playwright-core';
 import { Graph, GraphDocument, HostMessage, UIMessage } from '../../src/core/model';
 import { NodeRegistry, parseNodeDefinition } from '../../src/core/registry';
 import { parseDocument, primaryGraph } from '../../src/core/serializer';
+import { renderMapHtml } from '../../src/extension/map-html';
 import { renderEditorHtml } from '../../src/extension/webview-html';
 
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -29,10 +30,12 @@ export async function launchBrowser(): Promise<Browser | string> {
 
 // The webview's markup, written again whenever it changes. Test files run in parallel and write the
 // same text, each through a rename, so none reads a half-written page.
-function harnessUrl(): string {
-  const file = path.join(__dirname, 'editor.html');
+// The graph editor's page, or the Codebase Map's.
+function harnessUrl(which: 'editor' | 'map' = 'editor'): string {
+  const file = path.join(__dirname, `${which}.html`);
   const asset = (name: string): string => pathToFileURL(path.join(bundleDir, name)).href;
-  const html = renderEditorHtml({ cspSource: 'file:', nonce: 'test-nonce', scriptUri: asset('editor.js'), styleUri: asset('editor.css') });
+  const options = { cspSource: 'file:', nonce: 'test-nonce', scriptUri: asset(`${which}.js`), styleUri: asset(`${which}.css`) };
+  const html = which === 'map' ? renderMapHtml(options) : renderEditorHtml(options);
   const current = (): string | undefined => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined);
   if (current() !== html) {
     const temp = `${file}.${process.pid}`;
@@ -74,7 +77,7 @@ export class EditorPage {
     });
   }
 
-  static async open(browser: Browser): Promise<EditorPage> {
+  static async open(browser: Browser, which: 'editor' | 'map' = 'editor'): Promise<EditorPage> {
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
     const editor = new EditorPage(page);
     // The webview's state (getState and setState) lasts across a reload, as VS Code keeps it.
@@ -87,7 +90,7 @@ export class EditorPage {
         setState: (state: unknown) => sessionStorage.setItem('vscodeState', JSON.stringify(state))
       });
     });
-    await page.goto(harnessUrl());
+    await page.goto(harnessUrl(which));
     return editor;
   }
 

@@ -285,6 +285,30 @@ Across all four:
   - Python's `for`-`else` and `while`-`else` are left out.
   - Expressions with flow of their own (`&&`, `?:`, comprehensions) stay inside one box, as designed.
 6. The map's shell: the Codebase Map panel, ELK in a worker, rendering with level of detail, pan, zoom, expand and collapse, and opening the code.
+
+### Built (step 6)
+
+- **Show Codebase Map** (the command palette, or a folder's menu in the Explorer) opens a folder's map in a panel of its own. Each workspace folder has one map, which remembers which boxes are open, and redraws when the code changes.
+- **The scene** (`src/core/codemap/scene.ts`, pure) is what's in view: every box whose parents are all open, with its count of what's inside, its kind, its entry point and its place in the code. External packages are one box, "External packages".
+  - **Arrows** between hidden boxes are summed onto the boxes that show them, weighted by how many they stand for. Calls and inheritance are drawn between declarations; between files and folders, the imports say it.
+  - **Limits:** a box shows its first 60 children and "N more…", which opens the rest. The map holds at most 1,500 boxes.
+  - **The first view:** a folder's map opens with its projects open when it has up to three.
+- **The layout** runs ELK's layered algorithm, top to bottom, in a worker thread (`src/extension/map-layout*.ts`), not in the webview: elkjs 0.12.0 runs there as it is, and the webview's limits on workers don't apply.
+  - **Why each box separately:** each open box's contents are laid out on their own. Laying out the whole map at once, with arrows routed across levels, took 19 s for 600 boxes and over two minutes for 1,500. Box by box, those take 0.9 s and 2.4 s.
+  - **Lifted arrows:** an arrow between boxes in different open boxes is lifted to the two boxes holding its ends inside their nearest common box. The layers follow it, and the map draws the lifted arrows, summed and routed by ELK. Each level reads as what depends on what, without the hairball that drawing every arrow made.
+  - **A box's own arrows** run from box to box, and are drawn when the box is pointed at. They go down, or around the side when they point back up.
+- **The webview** (`src/map/`) draws boxes in a colour per kind and the arrows in a colour per kind; guessed calls are dashed.
+  - **Moving around:** drag to pan, scroll to zoom around the pointer, Fit (or Home) for the whole map.
+  - **Level of detail:** zoomed out, the second lines go, then small boxes' names.
+  - **Pointing at a box** (or clicking it, until the background is clicked) draws its own arrows, to and from everything inside it, over the dimmed map, and marks the boxes they reach.
+  - **Opening:** double-clicking a box that holds others opens or closes it, and double-clicking one with nothing inside opens its code. A box's ↗ opens its code at its line, or a graph in the graph editor.
+  - **Looks:** I checked it on this repository's map with screenshots while building it. They led to the lifted arrows and to wider boxes.
+- **ELK's notice** (EPL-2.0) is in THIRD_PARTY_NOTICES.md.
+- **Tested:**
+  - **The scene's rules:** what's in view, counts, summed arrows, arrows inside a box, calls only between declarations, the limits, entries.
+  - **The layout:** boxes inside their open boxes and apart from each other, arrows from box to box and pointing down, and 1,400 boxes laid out in under a second.
+  - **The webview** in a browser: drawing, highlighting, opening and closing, opening code, pan, zoom and level of detail, keeping the view on a redraw.
+  - **Integration:** the command opens the map inside VS Code, and opening a folder's box shows its graphs.
 7. Architecture and structure views.
 8. Call flow, with callers.
 9. Control flow.

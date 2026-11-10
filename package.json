@@ -132,6 +132,12 @@
         "category": "Blueprint Visual Scripting"
       },
       {
+        "command": "blueprintVisualScripting.showCodebaseMap",
+        "title": "Show Codebase Map",
+        "category": "Blueprint Visual Scripting",
+        "icon": "$(type-hierarchy)"
+      },
+      {
         "command": "blueprintVisualScripting.graphBack",
         "title": "Back to the Previous Graph",
         "category": "Blueprint Visual Scripting"
@@ -266,6 +272,11 @@
           "group": "blueprint@0"
         },
         {
+          "command": "blueprintVisualScripting.showCodebaseMap",
+          "when": "explorerResourceIsFolder",
+          "group": "blueprint@1"
+        },
+        {
           "command": "blueprintVisualScripting.exposeFunctions",
           "when": "!explorerResourceIsFolder && resourceExtname =~ /^\\.(ts|mts|cts|js|mjs|cjs|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
           "group": "blueprint@0"
@@ -388,10 +399,10 @@
   },
   "scripts": {
     "compile": "tsc -p ./ && npm run compile:webview",
-    "compile:webview": "esbuild src/webview/editor.ts src/webview/editor.css --bundle --outdir=dist/webview --format=iife --target=es2022 --sourcemap",
+    "compile:webview": "esbuild src/webview/editor.ts src/webview/editor.css --bundle --outdir=dist/webview --format=iife --target=es2022 --sourcemap && esbuild src/map/map.ts src/map/map.css --bundle --outdir=dist/webview --format=iife --target=es2022 --sourcemap",
     "watch": "tsc -watch -p ./",
     "watch:webview": "npm run compile:webview -- --watch",
-    "check": "tsc --noEmit -p ./ && tsc --noEmit -p src/webview && tsc --noEmit -p test",
+    "check": "tsc --noEmit -p ./ && tsc --noEmit -p src/webview && tsc --noEmit -p src/map && tsc --noEmit -p test",
     "test": "npm run compile:webview && npm run build:test && node --test \"out/test/**/*.test.js\"",
     "test:unit": "npm run build:test && node --test \"out/test/unit/**/*.test.js\"",
     "test:webview": "npm run compile:webview && npm run build:test && node --test \"out/test/webview/**/*.test.js\"",
@@ -430,6 +441,7 @@
     "tsconfig.json"
   ],
   "dependencies": {
+    "elkjs": "0.12.0",
     "web-tree-sitter": "0.27.1"
   }
 }

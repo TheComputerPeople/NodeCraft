@@ -28,11 +28,12 @@ import { NewProjectAnswers, newProject } from './new-project-command';
 import { SetupView } from './setup-view';
 import { ExposeAnswers, exposeFunctions } from './expose-command';
 import { CodeMapService } from './code-map-service';
+import { CodeMapPanels } from './map-panel';
 
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
 export interface ExtensionApi extends BlueprintVisualScriptingApi {
-  testing: { marks: DebugMarks; provider: GraphEditorProvider; outputPlans: OutputPlans; registry: NodeRegistry; codeMap: CodeMapService };
+  testing: { marks: DebugMarks; provider: GraphEditorProvider; outputPlans: OutputPlans; registry: NodeRegistry; codeMap: CodeMapService; codeMapPanels: CodeMapPanels };
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
@@ -60,7 +61,18 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   context.subscriptions.push(projectFunctions);
   // The Codebase Map's index of each folder (docs/codebase-map.md), built when the map is first used.
   const codeMap = new CodeMapService(context);
-  context.subscriptions.push(codeMap);
+  const codeMapPanels = new CodeMapPanels(context, codeMap);
+  context.subscriptions.push(codeMap, codeMapPanels);
+  // Show Codebase Map: the folder's map (of the folder chosen in the Explorer, or the active file's).
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showCodebaseMap', async (uri?: vscode.Uri) => {
+    const folderUri = await commandFolder(uri);
+    const folder = folderUri && vscode.workspace.getWorkspaceFolder(folderUri);
+    if (!folder) {
+      void vscode.window.showInformationMessage('Open a folder to see its Codebase Map.');
+      return undefined;
+    }
+    return codeMapPanels.show(folder);
+  }));
   // Function libraries made of graphs (docs/program-structure.md, "Functions").
   const graphLibraries = new GraphLibraries(registry, languages, nodeLibraries);
   context.subscriptions.push(graphLibraries);
@@ -277,7 +289,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       .then((choice) => choice && channel.show());
     return reports;
   }));
-  return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans, registry, codeMap } };
+  return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans, registry, codeMap, codeMapPanels } };
 }
 
 export function deactivate(): void {}

@@ -154,6 +154,22 @@ test("the Codebase Map draws a function's control flow", async () => {
   assert.equal(await api.codeMap.flowchart(folder, 'node-authoring/lib/dojo.ts', 1), undefined);
 });
 
+// docs/codebase-map.md, Part 3: Show Codebase Map opens the folder's map, laid out in the extension
+// and drawn in its webview; opening a box shows what it holds.
+test('Show Codebase Map draws the folder, and opening a box shows what it holds', async () => {
+  const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
+  const folder = vscode.workspace.workspaceFolders![0];
+  try {
+    const scene = await vscode.commands.executeCommand<{ boxes: { id: string; kind: string; parent?: string; expanded: boolean }[] }>('blueprintVisualScripting.showCodebaseMap', folder.uri);
+    assert.ok(scene?.boxes.some((b) => b.id === 'm:arena' && !b.expanded), 'the arena folder is on the map, closed');
+    assert.ok(vscode.window.tabGroups.activeTabGroup.activeTab?.label.startsWith('Codebase Map'), 'the map is the active tab');
+    const opened = await api.codeMapPanels.toggleIn(folder, 'm:arena');
+    assert.ok(opened?.boxes.some((b) => b.id === 'g:arena/Game.vgraph' && b.parent === 'm:arena'), "the folder's graphs are shown inside it");
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  }
+});
+
 // docs/multi-language.md, gap 1: a repository with a TypeScript web/ and a Python api/.
 test("a new graph takes its folder's language, and the folder's setting wins", async () => {
   const folder = workspaceFile('multi').fsPath;
@@ -818,6 +834,9 @@ interface ExtensionInternals {
     definitionAt(folder: vscode.WorkspaceFolder, path: string, line: number, column: number): Promise<string | undefined>;
     flowchart(folder: vscode.WorkspaceFolder, path: string, line: number): Promise<{ name: string; nodes: { kind: string; label: string }[] } | undefined>;
     onDidChange: vscode.Event<vscode.WorkspaceFolder>;
+  };
+  codeMapPanels: {
+    toggleIn(folder: vscode.WorkspaceFolder, id: string): Promise<{ boxes: { id: string; kind: string; parent?: string; expanded: boolean }[] } | undefined>;
   };
 }
 

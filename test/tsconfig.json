@@ -16,6 +16,7 @@
     "../src/conformance",
     "../src/sdk",
     "../src/extension/webview-html.ts",
+    "../src/extension/map-html.ts",
     "../src/extension/runner.ts",
     "../src/extension/placement.ts",
     "../src/extension/npm-registry.ts",
@@ -25,6 +26,8 @@
     "../src/extension/code-parser.ts",
     "../src/extension/code-indexer.ts",
     "../src/extension/code-flow.ts",
+    "../src/extension/map-layout.ts",
+    "../src/extension/map-layout-worker.ts",
     "../src/extension/parse-service.ts",
     "../src/extension/parse-worker.ts"
   ]

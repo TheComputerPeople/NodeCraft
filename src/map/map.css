@@ -1,0 +1,69 @@
+/* The Codebase Map's webview (src/map/map.ts). Colors come from the VS Code theme. */
+:root {
+  --fg: var(--vscode-editor-foreground, #ccc);
+  --bg: var(--vscode-editor-background, #1e1e1e);
+  --panel: var(--vscode-sideBar-background, #252526);
+  --border: var(--vscode-panel-border, #444);
+  --muted: var(--vscode-descriptionForeground, #999);
+  --accent: var(--vscode-focusBorder, #007acc);
+  --imports: #7a8aa6;
+  --calls: #d08a3c;
+  --inherits: #a271d4;
+}
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--vscode-font-family, sans-serif); font-size: 12px; }
+#map-app { display: grid; grid-template-rows: 36px minmax(0, 1fr); height: 100vh; }
+#map-toolbar { display: flex; align-items: center; gap: 12px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
+#map-title { font-weight: 600; }
+#map-toolbar button { height: 24px; border: 1px solid var(--border); border-radius: 4px; background: var(--vscode-button-secondaryBackground, #3a3d41); color: var(--vscode-button-secondaryForeground, #fff); cursor: pointer; }
+#map-status { margin-left: auto; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.map-legend { display: flex; gap: 10px; color: var(--muted); }
+.legend-item::before { content: ""; display: inline-block; width: 18px; height: 0; margin-right: 4px; vertical-align: middle; border-top: 2px solid var(--muted); }
+.legend-item[data-kind="imports"]::before { border-color: var(--imports); }
+.legend-item[data-kind="calls"]::before { border-color: var(--calls); }
+.legend-item[data-kind="inherits"]::before { border-color: var(--inherits); }
+.legend-item.guess::before { border-top-style: dashed; }
+#map-canvas { position: relative; overflow: hidden; cursor: grab; outline: none; background-image: radial-gradient(circle, color-mix(in srgb, var(--fg) 10%, transparent) 1px, transparent 1px); background-size: 24px 24px; }
+#map-canvas.panning { cursor: grabbing; }
+#map-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+#map-arrows { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 2; }
+#map-boxes { position: absolute; left: 0; top: 0; }
+
+.map-box { position: absolute; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); overflow: hidden; --kind: var(--muted); border-top: 3px solid var(--kind); user-select: none; }
+.map-box.open { background: color-mix(in srgb, var(--panel) 55%, transparent); overflow: visible; }
+.map-box.entry { box-shadow: 0 0 0 2px color-mix(in srgb, #4caf50 70%, transparent); }
+.map-box[data-kind="project"] { --kind: #3f8fd6; }
+.map-box[data-kind="module"] { --kind: #6b8e9f; }
+.map-box[data-kind="file"] { --kind: #8a8a8a; }
+.map-box[data-kind="graph-file"], .map-box[data-kind="graph"] { --kind: #c23b3b; }
+.map-box[data-kind="type"] { --kind: #2fa38f; }
+.map-box[data-kind="function"] { --kind: #3d8fe0; }
+.map-box[data-kind="external"], .map-box[data-kind="externals"] { --kind: #a6a6a6; border-style: dashed; border-top-style: solid; }
+.map-box[data-kind="more"] { --kind: transparent; border-style: dashed; background: transparent; color: var(--muted); cursor: pointer; }
+.map-head { display: flex; align-items: center; gap: 4px; padding: 4px 6px 0; height: 20px; }
+.map-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+.map-count { color: var(--muted); font-size: 11px; }
+.map-detail { padding: 2px 6px 0 8px; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-toggle { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 2px; font-size: 12px; line-height: 1; }
+.map-toggle:hover { color: var(--fg); }
+.map-open { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 2px; visibility: hidden; }
+.map-box:hover > .map-head > .map-open, .map-box:focus-within > .map-head > .map-open { visibility: visible; }
+.map-open:hover { color: var(--accent); }
+
+.map-arrow { fill: none; stroke: var(--imports); opacity: .75; }
+.map-arrow.calls { stroke: var(--calls); }
+.map-arrow.inherits { stroke: var(--inherits); }
+.map-arrow.guess { stroke-dasharray: 5 4; opacity: .55; }
+.map-arrowhead { fill: var(--imports); }
+.map-arrowhead.calls { fill: var(--calls); }
+.map-arrowhead.inherits { fill: none; stroke: var(--inherits); }
+
+/* A box pointed at: its own arrows over the dimmed map, and the boxes they reach. */
+#map-arrows.focused .map-arrow:not(.highlight) { opacity: .1; }
+.map-arrow.highlight { opacity: 1; }
+.map-box.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+.map-box.linked { outline: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); }
+
+/* Levels of detail: zoomed out, the second line goes, then small boxes' names. */
+#map-canvas.far .map-detail, #map-canvas.far .map-count { display: none; }
+#map-canvas.very-far .map-box:not(.open) .map-name { visibility: hidden; }
+#map-canvas.very-far .map-arrow { opacity: .4; }
