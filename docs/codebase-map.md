@@ -254,6 +254,36 @@ Across all four:
   - **Integration:** inside VS Code, a guessed call (a method on a variable) is resolved by TypeScript's server to the exact method.
 - **Scale:** this repository's index, with about 15,000 calls (6,800 certain) and 1,000 left unresolved, takes 1.4 s cold and 0.22 s warm, with a 3.3 MB cache.
 5. Control flow: the shared builder and the 12 languages' rules, with golden flowcharts.
+
+### Built (step 5)
+
+- **The flowchart** (`src/core/codemap/flow.ts`) is built in core from language-neutral statements: simple ones, if, loop, switch, try, return, throw, break, continue, and groups (with, using, lock).
+  - **Boxes:** a run of plain statements is one box, showing its first six lines. A statement that awaits or yields is a box of its own. A decision branches into true and false.
+  - **Loops** return to their head (back arrows). A loop tested after its body (do-while, repeat-until) runs the body first. A loop with no test (Rust's `loop`, Go's `for {}`) is left only by `break`.
+  - **Exits:** `break` and `continue` go to their loop, by label when they have one (`break outer`, `break 'outer`).
+  - **Switches:** cases fall through where the language does. A switch with no default has a "no match" way past, except Rust's `match`, which is always exhaustive.
+  - **try/catch:** each catch is reached from the body's first box (anything in it may throw), and a throw inside goes to the catches. A `finally` follows both; returns and uncaught throws leave through it.
+  - **The rest:** a return goes to End, and an uncaught throw goes to End marked "throws". What follows a return isn't reached, so it isn't drawn.
+- **Each language's statements** are read in the parsing worker (`src/extension/code-flow.ts`). One walker reads a table of each language's node types:
+  - `else if` chains, Python's, PHP's, Lua's and GDScript's `elif` clauses, and Ruby's `elsif`, `unless` and modifiers (`return 0 if x`);
+  - for, while, do, repeat-until and Rust's expression loops;
+  - switch, match, Go's switch and select, and Ruby's case;
+  - try, catch and finally, Python's `else`, and Ruby's `rescue` and `ensure` (a method body's own too);
+  - the initializer of Go's and C++'s `if x := f(); …` as a box before the decision;
+  - the calls that throw in languages without `throw`: Go's `panic`, Rust's `panic!`, Lua's `error()`, Ruby's `raise`.
+
+  A function is the innermost one around a line, nested and anonymous functions included. C's and C++'s names are read from their declarators.
+- **Where it's used:** `ParseService.flow` and `CodeMapService.flowchart` give the flowchart of the function around a line of a file, from the file as the editor has it (unsaved changes included). Flowcharts are made when asked for, not indexed.
+- **Tested:**
+  - **The builder's rules:** blocks, branches, loops and their exits, labels, fall-through, try/catch/finally, returns through finally, unreachable code.
+  - **Golden flowcharts:** one function per language, checked by hand once and then pinned. Each has a branch, a loop left by a break, an early return, and a try/catch (Go, C, Lua, GDScript and Rust have an error return or `match` instead).
+  - **Real code:** every function and method of every fixture's generated code in all 12 languages, and of the corpus, has a flowchart in which every box is reached and leads somewhere. This repository's 3,155 functions were also checked this way while it was built.
+  - **Integration:** the service draws a function inside VS Code.
+- **Known approximations:**
+  - Iterator methods with blocks (Ruby's `each`, `map`) are calls, not loops.
+  - A switch's binding arm (`n =>`) isn't taken for a default.
+  - Python's `for`-`else` and `while`-`else` are left out.
+  - Expressions with flow of their own (`&&`, `?:`, comprehensions) stay inside one box, as designed.
 6. The map's shell: the Codebase Map panel, ELK in a worker, rendering with level of detail, pan, zoom, expand and collapse, and opening the code.
 7. Architecture and structure views.
 8. Call flow, with callers.

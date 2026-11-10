@@ -15,7 +15,9 @@ parentPort?.on('message', (request: ParseRequest) => {
   void (async (): Promise<ParseResponse> => {
     try {
       const p = await parser;
-      const result = request.want === 'facts' ? await p.facts(request.grammar, request.text) : await p.summarize(request.grammar, request.text);
+      const result = request.want === 'facts' ? await p.facts(request.grammar, request.text)
+        : request.want === 'flow' ? await p.flow(request.grammar, request.text, request.line ?? 1)
+          : await p.summarize(request.grammar, request.text);
       return { id: request.id, result };
     } catch (error) {
       return { id: request.id, error: error instanceof Error ? error.message : String(error) };

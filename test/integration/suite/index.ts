@@ -144,6 +144,16 @@ test("the Codebase Map asks the language's server what a guessed call is", async
   }
 });
 
+// docs/codebase-map.md, Part 2: a function's flowchart, from the file as the editor has it.
+test("the Codebase Map draws a function's control flow", async () => {
+  const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
+  const folder = vscode.workspace.workspaceFolders![0];
+  const chart = await api.codeMap.flowchart(folder, 'node-authoring/lib/dojo.ts', 22);
+  assert.equal(chart?.name, 'train');
+  assert.deepEqual(chart?.nodes.map((n) => n.kind), ['start', 'end', 'block', 'return']);
+  assert.equal(await api.codeMap.flowchart(folder, 'node-authoring/lib/dojo.ts', 1), undefined);
+});
+
 // docs/multi-language.md, gap 1: a repository with a TypeScript web/ and a Python api/.
 test("a new graph takes its folder's language, and the folder's setting wins", async () => {
   const folder = workspaceFile('multi').fsPath;
@@ -806,6 +816,7 @@ interface ExtensionInternals {
       calls: { from: string; to: string; path: string; line: number; column: number; certain: boolean }[];
     }>;
     definitionAt(folder: vscode.WorkspaceFolder, path: string, line: number, column: number): Promise<string | undefined>;
+    flowchart(folder: vscode.WorkspaceFolder, path: string, line: number): Promise<{ name: string; nodes: { kind: string; label: string }[] } | undefined>;
     onDidChange: vscode.Event<vscode.WorkspaceFolder>;
   };
 }

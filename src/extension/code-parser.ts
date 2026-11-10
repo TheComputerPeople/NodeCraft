@@ -5,6 +5,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Language, Node, Parser, Query, Tree } from 'web-tree-sitter';
 import { FileFacts, MAX_CAPTURE_TEXT, QUERIES, QueryMatch, capturesText, factsFromMatches } from '../core/codemap/facts';
+import type { Flowchart } from '../core/codemap/flow';
+import { flowchartAt } from './code-flow';
 import { GrammarId, grammarFileName } from '../core/parsing/grammars';
 
 export interface SyntaxError {
@@ -88,6 +90,16 @@ export class CodeParser {
         }))
       }));
       return factsFromMatches(grammar, matches, tree.rootNode.hasError ? countNodes(tree.rootNode).errors.length : 0);
+    } finally {
+      tree.delete();
+    }
+  }
+
+  // The flowchart of the innermost function around a 1-based line (docs/codebase-map.md, Part 2).
+  async flow(grammar: GrammarId, text: string, line: number): Promise<Flowchart | undefined> {
+    const tree = await this.parse(grammar, text);
+    try {
+      return flowchartAt(grammar, tree.rootNode, line);
     } finally {
       tree.delete();
     }

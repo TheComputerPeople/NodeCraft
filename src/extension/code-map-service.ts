@@ -6,6 +6,7 @@ import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { CodeIndex, entityAt } from '../core/codemap/code-index';
+import type { Flowchart } from '../core/codemap/flow';
 import { grammarForFile } from '../core/parsing/grammars';
 import { IndexResult, JsonFactsCache, factsVersion, indexFolder } from './code-indexer';
 import { ParseService } from './parse-service';
@@ -94,6 +95,18 @@ export class CodeMapService implements vscode.Disposable {
     if (!targetFolder) return undefined;
     const relative = path.relative(targetFolder.uri.fsPath, target.fsPath).split(path.sep).join('/');
     return entityAt(await this.codeIndex(targetFolder), relative, range.start.line + 1);
+  }
+
+  // The flowchart of the function around a line of a file (docs/codebase-map.md, Part 2), read from
+  // the file as it is now (an editor's unsaved text included). Undefined when no function is there.
+  async flowchart(folder: vscode.WorkspaceFolder, relativePath: string, line: number): Promise<Flowchart | undefined> {
+    const grammar = grammarForFile(relativePath);
+    if (!grammar) return undefined;
+    const uri = vscode.Uri.joinPath(folder.uri, ...relativePath.split('/'));
+    const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+    const text = open ? open.getText() : new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+    this.parser ??= new ParseService(this.grammarDir());
+    return this.parser.flow(grammar, text, line);
   }
 
   private schedule(folder: vscode.WorkspaceFolder): void {

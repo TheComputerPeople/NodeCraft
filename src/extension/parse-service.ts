@@ -3,14 +3,17 @@
 import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { FileFacts } from '../core/codemap/facts';
+import type { Flowchart } from '../core/codemap/flow';
 import { GrammarId, grammarForFile } from '../core/parsing/grammars';
 import type { ParseSummary } from './code-parser';
 import type { ParseWorkerData } from './parse-worker';
 
-// summary: the parse's size and syntax errors; facts: what the file declares and imports.
+// summary: the parse's size and syntax errors; facts: what the file declares and imports; flow: the
+// flowchart of the function around `line`.
 export interface ParseResults {
   summary: ParseSummary;
   facts: FileFacts;
+  flow: Flowchart | undefined;
 }
 
 export interface ParseRequest {
@@ -18,6 +21,7 @@ export interface ParseRequest {
   want: keyof ParseResults;
   grammar: GrammarId;
   text: string;
+  line?: number;
 }
 
 export type ParseResponse = { id: number; result: ParseResults[keyof ParseResults]; error?: undefined } | { id: number; error: string; result?: undefined };
@@ -49,12 +53,12 @@ export class ParseService {
     this.worker.on('exit', (code) => fail(new Error(`The parsing worker stopped (exit code ${code}).`)));
   }
 
-  private request<K extends keyof ParseResults>(want: K, grammar: GrammarId, text: string): Promise<ParseResults[K]> {
+  private request<K extends keyof ParseResults>(want: K, grammar: GrammarId, text: string, line?: number): Promise<ParseResults[K]> {
     if (this.failure) return Promise.reject(this.failure);
     const id = this.nextId++;
     return new Promise<ParseResults[K]>((resolve, reject) => {
       this.pending.set(id, { resolve: resolve as (result: never) => void, reject });
-      const request: ParseRequest = { id, want, grammar, text };
+      const request: ParseRequest = { id, want, grammar, text, ...(line !== undefined ? { line } : {}) };
       this.worker.postMessage(request);
     });
   }
@@ -73,6 +77,11 @@ export class ParseService {
   // What a file declares and imports.
   facts(grammar: GrammarId, text: string): Promise<FileFacts> {
     return this.request('facts', grammar, text);
+  }
+
+  // The flowchart of the function around a 1-based line; undefined when no function is there.
+  flow(grammar: GrammarId, text: string, line: number): Promise<Flowchart | undefined> {
+    return this.request('flow', grammar, text, line);
   }
 
   async dispose(): Promise<void> {
