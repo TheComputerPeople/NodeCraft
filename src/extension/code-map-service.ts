@@ -5,7 +5,7 @@
 import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { CodeIndex } from '../core/codemap/code-index';
+import { CodeIndex, entityAt } from '../core/codemap/code-index';
 import { grammarForFile } from '../core/parsing/grammars';
 import { IndexResult, JsonFactsCache, factsVersion, indexFolder } from './code-indexer';
 import { ParseService } from './parse-service';
@@ -61,6 +61,39 @@ export class CodeMapService implements vscode.Disposable {
 
   async codeIndex(folder: vscode.WorkspaceFolder): Promise<CodeIndex> {
     return (await this.index(folder)).index;
+  }
+
+  // What the name at a position is, by the language's server (docs/codebase-map.md, Part 2): for a
+  // call the index left ambiguous or unresolved, asked for one call at a time. Undefined when no
+  // server answers, or the definition is outside the workspace (a library's).
+  async definitionAt(folder: vscode.WorkspaceFolder, relativePath: string, line: number, column: number): Promise<string | undefined> {
+    const uri = vscode.Uri.joinPath(folder.uri, ...relativePath.split('/'));
+    const ask = () => vscode.commands.executeCommand<(vscode.Location | vscode.LocationLink)[]>('vscode.executeDefinitionProvider', uri, new vscode.Position(line - 1, column - 1));
+    let found: (vscode.Location | vscode.LocationLink)[] | undefined;
+    try {
+      // Opening the document starts its language's extension (activated by its language).
+      await vscode.workspace.openTextDocument(uri);
+      found = await ask();
+      // Some servers know only the files that are open (TypeScript's, for a file in no tsconfig):
+      // the files this one imports are opened, and it's asked again.
+      if (!found?.length) {
+        const index = await this.codeIndex(folder);
+        const from = new Set([`f:${relativePath}`, ...index.entities.filter((e) => e.path === relativePath && e.kind !== 'file').map((e) => e.id)]);
+        const imported = new Set(index.imports.filter((i) => from.has(i.from)).map((i) => index.entities.find((e) => e.id === i.to)?.path).filter((p): p is string => !!p && !p.endsWith('.vgraph')));
+        for (const p of imported) await vscode.workspace.openTextDocument(vscode.Uri.joinPath(folder.uri, ...p.split('/'))).then(undefined, () => undefined);
+        if (imported.size) found = await ask();
+      }
+    } catch {
+      return undefined;
+    }
+    const first = found?.[0];
+    if (!first) return undefined;
+    const target = 'targetUri' in first ? first.targetUri : first.uri;
+    const range = 'targetUri' in first ? first.targetSelectionRange ?? first.targetRange : first.range;
+    const targetFolder = vscode.workspace.getWorkspaceFolder(target);
+    if (!targetFolder) return undefined;
+    const relative = path.relative(targetFolder.uri.fsPath, target.fsPath).split(path.sep).join('/');
+    return entityAt(await this.codeIndex(targetFolder), relative, range.start.line + 1);
   }
 
   private schedule(folder: vscode.WorkspaceFolder): void {

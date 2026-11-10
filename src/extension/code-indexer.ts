@@ -213,7 +213,7 @@ export async function indexFolder(root: string, options: IndexOptions): Promise<
     let facts = options.cache?.get(relative, hash);
     if (!facts) {
       facts = bytes.length > MAX_FILE_BYTES
-        ? { grammar, declarations: [], imports: [], entries: [], errors: 0 }
+        ? { grammar, declarations: [], imports: [], entries: [], calls: [], bases: [], errors: 0 }
         : await options.parser.facts(grammar, text);
       options.cache?.set(relative, hash, facts);
       parsed++;

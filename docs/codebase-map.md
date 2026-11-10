@@ -220,6 +220,39 @@ Across all four:
   - **The limit** leaves files out and counts them.
   - **Integration:** the service indexes the integration workspace inside VS Code and follows a new file.
 4. Calls and inheritance: call extraction and resolution, ambiguous and unresolved calls, and the language server's definition for one call on request.
+
+### Built (step 4)
+
+- **Facts** add each file's call sites, its types' bases and its declarations' decorators, from more of each grammar's query.
+  - **Call sites:** a call records its callee, its receiver as written and the declaration it's in. Its position is the callee's name, which is where a language server finds the definition.
+  - **Receivers:** `this`, `self`, `$this`, `@` and `Self` are read as *self*; `super`, `base` and `parent` as *super*. A new object's method is its type's: `new A().f()`, `A().f()`, `A::new().f()`, `A.new.f`. An expression too complex to read is `?`.
+  - **Rust's macros:** calls inside them (`println!("{}", m::f())`) are read from the macro's tokens, which tree-sitter doesn't parse.
+  - **Import names:** an import records the name it binds, as in `import G from`, `const r = require()`, `local m = require()`, `import a.b as x` and `const G = preload()`.
+  - **Decorators** go with the declaration they head. In Python, TypeScript and Rust that's the declaration after them; in Java, C# and PHP they're part of it.
+- **Framework handlers** are entry points:
+  - functions decorated as routes, commands, tasks, listeners or jobs (`@app.route`, `@GetMapping`, `[HttpGet]`, `#[get]`, `#[Route]`, `@Get()`, `@click.command`, `@shared_task` and the like);
+  - the methods of controllers and class-based views (`ApplicationController`, `Controller`, `ControllerBase`, `APIView`, `View`, …) and of classes marked `[ApiController]` or `@RestController`;
+  - `#[tokio::main]` functions, as `main`.
+
+  A function that's merely exported and never called isn't marked: in a library, that would be most of its API.
+- **Resolution** (`src/core/codemap/calls.ts`) is static, as decided:
+  - **`self` and `super`:** the caller's type and its bases, transitively.
+  - **A plain call:** the type's own method in languages where `this` is implicit (Java, C#, C++, Ruby, GDScript). Otherwise a free function in the file, then in what it sees: the files it imports, its package (Go's folder, Java's package, C#'s and PHP's namespace) and the sources of the C and C++ headers it includes.
+  - **A call on a name:** the module an import bound to it, a type's static methods, or a module's or table's functions (a Python module, Go's package, Lua's table).
+  - **Anything else:** each same-named method in sight.
+  - **Certainty:** a call with one answer is certain. One with up to five is drawn to each, uncertain. One with more is recorded as unresolved, with its count. A name the workspace never declares belongs to a library, and isn't recorded at all.
+- **Graphs:**
+  - A graph's calls come from its nodes: its functions and macros, library graphs, and project functions. A function a C or C++ header only declares resolves to the source that defines it.
+  - Its generated code adds only the certain calls out of the graph that its nodes don't already give, such as a class member's node.
+  - Support code that several generated files each carry (C++'s headers do) isn't shown, and calls into it aren't either.
+- **Inheritance** resolves bases to the workspace's types, a GDScript file's class by its `class_name`, or keeps a library's base by its name. A generated class's bases count only when they're the workspace's: a graph class's parent, not the runtime's `Object`.
+- **The language server, on request:** `definitionAt` asks the file's language server for one call's definition, and maps the answer to its entity (generated code to its graph). Some servers know only open files: TypeScript's, for a file in no `tsconfig`, resolved nothing until the imported file was open. So when a server has no answer, the files this file imports are opened, and it's asked again.
+- **Tested:**
+  - **Facts:** each language's calls, bases, decorators and handlers from a snippet, and the callee's position.
+  - **Resolution rules:** `self` and `super` through bases, implicit `this`, imports and import names, types and modules, guesses and the unresolved limit, graphs' nodes and their generated code, support code, inheritance, and the entity at a line.
+  - **The corpus:** in all 28 layouts, the entry point calls its graphs and the graphs call the code they use, all certain, across every language's module system. That includes a C++ graph calling a definition in another folder's `.cpp`, Rust through `println!`, and Lua, JavaScript and GDScript through import names. The workspace's own inheritance is found in six languages.
+  - **Integration:** inside VS Code, a guessed call (a method on a variable) is resolved by TypeScript's server to the exact method.
+- **Scale:** this repository's index, with about 15,000 calls (6,800 certain) and 1,000 left unresolved, takes 1.4 s cold and 0.22 s warm, with a 3.3 MB cache.
 5. Control flow: the shared builder and the 12 languages' rules, with golden flowcharts.
 6. The map's shell: the Codebase Map panel, ELK in a worker, rendering with level of detail, pan, zoom, expand and collapse, and opening the code.
 7. Architecture and structure views.

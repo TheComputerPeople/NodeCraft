@@ -83,7 +83,7 @@ export class CodeParser {
       const matches: QueryMatch[] = query.matches(tree.rootNode).map((match) => ({
         captures: match.captures.filter((c) => !c.name.startsWith('_')).map(({ name, node }) => ({
           name, type: node.type,
-          startRow: node.startPosition.row, endRow: node.endPosition.row, startIndex: node.startIndex, endIndex: node.endIndex,
+          startRow: node.startPosition.row, endRow: node.endPosition.row, startIndex: node.startIndex, endIndex: node.endIndex, startColumn: node.startPosition.column,
           text: capturesText(name) ? node.text.slice(0, MAX_CAPTURE_TEXT) : undefined
         }))
       }));

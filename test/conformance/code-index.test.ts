@@ -49,6 +49,49 @@ const EXPECTED: Record<string, { entries: string[]; imports: string[] }> = {
 
 const id = (p: string) => (p.endsWith('.vgraph') ? `g:${p}` : `f:${p}`);
 
+// For each layout: calls that must be found, certain ("from > to", by entity id; a "from" ending in
+// "*" is any entity starting with it): its entry point to its graphs, and its graphs to the code they call.
+const CALLS: Record<string, string[]> = {
+  'ts-vite-app': ['f:src/main.ts > g:src/graphs/Greeting.vgraph', 'g:src/graphs/Greeting.vgraph#Greet > s:src/text/format.ts#title'],
+  'ts-node-library': ['g:src/graphs/Greeting.vgraph#Greet > s:src/text/format.ts#title'],
+  'ts-pnpm-monorepo': ['f:packages/app/src/main.ts > g:packages/app/src/graphs/Greeting.vgraph', 'g:packages/app/src/graphs/Greeting.vgraph#Greet > s:packages/shared/src/text.ts#title'],
+  'js-commonjs': ['f:src/index.js > g:src/graphs/Greeting.vgraph', 'g:src/graphs/Greeting.vgraph#Greet > s:lib/format.js#title'],
+  'js-esm': ['f:src/index.js > g:src/graphs/Greeting.vgraph', 'g:src/graphs/Greeting.vgraph#Greet > s:lib/format.js#title'],
+  'ts-py-shared': ['s:api/main.py#main > g:api/graphs/ShowScore.vgraph', 'g:api/graphs/ShowScore.vgraph > g:shared/Score.vgraph'],
+  'py-src-layout': ['s:src/corpus_game/__main__.py#main > g:src/corpus_game/graphs/Greeting.vgraph', 'g:src/corpus_game/graphs/Greeting.vgraph#Greet > s:src/corpus_game/text.py#title', 's:src/corpus_game/features.py#BigCounter.__init__ > s:src/corpus_game/features.py#Counter.__init__'],
+  'py-scripts': ['g:scripts/Greeting.vgraph#Greet > s:scripts/score.py#title'],
+  'py-django-shaped': ['s:manage.py#main > g:game/graphs/Greeting.vgraph', 'g:game/graphs/Greeting.vgraph#Greet > s:game/services.py#title'],
+  'cs-console': ['f:Program.cs > g:Graphs/Greeting.vgraph#Greet', 'g:Graphs/Greeting.vgraph#Greet > s:Names.cs#Names.Title'],
+  'cs-solution': ['f:src/Corpus.App/Program.cs > g:src/Corpus.App/Graphs/Greeting.vgraph#Greet', 'g:src/Corpus.App/Graphs/Greeting.vgraph#Greet > s:src/Corpus.Core/Text.cs#Text.Title'],
+  'java-maven': ['s:src/main/java/corpus/game/Main.java#Main.main > g:src/main/java/corpus/game/graphs/Greeting.vgraph', 'g:src/main/java/corpus/game/graphs/Greeting.vgraph#Greet > s:src/main/java/corpus/game/Text.java#Text.title'],
+  'java-gradle-multi': ['s:app/src/main/java/corpus/app/Main.java#Main.main > g:app/src/main/java/corpus/app/graphs/Greeting.vgraph', 'g:app/src/main/java/corpus/app/graphs/Greeting.vgraph#Greet > s:core/src/main/java/corpus/core/Text.java#Text.title'],
+  'go-module': ['s:cmd/corpus/main.go#main > g:internal/graphs/Greeting.vgraph#Greet', 'g:internal/graphs/Greeting.vgraph#Greet > s:internal/text/text.go#Title'],
+  'go-workspace': ['s:app/main.go#main > g:app/graphs/Greeting.vgraph#Greet', 'g:app/graphs/Greeting.vgraph#Greet > s:lib/text/text.go#Title'],
+  'rust-bin': ['s:src/main.rs#main > g:src/graphs/Greeting.vgraph', 'g:src/graphs/Greeting.vgraph#Greet > s:src/text.rs#title'],
+  'rust-workspace': ['s:crates/app/src/main.rs#main > g:crates/app/src/graphs/Greeting.vgraph', 'g:crates/app/src/graphs/Greeting.vgraph#Greet > s:crates/core/src/text.rs#title'],
+  'cpp-cmake': ['s:src/main.cpp#main > g:src/graphs/Greeting.vgraph', 'g:src/graphs/Greeting.vgraph#Greet > s:lib/src/text.cpp#corpus.title'],
+  'cpp-make': ['s:src/main.cpp#main > g:src/graphs/Greeting.vgraph', 'g:src/graphs/Greeting.vgraph#Greet > s:src/names.cpp#names.title'],
+  'cpp-c-sources': ['s:src/main.cpp#main > g:src/graphs/Room.vgraph', 'g:src/graphs/Room.vgraph* > s:src/measure.c#area'],
+  'cpp-vcxproj': ['s:main.cpp#main > g:graphs/Greeting.vgraph', 'g:graphs/Greeting.vgraph#Greet > s:names.cpp#names.title'],
+  'ruby-gem': ['g:lib/corpus_game/graphs/Greeting.vgraph#Greet > s:lib/corpus_game/text.rb#CorpusGame.Text.title'],
+  'ruby-rails-shaped': ['g:app/graphs/Greeting.vgraph#Greet > s:app/services/name_formatter.rb#NameFormatter.title'],
+  'php-composer-lib': ['g:src/Graphs/Greeting.vgraph#Greet > s:src/Text/Names.php#Names.title'],
+  'php-laravel-shaped': ['g:app/Graphs/Greeting.vgraph#Greet > s:app/Services/NameFormatter.php#NameFormatter.title'],
+  'lua-rock': ['f:bin/corpus_game.lua > g:src/corpus_game/graphs/Greeting.vgraph', 'g:src/corpus_game/graphs/Greeting.vgraph#Greet > s:src/corpus_game/text.lua#M.title'],
+  'lua-scripts': ['f:main.lua > g:Greeting.vgraph', 'g:Greeting.vgraph#Greet > s:names.lua#M.title'],
+  'gd-addon': ['s:main.gd#_ready > g:scenes/graphs/Greeting.vgraph', 'g:scenes/graphs/Greeting.vgraph#Greet > s:addons/corpus_tools/text.gd#title']
+};
+
+// Types that extend the workspace's own ("from > to").
+const INHERITS: Record<string, string[]> = {
+  'py-src-layout': ['s:src/corpus_game/features.py#BigCounter > s:src/corpus_game/features.py#Counter'],
+  'ts-vite-app': ['s:src/game/features.ts#BigCounter > s:src/game/features.ts#Counter'],
+  'cs-console': ['s:Features.cs#BigCounter > s:Features.cs#Counter'],
+  'java-maven': ['s:src/main/java/corpus/game/count/BigCounter.java#BigCounter > s:src/main/java/corpus/game/count/Counter.java#Counter'],
+  'cpp-cmake': ['s:src/features/count.h#game.BigCounter > s:src/features/count.h#game.Counter'],
+  'gd-addon': ['f:addons/corpus_tools/big_counter.gd > f:addons/corpus_tools/counter.gd']
+};
+
 describe('the code index of each layout of the corpus', () => {
   let parser: ParseService;
   let workDir: string;
@@ -62,7 +105,7 @@ describe('the code index of each layout of the corpus', () => {
   });
 
   test('every layout has expectations', () => {
-    assert.deepEqual(LAYOUTS.map((l) => l.name).filter((n) => !EXPECTED[n]), []);
+    assert.deepEqual(LAYOUTS.map((l) => l.name).filter((n) => !EXPECTED[n] || !CALLS[n]), []);
   });
 
   for (const layout of LAYOUTS) {
@@ -83,6 +126,18 @@ describe('the code index of each layout of the corpus', () => {
         assert.ok(imports.has(`${id(from)} > ${id(to)}`), `${layout.name}: ${edge}`);
       }
       for (const entry of expected.entries) assert.ok(index.entities.find((e) => e.id === entry)?.entries?.length, `${layout.name}: ${entry} is an entry point`);
+      for (const edge of CALLS[layout.name]) {
+        const [from, to] = edge.split(' > ');
+        const found = index.calls.find((c) => c.to === to && (from.endsWith('*') ? c.from.startsWith(from.slice(0, -1)) : c.from === from));
+        assert.ok(found?.certain, `${layout.name}: calls ${edge}${found ? ' (found, but not certain)' : ''}`);
+      }
+      for (const edge of INHERITS[layout.name] ?? []) {
+        const [from, to] = edge.split(' > ');
+        assert.ok(index.inherits.some((i) => i.from === from && i.to === to), `${layout.name}: ${edge}`);
+      }
+      // Every call and base type is between entities of the index.
+      for (const c of index.calls) assert.ok(ids.has(c.from) && ids.has(c.to), `${c.from} > ${c.to}`);
+      for (const i of index.inherits) assert.ok(ids.has(i.from) && (!i.to || ids.has(i.to)), `${i.from} > ${i.to}`);
       // The structure is a tree: every entity's parent is in the index, before it.
       const seen = new Set<string>();
       for (const e of index.entities) {

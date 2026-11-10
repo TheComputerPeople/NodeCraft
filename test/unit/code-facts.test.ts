@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import { FileFacts, phpUses, rustUsePaths } from '../../src/core/codemap/facts';
 import { GrammarId } from '../../src/core/parsing/grammars';
 import { CodeParser } from '../../src/extension/code-parser';
+import { CALL_CASES } from './code-calls-cases';
 import { repoRoot } from './helpers';
 
 // "kind Container.name" for each declaration, "kind source" for each import, "kind name" for each entry.
@@ -171,5 +172,30 @@ describe('import forms', () => {
     assert.deepEqual(phpUses('use App\\Models\\{User, Post as P};'), ['App\\Models\\User', 'App\\Models\\Post']);
     assert.deepEqual(phpUses('use \\Foo\\Bar as Baz, function Q\\f;'), ['Foo\\Bar', 'Q\\f']);
     assert.deepEqual(phpUses('use const A\\B;'), ['A\\B']);
+  });
+});
+
+describe('calls, base types, decorators and framework handlers', () => {
+  let parser: CodeParser;
+  before(async () => {
+    parser = await CodeParser.create(path.join(repoRoot, 'grammars'));
+  });
+  after(() => parser.dispose());
+
+  for (const c of CALL_CASES) {
+    test(c.grammar, async () => {
+      const facts = await parser.facts(c.grammar, c.code);
+      assert.equal(facts.errors, 0);
+      const sorted = (list: string[]) => [...list].sort();
+      assert.deepEqual(sorted(facts.calls.map((x) => `${x.in ?? ''} > ${x.receiver !== undefined ? `${x.receiver}.` : ''}${x.new ? 'new ' : ''}${x.callee}`)), sorted(c.calls), 'calls');
+      assert.deepEqual(facts.bases.map((b) => `${b.of ?? ''} ${b.kind} ${b.name}`), c.bases, 'bases');
+      assert.deepEqual(facts.declarations.filter((d) => d.decorators).map((d) => `${d.name}: ${d.decorators!.join(', ')}`), c.decorators, 'decorators');
+      assert.deepEqual(facts.entries.filter((e) => e.kind === 'handler').map((e) => e.name), c.handlers, 'handlers');
+    });
+  }
+
+  test("a call's position is its callee's, where a language server finds its definition", async () => {
+    const facts = await parser.facts('typescript', 'export function f() {\n  const x = make().build().run();\n}\n');
+    assert.deepEqual(facts.calls.filter((c) => c.callee === 'run').map((c) => [c.line, c.column]), [[2, 28]]);
   });
 });

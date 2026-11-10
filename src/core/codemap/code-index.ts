@@ -2,6 +2,7 @@
 // workspace folder, the graph files that stand in for their generated code, the imports between
 // them and the entry points. Built from each file's facts (facts.ts) and the projects around them;
 // pure, so tests build it from fixture folders.
+import { CallEdge, InheritEdge, UnresolvedCall, linkCalls } from './calls';
 import { FileFacts, ImportFact } from './facts';
 import { GraphDocument } from '../model';
 import { GrammarId } from '../parsing/grammars';
@@ -10,8 +11,9 @@ export type EntityKind = 'project' | 'module' | 'file' | 'graph-file' | 'graph' 
 
 export interface EntryPoint {
   // main: a program's main; script: a file that runs as a whole; test: a test; engine: called by an
-  // engine (Godot); event: a graph's Start or Main event; bin: a package's executable.
-  kind: 'main' | 'script' | 'test' | 'engine' | 'event' | 'bin';
+  // engine (Godot); event: a graph's Start or Main event; bin: a package's executable; handler: a
+  // framework calls it (a route, a command, a controller's action).
+  kind: 'main' | 'script' | 'test' | 'engine' | 'event' | 'bin' | 'handler';
   name?: string;
   line?: number;
 }
@@ -55,6 +57,13 @@ export interface CodeIndex {
   imports: ImportEdge[];
   // Imports of the workspace's own code that weren't found (a relative path to nothing).
   unresolved: UnresolvedImport[];
+  // Calls between the workspace's functions, methods and graphs (calls.ts), calls too ambiguous
+  // to draw, and the types each type extends or implements.
+  calls: CallEdge[];
+  unresolvedCalls: UnresolvedCall[];
+  inherits: InheritEdge[];
+  // The generated files and the graph file each is shown as (support code's isn't shown).
+  generated: { path: string; shownAs?: string }[];
 }
 
 // A project, as the extension's project model finds it, with what resolving imports needs.
@@ -207,6 +216,21 @@ export function buildCodeIndex(input: IndexInput): CodeIndex {
     if (entries.length) entities.get(id)!.entries = entries;
   }
 
+  // Each file's declarations' entity ids. A generated file's are its graph's: a declaration named
+  // as one of its graphs is that graph, any other its graph file.
+  const declarationIds = new Map<string, Map<string, string>>();
+  for (const file of input.files) {
+    const shown = shownAs.get(file.path);
+    if (!shown?.startsWith('g:')) continue;
+    const doc = input.graphs.find((g) => `g:${g.path}` === shown)?.document;
+    const ids = new Map<string, string>();
+    for (const d of file.facts.declarations) {
+      const graph = doc?.graphs.find((g) => g.name === d.name || g.id === d.name);
+      ids.set([...d.container, d.name].join('.'), graph ? `${shown}#${graph.id}` : shown);
+    }
+    declarationIds.set(file.path, ids);
+  }
+
   // Source files and their declarations.
   for (const file of input.files) {
     if (shownAs.get(file.path) !== `f:${file.path}`) continue;
@@ -234,6 +258,7 @@ export function buildCodeIndex(input: IndexInput): CodeIndex {
       else if (e.kind === 'test' && !facts.declarations.some((d) => d.name === e.name)) fileEntries.push({ kind: 'test', name: e.name, line: e.line });
     }
     if (fileEntries.length) fileEntity.entries = fileEntries;
+    declarationIds.set(file.path, ids);
   }
 
   // Package executables, main files and the files a project's scripts run.
@@ -262,11 +287,20 @@ export function buildCodeIndex(input: IndexInput): CodeIndex {
   const imports: ImportEdge[] = [];
   const unresolved: UnresolvedImport[] = [];
   const seen = new Set<string>();
+  const importedFiles = new Map<string, string[]>();
+  const aliases = new Map<string, Map<string, string[]>>();
   for (const file of input.files) {
     const from = shownAs.get(file.path);
     if (!from || !entities.has(from)) continue;
     for (const imp of file.facts.imports) {
       const target = context.resolve(file, imp);
+      if (target && 'files' in target) {
+        importedFiles.set(file.path, [...(importedFiles.get(file.path) ?? []), ...target.files]);
+        if (imp.alias) {
+          if (!aliases.has(file.path)) aliases.set(file.path, new Map());
+          aliases.get(file.path)!.set(imp.alias, target.files);
+        }
+      }
       if (target === undefined) {
         unresolved.push({ from, source: imp.source, line: imp.line });
         continue;
@@ -297,6 +331,8 @@ export function buildCodeIndex(input: IndexInput): CodeIndex {
     }
   }
 
+  const linked = linkCalls({ files: input.files, graphs: input.graphs, declarationIds, shownAs, importedFiles, samePackage: (file) => context.samePackage(file), aliases });
+
   // Parents before children.
   const ordered: Entity[] = [];
   const placed = new Set<string>();
@@ -307,7 +343,8 @@ export function buildCodeIndex(input: IndexInput): CodeIndex {
     ordered.push(entity);
   };
   for (const entity of entities.values()) place(entity);
-  return { entities: ordered, imports, unresolved };
+  const generated = input.files.filter((f) => f.generatedFrom).map((f) => ({ path: f.path, ...(shownAs.get(f.path) ? { shownAs: shownAs.get(f.path) } : {}) }));
+  return { entities: ordered, imports, unresolved, ...linked, generated };
 }
 
 // Package ecosystems: TypeScript and JavaScript files import the same npm packages.
@@ -371,6 +408,15 @@ class ResolveContext {
   }
 
   private exists = (p: string): boolean => this.paths.has(p);
+
+  // The files of a file's package, which it sees without importing them: Go's folder, Java's
+  // package, C#'s and PHP's namespace.
+  samePackage(file: IndexFile): string[] {
+    const { grammar } = file.facts;
+    if (grammar === 'go') return (this.dirFiles.get(dirname(file.path)) ?? []).filter((f) => f.endsWith('.go'));
+    if (!file.facts.package || !['java', 'c_sharp', 'php'].includes(grammar)) return [];
+    return this.namespaceFiles.get(`${grammar}:${file.facts.package}`) ?? [];
+  }
 
   resolve(file: IndexFile, imp: ImportFact): Target {
     const dir = dirname(file.path);
@@ -644,4 +690,18 @@ function distance(dir: string, file: string): number {
   let common = 0;
   while (common < a.length && common < b.length && a[common] === b[common]) common++;
   return a.length - common + (b.length - common);
+}
+
+// The entity at a line of a file: the innermost type or function there, else the file; a generated
+// file's line is its graph's. Undefined for a file the index doesn't have.
+export function entityAt(index: CodeIndex, path: string, line: number): string | undefined {
+  const generated = index.generated.find((g) => g.path === path);
+  if (generated) return generated.shownAs;
+  let found: Entity | undefined;
+  for (const e of index.entities) {
+    if (e.path !== path || (e.kind !== 'type' && e.kind !== 'function') || e.line === undefined || e.endLine === undefined) continue;
+    if (e.line <= line && line <= e.endLine && (!found || e.line >= found.line!)) found = e;
+  }
+  if (found) return found.id;
+  return index.entities.some((e) => e.id === `f:${path}`) ? `f:${path}` : undefined;
 }

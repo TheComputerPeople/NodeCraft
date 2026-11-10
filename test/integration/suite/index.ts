@@ -111,6 +111,39 @@ test('the Codebase Map indexes the workspace, and follows a change', async () =>
   }
 });
 
+// docs/codebase-map.md, Part 2: a call the index can only guess (a method on a variable) is resolved
+// by the language's server when asked: here TypeScript's, built into VS Code.
+test("the Codebase Map asks the language's server what a guessed call is", async () => {
+  const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
+  const folder = vscode.workspace.workspaceFolders![0];
+  const file = workspaceFile('node-authoring/lib/map_calls.ts');
+  fs.writeFileSync(file.fsPath, "import { Trainee } from './dojo';\n\nexport function coach(t: Trainee): number {\n  return t.train(2);\n}\n");
+  try {
+    let index = await api.codeMap.codeIndex(folder);
+    const deadline = Date.now() + 15000;
+    while (!index.calls.some((c) => c.from === 's:node-authoring/lib/map_calls.ts#coach') && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      index = await api.codeMap.codeIndex(folder);
+    }
+    const call = index.calls.find((c) => c.from === 's:node-authoring/lib/map_calls.ts#coach');
+    assert.ok(call, 'the call is in the index');
+    assert.equal(call.to, 's:node-authoring/lib/dojo.ts#Trainee.train');
+    assert.equal(call.certain, false, 'a method on a variable is a guess');
+    // --disable-extensions turns off the built-in TypeScript extension too (npm run
+    // test:integration:debuggers runs with it).
+    if (!vscode.extensions.getExtension('vscode.typescript-language-features')) throw new Skip("VS Code's TypeScript extension is not loaded");
+    // The server may still be starting: it's asked until it answers.
+    let resolved: string | undefined;
+    while (!resolved && Date.now() < deadline + 30000) {
+      resolved = await api.codeMap.definitionAt(folder, call.path, call.line, call.column);
+      if (!resolved) await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    assert.equal(resolved, 's:node-authoring/lib/dojo.ts#Trainee.train');
+  } finally {
+    fs.rmSync(file.fsPath, { force: true });
+  }
+});
+
 // docs/multi-language.md, gap 1: a repository with a TypeScript web/ and a Python api/.
 test("a new graph takes its folder's language, and the folder's setting wins", async () => {
   const folder = workspaceFile('multi').fsPath;
@@ -766,7 +799,13 @@ interface ExtensionInternals {
   };
   registry: { get(type: string): NodeDefinition | undefined };
   codeMap: {
-    codeIndex(folder: vscode.WorkspaceFolder): Promise<{ entities: { id: string; kind: string; parent?: string; entries?: unknown[] }[]; imports: { from: string; to: string }[]; unresolved: unknown[] }>;
+    codeIndex(folder: vscode.WorkspaceFolder): Promise<{
+      entities: { id: string; kind: string; parent?: string; entries?: unknown[] }[];
+      imports: { from: string; to: string }[];
+      unresolved: unknown[];
+      calls: { from: string; to: string; path: string; line: number; column: number; certain: boolean }[];
+    }>;
+    definitionAt(folder: vscode.WorkspaceFolder, path: string, line: number, column: number): Promise<string | undefined>;
     onDidChange: vscode.Event<vscode.WorkspaceFolder>;
   };
 }

@@ -2,15 +2,15 @@
 // graphs in place of their generated code, resolution, standard libraries, externals and entry points.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CodeIndex, IndexFile, IndexInput, buildCodeIndex, joinPath } from '../../src/core/codemap/code-index';
-import { FileFacts, ImportFact } from '../../src/core/codemap/facts';
+import { CodeIndex, IndexFile, IndexInput, buildCodeIndex, entityAt, joinPath } from '../../src/core/codemap/code-index';
+import { CallFact, Declaration, FileFacts, ImportFact } from '../../src/core/codemap/facts';
 import { GraphDocument } from '../../src/core/model';
 import { GrammarId } from '../../src/core/parsing/grammars';
 
 function file(p: string, grammar: GrammarId, imports: Partial<ImportFact>[] = [], extra: Partial<FileFacts> = {}, generatedFrom?: string): IndexFile {
   return {
     path: p,
-    facts: { grammar, declarations: [], entries: [], errors: 0, ...extra, imports: imports.map((i) => ({ kind: 'module', line: 1, source: '', ...i })) },
+    facts: { grammar, declarations: [], entries: [], calls: [], bases: [], errors: 0, ...extra, imports: imports.map((i) => ({ kind: 'module', line: 1, source: '', ...i })) },
     ...(generatedFrom ? { generatedFrom } : {})
   };
 }
@@ -197,5 +197,141 @@ describe('the code index', () => {
     });
     const decls = i.entities.filter((e) => e.kind === 'type' || e.kind === 'function').map((e) => [e.id, e.parent]);
     assert.deepEqual(decls, [['s:a.java#A', 'f:a.java'], ['s:a.java#A.f', 's:a.java#A'], ['s:a.java#A.f@4', 's:a.java#A']]);
+  });
+});
+
+// Declarations ("kind Container.name"), calls ("in > receiver.callee") for a file.
+function decls(...specs: string[]): Declaration[] {
+  return specs.map((spec, i) => {
+    const [kind, qualified] = spec.split(' ');
+    const parts = qualified.split('.');
+    return { kind: kind as Declaration['kind'], name: parts.pop()!, container: parts, line: i * 10 + 1, endLine: i * 10 + 9 };
+  });
+}
+
+function calls(...specs: string[]): CallFact[] {
+  return specs.map((spec, i) => {
+    const [where, what] = spec.split(' > ');
+    const isNew = what.startsWith('new ');
+    const target = isNew ? what.slice(4) : what;
+    const dot = target.lastIndexOf('.');
+    return { callee: dot < 0 ? target : target.slice(dot + 1), ...(dot < 0 ? {} : { receiver: target.slice(0, dot) }), ...(isNew ? { new: true } : {}), line: i + 1, column: 1, ...(where ? { in: where } : {}) };
+  });
+}
+
+const callEdges = (i: CodeIndex) => i.calls.map((c) => `${c.from} > ${c.to}${c.certain ? '' : ' ?'}`).sort();
+
+describe('calls and inheritance', () => {
+  test("self and super look in the caller's type and its bases", () => {
+    const i = index({
+      files: [file('a.ts', 'typescript', [], {
+        declarations: decls('class A', 'method A.f', 'method A.g', 'class B', 'method B.h'),
+        bases: [{ of: 'B', name: 'A', kind: 'extends' }],
+        calls: calls('B.h > self.f', 'B.h > super.g', 'A.f > self.g')
+      })]
+    });
+    assert.deepEqual(callEdges(i), ['s:a.ts#A.f > s:a.ts#A.g', 's:a.ts#B.h > s:a.ts#A.f', 's:a.ts#B.h > s:a.ts#A.g']);
+    assert.deepEqual(i.inherits, [{ from: 's:a.ts#B', to: 's:a.ts#A', name: 'A', kind: 'extends' }]);
+  });
+
+  test('a bare call is the type\'s own method where `this` is implicit (Java), else a free function', () => {
+    const i = index({
+      files: [
+        file('A.java', 'java', [], { package: 'p', declarations: decls('class A', 'method A.f', 'method A.g'), calls: calls('A.f > g') }),
+        file('a.py', 'python', [], { declarations: decls('class A', 'method A.f', 'method A.g', 'function g'), calls: calls('A.f > g') })
+      ]
+    });
+    assert.deepEqual(callEdges(i), ['s:A.java#A.f > s:A.java#A.g', 's:a.py#A.f > s:a.py#g']);
+  });
+
+  test('what a file imports is in sight: by the name an import binds, a type, or a free function', () => {
+    const i = index({
+      files: [
+        file('main.ts', 'typescript', [{ source: './util', alias: 'u' }, { source: './calc' }], {
+          declarations: decls('function main'),
+          calls: calls('main > u.go', 'main > helper', 'main > Calc.square', 'main > new Calc', 'main > console.log')
+        }),
+        file('util.ts', 'typescript', [], { declarations: decls('function go', 'function helper') }),
+        file('other.ts', 'typescript', [], { declarations: decls('function helper') }),
+        file('calc.ts', 'typescript', [], { declarations: decls('class Calc', 'method Calc.square') })
+      ]
+    });
+    assert.deepEqual(callEdges(i), [
+      's:main.ts#main > s:calc.ts#Calc', 's:main.ts#main > s:calc.ts#Calc.square', 's:main.ts#main > s:util.ts#go', 's:main.ts#main > s:util.ts#helper'
+    ]);
+  });
+
+  test('a method on an object of unknown type is each same-named method in sight; too many are unresolved', () => {
+    const many = Array.from({ length: 6 }, (_, n) => file(`m${n}.ts`, 'typescript', [], { declarations: decls(`class T${n}`, `method T${n}.stop`) }));
+    const i = index({
+      files: [
+        file('main.ts', 'typescript', [{ source: './x' }, { source: './y' }], { declarations: decls('function main'), calls: calls('main > obj.run', 'main > ?.stop') }),
+        file('x.ts', 'typescript', [], { declarations: decls('class X', 'method X.run') }),
+        file('y.ts', 'typescript', [], { declarations: decls('class Y', 'method Y.run') }),
+        ...many
+      ]
+    });
+    assert.deepEqual(callEdges(i), ['s:main.ts#main > s:x.ts#X.run ?', 's:main.ts#main > s:y.ts#Y.run ?']);
+    assert.deepEqual(i.unresolvedCalls.map((u) => [u.callee, u.candidates]), [['stop', 6]]);
+  });
+
+  test("a graph's calls come from its nodes; its generated code adds only what they don't give", () => {
+    const greet = graph('g/Greet.vgraph', ['fn:typescript:lib/text.ts#title', 'core:function.call', 'lib:libs/Math.vgraph#Square']);
+    greet.document.graphs[0].nodes[1].properties = { graph: 'Helper' };
+    greet.document.graphs.push({ id: 'Helper', name: 'Helper', kind: 'function', nodes: [], connections: [], comments: [] });
+    const i = index({
+      graphs: [greet, graph('libs/Math.vgraph', [])],
+      files: [
+        file('main.ts', 'typescript', [{ source: './g/Greet.vgraph' }], { declarations: decls('function main'), calls: calls('main > Greet.Helper') }),
+        file('g/Greet.vgraph.ts', 'typescript', [{ source: '../lib/text' }], {
+          declarations: decls('class Greet', 'method Greet.Helper'),
+          calls: calls('Greet.Helper > title', 'Greet.Helper > new Counter')
+        }, 'Greet.vgraph'),
+        file('lib/text.ts', 'typescript', [], { declarations: decls('function title', 'class Counter') })
+      ]
+    });
+    assert.deepEqual(callEdges(i), [
+      'g:g/Greet.vgraph > s:lib/text.ts#Counter',
+      'g:g/Greet.vgraph#EventGraph > g:g/Greet.vgraph#Helper',
+      'g:g/Greet.vgraph#EventGraph > g:libs/Math.vgraph#Square',
+      'g:g/Greet.vgraph#EventGraph > s:lib/text.ts#title',
+      's:main.ts#main > g:g/Greet.vgraph#Helper'
+    ]);
+  });
+
+  test("support code that several graphs' generated files each carry isn't shown", () => {
+    const i = index({
+      graphs: [graph('a/A.vgraph', []), graph('b/B.vgraph', [])],
+      files: [
+        file('main.cpp', 'cpp', [], { declarations: decls('function main'), calls: calls('main > run_latent_actions') }),
+        file('a/A.vgraph.h', 'cpp', [], { declarations: decls('function run_latent_actions') }, 'A.vgraph'),
+        file('b/B.vgraph.h', 'cpp', [], { declarations: decls('function run_latent_actions') }, 'B.vgraph')
+      ]
+    });
+    assert.deepEqual(i.calls, []);
+    assert.deepEqual(i.unresolvedCalls, []);
+  });
+
+  test("bases outside the workspace keep their name; a GDScript file's class is found by its class_name", () => {
+    const i = index({
+      files: [
+        file('a.gd', 'gdscript', [], { package: 'Animal', bases: [{ name: 'Node', kind: 'extends' }] }),
+        file('b.gd', 'gdscript', [], { bases: [{ name: 'Animal', kind: 'extends' }] })
+      ]
+    });
+    assert.deepEqual(i.inherits, [{ from: 'f:a.gd', name: 'Node', kind: 'extends' }, { from: 'f:b.gd', to: 'f:a.gd', name: 'Animal', kind: 'extends' }]);
+  });
+
+  test('the entity at a line: the innermost declaration, else the file; generated code is its graph', () => {
+    const i = index({
+      graphs: [graph('G.vgraph', [])],
+      files: [file('a.ts', 'typescript', [], { declarations: decls('class A', 'method A.f') }), file('G.vgraph.ts', 'typescript', [], {}, 'G.vgraph')]
+    });
+    // decls() puts A at lines 1-9 and A.f at 11-19.
+    assert.equal(entityAt(i, 'a.ts', 12), 's:a.ts#A.f');
+    assert.equal(entityAt(i, 'a.ts', 3), 's:a.ts#A');
+    assert.equal(entityAt(i, 'a.ts', 30), 'f:a.ts');
+    assert.equal(entityAt(i, 'G.vgraph.ts', 5), 'g:G.vgraph');
+    assert.equal(entityAt(i, 'missing.ts', 1), undefined);
   });
 });
