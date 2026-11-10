@@ -142,7 +142,7 @@ Across all four:
   - Each layout's call flow from its entry point reaches its graphs and the project functions they call.
   - The control flow of one fixture function per language matches its expected flowchart, which has a branch, a loop with a break, a try/catch where the language has one, and an early return.
 - **Layout:** in every view, every edge points down except loops' and recursion's back edges, and boxes don't overlap.
-- **Scale:** this repository and the largest corpus layout are mapped within a time budget (set in step 3) on a cold cache, and a changed file updates the map in under a second.
+- **Scale:** this repository and the largest corpus layout are indexed in under 5 seconds on a cold cache, and a changed file updates the index in under a second. (Measured in step 3: this repository's 409 files in 1.1 s cold and 0.14 s warm; the largest corpus layout's 88 files in 0.3 s.)
 - **Bridges:** Expose as Node from the map makes a node; Open Graph opens the graph; Show in Codebase Map from a function in the code editor opens its call flow.
 - **Restricted Mode:** the map works in an untrusted workspace.
 
@@ -174,6 +174,51 @@ Across all four:
 - **A grammar bug found:** tree-sitter-typescript 0.23.2, its latest release, takes a member named `abstract` for the modifier. The test lists such bugs with an example that must keep failing, so a fixed grammar is noticed. tree-sitter's error recovery keeps the rest of such a file readable; step 3 has to rely on that.
 - **Packaging:** the extension's `dependencies` are web-tree-sitter only; ELK arrives with step 6.
 3. The code index: entities, imports with resolution through the module rules, containment, graph files, the cache and incremental updates, entry points.
+
+### Built (step 3)
+
+- **What each file declares and imports** (`src/core/codemap/facts.ts`) comes from a tree-sitter query per grammar, kept in core as text.
+  - The worker runs the query and sends back the matches as plain data. A pure function reads them per language into the file's facts: its declarations (with their containers and lines), its imports as written, the package or namespace it declares, and its entry points.
+  - Declarations nest by their ranges. A C++ `A::f` defined outside its class, a Go method's receiver, a Rust `impl` block and Lua's `M.f` and `M:f` all put the function in its type or table.
+  - Statements with structure of their own are read from their text: Rust's use trees, PHP's group uses, Java's static imports and Python's `from . import a, b`. Rust's `#[path]` attaches to the `mod` after it.
+- **The index** (`src/core/codemap/code-index.ts`) is pure and built from the facts, the graph files and the projects.
+  - **Structure:** projects (from Phase 11's project model, the deepest first, plus one for code outside them all), then their folders as modules, then files, then types and functions, each with a stable id. Parents always come before their children.
+  - **Graph files** stand in for their generated code. A generated file (found by its header) is shown as its graph, and its imports become the graph's, so a graph imports the code and graphs it uses. The languages' support files (`vgraph_runtime.*`) are hidden. A graph's project-function nodes count as imports too, before it's compiled.
+- **Imports resolve per language:**
+  - **TypeScript and JavaScript:** relative paths with extensions, index files and `.js` written for `.ts`, and a monorepo's packages by name.
+  - **Python:** relative imports by level, and absolute ones from the project, `src/`, the project's parent and a script's own folder, including submodules imported by name.
+  - **C#, Java and PHP:** namespaces, packages and types, to the files declaring them.
+  - **C and C++:** includes relative to the file, else the nearest file ending with that path.
+  - **Rust:** `mod` (and `#[path]`), `crate::`, `self::` and `super::` paths, and a workspace crate by name.
+  - **Go:** packages by `go.mod`'s module path.
+  - **Lua:** `require` from the usual roots.
+  - **Ruby:** `require_relative`, and `require` from `lib/`.
+  - **GDScript:** `res://` paths.
+- **Outside the workspace:**
+  - **External packages** are one entity per package and ecosystem; a TypeScript and a JavaScript file import the same npm package.
+  - **Left out,** because they aren't packages: standard libraries (Python's, Node's built-ins, Ruby's, Go's and Rust's, C and C++ headers, `System.*`, `java.*`) and imports of data and assets (JSON, styles, images).
+  - **Unresolved:** a relative import that finds nothing is recorded as unresolved.
+- **Entry points:**
+  - functions: `main` (Go's only in package `main`, Python's only when the file runs it), tests by each language's convention, Godot's callbacks;
+  - whole files: a Python file with a `__main__` block, C#'s top-level statements, the files a `package.json` names in `bin`, `main` and its scripts (`node src/server.js`), the module `index.html` loads, and Lua, Ruby and PHP programs in `bin/`, `exe/` or `scripts/` or at a project's top;
+  - graphs: Start and Main events, and test cases.
+
+  Framework handlers (routes, controllers) need calls, and move to step 4.
+- **The indexer** (`src/extension/code-indexer.ts`, vscode-free) walks a folder.
+  - **Folders skipped:** dependencies, plus `bin/`, `obj/`, `build/`, `target/` and `x64/` only beside their build's project file. A Node or Lua project's `bin/` holds its programs.
+  - **Reading files:** each file is read by the worker. Results are cached by content hash, in a cache that's discarded when the queries or grammars change. Files over 1 MB are indexed by name.
+  - **Settings:** it follows `scanLimit` and `files.exclude`.
+- **The service** (`src/extension/code-map-service.ts`) keeps each workspace folder's index in the extension, cached in workspace storage.
+  - Nothing is parsed until something asks for an index.
+  - After that, file changes rebuild it (reading only what changed) and fire an event.
+  - It works in Restricted Mode.
+- **Tested:**
+  - **Facts:** each language's from a snippet, plus Rust's and PHP's import forms.
+  - **The index's rules:** projects and modules, generated code shown as graphs, resolution in every language, standard libraries, externals, entry points and nesting.
+  - **The corpus:** each of the 28 layouts, with its graphs compiled in, has no unresolved imports, shows no generated file as a file, and has its expected entry points and imports. Those include the entry file to its graphs, the graphs to the code they call, and the imports between a monorepo's packages, a Cargo workspace's crates, Gradle's modules and Go's workspace.
+  - **The cache:** only a changed file is parsed again.
+  - **The limit** leaves files out and counts them.
+  - **Integration:** the service indexes the integration workspace inside VS Code and follows a new file.
 4. Calls and inheritance: call extraction and resolution, ambiguous and unresolved calls, and the language server's definition for one call on request.
 5. Control flow: the shared builder and the 12 languages' rules, with golden flowcharts.
 6. The map's shell: the Codebase Map panel, ELK in a worker, rendering with level of detail, pan, zoom, expand and collapse, and opening the code.

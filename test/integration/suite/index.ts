@@ -82,6 +82,35 @@ test("the graph tabs' Back and Forward are commands, keyed only while they can g
   await vscode.commands.executeCommand('blueprintVisualScripting.graphForward');
 });
 
+// docs/codebase-map.md, Part 1: the workspace's index, built in the parsing worker inside VS Code's
+// extension host, with graph files in place of their generated code, and rebuilt when a file changes.
+test('the Codebase Map indexes the workspace, and follows a change', async () => {
+  const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
+  const folder = vscode.workspace.workspaceFolders![0];
+  const index = await api.codeMap.codeIndex(folder);
+  const ids = new Set(index.entities.map((e) => e.id));
+  for (const id of ['g:demo.vgraph', 'g:arena/Game.vgraph', 'f:node-authoring/lib/dojo.ts', 'f:node-authoring/game/dojo.py']) assert.ok(ids.has(id), id);
+  assert.ok(!ids.has('f:arena/Game.vgraph.ts') && !ids.has('f:demo.vgraph.js'), 'generated code is shown as its graph');
+  assert.ok(index.imports.some((e) => e.from === 'g:arena/Game.vgraph' && e.to === 'g:arena/Knight.vgraph'), 'a graph imports the graphs it uses');
+  assert.ok(index.entities.find((e) => e.id === 'g:arena/Game.vgraph')?.entries?.length, "the game's Start event is an entry point");
+
+  const changed = new Promise<void>((resolve) => {
+    const listener = api.codeMap.onDidChange(() => {
+      listener.dispose();
+      resolve();
+    });
+  });
+  const file = workspaceFile('node-authoring/lib/map_probe.ts');
+  fs.writeFileSync(file.fsPath, 'export function mapProbe(): number {\n  return 1;\n}\n');
+  try {
+    await Promise.race([changed, new Promise((_, reject) => setTimeout(() => reject(new Error("The index wasn't rebuilt")), 15000))]);
+    const after = await api.codeMap.codeIndex(folder);
+    assert.ok(after.entities.some((e) => e.id === 's:node-authoring/lib/map_probe.ts#mapProbe'));
+  } finally {
+    fs.rmSync(file.fsPath, { force: true });
+  }
+});
+
 // docs/multi-language.md, gap 1: a repository with a TypeScript web/ and a Python api/.
 test("a new graph takes its folder's language, and the folder's setting wins", async () => {
   const folder = workspaceFile('multi').fsPath;
@@ -736,6 +765,10 @@ interface ExtensionInternals {
     goToDefinition(from: vscode.Uri, nodeType: string, site: DefinitionSite): Promise<void>;
   };
   registry: { get(type: string): NodeDefinition | undefined };
+  codeMap: {
+    codeIndex(folder: vscode.WorkspaceFolder): Promise<{ entities: { id: string; kind: string; parent?: string; entries?: unknown[] }[]; imports: { from: string; to: string }[]; unresolved: unknown[] }>;
+    onDidChange: vscode.Event<vscode.WorkspaceFolder>;
+  };
 }
 
 // The public API, as another extension uses it (docs/language-breadth.md): a language pack and a

@@ -3,7 +3,8 @@
 // in a worker (parse-service.ts).
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Language, Node, Parser, Tree } from 'web-tree-sitter';
+import { Language, Node, Parser, Query, Tree } from 'web-tree-sitter';
+import { FileFacts, MAX_CAPTURE_TEXT, QUERIES, QueryMatch, capturesText, factsFromMatches } from '../core/codemap/facts';
 import { GrammarId, grammarFileName } from '../core/parsing/grammars';
 
 export interface SyntaxError {
@@ -28,6 +29,7 @@ let initialized: Promise<void> | undefined;
 
 export class CodeParser {
   private readonly languages = new Map<GrammarId, Promise<Language>>();
+  private readonly queries = new Map<GrammarId, Promise<Query>>();
   private readonly parser: Parser;
 
   private constructor(private readonly grammarDir: string) {
@@ -70,6 +72,35 @@ export class CodeParser {
     } finally {
       tree.delete();
     }
+  }
+
+  // What a file declares and imports (docs/codebase-map.md, Part 2): its grammar's query, read by
+  // src/core/codemap/facts.ts.
+  async facts(grammar: GrammarId, text: string): Promise<FileFacts> {
+    const query = await this.query(grammar);
+    const tree = await this.parse(grammar, text);
+    try {
+      const matches: QueryMatch[] = query.matches(tree.rootNode).map((match) => ({
+        captures: match.captures.filter((c) => !c.name.startsWith('_')).map(({ name, node }) => ({
+          name, type: node.type,
+          startRow: node.startPosition.row, endRow: node.endPosition.row, startIndex: node.startIndex, endIndex: node.endIndex,
+          text: capturesText(name) ? node.text.slice(0, MAX_CAPTURE_TEXT) : undefined
+        }))
+      }));
+      return factsFromMatches(grammar, matches, tree.rootNode.hasError ? countNodes(tree.rootNode).errors.length : 0);
+    } finally {
+      tree.delete();
+    }
+  }
+
+  private query(grammar: GrammarId): Promise<Query> {
+    let compiled = this.queries.get(grammar);
+    if (!compiled) {
+      compiled = this.language(grammar).then((language) => new Query(language, QUERIES[grammar]));
+      compiled.catch(() => this.queries.delete(grammar));
+      this.queries.set(grammar, compiled);
+    }
+    return compiled;
   }
 
   dispose(): void {

@@ -14,7 +14,9 @@ const parser = CodeParser.create(grammarDir);
 parentPort?.on('message', (request: ParseRequest) => {
   void (async (): Promise<ParseResponse> => {
     try {
-      return { id: request.id, summary: await (await parser).summarize(request.grammar, request.text) };
+      const p = await parser;
+      const result = request.want === 'facts' ? await p.facts(request.grammar, request.text) : await p.summarize(request.grammar, request.text);
+      return { id: request.id, result };
     } catch (error) {
       return { id: request.id, error: error instanceof Error ? error.message : String(error) };
     }

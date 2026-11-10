@@ -23,6 +23,7 @@
     "../src/extension/simulate-session.ts",
     "../src/extension/simulate-worker.ts",
     "../src/extension/code-parser.ts",
+    "../src/extension/code-indexer.ts",
     "../src/extension/parse-service.ts",
     "../src/extension/parse-worker.ts"
   ]

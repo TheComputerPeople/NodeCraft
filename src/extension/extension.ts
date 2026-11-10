@@ -27,11 +27,12 @@ import { commandFolder } from './workspace-folders';
 import { NewProjectAnswers, newProject } from './new-project-command';
 import { SetupView } from './setup-view';
 import { ExposeAnswers, exposeFunctions } from './expose-command';
+import { CodeMapService } from './code-map-service';
 
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
 export interface ExtensionApi extends BlueprintVisualScriptingApi {
-  testing: { marks: DebugMarks; provider: GraphEditorProvider; outputPlans: OutputPlans; registry: NodeRegistry };
+  testing: { marks: DebugMarks; provider: GraphEditorProvider; outputPlans: OutputPlans; registry: NodeRegistry; codeMap: CodeMapService };
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
@@ -57,6 +58,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   // quick fixes in their files.
   const projectFunctions = new ProjectFunctions(registry, languages, output);
   context.subscriptions.push(projectFunctions);
+  // The Codebase Map's index of each folder (docs/codebase-map.md), built when the map is first used.
+  const codeMap = new CodeMapService(context);
+  context.subscriptions.push(codeMap);
   // Function libraries made of graphs (docs/program-structure.md, "Functions").
   const graphLibraries = new GraphLibraries(registry, languages, nodeLibraries);
   context.subscriptions.push(graphLibraries);
@@ -273,7 +277,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       .then((choice) => choice && channel.show());
     return reports;
   }));
-  return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans, registry } };
+  return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans, registry, codeMap } };
 }
 
 export function deactivate(): void {}
