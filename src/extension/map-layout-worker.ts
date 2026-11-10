@@ -98,7 +98,7 @@ export async function layoutScene(scene: Scene): Promise<LaidScene> {
     const placed = pointsOf(arrow, same && same.weight === arrow.weight ? routes.get(arrow.id) : undefined);
     return placed ? [{ ...arrow, ...placed, ...(same?.cycle ? { cycle: true } : {}) }] : [];
   });
-  return { mode: scene.mode, ...(scene.calls ? { calls: scene.calls } : {}), ...(scene.flow ? { flow: scene.flow } : {}), width: laid.width ?? 0, height: laid.height ?? 0, boxes, arrows, details };
+  return { mode: scene.mode, ...(scene.calls ? { calls: scene.calls } : {}), ...(scene.flow ? { flow: scene.flow } : {}), ...(scene.options ? { options: scene.options } : {}), ...(scene.filters ? { filters: scene.filters } : {}), width: laid.width ?? 0, height: laid.height ?? 0, boxes, arrows, details };
 }
 
 parentPort?.on('message', (request: { id: number; scene: Scene }) => {

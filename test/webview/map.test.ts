@@ -265,4 +265,76 @@ describe('the Codebase Map webview', () => {
     assert.equal(await e.count('.map-box'), 3);
     assert.equal(await e.page.$eval('#map-world', (el) => (el as HTMLElement).style.transform), panned);
   });
+
+  test('Find: Ctrl+F, what the index has, picked with the keys or the mouse', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    await e.page.click('#map-canvas', { position: { x: 600, y: 300 } });
+    await e.page.keyboard.press('Control+f');
+    assert.equal(await e.page.evaluate(() => document.activeElement?.id), 'map-find');
+    await e.page.keyboard.type('sc');
+    await e.page.waitForFunction(() => (window as unknown as { __posted: { type: string }[] }).__posted.some((m) => m.type === 'find'));
+    assert.deepEqual(await posted(e), [JSON.stringify({ type: 'find', query: 'sc' })]);
+    // An answer to an older query is ignored.
+    await e.send({ type: 'found', query: 's', results: [{ id: 'f:s.ts', label: 's.ts', kind: 'file', where: 's.ts' }] } as never);
+    assert.equal(await e.page.isVisible('#map-found'), false);
+    await e.send({
+      type: 'found', query: 'sc', results: [
+        { id: 's:a.ts#Score', label: 'Score', kind: 'type', where: 'a.ts:3' },
+        { id: 'f:score.ts', label: 'score.ts', kind: 'file', where: 'score.ts' }
+      ]
+    } as never);
+    assert.equal(await e.page.isVisible('#map-found'), true);
+    assert.equal(await e.count('.map-found-item'), 2);
+    assert.match((await e.page.textContent('.map-found-item.active'))!, /Score.*type.*a\.ts:3/);
+    await e.page.keyboard.press('ArrowDown');
+    assert.equal(await e.page.getAttribute('.map-found-item.active', 'data-id'), 'f:score.ts');
+    await e.page.keyboard.press('Enter');
+    assert.equal(await e.page.isVisible('#map-found'), false);
+    // Or with the mouse, after looking again.
+    await e.page.click('#map-find');
+    await e.page.click('.map-found-item[data-id="s:a.ts#Score"]');
+    assert.deepEqual((await posted(e)).slice(1), [JSON.stringify({ type: 'reveal', id: 'f:score.ts' }), JSON.stringify({ type: 'reveal', id: 's:a.ts#Score' })]);
+    // Nothing found says so.
+    await e.page.fill('#map-find', 'zz');
+    await e.send({ type: 'found', query: 'zz', results: [] } as never);
+    assert.equal(await e.page.textContent('#map-found'), 'Nothing found');
+  });
+
+  test('a scene with a focus centres and selects that box', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    await e.send({ type: 'scene', scene: SCENE, focus: 'f:b.ts' } as never);
+    assert.equal(await e.count('.map-box.active[data-id="f:b.ts"]'), 1, 'selected');
+    const canvas = (await e.page.locator('#map-canvas').boundingBox())!;
+    const box = (await e.page.locator('.map-box[data-id="f:b.ts"]').boundingBox())!;
+    assert.ok(Math.abs(box.x + box.width / 2 - (canvas.x + canvas.width / 2)) < 2, 'centred across');
+    assert.ok(Math.abs(box.y + box.height / 2 - (canvas.y + canvas.height / 2)) < 2, 'centred down');
+    assert.ok(box.width >= 149, 'readable');
+  });
+
+  test('Filter: languages, projects, packages and tests to hide; the button says how many are', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const options = { languages: ['python', 'typescript'], projects: [{ id: 'p:app', label: 'app' }, { id: 'p:tools', label: 'tools' }] };
+    await e.send({ type: 'scene', scene: { ...SCENE, options } } as never);
+    assert.equal(await e.page.isVisible('#map-filters'), false);
+    await e.page.click('#map-filter');
+    assert.equal(await e.page.getAttribute('#map-filter', 'aria-expanded'), 'true');
+    assert.deepEqual(await e.page.$$eval('#map-filters legend', (els) => els.map((el) => el.textContent)), ['Languages', 'Projects', 'Show']);
+    assert.equal(await e.count('#map-filters input:checked'), 6, 'everything shown');
+    await e.page.uncheck('#map-filters input[data-key="language:python"]');
+    await e.page.uncheck('#map-filters input[data-key="tests"]');
+    assert.deepEqual((await posted(e)).slice(-1), [JSON.stringify({ type: 'filters', filters: { languages: ['python'], tests: false } })]);
+    await e.send({ type: 'scene', scene: { ...SCENE, options, filters: { languages: ['python'], tests: false } } } as never);
+    assert.equal(await e.page.textContent('#map-filter'), 'Filter (2)');
+    // Clicking elsewhere closes it; opened again, it shows what's hidden.
+    await e.page.click('#map-canvas', { position: { x: 600, y: 300 } });
+    assert.equal(await e.page.isVisible('#map-filters'), false);
+    await e.page.click('#map-filter');
+    assert.equal(await e.page.isChecked('#map-filters input[data-key="language:python"]'), false);
+    assert.equal(await e.page.isChecked('#map-filters input[data-key="externals"]'), true);
+    await e.page.keyboard.press('Escape');
+    assert.equal(await e.page.isVisible('#map-filters'), false);
+  });
 });

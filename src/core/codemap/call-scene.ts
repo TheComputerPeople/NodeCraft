@@ -3,6 +3,7 @@
 // that reaches it, from above. Without a function chosen, from every entry point. Arrows always run
 // from caller to callee, so callers sit above what they call either way. Pure, like scene.ts.
 import { CodeIndex, Entity } from './code-index';
+import { filterOptions, hiddenBy } from './find';
 import type { CallEdge } from './calls';
 import { MapView, Scene, SceneArrow, SceneBox, liftArrows, markCycles } from './scene';
 
@@ -23,7 +24,8 @@ export function canStartCallFlow(entity: Entity | undefined): boolean {
 }
 
 export function buildCallScene(index: CodeIndex, view: MapView): Scene {
-  const byId = new Map(index.entities.map((e) => [e.id, e]));
+  const hidden = hiddenBy(index, view.filters);
+  const byId = new Map(index.entities.filter((e) => !hidden.has(e.id)).map((e) => [e.id, e]));
   const direction: CallDirection = view.calls?.direction ?? 'callees';
   const root = view.calls?.root && byId.has(view.calls.root) ? view.calls.root : undefined;
   const opened = new Set(view.calls?.explored ?? []);
@@ -47,7 +49,7 @@ export function buildCallScene(index: CodeIndex, view: MapView): Scene {
   // (A graph file whose graphs are entry points starts from those graphs.)
   const startsFromGraphs = (e: Entity) => e.kind === 'graph-file' && (graphsOf.get(e.id) ?? []).some((g) => byId.get(g)?.entries?.length);
   const starts = root ? [root] : index.entities
-    .filter((e) => e.entries?.length && canStartCallFlow(e) && !startsFromGraphs(e) && (edges.get(e.id)?.length ?? 0) > 0)
+    .filter((e) => byId.has(e.id) && e.entries?.length && canStartCallFlow(e) && !startsFromGraphs(e) && (edges.get(e.id)?.length ?? 0) > 0)
     .slice(0, MAX_ENTRY_STARTS).map((e) => e.id);
   // Breadth first: each start to CALL_DEPTH levels; an opened box one level further.
   const level = new Map<string, number>(starts.map((s) => [s, 0]));
@@ -100,7 +102,7 @@ export function buildCallScene(index: CodeIndex, view: MapView): Scene {
   // Calls left unresolved (too many candidates): a "?" box under the explored box that made them.
   if (direction === 'callees') {
     for (const u of index.unresolvedCalls) {
-      if (!explored.has(u.from) || boxes.length >= MAX_CALL_BOXES) continue;
+      if (!explored.has(u.from) || boxes.length >= MAX_CALL_BOXES || hidden.has(u.from)) continue;
       const id = `unresolved:${u.from}>${u.callee}`;
       if (seen.has(id)) continue;
       seen.add(id);
@@ -126,7 +128,7 @@ export function buildCallScene(index: CodeIndex, view: MapView): Scene {
   // Recursion and calls that come back round: their boxes and arrows are marked as cycles.
   markCycles(boxes, lifted, 'calls');
   return {
-    mode: 'calls', boxes, arrows, lifted,
+    mode: 'calls', boxes, arrows, lifted, options: filterOptions(index), ...(view.filters ? { filters: view.filters } : {}),
     calls: { direction, ...(root ? { root, rootLabel: labelOf(byId.get(root)!) } : {}), starts: starts.length }
   };
 }

@@ -1,6 +1,7 @@
 // The Codebase Map's webview (docs/codebase-map.md, Part 3): draws the laid-out scene the extension
 // sends, top to bottom, with pan and zoom; double-clicking a box opens it (its contents, or its code).
 // Zoomed out, boxes show less.
+import type { FoundEntity, MapFilters } from '../core/codemap/find';
 import type { MapHostMessage, MapMessage } from '../core/codemap/map-protocol';
 import type { LaidArrow, LaidBox, LaidScene } from '../core/codemap/scene';
 
@@ -408,6 +409,189 @@ canvas.addEventListener('keydown', (e) => {
   }
 });
 
+// Centres a box, zoomed so it's readable (and whole, if it can be).
+function centreOn(id: string): void {
+  const box = scene?.boxes.find((b) => b.id === id);
+  if (!box) return;
+  const rect = canvas.getBoundingClientRect();
+  zoom = Math.max(MIN_ZOOM, Math.min(1, (rect.width * 0.8) / Math.max(1, box.width), (rect.height * 0.8) / Math.max(1, box.height)));
+  pan = { x: rect.width / 2 - (box.x + box.width / 2) * zoom, y: rect.height / 2 - (box.y + box.height / 2) * zoom };
+  fitted = true;
+  applyView();
+}
+
+// Find: what the index has named like what's typed, picked from a list (arrow keys, Enter).
+const findInput = element<HTMLInputElement>('map-find');
+const foundList = element<HTMLElement>('map-found');
+let found: FoundEntity[] = [];
+let foundActive = 0;
+let findTimer: ReturnType<typeof setTimeout> | undefined;
+
+function placeBelow(popup: HTMLElement, anchor: HTMLElement): void {
+  const rect = anchor.getBoundingClientRect();
+  popup.style.left = `${Math.max(4, Math.min(rect.left, window.innerWidth - 340))}px`;
+  popup.style.top = `${rect.bottom + 2}px`;
+}
+
+function showFound(): void {
+  foundList.textContent = '';
+  if (!findInput.value.trim()) {
+    foundList.hidden = true;
+    return;
+  }
+  if (!found.length) {
+    const none = document.createElement('li');
+    none.className = 'map-found-none';
+    none.textContent = 'Nothing found';
+    foundList.appendChild(none);
+  }
+  found.forEach((f, i) => {
+    const item = document.createElement('li');
+    item.className = `map-found-item${i === foundActive ? ' active' : ''}`;
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', String(i === foundActive));
+    item.dataset.id = f.id;
+    const label = document.createElement('span');
+    label.className = 'map-found-label';
+    label.textContent = f.label;
+    const kind = document.createElement('span');
+    kind.className = 'map-found-kind';
+    kind.textContent = KIND_NAMES[f.kind] ?? f.kind;
+    const where = document.createElement('span');
+    where.className = 'map-found-where';
+    where.textContent = f.where;
+    item.append(label, kind, where);
+    // (On press, before the input's blur closes the list.)
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      pick(i);
+    });
+    foundList.appendChild(item);
+  });
+  placeBelow(foundList, findInput);
+  foundList.hidden = false;
+}
+
+function pick(i: number): void {
+  const f = found[i];
+  if (!f) return;
+  foundList.hidden = true;
+  post({ type: 'reveal', id: f.id });
+}
+
+findInput.addEventListener('input', () => {
+  if (findTimer) clearTimeout(findTimer);
+  const query = findInput.value;
+  if (!query.trim()) {
+    found = [];
+    showFound();
+    return;
+  }
+  findTimer = setTimeout(() => post({ type: 'find', query }), 120);
+});
+findInput.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (!found.length) return;
+    foundActive = (foundActive + (e.key === 'ArrowDown' ? 1 : found.length - 1)) % found.length;
+    showFound();
+    e.preventDefault();
+  } else if (e.key === 'Enter') {
+    pick(foundActive);
+    e.preventDefault();
+  } else if (e.key === 'Escape') {
+    if (!foundList.hidden) foundList.hidden = true;
+    else canvas.focus();
+    e.preventDefault();
+  }
+});
+findInput.addEventListener('blur', () => {
+  foundList.hidden = true;
+});
+// Back in the box (or clicked again after a pick), the list shows again.
+for (const event of ['focus', 'click']) {
+  findInput.addEventListener(event, () => {
+    if (findInput.value.trim() && foundList.hidden) showFound();
+  });
+}
+
+// Filters: languages, projects, external packages and tests, each shown or hidden.
+const filterButton = element<HTMLButtonElement>('map-filter');
+const filterPanel = element<HTMLElement>('map-filters');
+
+function filtersOn(filters: MapFilters | undefined): number {
+  if (!filters) return 0;
+  return (filters.languages?.length ?? 0) + (filters.projects?.length ?? 0) + (filters.externals === false ? 1 : 0) + (filters.tests === false ? 1 : 0);
+}
+
+function closeFilters(): void {
+  filterPanel.hidden = true;
+  filterButton.setAttribute('aria-expanded', 'false');
+}
+
+function showFilters(): void {
+  if (!scene) return;
+  const filters = scene.filters ?? {};
+  filterPanel.textContent = '';
+  const group = (title: string, items: { key: string; label: string; shown: boolean }[]): void => {
+    if (!items.length) return;
+    const fieldset = document.createElement('fieldset');
+    const legend = document.createElement('legend');
+    legend.textContent = title;
+    fieldset.appendChild(legend);
+    for (const item of items) {
+      const label = document.createElement('label');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = item.shown;
+      box.dataset.key = item.key;
+      label.append(box, document.createTextNode(` ${item.label}`));
+      fieldset.appendChild(label);
+    }
+    filterPanel.appendChild(fieldset);
+  };
+  const options = scene.options ?? { languages: [], projects: [] };
+  group('Languages', options.languages.map((l) => ({ key: `language:${l}`, label: l, shown: !filters.languages?.includes(l) })));
+  if (options.projects.length > 1) group('Projects', options.projects.map((p) => ({ key: `project:${p.id}`, label: p.label || '(workspace)', shown: !filters.projects?.includes(p.id) })));
+  group('Show', [
+    { key: 'externals', label: 'External packages', shown: filters.externals !== false },
+    { key: 'tests', label: 'Tests', shown: filters.tests !== false }
+  ]);
+  placeBelow(filterPanel, filterButton);
+  filterPanel.hidden = false;
+  filterButton.setAttribute('aria-expanded', 'true');
+}
+
+filterButton.addEventListener('click', () => {
+  if (filterPanel.hidden) showFilters();
+  else closeFilters();
+});
+filterPanel.addEventListener('change', () => {
+  const filters: MapFilters = {};
+  for (const box of filterPanel.querySelectorAll<HTMLInputElement>('input[type=checkbox]')) {
+    if (box.checked) continue;
+    const key = box.dataset.key ?? '';
+    if (key.startsWith('language:')) (filters.languages ??= []).push(key.slice('language:'.length));
+    else if (key.startsWith('project:')) (filters.projects ??= []).push(key.slice('project:'.length));
+    else if (key === 'externals') filters.externals = false;
+    else if (key === 'tests') filters.tests = false;
+  }
+  post({ type: 'filters', filters });
+});
+window.addEventListener('mousedown', (e) => {
+  if (filterPanel.hidden || !(e.target instanceof Element)) return;
+  if (e.target.closest('#map-filters, #map-filter')) return;
+  closeFilters();
+});
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+    findInput.focus();
+    findInput.select();
+    e.preventDefault();
+  } else if (e.key === 'Escape' && !filterPanel.hidden) {
+    closeFilters();
+  }
+});
+
 window.addEventListener('message', (event: MessageEvent<MapHostMessage>) => {
   const message = event.data;
   if (message.type === 'scene' && message.scene) {
@@ -430,9 +614,19 @@ window.addEventListener('message', (event: MessageEvent<MapHostMessage>) => {
       rootLabel.textContent = scene.calls.rootLabel ? `${scene.calls.direction === 'callers' ? 'Callers of' : 'From'} ${scene.calls.rootLabel}` : `From the entry points (${scene.calls.starts})`;
       rootClear.hidden = !scene.calls.root;
     }
+    // Filters on: the button says how many.
+    const on = filtersOn(scene.filters);
+    filterButton.textContent = on ? `Filter (${on})` : 'Filter';
+    filterButton.classList.toggle('on', on > 0);
+    if (message.focus) selected = message.focus;
     render();
+    if (message.focus) centreOn(message.focus);
   } else if (message.type === 'status' && message.text !== undefined) {
     statusEl.textContent = message.text;
+  } else if (message.type === 'found' && message.query === findInput.value) {
+    found = message.results ?? [];
+    foundActive = 0;
+    if (document.activeElement === findInput) showFound();
   }
 });
 

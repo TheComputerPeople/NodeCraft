@@ -6,6 +6,7 @@ import type { MapHostMessage, MapMessage } from '../core/codemap/map-protocol';
 import { buildCallScene } from '../core/codemap/call-scene';
 import { CodeIndex, Entity } from '../core/codemap/code-index';
 import { buildFlowScene, callsOf } from '../core/codemap/flow-scene';
+import { findEntities, hiddenBy } from '../core/codemap/find';
 import { LaidScene, MapMode, MapView, Scene, buildScene, defaultView } from '../core/codemap/scene';
 import { CodeMapService } from './code-map-service';
 import { renderMapHtml } from './map-html';
@@ -22,6 +23,11 @@ interface OpenMap {
   // The newest render asked for: older ones that finish later are dropped.
   render: number;
   scene?: LaidScene;
+  // The box the last render centred and selected.
+  focus?: string;
+  // Whether the page has loaded (said it's ready): until then, a view or focus set waits for it.
+  ready: boolean;
+  pendingFocus?: string[];
   // Each render's outcome: its scene, or why it failed.
   rendered: vscode.EventEmitter<LaidScene | Error>;
 }
@@ -55,7 +61,7 @@ export class CodeMapPanels implements vscode.Disposable {
     const asset = (name: string) => panel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview', name)).toString();
     panel.webview.html = renderMapHtml({ cspSource: panel.webview.cspSource, nonce: createNonce(), scriptUri: asset('map.js'), styleUri: asset('map.css') });
     const saved = this.context.workspaceState.get<MapView>(this.viewKey(folder));
-    const map: OpenMap = { panel, folder, view: saved ?? { expanded: [] }, render: 0, rendered: new vscode.EventEmitter<LaidScene | Error>() };
+    const map: OpenMap = { panel, folder, view: saved ?? { expanded: [] }, render: 0, ready: false, rendered: new vscode.EventEmitter<LaidScene | Error>() };
     const first = !saved;
     this.maps.set(key, map);
     const firstScene = nextScene(map);
@@ -65,8 +71,12 @@ export class CodeMapPanels implements vscode.Disposable {
     }, undefined, this.disposables);
     panel.webview.onDidReceiveMessage(async (message: MapMessage) => {
       if (message.type === 'ready') {
-        if (first) map.view = defaultView(await this.codeMap.codeIndex(folder));
-        await this.render(map);
+        // A first map opens on the default view, unless a command already chose one.
+        if (first && !map.view.mode) map.view = defaultView(await this.codeMap.codeIndex(folder));
+        map.ready = true;
+        const focus = map.pendingFocus;
+        map.pendingFocus = undefined;
+        await this.render(map, focus);
       } else if (message.type === 'toggle') {
         await this.toggle(map, message.id);
       } else if (message.type === 'open') {
@@ -83,6 +93,14 @@ export class CodeMapPanels implements vscode.Disposable {
         await this.history(map, message.direction);
       } else if (message.type === 'openLine') {
         await this.openLine(map, message.line);
+      } else if (message.type === 'find') {
+        const results = findEntities(await this.codeMap.codeIndex(folder), message.query);
+        const reply: MapHostMessage = { type: 'found', query: message.query, results };
+        void panel.webview.postMessage(reply);
+      } else if (message.type === 'reveal') {
+        await this.reveal(map, message.id);
+      } else if (message.type === 'filters') {
+        await this.update(map, { ...map.view, filters: message.filters });
       }
     }, undefined, this.disposables);
     return firstScene;
@@ -105,6 +123,35 @@ export class CodeMapPanels implements vscode.Disposable {
     if (direction) map.view = { ...map.view, calls: { ...map.view.calls, direction } };
     await this.showCalls(map, id);
     return next;
+  }
+
+  // Shows an entity on the map: in the view that has it (declarations are the structure's; the call
+  // and control flow views show other things), its boxes opened up to it, and it centred and selected
+  // (or the nearest box holding it: a method's type). Filters that hide it are cleared.
+  async reveal(map: OpenMap, id: string): Promise<void> {
+    const index = await this.codeMap.codeIndex(map.folder);
+    const byId = new Map(index.entities.map((e) => [e.id, e]));
+    const entity = byId.get(id);
+    if (!entity) return;
+    const declaration = entity.kind === 'type' || entity.kind === 'function' || entity.kind === 'graph';
+    const current = map.view.mode ?? 'architecture';
+    const mode: MapMode = declaration ? 'structure' : current === 'calls' || current === 'flow' ? 'architecture' : current;
+    const ancestors: string[] = [];
+    for (let p = entity.parent ? byId.get(entity.parent) : undefined; p; p = p.parent ? byId.get(p.parent) : undefined) ancestors.push(p.id);
+    if (entity.kind === 'external') ancestors.push('externals');
+    const filters = map.view.filters && hiddenBy(index, map.view.filters).has(id) ? undefined : map.view.filters;
+    map.view = { ...map.view, mode, expanded: [...new Set([...map.view.expanded, ...ancestors])], ...(filters ? { filters } : { filters: undefined }) };
+    await this.context.workspaceState.update(this.viewKey(map.folder), map.view);
+    await this.render(map, [id, ...ancestors]);
+  }
+
+  async revealIn(folder: vscode.WorkspaceFolder, id: string): Promise<{ scene: LaidScene; focus?: string } | undefined> {
+    const map = this.maps.get(folder.uri.toString());
+    if (!map) return undefined;
+    const next = nextScene(map);
+    await this.reveal(map, id);
+    const scene = await next;
+    return { scene, ...(map.focus ? { focus: map.focus } : {}) };
   }
 
   // A function's control flow; the flowchart shown before goes on the Back list. A graph opens in the
@@ -216,7 +263,12 @@ export class CodeMapPanels implements vscode.Disposable {
     return next;
   }
 
-  private async render(map: OpenMap): Promise<void> {
+  // Draws the map; `focus`: ids to centre and select, the first that's a box.
+  private async render(map: OpenMap, focus?: string[]): Promise<void> {
+    if (!map.ready) {
+      if (focus) map.pendingFocus = focus;
+      return;
+    }
     const number = ++map.render;
     try {
       const index = await this.codeMap.codeIndex(map.folder);
@@ -224,7 +276,9 @@ export class CodeMapPanels implements vscode.Disposable {
       const scene = await this.layout.layout(built);
       if (number !== map.render) return;
       map.scene = scene;
-      const message: MapHostMessage = { type: 'scene', scene, title: `Codebase Map: ${map.folder.name}` };
+      const boxes = new Set(scene.boxes.map((b) => b.id));
+      map.focus = focus?.find((id) => boxes.has(id));
+      const message: MapHostMessage = { type: 'scene', scene, title: `Codebase Map: ${map.folder.name}`, ...(map.focus ? { focus: map.focus } : {}) };
       void map.panel.webview.postMessage(message);
       map.rendered.fire(scene);
     } catch (error) {

@@ -23,12 +23,13 @@ import { OutputPlans } from './output-plans';
 import { BlueprintVisualScriptingApi } from '../core/api';
 import { ProjectFunctions } from './project-functions';
 import { watchWorkspaceLanguagePacks } from './workspace-packs';
-import { commandFolder } from './workspace-folders';
+import { activeFile, commandFolder } from './workspace-folders';
 import { NewProjectAnswers, newProject } from './new-project-command';
 import { SetupView } from './setup-view';
 import { ExposeAnswers, exposeFunctions } from './expose-command';
 import { CodeMapService } from './code-map-service';
 import { CodeMapPanels } from './map-panel';
+import { entityAt } from '../core/codemap/code-index';
 
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
@@ -72,6 +73,53 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       return undefined;
     }
     return codeMapPanels.show(folder);
+  }));
+  // What a command acts on in the map: the declaration at the cursor in a code editor, else the file,
+  // graph or folder (from the Explorer, or the editor's tab).
+  const mapTarget = async (uri: vscode.Uri | undefined, atCursor: boolean): Promise<{ folder: vscode.WorkspaceFolder; id: string } | undefined> => {
+    const editor = vscode.window.activeTextEditor;
+    const target = uri instanceof vscode.Uri ? uri : editor?.document.uri ?? activeFile();
+    const folder = target && vscode.workspace.getWorkspaceFolder(target);
+    if (!target || !folder) {
+      void vscode.window.showInformationMessage('Pick a file or folder of the workspace to show on its Codebase Map.');
+      return undefined;
+    }
+    const index = await codeMap.codeIndex(folder);
+    const relative = path.relative(folder.uri.fsPath, target.fsPath).split(path.sep).join('/');
+    if (atCursor && editor && editor.document.uri.toString() === target.toString()) {
+      const id = entityAt(index, relative, editor.selection.active.line + 1);
+      if (id) return { folder, id };
+    }
+    const byPath = index.entities.find((e) => e.path === relative && (e.kind === 'file' || e.kind === 'graph-file'))
+      ?? index.entities.find((e) => e.kind === 'project' && e.path === relative)
+      ?? index.entities.find((e) => e.kind === 'module' && e.path === relative);
+    const generated = index.generated.find((g) => g.path === relative)?.shownAs;
+    const id = byPath?.id ?? generated;
+    if (!id) {
+      void vscode.window.showInformationMessage(`${relative || folder.name} isn't on the Codebase Map (no code the map reads).`);
+      return undefined;
+    }
+    return { folder, id };
+  };
+  // Show in Codebase Map: the file, graph, folder or (in a code editor) declaration at the cursor.
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showInCodebaseMap', async (uri?: vscode.Uri) => {
+    const target = await mapTarget(uri, true);
+    if (!target) return undefined;
+    void codeMapPanels.show(target.folder);
+    return codeMapPanels.revealIn(target.folder, target.id);
+  }));
+  // Show Call Flow and Show Control Flow: of the function at the cursor (a file's: its top level).
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showCallFlow', async (uri?: vscode.Uri) => {
+    const target = await mapTarget(uri, true);
+    if (!target) return undefined;
+    void codeMapPanels.show(target.folder);
+    return codeMapPanels.callsIn(target.folder, target.id);
+  }));
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showControlFlow', async (uri?: vscode.Uri) => {
+    const target = await mapTarget(uri, true);
+    if (!target) return undefined;
+    void codeMapPanels.show(target.folder);
+    return codeMapPanels.flowIn(target.folder, target.id);
   }));
   // Function libraries made of graphs (docs/program-structure.md, "Functions").
   const graphLibraries = new GraphLibraries(registry, languages, nodeLibraries);

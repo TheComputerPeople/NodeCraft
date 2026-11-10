@@ -90,6 +90,20 @@ button.flow-call:hover { border-color: var(--calls); }
 #map-directions .map-direction[aria-checked="true"] { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 #map-root { color: var(--muted); }
 #map-root-clear { margin-left: 4px; height: 20px; padding: 0 6px; }
+#map-find { height: 22px; width: 160px; min-width: 80px; flex: 0 1 auto; box-sizing: border-box; padding: 0 6px; border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 4px; background: var(--vscode-input-background, #3c3c3c); color: var(--vscode-input-foreground, var(--fg)); }
+#map-find:focus { outline: 1px solid var(--accent); }
+#map-toolbar #map-filter.on { border-color: var(--accent); }
+#map-found, #map-filters { position: fixed; z-index: 20; min-width: 220px; max-width: 340px; max-height: 60vh; overflow: auto; margin: 0; padding: 4px; list-style: none; background: var(--vscode-editorWidget-background, var(--panel)); border: 1px solid var(--vscode-editorWidget-border, var(--border)); border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+#map-found[hidden], #map-filters[hidden] { display: none; }
+.map-found-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; padding: 3px 6px; border-radius: 3px; cursor: pointer; }
+.map-found-item.active, .map-found-item:hover { background: var(--vscode-list-activeSelectionBackground, color-mix(in srgb, var(--accent) 45%, transparent)); color: var(--vscode-list-activeSelectionForeground, var(--fg)); }
+.map-found-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-found-kind { color: var(--muted); font-size: 11px; }
+.map-found-where { grid-column: 1 / -1; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-found-none { padding: 3px 6px; color: var(--muted); }
+#map-filters fieldset { border: 0; margin: 0 0 4px; padding: 2px 4px; }
+#map-filters legend { padding: 0; color: var(--muted); font-size: 11px; }
+#map-filters label { display: block; padding: 1px 0; cursor: pointer; }
 
 .map-arrow { fill: none; stroke: var(--imports); opacity: .75; }
 .map-arrow.calls { stroke: var(--calls); }

@@ -384,6 +384,33 @@ Across all four:
   - **The webview:** the bar, Back and Forward, block code, call chips (a resolved one opens, an unresolved one doesn't), labels, the ⧉ button on functions only, and double-click to the code.
   - **Integration:** inside VS Code, a sample function's flowchart.
 10. Interaction: Find, filters, focus, path, breadcrumb, minimap, the Explorer, editor and graph editor commands, the Blueprint bridges, and the accessible tree view.
+
+### Built (step 10, part 1): Find, filters, and the commands
+
+- **Find** (`src/core/codemap/find.ts`, pure) searches the whole index, not just the boxes on screen.
+  - **Where:** the toolbar's box; Ctrl+F puts the cursor there.
+  - **Ranking:** the name itself first, then names starting with what's typed, then a word inside a name (camelCase or snake_case), then anywhere. Within a rank, declarations come before files, and files before folders and packages. At most 30 are listed.
+  - **Picking:** each result says what it is and where (its file and line). Arrow keys and Enter pick one, or the mouse does.
+- **Revealing** what was picked:
+  - **The view:** a type, function or graph is shown in the structure; a file, folder or package in the architecture (or the structure, if that's open).
+  - **The boxes:** those holding it are opened, and it's centred, zoomed to be readable, and selected, so its arrows are drawn.
+  - **Filters:** any that hide it are cleared.
+- **Filters** hide, with everything inside them:
+  - languages (a language hides its packages too);
+  - projects, when there's more than one;
+  - the external packages;
+  - tests: test folders, files named as tests are (`*.test.ts`, `*_test.go`, `test_*.py`, `*Tests.cs`…) and test entry points.
+  - **Where:** the toolbar's Filter button. It says how many filters are on, and the views (the call flow too) leave out what they hide.
+  - *(Changed from the design's "project, language and kind": the kinds worth hiding turned out to be packages and tests. Hiding functions or types is what closing their boxes already does.)*
+- **Commands:**
+  - **Show in Codebase Map** reveals a file or graph. It's on the Explorer's menu for files, the graph editor's title bar, and the code editor's menu, where it shows the declaration at the cursor.
+  - **Show Call Flow** and **Show Control Flow** are on the code editor's menu. They start from the function at the cursor (or, outside one, the file).
+  - A folder keeps **Show Codebase Map**, which opens its map as it was left.
+  - A command run before the map has loaded waits for it, so the map opens straight on what was asked.
+- **Tested:**
+  - **Rules:** ranking and the limit; what counts as a test; what each filter hides; the options offered; the architecture and call flow without what's hidden.
+  - **The webview:** Ctrl+F, an answer to an older query ignored, picking with the keys and the mouse, "Nothing found", centring a focused box, and the filter panel (its groups, what it sends, the button's count, closing it).
+  - **Integration:** inside VS Code, Show in Codebase Map on a graph file and at a method in the editor, and Show Call Flow and Show Control Flow at the cursor.
 11. The exit check, docs, the parity checklist and status.
 
 ## Not in this phase

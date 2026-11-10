@@ -1,5 +1,6 @@
 // The messages between the Codebase Map's webview (src/map/map.ts) and the extension
 // (src/extension/map-panel.ts).
+import type { FoundEntity, MapFilters } from './find';
 import type { LaidScene, MapMode } from './scene';
 
 // ready: the page loaded; toggle: open or close a box (or show a box's "N more…", or explore a call
@@ -17,12 +18,21 @@ export type MapMessage =
   // openLine: show the code at a line of the flowchart's file.
   | { type: 'flow'; id: string }
   | { type: 'history'; direction: 'back' | 'forward' }
-  | { type: 'openLine'; line: number };
+  | { type: 'openLine'; line: number }
+  // find: the index's entities named like `query` (answered by 'found'); reveal: show an entity on
+  // the map (its box opened up to, centred and selected); filters: what to hide.
+  | { type: 'find'; query: string }
+  | { type: 'reveal'; id: string }
+  | { type: 'filters'; filters: MapFilters };
 
-// scene: the laid-out map to draw; status: a line for the toolbar (while reading the code).
+// scene: the laid-out map to draw (with `focus`, the box to centre and select); status: a line for
+// the toolbar (while reading the code); found: what Find found.
 export interface MapHostMessage {
-  type: 'scene' | 'status';
+  type: 'scene' | 'status' | 'found';
   scene?: LaidScene;
+  focus?: string;
   title?: string;
   text?: string;
+  query?: string;
+  results?: FoundEntity[];
 }

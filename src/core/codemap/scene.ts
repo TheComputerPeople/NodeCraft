@@ -5,6 +5,7 @@
 // the extension lays the scene out (ELK, map-layout.ts) and the map's webview draws it.
 import { CodeIndex, Entity, EntityKind } from './code-index';
 import type { FlowContext } from './flow-scene';
+import { MapFilters, filterOptions, hiddenBy } from './find';
 
 // architecture: projects, folders and files, with their imports (importers above what they import);
 // structure: the types in them with their members, and inheritance (parents above children);
@@ -18,6 +19,8 @@ export interface MapView {
   calls?: { root?: string; direction?: 'callees' | 'callers'; explored?: string[] };
   // The function whose control flow is shown, and the flowcharts opened before and after it.
   flow?: { id: string; back?: string[]; forward?: string[] };
+  // What's hidden (languages, projects, external packages, tests).
+  filters?: MapFilters;
   // Boxes the user opened.
   expanded: string[];
   // Boxes whose children are all shown, past the usual limit ("N more…" was opened).
@@ -89,10 +92,18 @@ export interface LiftedArrow extends SceneArrow {
   cycle?: boolean;
 }
 
+// What the filters can choose from: the languages and projects present.
+export interface FilterOptions {
+  languages: string[];
+  projects: { id: string; label: string }[];
+}
+
 export interface Scene {
   mode: MapMode;
   calls?: CallFlowContext;
   flow?: FlowContext;
+  options?: FilterOptions;
+  filters?: MapFilters;
   boxes: SceneBox[];
   // Every arrow between the boxes that show its ends.
   arrows: SceneArrow[];
@@ -136,7 +147,9 @@ export function buildScene(index: CodeIndex, view: MapView): Scene {
   const parentOf = (e: Entity): string | undefined => e.parent ?? (e.kind === 'external' ? EXTERNALS : undefined);
   const children = new Map<string, Entity[]>();
   const roots: Entity[] = [];
+  const hidden = hiddenBy(index, view.filters);
   for (const e of index.entities) {
+    if (hidden.has(e.id)) continue;
     const parent = parentOf(e);
     if (parent) children.set(parent, [...(children.get(parent) ?? []), e]);
     else roots.push(e);
@@ -188,8 +201,9 @@ export function buildScene(index: CodeIndex, view: MapView): Scene {
   for (const root of roots) show(root);
   if (children.has(EXTERNALS)) show({ id: EXTERNALS, kind: 'externals', name: 'External packages' });
 
-  // Each entity's visible box: its own, else its nearest shown ancestor.
+  // Each entity's visible box: its own, else its nearest shown ancestor; none for a hidden one.
   const visibleOf = (id: string): string | undefined => {
+    if (hidden.has(id)) return undefined;
     if (shownAs.has(id)) return shownAs.get(id);
     const e = byId.get(id);
     const parent = e ? parentOf(e) : undefined;
@@ -224,7 +238,7 @@ export function buildScene(index: CodeIndex, view: MapView): Scene {
   const sceneArrows = [...arrows.values()];
   const lifted = liftArrows(boxes, sceneArrows);
   markCycles(boxes, lifted, 'imports');
-  return { mode, boxes, arrows: sceneArrows, lifted };
+  return { mode, boxes, arrows: sceneArrows, lifted, options: filterOptions(index), ...(view.filters ? { filters: view.filters } : {}) };
 }
 
 // A type's members (its methods and nested types), or a graph file's graphs, for its box.
@@ -352,6 +366,8 @@ export interface LaidScene {
   mode: MapMode;
   calls?: CallFlowContext;
   flow?: FlowContext;
+  options?: FilterOptions;
+  filters?: MapFilters;
   width: number;
   height: number;
   boxes: LaidBox[];

@@ -138,6 +138,22 @@
         "icon": "$(type-hierarchy)"
       },
       {
+        "command": "blueprintVisualScripting.showInCodebaseMap",
+        "title": "Show in Codebase Map",
+        "category": "Blueprint Visual Scripting",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "blueprintVisualScripting.showCallFlow",
+        "title": "Show Call Flow",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.showControlFlow",
+        "title": "Show Control Flow",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
         "command": "blueprintVisualScripting.graphBack",
         "title": "Back to the Previous Graph",
         "category": "Blueprint Visual Scripting"
@@ -263,6 +279,11 @@
           "command": "blueprintVisualScripting.runTests",
           "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor",
           "group": "navigation@3"
+        },
+        {
+          "command": "blueprintVisualScripting.showInCodebaseMap",
+          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor",
+          "group": "navigation@4"
         }
       ],
       "explorer/context": [
@@ -275,6 +296,11 @@
           "command": "blueprintVisualScripting.showCodebaseMap",
           "when": "explorerResourceIsFolder",
           "group": "blueprint@1"
+        },
+        {
+          "command": "blueprintVisualScripting.showInCodebaseMap",
+          "when": "!explorerResourceIsFolder && resourceExtname =~ /^\\.(ts|mts|cts|tsx|js|mjs|cjs|jsx|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php|vgraph)$/",
+          "group": "blueprint@4"
         },
         {
           "command": "blueprintVisualScripting.exposeFunctions",
@@ -312,6 +338,21 @@
           "command": "blueprintVisualScripting.exposeFunctions",
           "when": "resourceExtname =~ /^\\.(ts|mts|cts|js|mjs|cjs|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
           "group": "blueprint@0"
+        },
+        {
+          "command": "blueprintVisualScripting.showInCodebaseMap",
+          "when": "resourceExtname =~ /^\\.(ts|mts|cts|tsx|js|mjs|cjs|jsx|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
+          "group": "blueprint@1"
+        },
+        {
+          "command": "blueprintVisualScripting.showCallFlow",
+          "when": "resourceExtname =~ /^\\.(ts|mts|cts|tsx|js|mjs|cjs|jsx|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
+          "group": "blueprint@2"
+        },
+        {
+          "command": "blueprintVisualScripting.showControlFlow",
+          "when": "resourceExtname =~ /^\\.(ts|mts|cts|tsx|js|mjs|cjs|jsx|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
+          "group": "blueprint@3"
         }
       ],
       "commandPalette": [

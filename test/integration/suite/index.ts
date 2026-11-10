@@ -188,6 +188,35 @@ test('Show Codebase Map draws the folder, and opening a box shows what it holds'
   }
 });
 
+// docs/codebase-map.md, Part 3: Show in Codebase Map, Show Call Flow and Show Control Flow, from a
+// file in the Explorer or the function at the cursor.
+test('Show in Codebase Map reveals a file, or the function at the cursor; the flows start from it', async () => {
+  const folder = vscode.workspace.workspaceFolders![0];
+  type Revealed = { scene: { mode: string; boxes: { id: string }[] }; focus?: string } | undefined;
+  try {
+    const game = await vscode.commands.executeCommand<Revealed>('blueprintVisualScripting.showInCodebaseMap', vscode.Uri.joinPath(folder.uri, 'arena', 'Game.vgraph'));
+    assert.equal(game?.focus, 'g:arena/Game.vgraph', 'the graph file is centred and selected');
+    assert.equal(game?.scene.mode, 'architecture');
+    const dojo = await vscode.window.showTextDocument(vscode.Uri.joinPath(folder.uri, 'node-authoring', 'lib', 'dojo.ts'));
+    dojo.selection = new vscode.Selection(21, 4, 21, 4);
+    const train = await vscode.commands.executeCommand<Revealed>('blueprintVisualScripting.showInCodebaseMap');
+    assert.equal(train?.scene.mode, 'structure', 'a declaration is shown in the structure');
+    assert.ok(train?.focus === 's:node-authoring/lib/dojo.ts#Trainee.train' || train?.focus === 's:node-authoring/lib/dojo.ts#Trainee', `the method (or its class) is selected: ${train?.focus}`);
+    await vscode.window.showTextDocument(dojo.document);
+    const calls = await vscode.commands.executeCommand<{ mode: string; calls?: { root?: string } }>('blueprintVisualScripting.showCallFlow');
+    assert.equal(calls?.mode, 'calls');
+    assert.equal(calls?.calls?.root, 's:node-authoring/lib/dojo.ts#Trainee.train');
+    await vscode.window.showTextDocument(dojo.document);
+    const flow = await vscode.commands.executeCommand<{ mode: string; flow?: { label: string } }>('blueprintVisualScripting.showControlFlow');
+    assert.equal(flow?.mode, 'flow');
+    assert.equal(flow?.flow?.label, 'train');
+    const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
+    await api.codeMapPanels.modeIn(folder, 'architecture');
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  }
+});
+
 // docs/multi-language.md, gap 1: a repository with a TypeScript web/ and a Python api/.
 test("a new graph takes its folder's language, and the folder's setting wins", async () => {
   const folder = workspaceFile('multi').fsPath;

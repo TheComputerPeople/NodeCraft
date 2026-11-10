@@ -34,6 +34,8 @@ export function renderMapHtml({ cspSource, nonce, scriptUri, styleUri }: Webview
       </span>
       <span id="map-root"><span id="map-root-label">From the entry points</span><button id="map-root-clear" title="Start from the entry points" aria-label="Start from the entry points" hidden>×</button></span>
     </span>
+    <input id="map-find" type="search" placeholder="Find (Ctrl+F)" aria-label="Find on the map" aria-controls="map-found" aria-autocomplete="list" autocomplete="off" spellcheck="false">
+    <button id="map-filter" aria-haspopup="true" aria-expanded="false" title="Hide languages, projects, packages or tests">Filter</button>
     <button id="map-fit" title="Fit the map (Home)">Fit</button>
     <span class="map-legend" aria-label="Legend">
       <span class="legend-item" data-kind="imports">imports</span>
@@ -44,6 +46,8 @@ export function renderMapHtml({ cspSource, nonce, scriptUri, styleUri }: Webview
     </span>
     <span id="map-status" aria-live="polite">Reading the code…</span>
   </header>
+  <ul id="map-found" role="listbox" aria-label="Found" hidden></ul>
+  <div id="map-filters" role="dialog" aria-label="Filters" hidden></div>
   <main id="map-canvas" tabindex="0" aria-label="Codebase Map. Drag to pan, scroll to zoom, double-click a box to open it.">
     <div id="map-world">
       <svg id="map-arrows" aria-hidden="true"></svg>
