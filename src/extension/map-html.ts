@@ -20,6 +20,12 @@ export function renderMapHtml({ cspSource, nonce, scriptUri, styleUri }: Webview
       <button class="map-mode" data-mode="architecture" role="radio" aria-checked="true" title="Projects, folders and files, and their imports: importers above what they import">Architecture</button>
       <button class="map-mode" data-mode="structure" role="radio" aria-checked="false" title="Types and their members, and inheritance: parents above their children">Structure</button>
       <button class="map-mode" data-mode="calls" role="radio" aria-checked="false" title="What calls what, from the entry points or a function, flowing down">Call flow</button>
+      <button class="map-mode" data-mode="flow" role="radio" aria-checked="false" title="A function's control flow (choose one with its ⧉ button)">Control flow</button>
+    </span>
+    <span id="map-flow" hidden>
+      <button id="map-flow-back" title="Back to the flowchart before" aria-label="Back">&#x2190;</button>
+      <button id="map-flow-forward" title="Forward to the next flowchart" aria-label="Forward">&#x2192;</button>
+      <span id="map-flow-label"></span>
     </span>
     <span id="map-calls" hidden>
       <span id="map-directions" role="radiogroup" aria-label="Direction">

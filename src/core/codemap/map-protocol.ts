@@ -12,7 +12,12 @@ export type MapMessage =
   | { type: 'open'; id: string }
   | { type: 'mode'; mode: MapMode }
   | { type: 'calls'; id?: string }
-  | { type: 'direction'; direction: 'callees' | 'callers' };
+  | { type: 'direction'; direction: 'callees' | 'callers' }
+  // flow: show a function's control flow; history: Back or Forward through the flowcharts opened;
+  // openLine: show the code at a line of the flowchart's file.
+  | { type: 'flow'; id: string }
+  | { type: 'history'; direction: 'back' | 'forward' }
+  | { type: 'openLine'; line: number };
 
 // scene: the laid-out map to draw; status: a line for the toolbar (while reading the code).
 export interface MapHostMessage {

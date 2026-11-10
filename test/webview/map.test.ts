@@ -158,6 +158,52 @@ describe('the Codebase Map webview', () => {
     assert.equal(await e.page.isVisible('#map-root-clear'), false);
   });
 
+  test("a flowchart: its boxes' code and calls, labelled arrows, Back and Forward, and the code at a box's line", async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const flow: LaidScene = {
+      mode: 'flow', flow: { id: 's:a.ts#total', label: 'total', path: 'a.ts', line: 1, back: true, forward: false }, width: 400, height: 300,
+      boxes: [
+        { id: 'n:n0', label: 'total', kind: 'flow', flowKind: 'start', detail: 'a.ts:1', count: 0, expandable: false, expanded: false, path: 'a.ts', line: 1, x: 0, y: 0, width: 120, height: 44 },
+        { id: 'n:n2', label: '!items', kind: 'flow', flowKind: 'decision', detail: 'line 2', count: 0, expandable: false, expanded: false, path: 'a.ts', line: 2, x: 0, y: 80, width: 140, height: 44 },
+        { id: 'n:n4', label: 'line 4', kind: 'flow', flowKind: 'block', count: 0, expandable: false, expanded: false, path: 'a.ts', line: 4, x: 0, y: 160, width: 200, height: 74, members: ['sum(i)'], calls: [{ label: 'sum', id: 's:a.ts#sum' }, { label: 'emit?' }] }
+      ],
+      arrows: [
+        { id: 'flow:0', from: 'n:n0', to: 'n:n2', kind: 'flow', weight: 1, certain: true, points: [{ x: 60, y: 44 }, { x: 60, y: 80 }] },
+        { id: 'flow:1', from: 'n:n2', to: 'n:n4', kind: 'flow', weight: 1, certain: true, label: 'false', points: [{ x: 60, y: 124 }, { x: 60, y: 160 }] }
+      ],
+      details: []
+    };
+    await e.send({ type: 'scene', scene: flow } as never);
+    assert.equal(await e.page.isVisible('#map-flow'), true);
+    assert.equal(await e.page.textContent('#map-flow-label'), 'Control flow of total');
+    assert.equal(await e.page.isDisabled('#map-flow-back'), false);
+    assert.equal(await e.page.isDisabled('#map-flow-forward'), true);
+    assert.equal(await e.count('.map-box.flow-decision'), 1);
+    assert.deepEqual(await e.page.$$eval('.map-box[data-id="n:n4"] .flow-code li', (els) => els.map((el) => el.textContent)), ['sum(i)']);
+    assert.deepEqual(await e.page.$$eval('.map-arrow-label', (els) => els.map((el) => el.textContent)), ['false']);
+    // A call with a callee opens its flowchart; one the index couldn't resolve doesn't.
+    assert.equal(await e.count('.map-box[data-id="n:n4"] button.flow-call'), 1);
+    assert.equal(await e.count('.map-box[data-id="n:n4"] span.flow-call'), 1);
+    await e.page.click('.map-box[data-id="n:n4"] button.flow-call');
+    await e.page.click('#map-flow-back');
+    await e.page.dblclick('.map-box[data-id="n:n2"] .map-name');
+    assert.deepEqual(await posted(e), [
+      JSON.stringify({ type: 'flow', id: 's:a.ts#sum' }), JSON.stringify({ type: 'history', direction: 'back' }), JSON.stringify({ type: 'openLine', line: 2 })
+    ]);
+  });
+
+  test('a function box opens its control flow', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const fnScene: LaidScene = { ...SCENE, boxes: [...SCENE.boxes, { id: 's:b.ts#g', parent: 'p:', label: 'g', kind: 'function', count: 0, expandable: false, expanded: false, x: 200, y: 150, width: 120, height: 48, path: 'b.ts', line: 3 }] };
+    await e.send({ type: 'scene', scene: fnScene } as never);
+    assert.equal(await e.count('.map-box[data-id="f:a.ts"] .map-flow-open'), 0, 'a file has no flowchart');
+    await e.page.hover('.map-box[data-id="s:b.ts#g"]');
+    await e.page.click('.map-box[data-id="s:b.ts#g"] .map-flow-open');
+    assert.deepEqual(await posted(e), [JSON.stringify({ type: 'flow', id: 's:b.ts#g' })]);
+  });
+
   test('import cycles are marked on their boxes and arrows', async (t) => {
     const e = await open(t);
     if (!e) return;

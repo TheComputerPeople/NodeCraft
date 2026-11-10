@@ -46,6 +46,7 @@ export function fit(): void {
 const CODE_KINDS = new Set(['file', 'graph-file', 'graph', 'type', 'function']);
 // Boxes the call flow can start from.
 const CALLABLE_KINDS = new Set(['function', 'type', 'graph', 'graph-file', 'file']);
+const FLOW_SHAPES: Record<string, string> = { decision: '◇', loop: '↻', switch: '⋔', catch: '⚠', finally: '⤓', return: '⏎', throw: '⚡', break: '⇥', continue: '↺', await: '⏳' };
 
 const KIND_NAMES: Record<string, string> = {
   project: 'project', module: 'folder', file: 'file', 'graph-file': 'graph file', graph: 'graph', type: 'type', function: 'function', external: 'package', externals: 'packages', more: ''
@@ -53,7 +54,7 @@ const KIND_NAMES: Record<string, string> = {
 
 function renderBox(box: LaidBox): HTMLElement {
   const el = document.createElement('div');
-  el.className = `map-box${box.expanded && scene?.mode !== 'calls' ? ' open' : ''}${box.entry ? ' entry' : ''}${box.cycle ? ' cycle' : ''}${box.root ? ' root' : ''}`;
+  el.className = `map-box${box.expanded && scene?.mode !== 'calls' ? ' open' : ''}${box.entry ? ' entry' : ''}${box.cycle ? ' cycle' : ''}${box.root ? ' root' : ''}${box.flowKind ? ` flow-${box.flowKind}` : ''}`;
   el.dataset.id = box.id;
   el.dataset.kind = box.kind;
   el.style.left = `${box.x}px`;
@@ -61,6 +62,7 @@ function renderBox(box: LaidBox): HTMLElement {
   el.style.width = `${box.width}px`;
   el.style.height = `${box.height}px`;
   el.tabIndex = -1;
+  if (box.kind === 'flow') return renderFlowBox(box, el);
   el.setAttribute('role', 'treeitem');
   if (box.expandable) el.setAttribute('aria-expanded', String(box.expanded));
   const what = box.detail && box.kind !== 'project' ? box.detail : KIND_NAMES[box.kind] ?? box.kind;
@@ -82,6 +84,19 @@ function renderBox(box: LaidBox): HTMLElement {
   name.className = 'map-name';
   name.textContent = box.label;
   head.appendChild(name);
+  // A function's control flow.
+  if (box.kind === 'function') {
+    const flow = document.createElement('button');
+    flow.className = 'map-flow-open';
+    flow.textContent = '⧉';
+    flow.title = 'Show its control flow';
+    flow.setAttribute('aria-label', `Show the control flow of ${box.label}`);
+    flow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      post({ type: 'flow', id: box.id });
+    });
+    head.appendChild(flow);
+  }
   // The call flow from a box (in the call flow itself, from another box).
   if (CALLABLE_KINDS.has(box.kind) && !box.root) {
     const calls = document.createElement('button');
@@ -168,6 +183,67 @@ function arrowPath(arrow: LaidArrow): string {
   return `M ${a.x} ${a.y} C ${a.x} ${a.y + dy}, ${b.x} ${b.y - dy}, ${b.x} ${b.y}`;
 }
 
+// A flowchart's box: a mark for what it is, its code (or condition, or loop head), and the calls made
+// on its lines, each opening its callee's flowchart. Double-clicking it shows its code.
+function renderFlowBox(box: LaidBox, el: HTMLElement): HTMLElement {
+  el.title = `${box.label}${box.detail ? `\n${box.detail}` : ''}${box.line ? `\nDouble-click: the code at line ${box.line}` : ''}`;
+  const head = document.createElement('div');
+  head.className = 'map-head';
+  const mark = FLOW_SHAPES[box.flowKind ?? ''];
+  if (mark) {
+    const shape = document.createElement('span');
+    shape.className = 'flow-mark';
+    shape.textContent = mark;
+    head.appendChild(shape);
+  }
+  const name = document.createElement('span');
+  name.className = 'map-name';
+  name.textContent = box.label;
+  head.appendChild(name);
+  el.appendChild(head);
+  if (box.detail) {
+    const detail = document.createElement('div');
+    detail.className = 'map-detail';
+    detail.textContent = box.detail;
+    el.appendChild(detail);
+  }
+  if (box.members?.length) {
+    const code = document.createElement('ul');
+    code.className = 'map-members flow-code';
+    for (const line of box.members) {
+      const item = document.createElement('li');
+      item.textContent = line;
+      code.appendChild(item);
+    }
+    el.appendChild(code);
+  }
+  if (box.calls?.length) {
+    const calls = document.createElement('div');
+    calls.className = 'flow-calls';
+    for (const call of box.calls) {
+      const chip = document.createElement(call.id ? 'button' : 'span');
+      chip.className = 'flow-call';
+      chip.textContent = `→ ${call.label}`;
+      if (call.id) {
+        chip.title = `Open ${call.label.replace(/\?$/, '')}'s control flow`;
+        chip.addEventListener('click', (e) => {
+          e.stopPropagation();
+          post({ type: 'flow', id: call.id! });
+        });
+      } else {
+        chip.title = 'The index couldn\'t tell which function this is';
+      }
+      calls.appendChild(chip);
+    }
+    el.appendChild(calls);
+  }
+  el.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    if (box.line) post({ type: 'openLine', line: box.line });
+  });
+  return el;
+}
+
 // The arrows of the box pointed at (or selected), and of everything inside it, drawn over the map
 // (which dims), with the boxes they reach marked.
 function highlight(): void {
@@ -222,7 +298,7 @@ function render(): void {
   const ns = 'http://www.w3.org/2000/svg';
   arrowsSvg.textContent = '';
   const defs = document.createElementNS(ns, 'defs');
-  for (const kind of ['imports', 'calls', 'inherits']) {
+  for (const kind of ['imports', 'calls', 'inherits', 'flow']) {
     const marker = document.createElementNS(ns, 'marker');
     marker.setAttribute('id', `head-${kind}`);
     marker.setAttribute('viewBox', '0 0 10 10');
@@ -238,7 +314,25 @@ function render(): void {
     defs.appendChild(marker);
   }
   arrowsSvg.appendChild(defs);
-  for (const arrow of scene.arrows) arrowsSvg.appendChild(arrowElement(arrow));
+  for (const arrow of scene.arrows) {
+    arrowsSvg.appendChild(arrowElement(arrow));
+    // A flowchart's arrows say which way they go (true, false, a case, loop, done…), by their end,
+    // where branches that leave a decision together have parted.
+    if (arrow.label && arrow.points.length) {
+      const end = arrow.points[arrow.points.length - 1];
+      const before = arrow.points[arrow.points.length - 2] ?? end;
+      const text = document.createElementNS(ns, 'text');
+      text.setAttribute('class', `map-arrow-label${arrow.label === 'true' ? ' yes' : arrow.label === 'false' ? ' no' : ''}`);
+      // Just before the box it reaches: beside a last stretch going down, above one going across.
+      const down = Math.abs(before.x - end.x) < Math.abs(before.y - end.y);
+      text.setAttribute('x', String(end.x + (down ? 5 : (before.x < end.x ? -6 : 6))));
+      // (An arrow coming back up into a box ends at its bottom: the label goes below it.)
+      text.setAttribute('y', String(end.y + (down ? (before.y > end.y ? 12 : -6) : -4)));
+      if (!down && before.x < end.x) text.setAttribute('text-anchor', 'end');
+      text.textContent = arrow.label;
+      arrowsSvg.appendChild(text);
+    }
+  }
   // A selected box that's gone (closed, or its file deleted) is no longer selected.
   if (selected && !scene.boxes.some((b) => b.id === selected)) selected = undefined;
   highlight();
@@ -287,6 +381,12 @@ canvas.addEventListener('wheel', (e) => {
   applyView();
 }, { passive: false });
 element<HTMLElement>('map-fit').addEventListener('click', fit);
+const flowBar = element<HTMLElement>('map-flow');
+const flowLabel = element<HTMLElement>('map-flow-label');
+const flowBack = element<HTMLButtonElement>('map-flow-back');
+const flowForward = element<HTMLButtonElement>('map-flow-forward');
+flowBack.addEventListener('click', () => post({ type: 'history', direction: 'back' }));
+flowForward.addEventListener('click', () => post({ type: 'history', direction: 'forward' }));
 const callsBar = element<HTMLElement>('map-calls');
 const rootLabel = element<HTMLElement>('map-root-label');
 const rootClear = element<HTMLElement>('map-root-clear');
@@ -298,7 +398,7 @@ for (const button of document.querySelectorAll<HTMLElement>('.map-direction')) {
 }
 for (const button of document.querySelectorAll<HTMLElement>('.map-mode')) {
   button.addEventListener('click', () => {
-    if (button.getAttribute('aria-checked') !== 'true') post({ type: 'mode', mode: button.dataset.mode as 'architecture' | 'structure' | 'calls' });
+    if (button.getAttribute('aria-checked') !== 'true') post({ type: 'mode', mode: button.dataset.mode as 'architecture' | 'structure' | 'calls' | 'flow' });
   });
 }
 canvas.addEventListener('keydown', (e) => {
@@ -316,6 +416,13 @@ window.addEventListener('message', (event: MessageEvent<MapHostMessage>) => {
     scene = message.scene;
     if (message.title) titleEl.textContent = message.title;
     for (const button of document.querySelectorAll<HTMLElement>('.map-mode')) button.setAttribute('aria-checked', String(button.dataset.mode === scene.mode));
+    // The flowchart's bar: Back, Forward, and whose flow it is.
+    flowBar.hidden = scene.mode !== 'flow';
+    if (scene.flow) {
+      flowLabel.textContent = `Control flow of ${scene.flow.label}`;
+      flowBack.disabled = !scene.flow.back;
+      flowForward.disabled = !scene.flow.forward;
+    }
     // The call flow's bar: its direction and where it starts.
     callsBar.hidden = scene.mode !== 'calls';
     if (scene.calls) {

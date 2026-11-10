@@ -360,6 +360,29 @@ Across all four:
   - **The webview:** the bar, its direction and its ×, the ⤵ button, a start without one.
   - **Integration:** inside VS Code, the sample's game starts the flow from the entry points, and calls on from its event graph.
 9. Control flow.
+
+### Built (step 9)
+
+- **Control flow** is the map's fourth view (`src/core/codemap/flow-scene.ts`, pure). It shows one function's flowchart (step 5), drawn from the file as the editor has it.
+- **Opening it:** a function box's ⧉ button opens its flowchart from any view.
+  - A type's flowchart is its constructor's.
+  - A graph opens in the graph editor, since its flow is the graph itself.
+  - Anything else without a body opens its code.
+- **Boxes:**
+  - **Kinds:** each kind has a look. The start and end are rounded; decisions and switches are amber with ◇; loops are blue with ↻; returns, throws and catches have their own colours; break and continue are dashed.
+  - **Content:** a block shows its lines of code (up to eight), and a decision or loop its condition or head.
+  - **Calls:** each box lists the certain calls made on its lines, as chips. A decision's are its condition's. A chip opens the callee's flowchart.
+  - **Code:** double-clicking a box shows the code at its line.
+- **Arrows** carry their labels (true and false in green and red, a case, loop, done, exception), placed where the arrow arrives, after branches leaving one decision have parted. Arrows going back up (a loop's return, continue) are dotted. A flowchart's arrows are drawn as they are, not lifted, so two between the same boxes keep their own labels.
+- **Back and Forward** go through the flowcharts opened, from the bar in the toolbar. *(Changed from the design, which opened a callee "in a new tab": the map has one canvas, and Back and Forward fit the breadcrumb and history step 10 gives the whole map.)*
+- **Found by looking:**
+  - **Hidden boxes:** the first screenshot of a real function (`factsFromMatches`, 114 boxes) showed only arrows. The boxes were placed before their size was set.
+  - **Overlapping labels:** true and false labels at the arrows' starts overlapped where branches leave a decision together.
+  - **Misleading guesses:** guessed calls listed in boxes (`list.push()` taken for a workspace's `push`) misled where the box is one place in the code. So boxes list only certain calls, and the call flow keeps the guesses.
+- **Tested:**
+  - **The view's rules:** boxes and labelled arrows, back arrows, block lines, the calls of a box and of a decision.
+  - **The webview:** the bar, Back and Forward, block code, call chips (a resolved one opens, an unresolved one doesn't), labels, the ⧉ button on functions only, and double-click to the code.
+  - **Integration:** inside VS Code, a sample function's flowchart.
 10. Interaction: Find, filters, focus, path, breadcrumb, minimap, the Explorer, editor and graph editor commands, the Blueprint bridges, and the accessible tree view.
 11. The exit check, docs, the parity checklist and status.
 

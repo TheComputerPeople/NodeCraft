@@ -4,24 +4,29 @@
 // for, and lifted to the boxes that hold their ends side by side, which is what the map draws. Pure:
 // the extension lays the scene out (ELK, map-layout.ts) and the map's webview draws it.
 import { CodeIndex, Entity, EntityKind } from './code-index';
+import type { FlowContext } from './flow-scene';
 
 // architecture: projects, folders and files, with their imports (importers above what they import);
 // structure: the types in them with their members, and inheritance (parents above children);
-// calls: the call flow from a function or the entry points (call-scene.ts).
-export type MapMode = 'architecture' | 'structure' | 'calls';
+// calls: the call flow from a function or the entry points (call-scene.ts); flow: one function's
+// control flow (flow-scene.ts).
+export type MapMode = 'architecture' | 'structure' | 'calls' | 'flow';
 
 export interface MapView {
   mode?: MapMode;
   // The call flow's start (absent: the entry points), its direction, and the boxes opened in it.
   calls?: { root?: string; direction?: 'callees' | 'callers'; explored?: string[] };
+  // The function whose control flow is shown, and the flowcharts opened before and after it.
+  flow?: { id: string; back?: string[]; forward?: string[] };
   // Boxes the user opened.
   expanded: string[];
   // Boxes whose children are all shown, past the usual limit ("N more…" was opened).
   unlimited?: string[];
 }
 
-// unresolved: a call the index couldn't resolve (too many candidates), in the call flow.
-export type BoxKind = EntityKind | 'externals' | 'more' | 'unresolved';
+// unresolved: a call the index couldn't resolve (too many candidates), in the call flow; flow: a box
+// of a flowchart.
+export type BoxKind = EntityKind | 'externals' | 'more' | 'unresolved' | 'flow';
 
 export interface SceneBox {
   id: string;
@@ -45,6 +50,9 @@ export interface SceneBox {
   cycle?: boolean;
   // The call flow's start.
   root?: boolean;
+  // A flowchart's box: what it is (decision, loop, return…), and the calls made on its lines.
+  flowKind?: string;
+  calls?: { label: string; id?: string }[];
 }
 
 // What the call flow shows: its direction, its start (absent: the entry points), how many starts.
@@ -55,7 +63,7 @@ export interface CallFlowContext {
   starts: number;
 }
 
-export type ArrowKind = 'imports' | 'calls' | 'inherits';
+export type ArrowKind = 'imports' | 'calls' | 'inherits' | 'flow';
 
 export interface SceneArrow {
   id: string;
@@ -67,6 +75,10 @@ export interface SceneArrow {
   weight: number;
   // False when any of them is a guess (an ambiguous call).
   certain: boolean;
+  // A flowchart's arrow: its label (true, false, a case, loop, done, exception), and whether it goes
+  // back up (a loop's return, continue).
+  label?: string;
+  back?: boolean;
 }
 
 // An arrow lifted to the boxes holding its ends side by side, in their nearest common open box.
@@ -80,6 +92,7 @@ export interface LiftedArrow extends SceneArrow {
 export interface Scene {
   mode: MapMode;
   calls?: CallFlowContext;
+  flow?: FlowContext;
   boxes: SceneBox[];
   // Every arrow between the boxes that show its ends.
   arrows: SceneArrow[];
@@ -332,14 +345,13 @@ export interface LaidBox extends SceneBox {
 export interface LaidArrow extends SceneArrow {
   // ELK's route (orthogonal), or the two ends of a curve the map draws; from `from` to `to`.
   points: { x: number; y: number }[];
-  // Pointing back up (against the layers: a cycle): drawn around the side.
-  back?: boolean;
   cycle?: boolean;
 }
 
 export interface LaidScene {
   mode: MapMode;
   calls?: CallFlowContext;
+  flow?: FlowContext;
   width: number;
   height: number;
   boxes: LaidBox[];
@@ -359,6 +371,12 @@ export function boxSize(box: SceneBox): { width: number; height: number } {
     ...(box.members ?? []).map((m) => m.length * 0.9)
   );
   const members = box.members?.length ?? 0;
+  if (box.kind === 'flow') {
+    // A flowchart's box: its code at full width (up to a limit), and a row of its calls.
+    const code = Math.max(box.label.length * 7.8, ...(box.members ?? []).map((m) => m.length * 7.2), (box.calls ?? []).reduce((w, c) => w + c.label.length * 7 + 22, 0));
+    const short = box.flowKind === 'start' || box.flowKind === 'end' || box.flowKind === 'break' || box.flowKind === 'continue';
+    return { width: Math.round(Math.min(520, Math.max(short ? 90 : 120, code + 32))), height: (box.detail ? 44 : 30) + (members ? members * 15 + 6 : 0) + (box.calls?.length ? 22 : 0) };
+  }
   return { width: Math.round(Math.min(360, Math.max(110, longest * 7.8 + 60))), height: 48 + (members ? members * 15 + 6 : 0) };
 }
 

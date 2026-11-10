@@ -4,7 +4,9 @@
 import * as vscode from 'vscode';
 import type { MapHostMessage, MapMessage } from '../core/codemap/map-protocol';
 import { buildCallScene } from '../core/codemap/call-scene';
-import { LaidScene, MapMode, MapView, buildScene, defaultView } from '../core/codemap/scene';
+import { CodeIndex, Entity } from '../core/codemap/code-index';
+import { buildFlowScene, callsOf } from '../core/codemap/flow-scene';
+import { LaidScene, MapMode, MapView, Scene, buildScene, defaultView } from '../core/codemap/scene';
 import { CodeMapService } from './code-map-service';
 import { renderMapHtml } from './map-html';
 import { MapLayout } from './map-layout';
@@ -75,6 +77,12 @@ export class CodeMapPanels implements vscode.Disposable {
         await this.showCalls(map, message.id);
       } else if (message.type === 'direction') {
         await this.update(map, { ...map.view, calls: { ...map.view.calls, direction: message.direction, explored: [] } });
+      } else if (message.type === 'flow') {
+        await this.showFlow(map, message.id);
+      } else if (message.type === 'history') {
+        await this.history(map, message.direction);
+      } else if (message.type === 'openLine') {
+        await this.openLine(map, message.line);
       }
     }, undefined, this.disposables);
     return firstScene;
@@ -97,6 +105,63 @@ export class CodeMapPanels implements vscode.Disposable {
     if (direction) map.view = { ...map.view, calls: { ...map.view.calls, direction } };
     await this.showCalls(map, id);
     return next;
+  }
+
+  // A function's control flow; the flowchart shown before goes on the Back list. A graph opens in the
+  // graph editor (its flow is the graph itself); a type's flow is its constructor's; anything else
+  // without a flowchart opens its code.
+  async showFlow(map: OpenMap, id: string): Promise<void> {
+    const index = await this.codeMap.codeIndex(map.folder);
+    const target = flowTarget(index, id);
+    if (!target) {
+      await this.open(map, id);
+      return;
+    }
+    const current = map.view.mode === 'flow' ? map.view.flow?.id : undefined;
+    const back = [...(map.view.flow?.back ?? []), ...(current && current !== target ? [current] : [])];
+    await this.update(map, { ...map.view, mode: 'flow', flow: { id: target, back: current ? back : map.view.flow?.back ?? [], forward: [] } });
+  }
+
+  async flowIn(folder: vscode.WorkspaceFolder, id: string): Promise<LaidScene | undefined> {
+    const map = this.maps.get(folder.uri.toString());
+    if (!map) return undefined;
+    const next = nextScene(map);
+    await this.showFlow(map, id);
+    return next;
+  }
+
+  // Back or Forward through the flowcharts opened.
+  private async history(map: OpenMap, direction: 'back' | 'forward'): Promise<void> {
+    const flow = map.view.flow;
+    if (!flow) return;
+    const from = direction === 'back' ? [...(flow.back ?? [])] : [...(flow.forward ?? [])];
+    const to = from.pop();
+    if (!to) return;
+    const other = direction === 'back' ? [...(flow.forward ?? []), flow.id] : [...(flow.back ?? []), flow.id];
+    await this.update(map, { ...map.view, mode: 'flow', flow: direction === 'back' ? { id: to, back: from, forward: other } : { id: to, back: other, forward: from } });
+  }
+
+  // The flowchart's file at a line.
+  private async openLine(map: OpenMap, line: number): Promise<void> {
+    const index = await this.codeMap.codeIndex(map.folder);
+    const entity = index.entities.find((e) => e.id === map.view.flow?.id);
+    if (!entity?.path) return;
+    const uri = vscode.Uri.joinPath(map.folder.uri, ...entity.path.split('/'));
+    const at = Math.max(0, line - 1);
+    await vscode.window.showTextDocument(uri, { viewColumn: vscode.ViewColumn.Beside, selection: new vscode.Range(at, 0, at, 0) });
+  }
+
+  // The flowchart scene of the view's function.
+  private async flowScene(map: OpenMap, index: CodeIndex): Promise<Scene> {
+    const flow = map.view.flow;
+    const entity = flow && index.entities.find((e) => e.id === flow.id);
+    if (!flow || !entity?.path) throw new Error('Choose a function to see its control flow (its ⧉ button, in any view).');
+    const chart = await this.codeMap.flowchart(map.folder, entity.path, entity.line ?? 1);
+    if (!chart) throw new Error(`${entity.name} has no body to draw.`);
+    return buildFlowScene(chart, callsOf(index, entity.id), {
+      id: entity.id, label: entity.name, path: entity.path, line: entity.line ?? 1,
+      back: (flow.back?.length ?? 0) > 0, forward: (flow.forward?.length ?? 0) > 0
+    });
   }
 
   private async update(map: OpenMap, view: MapView): Promise<void> {
@@ -155,7 +220,8 @@ export class CodeMapPanels implements vscode.Disposable {
     const number = ++map.render;
     try {
       const index = await this.codeMap.codeIndex(map.folder);
-      const scene = await this.layout.layout(map.view.mode === 'calls' ? buildCallScene(index, map.view) : buildScene(index, map.view));
+      const built = map.view.mode === 'calls' ? buildCallScene(index, map.view) : map.view.mode === 'flow' ? await this.flowScene(map, index) : buildScene(index, map.view);
+      const scene = await this.layout.layout(built);
       if (number !== map.render) return;
       map.scene = scene;
       const message: MapHostMessage = { type: 'scene', scene, title: `Codebase Map: ${map.folder.name}` };
@@ -206,4 +272,17 @@ function nextScene(map: OpenMap): Promise<LaidScene> {
       else resolve(outcome);
     });
   });
+}
+
+// The function whose flowchart a box stands for: itself, a type's constructor; undefined for what has
+// no flowchart (a graph, a file, a package).
+function flowTarget(index: CodeIndex, id: string): string | undefined {
+  const entity = index.entities.find((e) => e.id === id);
+  if (!entity) return undefined;
+  if (entity.kind === 'function') return entity.id;
+  if (entity.kind === 'type') {
+    const constructor = index.entities.find((e: Entity) => e.parent === entity.id && e.kind === 'function' && (e.detail === 'constructor' || /^(constructor|__init__|initialize|_init|new|__construct)$/.test(e.name) || e.name === entity.name));
+    return constructor?.id;
+  }
+  return undefined;
 }

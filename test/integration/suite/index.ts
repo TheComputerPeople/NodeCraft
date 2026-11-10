@@ -177,6 +177,11 @@ test('Show Codebase Map draws the folder, and opening a box shows what it holds'
     const fromGame = await api.codeMapPanels.callsIn(folder, 'g:arena/Game.vgraph#EventGraph');
     assert.ok(fromGame?.boxes.some((b) => b.id === 'g:arena/Game.vgraph#EventGraph' && b.root));
     assert.ok(fromGame?.arrows.some((a) => a.kind === 'calls' && a.from === 'g:arena/Game.vgraph#EventGraph'), 'the game calls on, down the map');
+    // A function's control flow, from its code.
+    const train = await api.codeMapPanels.flowIn(folder, 's:node-authoring/lib/dojo.ts#Trainee.train');
+    assert.equal(train?.mode, 'flow');
+    assert.equal(train?.flow?.label, 'train');
+    assert.deepEqual(train?.boxes.map((b) => b.flowKind), ['start', 'end', 'block', 'return']);
     await api.codeMapPanels.modeIn(folder, 'architecture');
   } finally {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -856,6 +861,7 @@ interface ExtensionInternals {
       boxes: { id: string; root?: boolean }[];
       arrows: { kind: string; from: string; to: string }[];
     } | undefined>;
+    flowIn(folder: vscode.WorkspaceFolder, id: string): Promise<{ mode: string; flow?: { label: string }; boxes: { flowKind?: string }[] } | undefined>;
     modeIn(folder: vscode.WorkspaceFolder, mode: 'architecture' | 'structure' | 'calls'): Promise<{
       mode: string;
       boxes: { id: string; members?: string[] }[];

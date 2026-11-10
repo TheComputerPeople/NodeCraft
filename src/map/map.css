@@ -53,6 +53,36 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); c
 .map-box:hover > .map-head > .map-calls, .map-box:focus-within > .map-head > .map-calls { visibility: visible; }
 .map-box.root { box-shadow: 0 0 0 2px var(--accent); }
 .map-box[data-kind="unresolved"] { --kind: transparent; border-style: dashed; background: transparent; color: var(--muted); }
+/* Flowcharts: each kind of box its own look. */
+.map-box[data-kind="flow"] { --kind: #6b8e9f; }
+.map-box.flow-start, .map-box.flow-end { --kind: #4caf50; border-radius: 18px; }
+.map-box.flow-decision, .map-box.flow-switch { --kind: #d0a03c; background: color-mix(in srgb, #d0a03c 12%, var(--panel)); }
+.map-box.flow-loop { --kind: #3d8fe0; background: color-mix(in srgb, #3d8fe0 12%, var(--panel)); }
+.map-box.flow-return { --kind: #2fa38f; }
+.map-box.flow-throw, .map-box.flow-catch { --kind: #e05252; }
+.map-box.flow-await { --kind: #a271d4; }
+.map-box.flow-break, .map-box.flow-continue { --kind: #8a8a8a; border-style: dashed; border-top-style: solid; }
+.map-box[data-kind="flow"] .map-name { font-family: var(--vscode-editor-font-family, monospace); font-weight: 500; }
+.flow-mark { color: var(--kind); font-size: 12px; }
+.flow-code { border-top: 0; margin-top: 0; white-space: pre; }
+.flow-calls { display: flex; flex-wrap: nowrap; gap: 4px; padding: 2px 6px; overflow: hidden; }
+.flow-call { border: 1px solid var(--border); border-radius: 9px; background: transparent; color: var(--calls); font-size: 10.5px; padding: 0 6px; white-space: nowrap; cursor: pointer; }
+span.flow-call { cursor: default; color: var(--muted); border-style: dashed; }
+button.flow-call:hover { border-color: var(--calls); }
+.map-arrow.flow { stroke: var(--muted); }
+.map-arrow.flow.back { stroke-dasharray: 3 3; }
+.map-arrowhead.flow { fill: var(--muted); }
+.map-arrow-label { fill: var(--muted); font-size: 10.5px; }
+.map-arrow-label.yes { fill: #4caf50; }
+.map-arrow-label.no { fill: #e05252; }
+.map-flow-open { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 2px; visibility: hidden; }
+.map-box:hover > .map-head > .map-flow-open, .map-box:focus-within > .map-head > .map-flow-open { visibility: visible; }
+.map-flow-open:hover { color: var(--accent); }
+#map-flow { display: inline-flex; align-items: center; gap: 4px; }
+#map-flow[hidden] { display: none; }
+#map-flow button { height: 22px; padding: 0 6px; }
+#map-flow button:disabled { opacity: .4; cursor: default; }
+#map-flow-label { margin-left: 4px; color: var(--muted); }
 #map-calls { display: inline-flex; align-items: center; gap: 8px; }
 #map-calls[hidden] { display: none; }
 #map-directions { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
