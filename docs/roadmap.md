@@ -364,7 +364,7 @@ Status: complete (October 2026), with the deferrals below. The exit check is sam
 Design and steps: [node-authoring.md](node-authoring.md), with what each step built.
 
 - **Deferred:**
-  - Code classes as parents of graph classes: Phase 12.
+  - Code classes as parents of graph classes: Phase 13.
   - Generic functions in C++ (templates), Go, Lua (`---@generic`) and PHP (`@template`), and generic functions with more than two type parameters.
 
 ### Phase 10: Language context
@@ -409,9 +409,23 @@ Design and steps: [project-integration.md](project-integration.md).
 
 Status: complete (November 2026), with the deferrals in project-integration.md. The exit check is in the tests: a corpus of 28 project layouts in all 12 languages (Vite and Node apps, a pnpm monorepo, src-layout and Django-shaped Python, a .NET solution, CMake, Makefile and Visual Studio C++ projects, a C file called from C++, Cargo workspaces, Maven and multi-module Gradle, Go modules and workspaces, a rock, a Godot addon, a gem and a Rails-shaped app, Composer and Laravel-shaped PHP) builds, passes each project's strictest checkers on the generated code (`tsc` strict, mypy and Pyright strict, C# analyzers with warnings as errors, `-Werror` and MSVC `/W4 /WX`, clippy's pedantic lints, `go vet` and staticcheck, `javac -Xlint:all -Werror`, PHPStan level 9, Godot's warnings as errors, RuboCop and PHP_CodeSniffer) and runs from its own entry point. New Project's project in each language builds, passes its checkers and runs. Set Up in This Project reports the corpus and its hooks make the C++ and Rust layouts build. A two-folder workspace works from both folders. Your own code becomes nodes from the Explorer too (Expose Functions as Nodes, in all 12 languages; a C or C++ source's through its header).
 
-### Phase 12: Code classes as parents
+### Phase 12: Codebase Map
 
-Goal: a graph class can extend a class written in code, as a Blueprint extends a C++ class. Decided 2026-10-29 as its own phase, after Phase 9 is merged, rather than as Phase 9's deferred work (first numbered 10; Language context and Project integration came first).
+Goal: the extension scans a project or the whole workspace and draws an interactive map of its structure and flow, flowing top to bottom, from the whole codebase down to one function's body. Asked for on 2026-11-09; Phase 11 and the graph tabs were merged first, and this phase comes before code classes as parents.
+
+Before it: declarations are read in all 12 languages (functions, classes, members) and the project model knows each project, but nothing reads imports, calls or function bodies, and nothing lays a graph out automatically.
+
+- **A code index** of the workspace: projects, modules, files, types and functions, with imports, inheritance, calls and entry points; graph files stand in for their generated code. It's cached and updated as files change, and works in Restricted Mode.
+- **Four views to drill through,** each laid out top to bottom: the architecture (projects, modules, files and their imports), the structure (types, inheritance, members), the call flow (from entry points down, or callers from above) and the control flow inside one function.
+- **Explore, with bridges into Blueprint:** read-only, with Find, filters, focus, paths, Back and Forward, opening the code, Expose as Node and Open Graph, and an accessible tree view of the same index. Blueprint graphs stay left to right.
+
+To confirm before building: tree-sitter as the parser for all 12 languages, and ELK for the layout (the extension's first runtime dependencies).
+
+Design and steps: [codebase-map.md](codebase-map.md).
+
+### Phase 13: Code classes as parents
+
+Goal: a graph class can extend a class written in code, as a Blueprint extends a C++ class. Decided 2026-10-29 as its own phase, after Phase 9 is merged, rather than as Phase 9's deferred work (first numbered 10; Language context, Project integration and the Codebase Map came first).
 
 Before it: graph classes extend other graph classes (Parent Class, overrides, Parent calls, virtual calls), and code classes' constructors, methods and properties are nodes with a Target pin (Phase 9).
 
@@ -422,7 +436,7 @@ Before it: graph classes extend other graph classes (Parent Class, overrides, Pa
 
 Design and steps: written when the phase starts.
 
-### Phase 13: Release
+### Phase 14: Release
 
 Marketplace packaging waits until the platform is complete and robust (decided 2026-10-28).
 
@@ -432,7 +446,7 @@ Marketplace packaging waits until the platform is complete and robust (decided 2
 
 ## Non-goals
 
-- **Converting code back into graphs.** Generated code is output; the graph is the source. Editing generated files by hand isn't supported (they carry a do-not-edit header and are overwritten on compile).
+- **Converting code back into graphs.** Generated code is output; the graph is the source. Editing generated files by hand isn't supported (they carry a do-not-edit header and are overwritten on compile). The Codebase Map (Phase 12) draws code as a read-only map; it never produces a graph or edits code.
 - **Reproducing the Unreal engine.** Actors, components, levels, and the Tick loop are engine features. Framework packs can provide equivalents for specific frameworks, but the core stays engine-agnostic.
 - **Running every language inside the extension.** Execution happens in the project's own toolchain; Simulate covers core nodes only.
 
@@ -500,7 +514,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | For Each Loop (with Break) | ✅ | — |
 | Structure | Structs, enums, Make/Break, Set Members, Switch on Enum, the structure and enumeration editors | ✅ (sets and map keys of structs or enums later) | — |
 | Structure | Object references: Construct, Self, Is Valid, Target pins on variables, functions, events and dispatchers | ✅ | — |
-| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents in Phase 12) | 12 |
+| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents in Phase 13) | 13 |
 | Structure | Blueprint Interfaces (implemented in Class Settings, interface calls), Cast To class or interface | ✅ (pure Cast later) | — |
 | Structure | Access (Public, Protected, Private) for variables and functions | ✅ | — |
 | Structure | Entry points: Main with command-line arguments; framework packs' events; Test Case events with Assert nodes and Run Tests | ✅ (C# tests run through Run's project, not xUnit) | — |
@@ -508,7 +522,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python, C#, C++ headers, Rust, Java, Lua, GDScript, Ruby, PHP; Go and other languages through their language server) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
-| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes in Phase 12) | 12 |
+| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes in Phase 13) | 13 |
 | Interop | Out parameters and several return values from code; latent (async) functions | ✅ (several outputs in every language but GDScript, which has none; async functions in all twelve: futures, promises and tasks; Go's channels, Lua's coroutines, PHP's Fibers, GDScript's await and Ruby's threads) | — |
 | Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ✅ (graph functions and macros in Details; code through tags and each language's deprecation marker) | — |
 | Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | ✅ (also F12 and Shift+F12; node files open at their type) | — |
@@ -517,6 +531,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Library | Blueprint Function Libraries usable from graphs in each of several languages; plugins that carry library graphs | ✅ (a library is generated for each of its languages; packages carry graphs, added with Add Blueprint Package) | — |
 | Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Rust has no inheritance or interfaces, Go no inheritance) | 6, 8 |
 | Languages | (Beyond Unreal, which owns its projects) Graphs fit any codebase: each project's build and workspace, its declared language version checked against what generated code needs, generated code that passes the project's own checkers, New Project and Set Up in This Project | ✅ (generated code for older language versions deferred) | 11 |
+| Languages | (Beyond Unreal, whose nearest is the Reference Viewer) A map of the whole codebase, top to bottom: architecture, structure, call flow and a function's control flow, with bridges into Blueprint | ⬜ | 12 |
 | Languages | (Beyond Unreal) Workspaces with graphs in several languages: a new graph takes its folder's language, structs and enums can be shared between languages, and another language's code is reached through project functions | ✅ (generated cross-language bindings deferred) | 7 |
 | Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |
 | Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |
