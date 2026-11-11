@@ -1,7 +1,7 @@
 // Functions read from project code, and how they become nodes (docs/code-as-nodes.md). Each language
 // pack's scanner produces a ModuleScan; exposeFunctions turns it into node definitions.
 import { CodeMember, CodeResults, FunctionImplementation, NodeDefinition, PinDefinition } from '../model';
-import { CODE_CLASS_PREFIX, CodeClassInfo, CodeOverridable } from '../objects';
+import { CODE_CLASS_PREFIX, CodeClassInfo, CodeOverridable, CodeSpelling } from '../objects';
 import { TypeRef } from '../types';
 
 export interface DocComment {
@@ -47,6 +47,9 @@ export interface ScannedFunction {
   abstract?: boolean;
   sealed?: boolean;
   protected?: boolean;
+  // A class's method or constructor as the code writes its types (C++, Java): an override has to
+  // repeat them, where the graph's own types would be other ones (an int, not a long).
+  spelling?: CodeSpelling;
 }
 
 // A function that can't become a node, and why.
@@ -358,7 +361,7 @@ function codeClassDefinition(cls: ScannedClass, options: ExposeOptions): NodeDef
       const def = definitionFor(m, options);
       return {
         name: m.name, inputs: dataPins(def.inputs), outputs: dataPins(def.outputs),
-        ...(m.abstract ? { abstract: true } : {}), ...(m.protected ? { protected: true } : {}), ...(m.latent ? { latent: true } : {})
+        ...(m.abstract ? { abstract: true } : {}), ...(m.protected ? { protected: true } : {}), ...(m.latent ? { latent: true } : {}), ...(m.spelling ? { spelling: m.spelling } : {})
       };
     });
   const id = codeClassId(options.language, options.path, cls.name);
@@ -366,7 +369,7 @@ function codeClassDefinition(cls: ScannedClass, options: ExposeOptions): NodeDef
     kind: 'code-class', id, type: cls.type.id, ...(cls.base ? { base: cls.base.id } : {}),
     name: cls.name, title: simple, language: options.language, path: options.path, ...(options.module ? { module: options.module } : {}),
     ...(cls.abstract ? { abstract: true } : {}),
-    ...(cls.init?.params.length ? { init: dataPins(definitionFor(cls.init, options).inputs) } : {}),
+    ...(cls.init?.params.length ? { init: dataPins(definitionFor(cls.init, options).inputs), ...(cls.init.spelling ? { initSpelling: cls.init.spelling.params } : {}) } : {}),
     overridable,
     members: [...new Set([...cls.methods.map((m) => m.name), ...cls.properties.map((p) => p.name)])]
   };

@@ -355,6 +355,20 @@ export function codeParentInfo(program: Pick<IrProgram, 'imports' | 'classInfo'>
   return undefined;
 }
 
+// Whether a function reads one of its parameters, in its body or its event's stores. (C++ warns of
+// an override's parameter it doesn't.)
+export function readsParam(fn: IrFunction, id: string): boolean {
+  if (fn.event?.stores.some((s) => s.param === id)) return true;
+  const visit = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.some(visit);
+    if (!value || typeof value !== 'object') return false;
+    const node = value as Record<string, unknown>;
+    if (node.kind === 'param' && node.function === fn.id && node.id === id) return true;
+    return Object.values(node).some(visit);
+  };
+  return visit(fn.body);
+}
+
 // The data pins of a function's or event's inputs: the parameters a call passes, in order.
 export function dataPins<P extends { kind: string; type?: TypeRef }>(pins: readonly P[] | undefined): P[] {
   return pins?.filter((p) => p.kind === 'data') ?? [];

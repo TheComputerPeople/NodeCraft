@@ -48,6 +48,11 @@ template <class T> T& code_object(const std::any& value) {
     throw std::runtime_error("Accessed None");
 }
 
+// A graph class's object, whose class extends a class from the code (docs/code-classes-as-parents.md).
+template <class T, class U> T& code_object(const std::shared_ptr<U>& object) {
+    return static_cast<T&>(deref(object));
+}
+
 inline bool is_valid(const std::any& value) {
     return value.has_value();
 }

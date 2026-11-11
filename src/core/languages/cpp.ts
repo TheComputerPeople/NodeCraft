@@ -1,7 +1,7 @@
 // C++ pack (docs/language-breadth.md, "C++"): a header and a source file per graph, generated from
 // Visual IR, and run through a small scaffold built with the first C++20 compiler found.
-import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, canComplete } from '../compiler/ir';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent } from '../compiler/names';
+import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, classInfo, codeParentInfo, exprType, interfaceInfo, isCodeClassId, programClassSpec, readsParam, userTypes, canComplete } from '../compiler/ir';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CompileDiagnostic } from '../compiler/diagnostics';
 import { relativeSpecifier } from '../compiler/module-paths';
@@ -257,6 +257,7 @@ const cppGenerator: CodeGenerator = {
   placement: cppPlacement,
   snippetLanguages: ['cpp'],
   importLanguages: ['cpp'],
+  codeParents: true,
   outputFileName: (graphFileName) => `${graphFileName}.cpp`,
   companionFileNames: (graphFileName) => [cppHeaderName(graphFileName)],
   generate: (program, options) => new CppEmitter(program, options).emit(),
@@ -287,6 +288,15 @@ export const cppPack: LanguagePack = {
   // Functions marked @blueprint in headers: generated code includes the header to call them.
   importer: { extensions: ['.h', '.hpp', '.hh', '.hxx'], scan: scanCpp }
 };
+
+// A member function's parameter: `text`, its type as the code writes it (an override's); `unused`
+// when the body doesn't read it.
+interface CppParam {
+  name: string;
+  type?: TypeRef;
+  text?: string;
+  unused?: boolean;
+}
 
 interface MethodSpec {
   // In the class (header): `virtual double twice(double n)`.
@@ -328,7 +338,8 @@ class CppEmitter {
       this.names = classScope(this.className);
       const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
       this.classNames.set(`object:${program.className}`, own);
-      for (const f of program.functions) this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
+      // An override event takes the code's name for its method, which the code parent's names hold.
+      for (const f of program.functions) this.functionNames.set(f.id, f.event && f.code ? f.code : (f.event ? own.events : own.functions).get(f.id)!);
       for (const [id, name] of own.variables) this.memberNames.set(id, name);
       for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     }
@@ -368,8 +379,11 @@ class CppEmitter {
       out.line(`}  // namespace ${this.className}`);
       return this.finish(this.libraryHeader());
     }
+    // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay (a class
+    // from the code has none).
     const parent = this.program.classInfo?.parent;
-    if (!parent || this.program.hasStart) this.method(parent ? 'void start() override' : 'virtual void start()', 'void', 'start', [], 'public', () => this.statements(this.program.start));
+    const graphParent = !!parent && !isCodeClassId(parent);
+    if (!graphParent || this.program.hasStart) this.method(graphParent ? 'void start() override' : 'virtual void start()', 'void', 'start', [], 'public', () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
     // The interface functions the class gives no body: they do nothing and return defaults.
     for (const { type, stubs } of this.program.interfaces ?? []) {
@@ -447,9 +461,13 @@ class CppEmitter {
     const declared = this.program.imports.filter((i) => i.userType?.kind === 'class' && i.id !== parent).map((i) => i.name);
     for (const name of [...new Set(declared)]) lines.push(`class ${name};`);
     if (declared.length) lines.push('');
-    const bases = [parent ? `public ${this.userTypeName(parent)}` : 'public vgraph::Object', ...(this.program.interfaces ?? []).map((i) => `public ${this.userTypeName(i.type.id)}`)];
+    // A class straight from the code's is an Object too, so Self can be a shared reference to it.
+    const bases = [...(parent ? [`public ${this.userTypeName(parent)}`] : []), ...(!parent || isCodeClassId(parent) ? ['public vgraph::Object'] : []), ...(this.program.interfaces ?? []).map((i) => `public ${this.userTypeName(i.type.id)}`)];
     lines.push(`class ${this.className} : ${bases.join(', ')} {`);
     const sections: Record<'public' | 'protected' | 'private', string[]> = { public: [], protected: [], private: [] };
+    // The code parent's constructor, inherited (through the graph parents too): Construct passes
+    // its arguments (docs/code-classes-as-parents.md).
+    if (parent && codeParentInfo(this.program)?.init?.length) sections.public.push(`using ${this.userTypeName(parent)}::${this.userTypeName(parent).split('::').pop()};`);
     for (const m of this.program.members.filter((x) => !x.function)) sections[m.access ?? 'public'].push(`${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
     for (const d of this.program.dispatchers ?? []) sections.public.push(`vgraph::Dispatcher<${d.params.map((p) => this.typeName(p.type)).join(', ')}> ${this.dispatcherNames.get(d.id)};`);
     sections.public.push(`virtual ~${this.className}() = default;`);
@@ -514,7 +532,7 @@ class CppEmitter {
   // implements, and the parent class.
   private headerIncludes(): string[] {
     const parent = this.program.classInfo?.parent;
-    return this.includesOf(this.program.imports.filter((i) => i.userType && (i.userType.kind !== 'class' || i.id === parent)));
+    return this.includesOf(this.program.imports.filter((i) => i.id === parent || (i.userType && i.userType.kind !== 'class')));
   }
 
   // The source includes every other generated header it uses (classes it constructs or calls,
@@ -539,12 +557,13 @@ class CppEmitter {
 
   // ---- Methods ------------------------------------------------------------------------------
 
-  // A member function: declared in the header (`declaration`), defined in the source.
-  private method(declaration: string, returns: string, name: string, params: { name: string; type?: TypeRef }[], access: MethodSpec['access'], body: () => void): void {
+  // A member function: declared in the header (`declaration`), defined in the source. `suffix`:
+  // what follows its parameters there (an override's `noexcept`).
+  private method(declaration: string, returns: string, name: string, params: CppParam[], access: MethodSpec['access'], body: () => void, suffix = ''): void {
     this.methods.push({ declaration, access });
     this.out.endNode();
     const qualified = this.library ? name : `${this.className}::${name}`;
-    this.out.line(`${returns} ${qualified}(${this.paramList(params)}) {`);
+    this.out.line(`${returns} ${qualified}(${this.paramList(params, true)})${suffix ? ` ${suffix}` : ''} {`);
     this.out.indent();
     body();
     this.out.dedent();
@@ -552,31 +571,50 @@ class CppEmitter {
     this.out.line();
   }
 
-  private paramList(params: { name: string; type?: TypeRef }[]): string {
-    return params.map((p) => `${this.typeName(p.type)} ${p.name}`).join(', ');
+  // In a definition, a parameter the body doesn't read is [[maybe_unused]] (-Wextra warns of it).
+  private paramList(params: CppParam[], definition = false): string {
+    return params.map((p) => `${definition && p.unused ? '[[maybe_unused]] ' : ''}${p.text ?? this.typeName(p.type)} ${p.name}`).join(', ');
   }
 
   // A function graph as a member function (a free function in a library): its locals and its
   // nodes' outputs are variables of each call.
   private functionMethod(fn: IrFunction): void {
     const scope = new NameScope(RESERVED);
-    const params = fn.params.map((p) => {
-      const name = scope.claim(p.name, 'camel');
+    // A method of the code's keeps its parameters' names and the code's types for them: C++
+    // overrides only a member function of the same parameter types and qualifiers.
+    const spelling = fn.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === fn.code)?.spelling : undefined;
+    const params: CppParam[] = fn.params.map((p, i) => {
+      const name = scope.claim(p.name, fn.code ? 'keep' : 'camel');
       this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
-      return { name, type: p.type };
+      return { name, type: p.type, ...(spelling?.params[i] ? { text: spelling.params[i] } : {}), ...(fn.code && !readsParam(fn, p.id) ? { unused: true } : {}) };
     });
     const locals = this.program.members.filter((m) => m.function === fn.id);
     for (const m of locals) this.memberNames.set(m.id, scope.claim(m.name, 'camel'));
     const slots = this.program.slots.filter((x) => x.function === fn.id);
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name, 'keep', '_'));
-    const returns = this.resultType(fn.outputs.map((o) => o.type));
+    const returns = spelling?.returns ?? this.resultType(fn.outputs.map((o) => o.type));
     const name = this.functionNames.get(fn.id)!;
     const access = this.library ? 'public' : fn.access ?? 'public';
     // Private functions can't be overridden; the others can.
     const qualifier = this.library || access === 'private' ? '' : fn.overrides ? '' : 'virtual ';
-    const declaration = `${qualifier}${returns} ${name}(${this.paramList(params)})${!this.library && fn.overrides ? ' override' : ''}`;
+    const qualifiers = spelling?.qualifiers ?? '';
+    const declaration = `${qualifier}${returns} ${name}(${this.paramList(params)})${qualifiers ? ` ${qualifiers}` : ''}${!this.library && fn.overrides ? ' override' : ''}`;
     if (fn.description) this.out.line(`// ${fn.description.replace(/\s+/g, ' ')}`);
-    this.method(declaration, returns, name, params, access, () => {
+    let bodyName = name;
+    if (/\bconst\b/.test(qualifiers)) {
+      // A const member function's override is const too. The graph's function may change the object
+      // as any other can, so it runs in a member function that isn't: the object is never const
+      // (Construct makes it with make_shared), so casting const away is sound.
+      bodyName = this.names.claim(`${name} graph`, 'camel');
+      this.methods.push({ declaration, access });
+      this.out.endNode();
+      this.out.line(`${returns} ${this.className}::${name}(${this.paramList(params.map((p) => ({ ...p, unused: false })), true)}) ${qualifiers} {`);
+      this.out.line(`    return const_cast<${this.className}*>(this)->${bodyName}(${params.map((p) => p.name).join(', ')});`);
+      this.out.line('}');
+      this.out.line();
+    }
+    const own = bodyName === name;
+    this.method(own ? declaration : `${returns} ${bodyName}(${this.paramList(params)})`, returns, bodyName, params, own ? access : 'private', () => {
       // A custom event keeps the inputs other flows read, as Unreal keeps an event's outputs.
       for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotNames.get(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)};`);
       for (const m of locals) this.out.line(`${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
@@ -585,7 +623,7 @@ class CppEmitter {
       // Reaching the end without a Return Node returns the outputs' defaults.
       // Only where it can be reached (a Branch whose sides both return can't complete).
       if (fn.outputs.length && canComplete(fn.body)) this.out.line(`return ${this.resultValue(fn.outputs.map((o) => this.defaultFor(o.type)))};`);
-    });
+    }, own ? qualifiers : '');
   }
 
   private resultType(types: (TypeRef | undefined)[]): string {
@@ -832,16 +870,19 @@ class CppEmitter {
           out.line(`${parent ? this.userTypeName(parent) : 'vgraph::Object'}::start();`);
           break;
         }
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === s.function);
+        // A graph ancestor's function, or the code parent's method (its name as the code has it).
+        const fn = s.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === s.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === s.function);
         const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `${parent ? this.userTypeName(parent) : ''}::${this.parentFunctionName(s.function!)}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        const call = `${parent ? this.userTypeName(parent) : ''}::${s.code ? s.function : this.parentFunctionName(s.function!)}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
         this.results(call, s.results, outputs.length);
         break;
       }
       case 'construct': {
+        // The code parent's constructor takes its arguments (docs/code-classes-as-parents.md).
         const slot = this.slotNames.get(s.slot)!;
-        out.line(`${slot} = std::make_shared<${this.userTypeName(s.type)}>();`);
+        const init = codeParentInfo(this.program, s.type)?.init ?? [];
+        out.line(`${slot} = std::make_shared<${this.userTypeName(s.type)}>(${(s.args ?? []).map((a, i) => this.coerce(a, init[i]?.type)).join(', ')});`);
         out.line(`${slot}->start();`);
         break;
       }
@@ -945,10 +986,10 @@ class CppEmitter {
         return e.output ? `std::get<${(fn?.outputs.filter((p) => p.kind === 'data') ?? []).findIndex((o) => o.id === e.output)}>(${call})` : call;
       }
       case 'parentCall': {
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const fn = e.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === e.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
         const parent = this.program.classInfo?.parent;
-        const call = `${parent ? this.userTypeName(parent) : ''}::${this.parentFunctionName(e.function)}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        const call = `${parent ? this.userTypeName(parent) : ''}::${e.code ? e.function : this.parentFunctionName(e.function)}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
         return e.output ? `std::get<${(fn?.outputs.filter((p) => p.kind === 'data') ?? []).findIndex((o) => o.id === e.output)}>(${call})` : call;
       }
       case 'isValid':
@@ -993,10 +1034,11 @@ class CppEmitter {
     const member = imported.member;
     if (!member) return `${qualified(imported)}(${list})`;
     // A code class's member (docs/node-authoring.md, gap 2): its objects travel in a std::any, as
-    // their class and each class it extends (vgraph::code_new, vgraph::code_object).
+    // their class and each class it extends (vgraph::code_new, vgraph::code_object). Self is one
+    // (docs/code-classes-as-parents.md); a graph class's object is one through its shared pointer.
     if (member.kind === 'construct') return `vgraph::code_new<${[imported, ...(imported.bases ?? [])].map(qualified).join(', ')}>(${list})`;
     const [target, ...rest] = args;
-    const object = `vgraph::code_object<${qualified(imported)}>(${this.expr(target)})`;
+    const object = target.kind === 'self' ? '(*this)' : `vgraph::code_object<${qualified(imported)}>(${this.expr(target)})`;
     const values = [...rest.map((a, i) => this.coerce(a, signature?.params[i + 1]?.type)), ...extra].join(', ');
     return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
@@ -1062,6 +1104,9 @@ class CppEmitter {
     const seen = new Set<string>();
     for (let parent = info?.parent; parent && !seen.has(parent);) {
       seen.add(parent);
+      // A class from the code ends the chain: its members keep the code's names.
+      const code = isCodeClassId(parent) ? this.program.codeClasses?.find((c) => c.id === parent) : undefined;
+      if (code) chain.push(codeInheritedMembers(code));
       const ancestor = classInfo(this.program, parent);
       const names = ancestor && this.membersOf(parent);
       if (!ancestor || !names) break;

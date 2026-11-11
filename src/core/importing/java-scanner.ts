@@ -245,7 +245,7 @@ export function scanJava(source: string): ModuleScan {
           if (!modifiers.has('public')) memberSkip(tokens[typeStart].text, "it isn't public, so generated code can't call it");
           else if (at(close, 'throws')) memberSkip(tokens[typeStart].text, "constructors that declare checked exceptions can't be nodes yet");
           else if ('reason' in params) memberSkip(tokens[typeStart].text, params.reason);
-          else if (!cls.init || isMarked(memberDoc)) cls.init = { name: tokens[typeStart].text, line: tokens[first].line, params, returns: null, doc: memberDoc };
+          else if (!cls.init || isMarked(memberDoc)) cls.init = { name: tokens[typeStart].text, line: tokens[first].line, params, returns: null, doc: memberDoc, spelling: { params: paramTexts(k + 1, close - 1) } };
           j = skipMember(close);
           continue;
         }
@@ -276,7 +276,7 @@ export function scanJava(source: string): ModuleScan {
           else {
             const params = parseParams(k + 1, close - 1);
             if ('reason' in params) memberSkip(name, params.reason);
-            else cls.methods.push({ name, line: tokens[first].line, params, ...returnsOf(returnText), doc: memberDoc, ...inheritance, ...(isProtected ? { protected: true } : {}) });
+            else cls.methods.push({ name, line: tokens[first].line, params, ...returnsOf(returnText), doc: memberDoc, ...inheritance, ...(isProtected ? { protected: true } : {}), spelling: { params: paramTexts(k + 1, close - 1), returns: returnText } });
           }
           j = skipMember(close);
           continue;
@@ -310,7 +310,11 @@ export function scanJava(source: string): ModuleScan {
   };
   const qualified = (container: string) => (pkg ? `${pkg}.${container}` : container);
 
-  const parseParams = (start: number, end: number): ScannedParam[] | { reason: string } => {
+  // Each parameter's type as written (after its annotations and final), for an override to repeat.
+  const paramTexts = (start: number, end: number): string[] => paramPieces(start, end).map(([s, b]) => typeText(s, b - 1));
+
+  // The parameters' token ranges, each without its annotations and final.
+  const paramPieces = (start: number, end: number): [number, number][] => {
     if (end <= start) return [];
     const pieces: [number, number][] = [];
     let from = start;
@@ -328,8 +332,7 @@ export function scanJava(source: string): ModuleScan {
       }
     }
     if (from < end) pieces.push([from, end]);
-    const params: ScannedParam[] = [];
-    for (const [a, b] of pieces) {
+    return pieces.map(([a, b]) => {
       let s = a;
       for (;;) {
         const annotation = skipAnnotation(s);
@@ -337,6 +340,13 @@ export function scanJava(source: string): ModuleScan {
         else if (at(s, 'final')) s++;
         else break;
       }
+      return [s, b];
+    });
+  };
+
+  const parseParams = (start: number, end: number): ScannedParam[] | { reason: string } => {
+    const params: ScannedParam[] = [];
+    for (const [s, b] of paramPieces(start, end)) {
       if (text(s, b).includes('...')) return { reason: 'varargs methods can\'t be nodes' };
       if (tokens[b - 1]?.kind !== 'name' || b - 1 <= s) return { reason: 'a parameter has no name, so it can\'t be a pin' };
       params.push({ name: tokens[b - 1].text, type: mapJavaType(typeText(s, b - 1)) });

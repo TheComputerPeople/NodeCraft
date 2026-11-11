@@ -409,6 +409,8 @@ export interface CodeClassInfo {
   abstract?: boolean;
   // Its constructor's parameters: Construct <GraphClass>'s inputs, passed on to it.
   init?: PinDefinition[];
+  // Their types as the code writes them (C++, Java: CodeSpelling).
+  initSpelling?: string[];
   // The methods a graph class may override: marked `@blueprint overridable`, or abstract; never one
   // the language seals. Their data pins.
   overridable: CodeOverridable[];
@@ -424,6 +426,16 @@ export interface CodeOverridable {
   abstract?: boolean;
   protected?: boolean;
   latent?: boolean;
+  // Its types as the code writes them (C++, Java), which an override repeats.
+  spelling?: CodeSpelling;
+}
+
+// A code method's types as the code writes them: each parameter's, the return type's, and (C++)
+// what follows the parameters (`const`, `noexcept`).
+export interface CodeSpelling {
+  params: string[];
+  returns?: string;
+  qualifiers?: string;
 }
 
 export const CODE_CLASS_PREFIX = 'code:';

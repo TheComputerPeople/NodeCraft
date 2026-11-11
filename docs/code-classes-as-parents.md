@@ -58,7 +58,7 @@ Each language extends the class as its code would, and imports it as its member 
 | TypeScript, JavaScript | `extends Actor` | a method of the same name (`override` in TypeScript) | `super.hit(…)` | `constructor(…) { super(…); }` |
 | Python | `class Knight(Actor)` | a method of the same name | `super().hit(…)` | `__init__` calling `super().__init__(…)` |
 | C# | `: Actor` | `override` (the method is `virtual` or `abstract`) | `base.Hit(…)` | `: base(…)` |
-| C++ | `: public Actor` | `override` (the method is `virtual`) | `Actor::hit(…)` | the base's constructor in its initializer list |
+| C++ | `: public Actor` | `override` (the method is `virtual`) | `Actor::hit(…)` | the base's, inherited (`using Actor::Actor;`) |
 | Java | `extends Actor` | `@Override` | `super.hit(…)` | `super(…)` first |
 | Lua | the class table's `__index` is the parent; `new` builds on the parent's | a function of the same name | `Actor.hit(self, …)` | the parent's `new`, then the class's metatable |
 | GDScript | `extends "res://…/actor.gd"` | a function of the same name | `super.hit(…)` | `_init` calling `super(…)` |
@@ -202,6 +202,30 @@ The three choices this design needs. The user confirmed all three as recommended
   - **Subclasses.** A Squire extending Knight passes the name on and overrides hit again; its Parent: hit reaches Knight's.
   - **Rules:** an abstract class when describe is left, the names check, and Compile's new errors.
 5. Generated code in C++ and Java.
+
+### Built (step 5)
+
+- **What the generated class does** in Java and C++:
+
+  | | Java | C++ |
+  |---|---|---|
+  | Extends | `extends game.Actor` | `: public ::game::Actor, public vgraph::Object` (Object, so Self is a shared reference) |
+  | Overrides | `@Override public void hit(int damage)` | `void hit(int damage) override` |
+  | Parent: <Method> | `super.hit(damage)` | `::game::Actor::hit(damage)` |
+  | Constructor | `public Knight(String name) { super(name); }` | the code's, inherited: `using ::game::Actor::Actor;` |
+  | Abstract methods left | `public abstract class` | abstract already: C++ needs no keyword |
+
+  - **The code's own types.** An override repeats the code's spelling of its signature (`CodeSpelling`, read by the C++ and Java scanners for class methods and constructors). The graph's own types would declare a different method: its ints are a `long` in Java and a `long long` in C++, which hide an `int` one rather than override it. The Java constructor's parameters are the code's too.
+  - **C++ qualifiers.** `const` and `noexcept` follow the parameters as in the code. A `const` method's override is `const`, and runs the graph in a member function that isn't (`describeGraph`): the graph may set variables or call other functions there, as in any function. The object is never const (Construct makes it with `make_shared`), so casting const away is sound.
+  - **C++ warnings.** A parameter the graph doesn't read is `[[maybe_unused]]` (`readsParam`), as `-Wextra` asks. The inherited constructor declares no parameters to shadow a member.
+  - **Members on Self.** A code member node with its Target unwired is `this` in Java and `(*this)` in C++, with no cast, since `-Xlint` reports a redundant one. A graph class's object on a code class's Target is no cast in Java either, and in C++ `vgraph::code_object` takes its shared pointer (a new overload in the runtime).
+  - **Including the parent.** The C++ header includes the code class's header, as it includes a graph parent's.
+- **Tested:**
+  - **Both run it.** The Actor program prints the same five lines in Java and C++ as in the other targets. The Java Actor's hit takes an `int` and its describe is protected; the C++ Actor's describe is protected and `const`.
+  - **The strictest settings** of the corpus's Java and C++ projects: `javac -Xlint:all -Werror`, and g++ with `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror`.
+  - **Subclasses.** Squire passes the name on (Java's constructor, C++'s `using ::Knight::Knight;`), and its Parent: hit reaches Knight's.
+  - **Rules:** the scanners' spelling of the Java and C++ Actors' methods and constructor, a Java class leaving describe abstract, and Compile's "not yet" error, now shown for PHP.
+  - **Not yet:** a C++ method with out parameters (`int&`) has no spelling, so its override wouldn't match. In both languages, a type from the code's namespace or package is written as the code writes it, which only resolves where the code's name does.
 6. Generated code in Lua, GDScript, Ruby and PHP.
 7. Rust and Go reported; Simulate's message.
 8. Debugging across the boundary.

@@ -365,7 +365,12 @@ export function scanCpp(source: string): ModuleScan {
           const returns = mapReturn(returnText);
           if ('reason' in params) skip(name, params.reason);
           else if ('reason' in returns) skip(name, returns.reason);
-          else cls.methods.push({ ...withFuture(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment }, outs, returnText), returnText, outs), ...inheritance });
+          else {
+            // As the code writes it, for an override to repeat: the types, and `const` or `noexcept` after them.
+            const qualifiers = after.replace(/\{[\s\S]*$/, '').replace(/=\s*0\s*;?\s*$/, '').replace(/;\s*$/, '').replace(/\b(override|final)\b/g, '').replace(/\s+/g, ' ').trim();
+            const spelling = outs.length ? {} : { spelling: { params: paramTexts(open + 1, close - 1), returns: normalize(returnText), ...(qualifiers ? { qualifiers } : {}) } };
+            cls.methods.push({ ...withFuture(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment }, outs, returnText), returnText, outs), ...inheritance, ...spelling });
+          }
         }
         i = declEnd;
         continue;
@@ -418,9 +423,14 @@ export function scanCpp(source: string): ModuleScan {
     return undefined;
   };
 
-  // Non-const reference parameters (`int& count`) go into `outs` (docs/node-authoring.md, gap 3)
-  // when it's given, as Unreal takes them for out parameters.
-  const parseParams = (start: number, end: number, outs?: Out[]): ScannedParam[] | { reason: string } => {
+  // Each parameter's type as written (without its name or default), for an override to repeat.
+  const paramTexts = (start: number, end: number): string[] => paramPieces(start, end).map(([a, b]) => {
+    const eq = tokens.slice(a, b).findIndex((t) => t.text === '=' && t.kind === 'punct');
+    return normalize(text(a, (eq < 0 ? b : a + eq) - 1));
+  });
+
+  // The parameters' token ranges, split at top-level commas.
+  const paramPieces = (start: number, end: number): [number, number][] => {
     if (end <= start || (end - start === 1 && at(start, 'void'))) return [];
     const pieces: [number, number][] = [];
     let from = start;
@@ -440,8 +450,14 @@ export function scanCpp(source: string): ModuleScan {
       }
     }
     pieces.push([from, end]);
+    return pieces;
+  };
+
+  // Non-const reference parameters (`int& count`) go into `outs` (docs/node-authoring.md, gap 3)
+  // when it's given, as Unreal takes them for out parameters.
+  const parseParams = (start: number, end: number, outs?: Out[]): ScannedParam[] | { reason: string } => {
     const params: ScannedParam[] = [];
-    for (const [a, b] of pieces) {
+    for (const [a, b] of paramPieces(start, end)) {
       if (at(a, '...') || text(a, b).includes('...')) return { reason: 'variadic functions can\'t be nodes' };
       const eq = tokens.slice(a, b).findIndex((t) => t.text === '=' && t.kind === 'punct');
       const declEnd = eq < 0 ? b : a + eq;

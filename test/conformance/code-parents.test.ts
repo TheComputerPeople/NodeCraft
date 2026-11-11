@@ -1,5 +1,5 @@
-// Code classes as parents (docs/code-classes-as-parents.md), in TypeScript, JavaScript, Python and
-// C#: an Actor from the project's code, with a constructor taking a name, a health property, a
+// Code classes as parents (docs/code-classes-as-parents.md), in TypeScript, JavaScript, Python, C#,
+// Java and C++: an Actor from the project's code, with a constructor taking a name, a health property, a
 // method (greet), an overridable method (hit), an abstract one (describe) and a template method
 // (turn) calling both. A Knight graph extends it: its Start sets health and greets on Self, Event
 // hit says so and calls Parent: hit, and describe is a function. A Game graph constructs a Knight
@@ -140,6 +140,97 @@ const MODULES: Record<string, { path: string; text: string; module?: string }> =
       '}',
       ''
     ].join('\n')
+  },
+  // hit takes an int (the graph's ints are longs) and describe is protected: the override repeats
+  // the code's types and access.
+  java: {
+    path: 'lib/game/Actor.java',
+    module: 'game',
+    text: [
+      'package game;',
+      '',
+      '/** @blueprint */',
+      'public abstract class Actor {',
+      '    /** @blueprint */',
+      '    public long health = 100;',
+      '',
+      '    private final String name;',
+      '',
+      '    /** @blueprint */',
+      '    public Actor(String name) {',
+      '        this.name = name;',
+      '    }',
+      '',
+      '    /** @blueprint */',
+      '    public String greet() {',
+      '        return name + " has " + health;',
+      '    }',
+      '',
+      '    /** @blueprint overridable */',
+      '    public void hit(int damage) {',
+      '        health -= damage;',
+      '        System.out.println(name + " takes " + damage);',
+      '    }',
+      '',
+      '    protected abstract String describe();',
+      '',
+      '    /** @blueprint */',
+      '    public void turn() {',
+      '        System.out.println(name + " is " + describe());',
+      '        hit(3);',
+      '        System.out.println(greet());',
+      '    }',
+      '}',
+      ''
+    ].join('\n')
+  },
+  // describe is const and protected: the override is too.
+  cpp: {
+    path: 'lib/actor.h',
+    text: [
+      '#pragma once',
+      '#include <iostream>',
+      '#include <string>',
+      '#include <utility>',
+      '',
+      'namespace game {',
+      '',
+      '/** @blueprint */',
+      'class Actor {',
+      'public:',
+      '    /** @blueprint */',
+      '    int health = 100;',
+      '',
+      '    /** @blueprint */',
+      '    explicit Actor(std::string name) : name_(std::move(name)) {}',
+      '    virtual ~Actor() = default;',
+      '',
+      '    /** @blueprint */',
+      '    std::string greet() const { return name_ + " has " + std::to_string(health); }',
+      '',
+      '    /** @blueprint overridable */',
+      '    virtual void hit(int damage) {',
+      '        health -= damage;',
+      '        std::cout << name_ << " takes " << damage << std::endl;',
+      '    }',
+      '',
+      '    /** @blueprint */',
+      '    void turn() {',
+      '        std::cout << name_ << " is " << describe() << std::endl;',
+      '        hit(3);',
+      '        std::cout << greet() << std::endl;',
+      '    }',
+      '',
+      'protected:',
+      '    virtual std::string describe() const = 0;',
+      '',
+      'private:',
+      '    std::string name_;',
+      '};',
+      '',
+      '}  // namespace game',
+      ''
+    ].join('\n')
   }
 };
 
@@ -217,7 +308,7 @@ function registryFor(language: string, code: Code): NodeRegistry {
   r.registerMany(code.definitions);
   const generator = languages.get(language)!.generator!;
   const file = generator.outputFileName('Knight.vgraph');
-  const module = language === 'python' ? file.replace(/\.py$/, '') : language === 'csharp' ? 'Arena' : undefined;
+  const module = language === 'python' ? file.replace(/\.py$/, '') : language === 'csharp' || language === 'java' ? 'Arena' : undefined;
   r.registerMany(classDefinitions(declaredClass(knight(language, code), { document: 'graphs/Knight.vgraph', generatedPath: `graphs/${file}`, ...(module ? { module } : {}) })!));
   return r;
 }
@@ -249,6 +340,11 @@ function build(name: string, key: string, language: string, generate: Partial<Ge
     const file = path.join(dir, 'graphs', result.output!.fileName);
     fs.writeFileSync(file, result.output!.text);
     texts[doc.name] = result.output!.text;
+    // C++'s header.
+    for (const companion of result.output!.companionFiles ?? []) {
+      fs.writeFileSync(path.join(dir, 'graphs', companion.fileName), companion.text);
+      texts[`${doc.name}.h`] = companion.text;
+    }
     files.push(file);
     last = { file, className: result.output!.className, importRoots: result.output!.importRoots?.map((root) => path.join(dir, root)) };
   }
@@ -260,8 +356,14 @@ const TARGETS = [
   { label: 'JavaScript (ES modules)', key: 'javascript-esm', language: 'javascript', moduleFormat: 'esm' as const },
   { label: 'JavaScript (CommonJS)', key: 'javascript-commonjs', language: 'javascript', moduleFormat: 'commonjs' as const },
   { label: 'Python', key: 'python', language: 'python' },
-  { label: 'C#', key: 'csharp', language: 'csharp' }
+  { label: 'C#', key: 'csharp', language: 'csharp' },
+  { label: 'Java', key: 'java', language: 'java' },
+  { label: 'C++', key: 'cpp', language: 'cpp' }
 ];
+
+// The sources a compiled language's Run builds besides the program's own file: the code's, and the
+// other graph's (C++ includes the code's header).
+const otherSources = (built: Built) => built.files.filter((f) => f !== built.file && !/\.h$/.test(f));
 
 describe('code classes as parents', () => {
   test('the generated subclass: extends, overrides with the code\'s names, Parent calls, members on Self, the constructor', () => {
@@ -287,13 +389,32 @@ describe('code classes as parents', () => {
     assert.match(cs.Knight, /^ {8}base\.Hit\(damage\);$/m);
     assert.match(cs.Knight, /^ {4}public override string Describe\(\)$/m);
     assert.match(cs.Knight, /^ {4}public virtual void Start\(\)$/m);
+    const java = build('java-text', 'java', 'java').texts;
+    assert.match(java.Knight, /^public class Knight extends game\.Actor \{$/m);
+    assert.match(java.Knight, /^ {4}public Knight\(String name\) \{\n {8}super\(name\);\n {4}\}$/m);
+    assert.match(java.Knight, /^ {4}@Override\n {4}public void hit\(int damage\) \{$/m, "the code's int, not the graph's long");
+    assert.match(java.Knight, /^ {8}super\.hit\(damage\);$/m);
+    assert.match(java.Knight, /^ {4}@Override\n {4}protected String describe\(\) \{$/m);
+    assert.match(java.Knight, /^ {8}this\.health = 50L;$/m);
+    assert.match(java.Game, /^ {8}_make_object = new Knight\("Bors"\);$/m);
+    assert.match(java.Game, /^ {8}_make_object\.turn\(\);$/m, 'a Knight is an Actor: no cast');
+    const cpp = build('cpp-text', 'cpp', 'cpp').texts;
+    assert.match(cpp['Knight.h'], /^#include "\.\.\/lib\/actor\.h"$/m);
+    assert.match(cpp['Knight.h'], /^class Knight : public ::game::Actor, public vgraph::Object \{$/m);
+    assert.match(cpp['Knight.h'], /^ {4}using ::game::Actor::Actor;$/m);
+    assert.match(cpp['Knight.h'], /^ {4}void hit\(int damage\) override;$/m);
+    assert.match(cpp['Knight.h'], /^protected:\n {4}std::string describe\(\) const override;$/m);
+    assert.match(cpp.Knight, /^ {4}::game::Actor::hit\(damage\);$/m);
+    assert.match(cpp.Knight, /^std::string Knight::describe\(\) const \{\n {4}return const_cast<Knight\*>\(this\)->describeGraph\(\);\n\}$/m);
+    assert.match(cpp.Knight, /^ {4}\(\*this\)\.health = 50;$/m);
+    assert.match(cpp.Game, /std::make_shared<::Knight>\(std::string\("Bors"\)\)/);
   });
 
   // Squire extends Knight: a variable of its own, and hit overridden again, its Parent call
   // reaching Knight's version through the code's name.
   test('a graph class extending the graph class: the constructor passes the name on, Parent: hit is the nearest', () => {
     const texts: Record<string, string> = {};
-    for (const language of ['typescript', 'python', 'csharp']) {
+    for (const language of ['typescript', 'python', 'csharp', 'java', 'cpp']) {
       const code = scan(language, language);
       const hit = method(code, 'hit');
       const r = registryFor(language, code);
@@ -308,6 +429,7 @@ describe('code classes as parents', () => {
       const result = compileDocument(squire, { registry: r, languages, generate: { sourceFileName: 'Squire.vgraph', outputDir: 'graphs', namespace: 'Arena' } });
       assert.deepEqual(result.diagnostics, [], language);
       texts[language] = result.output!.text;
+      for (const companion of result.output!.companionFiles ?? []) texts[`${language}.h`] = companion.text;
     }
     assert.match(texts.typescript, /^export class Squire extends Knight \{$/m);
     assert.match(texts.typescript, /^ {2}override hit\(damage: number\): void \{\n {4}\/\/ Parent: hit \(parent\)\n {4}super\.hit\(damage\);$/m);
@@ -315,10 +437,19 @@ describe('code classes as parents', () => {
     assert.match(texts.python, /^ {4}def __init__\(self, name: str\) -> None:\n {8}super\(\)\.__init__\(name\)\n {8}self\.Pride: int = 1$/m);
     assert.match(texts.csharp, /^ {4}public Squire\(string name\) : base\(name\)$/m);
     assert.match(texts.csharp, /^ {4}public override void Hit\(int damage\)$/m);
+    assert.match(texts.java, /^ {4}public Squire\(String name\) \{\n {8}super\(name\);$/m);
+    assert.match(texts.java, /^ {8}super\.hit\(damage\);$/m);
+    assert.match(texts['cpp.h'], /^class Squire : public ::Knight \{$/m);
+    assert.match(texts['cpp.h'], /^ {4}using ::Knight::Knight;$/m);
+    assert.match(texts.cpp, /^ {4}::Knight::hit\(damage\);$/m);
   });
 
-  test('a class leaving an abstract method is abstract (TypeScript, C#)', () => {
-    for (const [language, key, pattern] of [['typescript', 'typescript', /^export abstract class Knight extends Actor \{$/m], ['csharp', 'csharp', /^public abstract class Knight : global::Game\.Actor$/m]] as const) {
+  test('a class leaving an abstract method is abstract (TypeScript, C#, Java)', () => {
+    for (const [language, key, pattern] of [
+      ['typescript', 'typescript', /^export abstract class Knight extends Actor \{$/m],
+      ['csharp', 'csharp', /^public abstract class Knight : global::Game\.Actor$/m],
+      ['java', 'java', /^public abstract class Knight extends game\.Actor \{$/m]
+    ] as const) {
       const code = scan(language, key);
       const doc = knight(language, code);
       doc.graphs = doc.graphs.filter((g) => g.kind === 'event');
@@ -340,7 +471,7 @@ describe('code classes as parents', () => {
       const built = build(target.key, target.key, target.language, { moduleFormat: target.moduleFormat });
       let outcome;
       try {
-        const sources = target.language === 'csharp' ? built.files.filter((f) => f !== built.file) : undefined;
+        const sources = ['csharp', 'java', 'cpp'].includes(target.language) ? otherSources(built) : undefined;
         outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, built.file, built.className, { cwd: path.join(built.dir, 'graphs'), importRoots: built.importRoots, sources, timeoutMs: 180000 });
       } catch (error) {
         if (error instanceof ToolNotFoundError) return t.skip(error.message);
@@ -369,6 +500,23 @@ describe('code classes as parents', () => {
       assert.equal(result.status, 0, result.stdout + result.stderr);
     });
   }
+
+  // The corpus's Java and C++ projects' settings (test/fixtures/projects): every lint, as errors.
+  test('Java: the subclass compiles with -Xlint:all -Werror', (t) => {
+    if (spawnSync('javac', ['-version'], { encoding: 'utf8' }).error) return t.skip("javac isn't installed");
+    const built = build('lint-java', 'java', 'java');
+    const result = spawnSync('javac', ['-Xlint:all', '-Werror', '-encoding', 'UTF-8', '-d', path.join(built.dir, 'classes'), ...built.files], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+
+  test('C++: the subclass compiles with -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror', (t) => {
+    if (spawnSync('g++', ['--version'], { encoding: 'utf8' }).error) return t.skip("g++ isn't installed");
+    const built = build('lint-cpp', 'cpp', 'cpp');
+    for (const file of otherSources(built).concat(built.file)) {
+      const result = spawnSync('g++', ['-std=c++20', '-Wall', '-Wextra', '-Wpedantic', '-Wshadow', '-Wconversion', '-Werror', '-fsyntax-only', file], { cwd: path.dirname(file), encoding: 'utf8' });
+      assert.equal(result.status, 0, `${path.basename(file)}:\n${result.stdout}${result.stderr}`);
+    }
+  });
 
   for (const checker of [{ name: 'mypy --strict', args: ['mypy', '--strict'] }, { name: 'Pyright (strict)', args: ['pyright'] }]) {
     test(`Python: the subclass passes ${checker.name}`, (t) => {

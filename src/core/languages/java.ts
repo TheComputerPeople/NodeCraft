@@ -2,8 +2,8 @@
 // a small launcher compiled with it. Close to the C# pack; where Java differs: functions with several
 // outputs return them as an Object[], ints are longs, strings compare with equals, and a method's
 // end must be reachable before it returns a default.
-import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent } from '../compiler/names';
+import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, canComplete, classInfo, codeParentInfo, exprType, interfaceInfo, isCodeClassId, programClassSpec, userTypes } from '../compiler/ir';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { scanJava } from '../importing/java-scanner';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
@@ -434,6 +434,7 @@ const javaGenerator: CodeGenerator = {
   libraryExports: javaLibraryExports,
   snippetLanguages: ['java'],
   importLanguages: ['java'],
+  codeParents: true,
   outputFileName: javaOutputFileName,
   moduleName: (_generatedFileName, options) => options.namespace,
   generate: (program, options) => new JavaEmitter(program, options).emit(),
@@ -507,7 +508,8 @@ class JavaEmitter {
     this.names = this.library ? new NameScope(RESERVED, [this.className, ...HELPER_NAMES]) : classScope(this.className);
     const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
     this.classNames.set(`object:${program.className}`, own);
-    for (const f of program.functions) this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
+    // An override event takes the code's name for its method, which the code parent's names hold.
+    for (const f of program.functions) this.functionNames.set(f.id, f.event && f.code ? f.code : (f.event ? own.events : own.functions).get(f.id)!);
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
     for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', '_'));
@@ -526,9 +528,22 @@ class JavaEmitter {
     for (const d of dispatchers) body.line(`public final EventDispatcher ${this.dispatcherNames.get(d.id)} = new EventDispatcher();`);
     for (const x of slots) body.line(`private ${this.typeName(x.type)} ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
     if (members.length || slots.length || dispatchers.length) body.line();
-    // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay.
+    // A class from the code's constructor takes arguments: this class's takes them on, as Java
+    // doesn't inherit constructors (docs/code-classes-as-parents.md).
     const parent = this.program.classInfo?.parent;
-    if (!this.library && (!parent || this.program.hasStart)) this.method('public', 'start', [], undefined, () => this.statements(this.program.start));
+    const code = parent ? codeParentInfo(this.program) : undefined;
+    if (code?.init?.length) {
+      const scope = new NameScope(RESERVED);
+      const params = code.init.map((p, i) => ({ name: scope.claim(p.id, 'keep'), type: p.type, text: code.initSpelling?.[i] }));
+      body.line(`public ${this.className}(${params.map((p) => `${p.text ?? this.typeName(p.type)} ${p.name}`).join(', ')}) {`);
+      body.line(`    super(${params.map((p) => p.name).join(', ')});`);
+      body.line('}');
+      body.line();
+    }
+    // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay (a class
+    // from the code has none).
+    const graphParent = !!parent && !isCodeClassId(parent);
+    if (!this.library && (!graphParent || this.program.hasStart)) this.method('public', 'start', [], undefined, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
     // The interface functions the class gives no body: they do nothing and return defaults.
     for (const { type, stubs } of this.program.interfaces ?? []) {
@@ -559,7 +574,8 @@ class JavaEmitter {
     const header = this.header();
     const parentClass = this.program.classInfo?.parent;
     const interfaces = (this.program.interfaces ?? []).map((i) => this.userTypeName(i.type.id));
-    header.line(`${this.access()}${this.library ? 'final ' : ''}class ${this.className}${parentClass ? ` extends ${this.userTypeName(parentClass)}` : ''}${interfaces.length ? ` implements ${interfaces.join(', ')}` : ''} {`);
+    // A class leaving its code parent's abstract methods to a subclass is abstract.
+    header.line(`${this.access()}${this.library ? 'final ' : this.program.abstract ? 'abstract ' : ''}class ${this.className}${parentClass ? ` extends ${this.userTypeName(parentClass)}` : ''}${interfaces.length ? ` implements ${interfaces.join(', ')}` : ''} {`);
     return this.finish(header, body);
   }
 
@@ -671,10 +687,11 @@ class JavaEmitter {
 
   // ---- Class members ------------------------------------------------------------------------
 
-  // `returns` is a type, or the text of one (Object[] for several outputs).
-  private method(access: string, name: string, params: { name: string; type?: TypeRef }[], returns: TypeRef | string | undefined, body: () => void): void {
+  // `returns` is a type, or the text of one (Object[] for several outputs). `text`: a parameter's
+  // type as written, when it isn't typeName's (the code's, in an override of its method).
+  private method(access: string, name: string, params: { name: string; type?: TypeRef; text?: string }[], returns: TypeRef | string | undefined, body: () => void): void {
     this.out.endNode();
-    const list = params.map((p) => `${this.typeName(p.type)} ${p.name}`).join(', ');
+    const list = params.map((p) => `${p.text ?? this.typeName(p.type)} ${p.name}`).join(', ');
     this.out.line(`${access}${this.library ? ' static' : ''} ${typeof returns === 'string' ? returns : returns ? this.typeName(returns) : 'void'} ${name}(${list}) {`);
     this.out.indent();
     body();
@@ -685,17 +702,22 @@ class JavaEmitter {
 
   private functionMethod(fn: IrFunction): void {
     const scope = new NameScope(RESERVED);
-    const params = fn.params.map((p) => {
-      const name = scope.claim(p.name, 'camel');
+    // A method of the code's keeps its parameters' names and the code's types for them: Java
+    // overrides only a method of the same parameter types.
+    const spelling = fn.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === fn.code)?.spelling : undefined;
+    const params = fn.params.map((p, i) => {
+      const name = scope.claim(p.name, fn.code ? 'keep' : 'camel');
       this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
-      return { name, type: p.type };
+      return { name, type: p.type, ...(spelling?.params[i] ? { text: spelling.params[i] } : {}) };
     });
     const locals = this.program.members.filter((m) => m.function === fn.id);
     for (const m of locals) this.memberNames.set(m.id, scope.claim(m.name, 'camel'));
     const slots = this.program.slots.filter((x) => x.function === fn.id);
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name, 'keep', '_'));
-    const returns = fn.outputs.length > 1 ? 'Object[]' : fn.outputs[0]?.type ?? undefined;
+    const returns = fn.outputs.length > 1 ? 'Object[]' : fn.code && fn.outputs.length && spelling?.returns ? spelling.returns : fn.outputs[0]?.type ?? undefined;
+    this.out.endNode();
     if (fn.description) this.out.line(`/** ${fn.description.replace(/\*\//g, '* /').replace(/\s+/g, ' ')} */`);
+    if (fn.code) this.out.line('@Override');
     const access = this.library ? 'public' : fn.access ?? 'public';
     this.method(access, this.functionNames.get(fn.id)!, params, returns, () => {
       for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotNames.get(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)};`);
@@ -925,17 +947,21 @@ class JavaEmitter {
           out.line('super.start();');
           break;
         }
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === s.function);
+        // A graph ancestor's function, or the code parent's method (its name as the code has it).
+        const fn = s.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === s.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === s.function);
         const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `super.${this.parentFunctionName(s.function!)}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        const call = `super.${s.code ? s.function : this.parentFunctionName(s.function!)}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
         this.callResults(call, outputs, s.results);
         break;
       }
-      case 'construct':
-        out.line(`${this.slotNames.get(s.slot)} = new ${this.userTypeName(s.type)}();`);
+      case 'construct': {
+        // The code parent's constructor takes its arguments (docs/code-classes-as-parents.md).
+        const init = codeParentInfo(this.program, s.type)?.init ?? [];
+        out.line(`${this.slotNames.get(s.slot)} = new ${this.userTypeName(s.type)}(${(s.args ?? []).map((a, i) => this.coerce(a, init[i]?.type)).join(', ')});`);
         out.line(`${this.slotNames.get(s.slot)}.start();`);
         break;
+      }
       case 'setObjectVariable':
         out.line(`${this.targetRef(s.target)}.${this.membersOf(s.type)?.variables.get(s.variable)} = ${this.coerce(s.value, classInfo(this.program, s.type)?.variables.find((v) => v.id === s.variable)?.type)};`);
         break;
@@ -1065,9 +1091,9 @@ class JavaEmitter {
         return this.output(call, fn?.outputs.filter((p) => p.kind === 'data') ?? [], e.output);
       }
       case 'parentCall': {
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const fn = e.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === e.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `super.${this.parentFunctionName(e.function)}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        const call = `super.${e.code ? e.function : this.parentFunctionName(e.function)}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
         return this.output(call, fn?.outputs.filter((p) => p.kind === 'data') ?? [], e.output);
       }
       case 'isValid':
@@ -1125,10 +1151,12 @@ class JavaEmitter {
     const member = imported.member;
     if (!member) return `${qualified}(${list})`;
     // A code class's member (docs/node-authoring.md, gap 2). Its objects travel as Object, so the
-    // Target is cast to the class.
+    // Target is cast to the class. Self, and a graph class's object, are one already
+    // (docs/code-classes-as-parents.md), which -Xlint says of a cast.
     if (member.kind === 'construct') return `new ${qualified}(${list})`;
     const [target, ...rest] = args;
-    const object = `((${qualified}) ${this.operand(target)})`;
+    const targetType = this.typeOf(target);
+    const object = target.kind === 'self' ? 'this' : targetType?.id.startsWith('object:') && !targetType.container ? this.operand(target) : `((${qualified}) ${this.operand(target)})`;
     const values = rest.map((a, i) => this.coerce(a, signature?.params[i + 1]?.type)).join(', ');
     return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }
@@ -1214,6 +1242,9 @@ class JavaEmitter {
     const seen = new Set<string>();
     for (let parent = info?.parent; parent && !seen.has(parent);) {
       seen.add(parent);
+      // A class from the code ends the chain: its members keep the code's names.
+      const code = isCodeClassId(parent) ? this.program.codeClasses?.find((c) => c.id === parent) : undefined;
+      if (code) chain.push(codeInheritedMembers(code));
       const ancestor = classInfo(this.program, parent);
       const names = ancestor && this.membersOf(parent);
       if (!ancestor || !names) break;
@@ -1278,6 +1309,8 @@ class JavaEmitter {
     if (this.program.declaration?.type.id === id || id === `object:${this.program.className}`) return this.className;
     const imported = this.program.imports.find((i) => i.id === id);
     if (!imported) return 'Object';
+    // A class from the code goes by its name there, with its package.
+    if (isCodeClassId(id)) return imported.name;
     const name = javaClassName(imported.name);
     return imported.module && imported.module !== this.options.namespace ? `${imported.module}.${name}` : name;
   }

@@ -121,6 +121,9 @@ describe('code classes graph classes may extend', () => {
     ].join('\n')), { language: 'java', path: 'src/main/java/game/Actor.java', module: 'game' });
     assert.deepEqual(overridable(actor), ['hit(damage:int)', 'describe() -> string abstract protected']);
     assert.deepEqual(actor.init?.map((p) => p.id), ['name']);
+    // The types as the code writes them, which a generated override repeats.
+    assert.deepEqual(actor.overridable.map((m) => m.spelling), [{ params: ['long'], returns: 'void' }, { params: [], returns: 'String' }]);
+    assert.deepEqual(actor.initSpelling, ['String']);
   });
 
   test('C++: virtual, pure virtual (an abstract class), final and protected member functions', () => {
@@ -144,6 +147,8 @@ describe('code classes graph classes may extend', () => {
     assert.equal(actor.id, 'code:cpp:include/actor.h#game::Actor');
     assert.equal(actor.abstract, true);
     assert.deepEqual(overridable(actor), ['hit(damage:int)', 'describe() -> string abstract protected']);
+    // The types as the code writes them, and what follows the parameters (not `= 0`).
+    assert.deepEqual(actor.overridable.map((m) => m.spelling), [{ params: ['int'], returns: 'void' }, { params: [], returns: 'std::string', qualifiers: 'const' }]);
   });
 
   test('PHP: abstract, final and protected methods', () => {
@@ -200,7 +205,7 @@ describe('a graph class extending a class from the code', () => {
     assert.ok(subclassTest(definition, declaredClass(squire)!, codeClassBases(registry.all()))('object:Squire', 'native:Actor'));
   });
 
-  test("Compile: a missing code class, one in another language, and (until generated) Java's", () => {
+  test("Compile: a missing code class, one in another language, and (until generated) PHP's", () => {
     const errors = (doc: GraphDocument, registry: NodeRegistry) => compileDocument(doc, { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Knight.vgraph' } }).diagnostics
       .filter((d) => d.severity === 'error').map((d) => `${d.code}: ${d.message}`);
     const missing = workspace(codeClassId('typescript', 'src/gone.ts', 'Gone'));
@@ -208,11 +213,11 @@ describe('a graph class extending a class from the code', () => {
     const python = workspace();
     assert.match(errors({ ...python.knight, language: 'python' }, python.registry).join('\n'), /^wrong-language: Actor is a TypeScript class \(src\/actor\.ts\); a Python graph can't extend it\.$/);
     const later = workspace();
-    const java = codeClassId('java', 'src/Actor.java', 'Actor');
+    const php = codeClassId('php', 'src/Actor.php', 'Actor');
     const actor = later.registry.get(later.knight.parent!)!;
     if (actor.implementation?.kind !== 'code-class') throw new Error('no Actor');
-    later.registry.register({ ...actor, type: java, implementation: { kind: 'code-class', type: { ...actor.implementation.type, id: java, language: 'java', path: 'src/Actor.java' } } });
-    assert.deepEqual(errors({ ...later.knight, language: 'java', parent: java }, later.registry), ["code-parent-unsupported: Generated code can't extend a class from your code (Actor) in Java yet."]);
+    later.registry.register({ ...actor, type: php, implementation: { kind: 'code-class', type: { ...actor.implementation.type, id: php, language: 'php', path: 'src/Actor.php' } } });
+    assert.deepEqual(errors({ ...later.knight, language: 'php', parent: php }, later.registry), ["code-parent-unsupported: Generated code can't extend a class from your code (Actor) in PHP yet."]);
     // TypeScript's generated code extends it (docs/code-classes-as-parents.md, step 4).
     assert.deepEqual(errors(later.knight, later.registry), []);
   });
