@@ -27,6 +27,9 @@ export interface LanguageCapabilities {
   containers?: ('array' | 'set' | 'map')[];
   // Event dispatchers and bound events (true when absent).
   delegates?: boolean;
+  // Why a language without inheritance has none, and what to do instead: Class Settings shows it in
+  // place of Parent Class, and Compile's error says it (docs/code-classes-as-parents.md, decision 3).
+  noInheritance?: string;
 }
 
 // Executes code-node snippets inside the extension host, for Simulate mode. Only languages the

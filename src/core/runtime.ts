@@ -7,7 +7,7 @@ import { NodeRegistry } from './registry';
 import { SWITCH_STRING, isStateInput, mainExecInput, switchIntCases, switchStringCases } from './flow-control';
 import { FUNCTION_ENTRY, functionGraph } from './functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs } from './events';
-import { ClassInfo, InterfaceInfo, ObjectValue, PARENT_START, classById, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, nodeClass } from './objects';
+import { CODE_CLASS_PREFIX, ClassInfo, InterfaceInfo, ObjectValue, PARENT_START, classById, codeClassById, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, nodeClass } from './objects';
 import { expandDocument, isExpandedNode, macroProblemKey, visibleNodeId } from './macros';
 import { StructValue, TypeLookup, declaredType, expandSplitPins, typeLookup, userTypeProblems } from './user-types';
 import { NodeResolver, createResolver, createUnsplitResolver, isPure } from './resolve';
@@ -766,6 +766,13 @@ export class GraphRuntime {
     const docs: { doc: GraphDocument; document?: string }[] = [{ doc, document }];
     const seen = new Set([doc.name]);
     for (let parent = doc.parent; parent;) {
+      // A class from the code: Simulate can't run it, as it can't run a code node
+      // (docs/code-classes-as-parents.md, part 4).
+      if (parent.startsWith(CODE_CLASS_PREFIX)) {
+        const code = codeClassById(parent, (t) => this.registry.get(t));
+        const [where, name] = parent.slice(CODE_CLASS_PREFIX.length).split('#');
+        return `Simulate can't run your project's code: ${docs[docs.length - 1].doc.name} extends ${code?.title ?? name}, a class in ${code?.path ?? where.replace(/^[^:]*:/, '')}. Use Run to run the generated code.`;
+      }
       const type = classById(parent, (t) => this.registry.get(t));
       const parentDoc = type?.source && this.loadDocument?.(type.source.document);
       if (!type || !parentDoc) return `Simulate can't read the parent class ${parent.replace(/^object:/, '')}.`;

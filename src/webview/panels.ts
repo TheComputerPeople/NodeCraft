@@ -1,5 +1,6 @@
 // The node palette (left) and the Details panel (right).
 import { supports } from '../core/capabilities';
+import { DEFAULT_LANGUAGE } from '../core/languages';
 import {
   addSignaturePin, findVariable, functionUses, removeSignaturePin, renameGraph, renameSignaturePin, renameVariable, setFunctionPure, setSignaturePinType, setTypeLanguages, setVariableType, variableUses
 } from '../core/blueprint-edits';
@@ -148,8 +149,16 @@ function renderClassSettings(): void {
     changed();
   });
   // A language without inheritance or interfaces offers neither (unless the class already has one).
+  // One that says why (Rust, Go) says it in place of the Parent Class (docs/code-classes-as-parents.md,
+  // decision 3).
   const capabilities = languageCapabilities();
   if (supports(capabilities, 'inheritance') || doc.parent) fields.appendChild(field('Parent Class', parent));
+  if (!supports(capabilities, 'inheritance') && capabilities.noInheritance) {
+    const why = document.createElement('div');
+    why.className = 'muted no-inheritance';
+    why.textContent = `${state.languages.find((l) => l.id === (doc.language || DEFAULT_LANGUAGE))?.displayName ?? doc.language} has no inheritance. ${capabilities.noInheritance}`;
+    fields.appendChild(why);
+  }
 
   // Implemented Interfaces, as in Unreal's Class Settings.
   if (supports(capabilities, 'interfaces') || doc.interfaces?.length) fields.insertAdjacentHTML('beforeend', '<div class="details-heading">Implemented Interfaces</div>');

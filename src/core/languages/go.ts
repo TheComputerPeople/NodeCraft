@@ -210,7 +210,11 @@ export const goPack: LanguagePack = {
   generatedFileExtension: '.go',
   workspaceMarkers: ['**/go.mod'],
   // No inheritance: embedding has no virtual calls, as Rust has none.
-  capabilities: { staticTyping: true, classes: true, inheritance: false, interfaces: true, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
+  capabilities: {
+    staticTyping: true, classes: true, inheritance: false, interfaces: true, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true,
+    // Embedding isn't inheritance: the embedded struct's methods never reach the outer one's.
+    noInheritance: "Embedding a struct would give a class its methods, but the struct's own code would never call the class's versions of them, so overriding one would do nothing. Use the other class's members on one of its objects, through Target pins."
+  },
   mapType,
   terms: LANGUAGE_TERMS.go,
   requires: { version: '1.21', label: 'Go 1.21', basis: 'needs', why: 'the slices package, min and max' },

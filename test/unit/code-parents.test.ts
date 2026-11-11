@@ -19,6 +19,8 @@ import { CodeClassInfo, OVERRIDE_EVENT, PARENT_CALL, abstractLeft, classDefiniti
 import { createResolver } from '../../src/core/resolve';
 import { lowerDocument } from '../../src/core/compiler/lower';
 import { NodeRegistry } from '../../src/core/registry';
+import { GraphRuntime } from '../../src/core/runtime';
+import { RuntimeLogEvent } from '../../src/core/model';
 
 function classesOf(scan: ModuleScan, options: Partial<ExposeOptions> & { language: string; path: string }): CodeClassInfo[] {
   return exposeFunctions(scan, { exposeAll: false, ...options }).classes.map((d) => {
@@ -217,9 +219,36 @@ describe('a graph class extending a class from the code', () => {
     const actor = later.registry.get(later.knight.parent!)!;
     if (actor.implementation?.kind !== 'code-class') throw new Error('no Actor');
     later.registry.register({ ...actor, type: rust, implementation: { kind: 'code-class', type: { ...actor.implementation.type, id: rust, language: 'rust', path: 'src/actor.rs' } } });
-    assert.deepEqual(errors({ ...later.knight, language: 'rust', parent: rust }, later.registry), ["unsupported: Rust has no inheritance, so a Parent Class can't be compiled to it."]);
+    assert.deepEqual(errors({ ...later.knight, language: 'rust', parent: rust }, later.registry), [
+      "unsupported: Rust has no inheritance, so a Parent Class can't be compiled to it. A struct can't extend another, so a class can't have a parent, from your code or a graph. Use the other class's members on one of its objects, through Target pins."
+    ]);
     // TypeScript's generated code extends it (docs/code-classes-as-parents.md, step 4).
     assert.deepEqual(errors(later.knight, later.registry), []);
+  });
+});
+
+// Decision 3 and part 4: Rust and Go say why a class can't have a parent; Simulate says it can't run
+// the code a class extends.
+describe("languages without inheritance, and Simulate", () => {
+  test("Go's Compile error says why embedding wouldn't do", () => {
+    const { registry, knight } = workspace(codeClassId('go', 'actor.go', 'Actor'));
+    const messages = compileDocument({ ...knight, language: 'go' }, { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Knight.vgraph' } }).diagnostics.filter((d) => d.severity === 'error').map((d) => d.message);
+    assert.ok(messages.includes("Go has no inheritance, so a Parent Class can't be compiled to it. Embedding a struct would give a class its methods, but the struct's own code would never call the class's versions of them, so overriding one would do nothing. Use the other class's members on one of its objects, through Target pins."), messages.join('\n'));
+  });
+
+  test('Simulate says it runs no project code, for a class extending it directly or through a graph parent', () => {
+    const { registry, knight } = workspace();
+    const errors = (doc: GraphDocument, load?: (file: string) => GraphDocument | undefined) => {
+      const events: RuntimeLogEvent[] = [];
+      new GraphRuntime(registry, (e) => events.push(e), undefined, load).run(doc);
+      return events.filter((e) => e.kind === 'error').map((e) => e.message);
+    };
+    assert.deepEqual(errors(knight), ["Simulate can't run your project's code: Knight extends Actor, a class in src/actor.ts. Use Run to run the generated code."]);
+    for (const d of classDefinitions(declaredClass(knight, { document: 'Knight.vgraph', generatedPath: 'Knight.vgraph.ts' })!)) registry.register(d);
+    const squire: GraphDocument = { ...knight, name: 'Squire', parent: 'object:Knight' };
+    assert.deepEqual(errors(squire, (file) => (file === 'Knight.vgraph' ? knight : undefined)), ["Simulate can't run your project's code: Knight extends Actor, a class in src/actor.ts. Use Run to run the generated code."]);
+    // A class from the code that's gone: its name and file from the id.
+    assert.deepEqual(errors({ ...knight, parent: codeClassId('typescript', 'src/gone.ts', 'Gone') }), ["Simulate can't run your project's code: Knight extends Gone, a class in src/gone.ts. Use Run to run the generated code."]);
   });
 });
 

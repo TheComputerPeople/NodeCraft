@@ -90,12 +90,13 @@ export function missingCapabilities(needs: Capability[], capabilities: LanguageC
 // document's settings) that use them.
 export function checkCapabilities(doc: GraphDocument, resolve: (node: GraphNode) => NodeDefinition | undefined, capabilities: LanguageCapabilities, languageName: string): CompileDiagnostic[] {
   const diagnostics: CompileDiagnostic[] = [];
-  const report = (needs: Capability[], what: string, at: { graphId?: string; nodeId?: string } = {}) => {
+  // `why`: what the language's pack says of it (LanguageCapabilities.noInheritance).
+  const report = (needs: Capability[], what: string, at: { graphId?: string; nodeId?: string } = {}, why?: string) => {
     for (const need of missingCapabilities(needs, capabilities)) {
-      diagnostics.push({ severity: 'error', code: 'unsupported', message: `${languageName} has no ${FEATURE[need]}, so ${what} can't be compiled to it.`, ...at });
+      diagnostics.push({ severity: 'error', code: 'unsupported', message: `${languageName} has no ${FEATURE[need]}, so ${what} can't be compiled to it.${why ? ` ${why}` : ''}`, ...at });
     }
   };
-  if (doc.parent) report(['inheritance'], 'a Parent Class');
+  if (doc.parent) report(['inheritance'], 'a Parent Class', {}, capabilities.noInheritance);
   if (doc.interfaces?.length) report(['interfaces'], 'implemented interfaces');
   if (doc.dispatchers?.length) report(['delegates'], 'event dispatchers');
   for (const variable of doc.variables) report(typeRequirements(variable.type), `the variable "${variable.name}"`);

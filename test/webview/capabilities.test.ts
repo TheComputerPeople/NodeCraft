@@ -61,6 +61,17 @@ describe('capabilities in the editor', () => {
     assert.deepEqual(containers, ['Single', 'Array']);
   });
 
+  // docs/code-classes-as-parents.md, decision 3: a language that says why it has no inheritance
+  // (Rust, Go) says it in Class Settings.
+  test("Class Settings says why a language without inheritance can't have a Parent Class", async (t) => {
+    const why = "A struct can't extend another.";
+    const e = await open(t, { id: 'javascript', displayName: 'Plain', callable: ['javascript'], capabilities: { ...full, inheritance: false, noInheritance: why } });
+    if (!e) return;
+    await e.page.click('#canvas-wrap', { position: { x: 20, y: 20 } });
+    assert.equal(await e.count('#inspector-content select[aria-label="Parent Class"]'), 0);
+    assert.equal(await e.page.textContent('#inspector-content .no-inheritance'), `Plain has no inheritance. ${why}`);
+  });
+
   test('the language list follows packs registered and removed while the editor is open', async (t) => {
     const e = await open(t, { id: 'javascript', displayName: 'JavaScript', callable: ['javascript'], capabilities: full });
     if (!e) return;

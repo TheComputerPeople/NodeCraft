@@ -270,6 +270,16 @@ The three choices this design needs. The user confirmed all three as recommended
   - **Subclasses.** Squire's Lua `new` uses Knight's `__vg_new`, and its Parent: hit reaches Knight's. Squire's GDScript passes the name on and has Knight's `vg`.
   - **Not checked:** luacheck, the corpus's Lua linter, isn't installed here, and generated Lua is marked for it to skip.
 7. Rust and Go reported; Simulate's message.
+
+### Built (step 7)
+
+- **Why Rust and Go can't.** A language pack without inheritance can say why (`LanguageCapabilities.noInheritance`), and both do:
+  - **Rust:** "A struct can't extend another, so a class can't have a parent, from your code or a graph. Use the other class's members on one of its objects, through Target pins."
+  - **Go:** "Embedding a struct would give a class its methods, but the struct's own code would never call the class's versions of them, so overriding one would do nothing. Use the other class's members on one of its objects, through Target pins."
+
+  Class Settings shows it in place of Parent Class ("Rust has no inheritance. A struct can't…"), so the code's classes aren't offered and the reason is there. Compile's error for a graph that names a parent anyway ends with it.
+- **Simulate** says it can't run the code a class extends, when it starts and wherever it would construct one: "Simulate can't run your project's code: Knight extends Actor, a class in src/actor.ts. Use Run to run the generated code." It's the same for a class extending the code through a graph parent (it names the graph class that extends the code), and for a code class that's gone (its name and file from the parent's id). Before, it said it couldn't read the parent class, and gave the id.
+- **Tested:** Compile's errors for Rust and Go; Simulate's message for Knight, for Squire through Knight, and for a missing code class; the webview's Class Settings with a language that says why (no Parent Class, and the reason).
 8. Debugging across the boundary.
 9. The exit check, docs, the parity checklist and status.
 

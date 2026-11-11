@@ -253,7 +253,10 @@ export const rustPack: LanguagePack = {
   generatedFileExtension: '.rs',
   workspaceMarkers: ['**/Cargo.toml'],
   // No inheritance; interfaces (traits) arrive later.
-  capabilities: { staticTyping: true, classes: true, inheritance: false, interfaces: false, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true },
+  capabilities: {
+    staticTyping: true, classes: true, inheritance: false, interfaces: false, generics: true, async: true, exceptions: false, containers: ['array', 'set', 'map'], delegates: true,
+    noInheritance: "A struct can't extend another, so a class can't have a parent, from your code or a graph. Use the other class's members on one of its objects, through Target pins."
+  },
   mapType,
   terms: LANGUAGE_TERMS.rust,
   requires: { version: '2018', label: 'edition 2018', basis: 'needs' },
