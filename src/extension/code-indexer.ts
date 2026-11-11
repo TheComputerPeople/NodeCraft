@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { CodeIndex, IndexFile, IndexGraph, IndexProject, buildCodeIndex } from '../core/codemap/code-index';
 import { FileFacts, QUERIES } from '../core/codemap/facts';
 import { generatedFrom, isGeneratedSupport } from '../core/codemap/generated';
-import { grammarForFile } from '../core/parsing/grammars';
+import { GrammarId, grammarForFile, grammarForShebang, mayBeScript } from '../core/parsing/grammars';
 import { parseDocument } from '../core/serializer';
 import { ParseService } from './parse-service';
 import { findProjects } from './projects';
@@ -110,9 +110,27 @@ export interface IndexResult {
 
 const toPosix = (p: string) => p.split(path.sep).join('/');
 
-// The folder's source files and graph files, skipping dependencies and build output.
-function listFiles(root: string, exclude?: (p: string) => boolean): { sources: string[]; graphs: string[] } {
+// The grammar of a script without an extension, from its `#!` line.
+function scriptGrammar(file: string): GrammarId | undefined {
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const head = Buffer.alloc(200);
+      const read = fs.readSync(fd, head, 0, head.length, 0);
+      return grammarForShebang(head.subarray(0, read).toString('utf8').split(/\r?\n/)[0]);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+// The folder's source files (with the grammar each is parsed with) and graph files, skipping
+// dependencies and build output.
+function listFiles(root: string, exclude?: (p: string) => boolean): { sources: string[]; graphs: string[]; grammars: Map<string, GrammarId> } {
   const sources: string[] = [];
+  const grammars = new Map<string, GrammarId>();
   const graphs: string[] = [];
   const walk = (dir: string): void => {
     let entries: fs.Dirent[];
@@ -131,12 +149,18 @@ function listFiles(root: string, exclude?: (p: string) => boolean): { sources: s
         if (!SKIPPED_FOLDERS.has(entry.name) && !entry.name.startsWith('.') && !(output && names.some((n) => output.test(n)))) walk(full);
       } else if (entry.isFile()) {
         if (entry.name.endsWith('.vgraph')) graphs.push(relative);
-        else if (grammarForFile(entry.name)) sources.push(relative);
+        else {
+          const grammar = grammarForFile(entry.name) ?? (mayBeScript(relative) ? scriptGrammar(full) : undefined);
+          if (grammar) {
+            sources.push(relative);
+            grammars.set(relative, grammar);
+          }
+        }
       }
     }
   };
   walk(root);
-  return { sources: sources.sort(), graphs: graphs.sort() };
+  return { sources: sources.sort(), graphs: graphs.sort(), grammars };
 }
 
 const readJson = (file: string): Record<string, unknown> | undefined => {
@@ -201,7 +225,7 @@ export async function indexFolder(root: string, options: IndexOptions): Promise<
   let parsed = 0;
   const files: IndexFile[] = [];
   await Promise.all(sources.map(async (relative) => {
-    const grammar = grammarForFile(relative)!;
+    const grammar = listed.grammars.get(relative)!;
     let bytes: Buffer;
     try {
       bytes = fs.readFileSync(path.join(root, relative));

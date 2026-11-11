@@ -273,14 +273,6 @@ export function buildCodeIndex(input: IndexInput): CodeIndex {
     for (const script of project.scripts ?? []) markFile(resolveJsFile(joinPath(project.root, script), known), { kind: 'script' });
     if (project.main) markFile(resolveJsFile(joinPath(project.root, project.main), known), { kind: 'main' });
   }
-  // Scripting languages' programs, by where they are: a bin/, exe/ or scripts/ folder, or a main
-  // file at a project's top (Lua, Ruby and PHP have no main function).
-  for (const file of input.files) {
-    if (!['lua', 'ruby', 'php'].includes(file.facts.grammar)) continue;
-    const project = projectOf(file.path);
-    const inProject = project.root ? file.path.slice(project.root.length + 1) : file.path;
-    if (/(^|\/)(bin|exe|scripts)\//.test(inProject) || /^(main\.(lua|rb|php)|index\.php|artisan)$/.test(inProject)) markFile(file.path, { kind: 'script' });
-  }
 
   // Imports.
   const context = new ResolveContext(input, projects, projectOf);
@@ -331,6 +323,18 @@ export function buildCodeIndex(input: IndexInput): CodeIndex {
     }
   }
 
+  // Scripting languages' programs, by where they are: a main file at a project's top (Lua, Ruby and
+  // PHP have no main function), or a file in a bin/, exe/ or scripts/ folder (Python's too) that no
+  // other file imports (one that's imported is the scripts' library).
+  const imported = new Set(imports.map((i) => i.to));
+  for (const file of input.files) {
+    if (!['lua', 'ruby', 'php', 'python'].includes(file.facts.grammar) || shownAs.get(file.path) !== `f:${file.path}`) continue;
+    const project = projectOf(file.path);
+    const inProject = project.root ? file.path.slice(project.root.length + 1) : file.path;
+    if (/^(main\.(lua|rb|php)|index\.php|artisan)$/.test(inProject)) markFile(file.path, { kind: 'script' });
+    else if (/(^|\/)(bin|exe|scripts)\//.test(inProject) && !imported.has(`f:${file.path}`)) markFile(file.path, { kind: 'script' });
+  }
+
   const linked = linkCalls({ files: input.files, graphs: input.graphs, declarationIds, shownAs, importedFiles, samePackage: (file) => context.samePackage(file), aliases });
 
   // Parents before children.
@@ -360,13 +364,32 @@ function externalId(file: IndexFile, name: string, entities: Map<string, Entity>
   return id;
 }
 
+// A JavaScript or TypeScript module by its path: as written, as the .ts written for a .js, or a
+// folder's index. A path into build output (package.json's "main": "dist/index.js") that isn't in
+// the workspace is its source's: the same path under src/, or the project's top.
 function resolveJsFile(base: string, exists: (p: string) => boolean): string | undefined {
-  if (exists(base)) return base;
-  const noJs = base.replace(/\.(m|c)?jsx?$/, '');
-  for (const ext of TS_EXTENSIONS) if (exists(`${noJs}${ext}`)) return `${noJs}${ext}`;
-  for (const ext of TS_EXTENSIONS) if (exists(`${base}/index${ext}`)) return `${base}/index${ext}`;
+  const direct = (p: string): string | undefined => {
+    // (A graph file named without an extension, `./Greeting.vgraph`, is its generated module, once compiled.)
+    if (exists(p) && !p.endsWith('.vgraph')) return p;
+    const noJs = p.replace(/\.(m|c)?jsx?$/, '').replace(/\.d\.ts$/, '');
+    for (const ext of TS_EXTENSIONS) if (exists(`${noJs}${ext}`)) return `${noJs}${ext}`;
+    for (const ext of TS_EXTENSIONS) if (exists(`${p}/index${ext}`)) return `${p}/index${ext}`;
+    return exists(p) ? p : undefined;
+  };
+  const found = direct(base);
+  if (found) return found;
+  // (The innermost output folder first: a project may itself be in one named lib/.)
+  const parts = base.split('/');
+  for (let i = parts.length - 2; i >= 0; i--) {
+    if (!JS_OUTPUT_FOLDERS.has(parts[i])) continue;
+    const [before, after] = [parts.slice(0, i), parts.slice(i + 1)];
+    const source = direct([...before, 'src', ...after].join('/')) ?? direct([...before, ...after].join('/'));
+    if (source) return source;
+  }
   return undefined;
 }
+
+const JS_OUTPUT_FOLDERS = new Set(['dist', 'build', 'out', 'lib']);
 
 // What an import resolves to: workspace files, an external package, undefined when it should have
 // been found (a relative path to nothing), or null when it's nothing to show (a builtin).
@@ -661,7 +684,8 @@ class ResolveContext {
       for (const candidate of [joinPath(dir, imp.source), joinPath(project.root, imp.source)]) {
         if (this.exists(candidate)) return { files: [candidate] };
       }
-      return undefined;
+      // Composer's autoloader and dependencies (vendor/) aren't the workspace's code: nothing to show.
+      return /(^|\/)vendor\//.test(imp.source) ? null : undefined;
     }
     const files = this.typeFiles.get(`php:${imp.source}`) ?? this.namespaceFiles.get(`php:${imp.source}`);
     return files ? { files } : { external: imp.source.split('\\')[0] };

@@ -184,6 +184,35 @@ describe('the code index', () => {
     assert.deepEqual(entries, { 'f:cli/bin/run.js': ['bin'], 'f:cli/src/server.ts': ['script'], 's:app.go#main': ['main'], 'f:tools/bin/gen.lua': ['script'] });
   });
 
+  test("entry points: a package's build output is its source's; a script folder's own library and generated code aren't; scripts without an extension are", () => {
+    const i = index({
+      projects: [{ root: 'lib', name: 'lib', packageName: 'lib', main: 'dist/index.js', bins: ['build/cli.js'], buildSystems: ['npm'], languages: ['typescript'] }],
+      files: [
+        file('lib/src/index.ts', 'typescript'), file('lib/src/cli.ts', 'typescript'),
+        file('scripts/main.py', 'python', [{ source: 'score' }]), file('scripts/score.py', 'python'),
+        file('scripts/greeting_vgraph.py', 'python', [], {}, 'scripts/Greeting.vgraph'),
+        file('artisan', 'php'), file('bin/greet', 'ruby')
+      ],
+      graphs: [graph('scripts/Greeting.vgraph', [])]
+    });
+    const entries = Object.fromEntries(i.entities.filter((e) => e.entries).map((e) => [e.id, e.entries!.map((x) => x.kind)]));
+    assert.deepEqual(entries, { 'f:lib/src/index.ts': ['main'], 'f:lib/src/cli.ts': ['bin'], 'f:scripts/main.py': ['script'], 'f:artisan': ['script'], 'f:bin/greet': ['script'] });
+  });
+
+  test("a graph file imported without an extension is its generated module; PHP's vendor/ isn't the workspace's", () => {
+    const i = index({
+      files: [
+        file('src/main.ts', 'typescript', [{ source: './Greeting.vgraph' }], { calls: [{ callee: 'greet', line: 3, column: 1 }] }),
+        file('src/Greeting.vgraph.ts', 'typescript', [], { declarations: [{ kind: 'function', name: 'greet', container: [], line: 1, endLine: 3 }] }, 'src/Greeting.vgraph'),
+        file('artisan', 'php', [{ kind: 'file', source: '/vendor/autoload.php' }])
+      ],
+      graphs: [graph('src/Greeting.vgraph', [])]
+    });
+    assert.deepEqual(edges(i), ['f:src/main.ts > g:src/Greeting.vgraph']);
+    assert.ok(i.calls.find((c) => c.from === 'f:src/main.ts' && c.to === 'g:src/Greeting.vgraph')?.certain, 'its function is in sight: a certain call');
+    assert.deepEqual(i.unresolved, []);
+  });
+
   test('declarations nest in their containers, overloads each get their own id', () => {
     const i = index({
       files: [file('a.java', 'java', [], {

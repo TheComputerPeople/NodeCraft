@@ -16,6 +16,7 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 - **Run** (the generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter). With breakpoints set (F9), Simulate pauses at them: step node by node, see the call stack in graph terms, hover a pin to see its value, or **Watch this value** from the pin's menu.
 - **Tests**: Test Case events with Assert True and Assert Equal nodes. **Run Tests** runs them with the language's test tool (from a generated test file: `node --test`, `unittest`), **Simulate Tests** in the editor.
 - **Debug** (F5): runs the generated code under the language's own debugger (VS Code's built-in one for TypeScript and JavaScript, the Python Debugger extension for Python, the C# extension for C#, the C/C++ extension for C++, for Rust the C/C++ extension on Windows or CodeLLDB elsewhere, the Debugger for Java for Java, the Go extension (Delve) for Go, Lua Debug for Lua, godot-tools for GDScript in a Godot project, the VSCode rdbg Ruby Debugger for Ruby, and PHP Debug with Xdebug for PHP), stopping at the same node breakpoints, stepping node by node and showing pins' values, without opening the generated file.
+- The **Codebase Map**: your whole workspace, code and graphs, drawn top to bottom in four views to drill through (architecture, structure, call flow, a function's control flow), with Expose as Node and Open Graph on its boxes (see below).
 - Saving goes through VS Code's text document, so undo, redo, dirty state and source control work as usual.
 
 ## Open and run
@@ -43,7 +44,7 @@ The TypeScript configuration includes the DOM library definitions because VS Cod
 | `npm run test:unit` / `npm run test:webview` | Run one group |
 | `npm run test:conformance` | Runs every fixture graph in Simulate and as generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP, and checks they print the same output (part of `npm test`; needs Node.js 22.18+, Python 3, the .NET SDK, g++ or clang++, Cargo, a JDK, Go, Lua 5.4, Godot 4 as `godot` or in the `GODOT` environment variable, Ruby, and PHP with mbstring; missing tools skip their tests) |
 | `npm run corpus:tools` | Installs the Node.js tools the corpus of project layouts runs (TypeScript 5, ESLint with typescript-eslint, Node.js's types) into a cache folder outside the repository, and downloads PHP's (Composer, PHPStan and PHP_CodeSniffer, each a `.phar`) into it; the other languages' tools (mypy, Pyright, Ruff, pnpm, dotnet, Maven, Gradle, cargo, go, staticcheck, CMake, make, RuboCop, luacheck, Godot as `GODOT` or `godot`) come from the PATH. The corpus (`test/conformance/corpus.test.ts`, part of `npm test`) copies each project in `test/fixtures/projects`, compiles graphs into it as Compile does, then runs the project's own build, checkers, tests and entry point. A missing tool skips its step; a layout with skipped steps is reported as todo, and `BLUEPRINT_CORPUS_REQUIRE_TOOLS=1` makes it fail instead |
-| `npm run test:integration` | Launches VS Code with the extension and runs smoke tests inside it (not part of `npm test`) |
+| `npm run test:integration` | Launches VS Code with the extension and runs smoke tests inside it, in the sample workspace, a multi-root workspace, and the sample again in Restricted Mode (not part of `npm test`) |
 | `npm run test:integration:debuggers` | The same, with your installed VS Code extensions loaded, so debugging generated Python (Python Debugger extension), C# (C# extension), C++ and Rust (C/C++ extension), Java (Debugger for Java), Go (Go extension), Lua (Lua Debug), GDScript (godot-tools, with the `GODOT` environment variable set), Ruby (rdbg) and PHP (PHP Debug, with Xdebug in php.ini) is tested too |
 | `npm run build:sdk` / `npm run test:sdk` | Builds the language pack SDK (`packages/pack-sdk`, with the conformance suite and its `blueprint-conformance` command) / and runs its command once |
 
@@ -130,6 +131,19 @@ new Game().start();
 - **Constants are worked out when compiling.** A Branch on a constant leaves only the side that runs, and a value nothing reads leaves no code. A breakpoint on a node that left no code can't stop when debugging the generated code, and Debug says which ones. Simulate still stops there.
 - **A float wired into an int is truncated toward zero** (7.5 becomes 7), as Unreal converts it, in Simulate and every language ([docs/semantics.md](docs/semantics.md)).
 - **Large workspaces.** Scanning stops at `blueprintVisualScripting.scanLimit` files of each kind (5000), and says so when it does.
+
+## The Codebase Map
+
+**Blueprint Visual Scripting: Show Codebase Map** (also in a folder's menu in the Explorer) draws the workspace's code and graphs, flowing top to bottom. It reads every file with tree-sitter in all twelve languages, runs nothing, and works in Restricted Mode ([docs/codebase-map.md](docs/codebase-map.md)).
+
+- **Four views:**
+  - **Architecture:** projects, folders and files, with their imports. Importers sit above what they import, and cycles are outlined.
+  - **Structure:** types and functions, parents above their children, with each type's members listed.
+  - **Call flow:** from the entry points (or any function), what calls what, a few levels at a time; or its callers, from above. Graphs and code share one picture. Calls are found statically, so a guess is dashed.
+  - **Control flow:** one function's flowchart, its loops coming back up.
+- **Moving around:** Find (Ctrl+F), filters by project, language and kind, focus on a box's callers and calls, the path between two boxes, Back and Forward, a minimap, and keyboard moves along the arrows. Hovering a type or function shows its signature and doc comment.
+- **From the map into Blueprint:** a function's box offers **Expose as Node**, a graph's box opens it on its tab, and any box opens its code. **Show in Codebase Map**, **Show Call Flow** and **Show Control Flow** start from a file in the Explorer or the function at the cursor.
+- **In the Explorer,** the **Codebase Map** view lists the same projects, files, types and functions as a tree, for the keyboard and screen readers.
 
 ## Custom node libraries
 

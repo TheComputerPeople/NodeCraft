@@ -423,6 +423,14 @@ Decided (2026-11-09): tree-sitter parses all 12 languages, and ELK lays the map 
 
 Design and steps: [codebase-map.md](codebase-map.md).
 
+Status: complete (November 2026), with what's left for later in codebase-map.md (ambiguous calls through the language server, peeking, laying out only what changed). The exit check is in the tests:
+- **The corpus:** in each of the 28 layouts, in all 12 languages, the architecture shows its projects, folders and the imports listed for it. Its call flow from its own program reaches its graphs and the code they call, and its structure shows its types' parents.
+- **Control flow:** one function per language matches its golden flowchart.
+- **Layout:** every view is laid out top to bottom (only loops and cycles point back up), with no boxes overlapping.
+- **Scale:** this repository's 445 files are indexed in about a second cold, and a saved file is on the map in under a second.
+- **Bridges:** Expose as Node, Open Graph and Show Call Flow work inside VS Code.
+- **Restricted Mode:** the map works in an untrusted workspace.
+
 ### Phase 13: Code classes as parents
 
 Goal: a graph class can extend a class written in code, as a Blueprint extends a C++ class. Decided 2026-10-29 as its own phase, after Phase 9 is merged, rather than as Phase 9's deferred work (first numbered 10; Language context, Project integration and the Codebase Map came first).
@@ -531,7 +539,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Library | Blueprint Function Libraries usable from graphs in each of several languages; plugins that carry library graphs | ✅ (a library is generated for each of its languages; packages carry graphs, added with Add Blueprint Package) | — |
 | Languages | (Beyond Unreal's C++) Graphs compile to TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP; other languages come as packs from extensions or as declarative definitions, checked by the published conformance suite | ✅ (Rust has no inheritance or interfaces, Go no inheritance) | 6, 8 |
 | Languages | (Beyond Unreal, which owns its projects) Graphs fit any codebase: each project's build and workspace, its declared language version checked against what generated code needs, generated code that passes the project's own checkers, New Project and Set Up in This Project | ✅ (generated code for older language versions deferred) | 11 |
-| Languages | (Beyond Unreal, whose nearest is the Reference Viewer) A map of the whole codebase, top to bottom: architecture, structure, call flow and a function's control flow, with bridges into Blueprint | ⬜ | 12 |
+| Languages | (Beyond Unreal, whose nearest is the Reference Viewer) A map of the whole codebase, top to bottom: architecture, structure, call flow and a function's control flow, with bridges into Blueprint | ✅ (read-only; calls are static and approximate) | 12 |
 | Languages | (Beyond Unreal) Workspaces with graphs in several languages: a new graph takes its folder's language, structs and enums can be shared between languages, and another language's code is reached through project functions | ✅ (generated cross-language bindings deferred) | 7 |
 | Debugging | F9 breakpoints, Ctrl+Shift+F9 clears them; stepping | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |
 | Debugging | Pin value hover, Watch this value | ✅ (Simulate, and generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby, PHP and declarative packs' code) | — |

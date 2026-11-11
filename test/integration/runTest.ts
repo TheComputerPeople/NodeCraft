@@ -1,9 +1,33 @@
 // Launches VS Code with the extension under development and runs the integration suite inside it.
 // The first run downloads VS Code into .vscode-test/.
+import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { runTests } from '@vscode/test-electron';
+import { downloadAndUnzipVSCode, runTests } from '@vscode/test-electron';
+
+// runTests always turns workspace trust off (--disable-workspace-trust). For Restricted Mode, VS Code
+// is started here with the same arguments but that one, and stopped (its whole process tree) if it
+// doesn't finish in time.
+async function runTestsWithTrust(options: { version: string; extensionDevelopmentPath: string; extensionTestsPath: string; workspace: string; userDataDir: string; extensionsDir: string }): Promise<void> {
+  const executable = await downloadAndUnzipVSCode(options.version);
+  const args = [
+    options.workspace, '--disable-extensions', `--user-data-dir=${options.userDataDir}`, `--extensions-dir=${options.extensionsDir}`,
+    '--no-sandbox', '--disable-gpu-sandbox', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--no-cached-data',
+    `--extensionTestsPath=${options.extensionTestsPath}`, `--extensionDevelopmentPath=${options.extensionDevelopmentPath}`
+  ];
+  const child = spawn(executable, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  child.stdout.on('data', (d: Buffer) => process.stdout.write(d));
+  child.stderr.on('data', (d: Buffer) => process.stderr.write(d));
+  const timer = setTimeout(() => {
+    console.error('The Restricted Mode run took over 5 minutes; stopping it.');
+    if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F']);
+    else child.kill('SIGKILL');
+  }, 5 * 60_000);
+  const code = await new Promise<number | null>((resolve) => child.on('exit', resolve));
+  clearTimeout(timer);
+  if (code !== 0) throw new Error(`The Restricted Mode run failed with code ${code}`);
+}
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -76,6 +100,25 @@ async function main(): Promise<void> {
     });
   } finally {
     fs.rmSync(multi, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
+  }
+  // Restricted Mode (docs/codebase-map.md, "Exit check"): the sample workspace again, with workspace
+  // trust on and its prompt off, so it opens untrusted. Its own user data, so no trust is remembered.
+  const restricted = createWorkspace();
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'blueprint-vscode-untrusted-'));
+  const extensionsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'blueprint-vscode-untrusted-extensions-'));
+  fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
+  fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({ 'security.workspace.trust.enabled': true, 'security.workspace.trust.startupPrompt': 'never', 'security.workspace.trust.banner': 'never' }, null, 4));
+  try {
+    await runTestsWithTrust({
+      version: minimumVsCodeVersion(),
+      extensionDevelopmentPath: repoRoot,
+      extensionTestsPath: path.join(__dirname, 'restricted'),
+      workspace: restricted,
+      userDataDir: userData,
+      extensionsDir
+    });
+  } finally {
+    for (const dir of [restricted, userData, extensionsDir]) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
   }
 }
 

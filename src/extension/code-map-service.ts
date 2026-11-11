@@ -7,14 +7,16 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { CodeIndex, entityAt } from '../core/codemap/code-index';
 import type { Flowchart } from '../core/codemap/flow';
-import { grammarForFile } from '../core/parsing/grammars';
+import { grammarForFile, grammarForShebang, mayBeScript } from '../core/parsing/grammars';
 import { IndexResult, JsonFactsCache, factsVersion, indexFolder } from './code-indexer';
 import { ParseService } from './parse-service';
 import { globToRegExp } from './placement';
 import { scanLimit } from './scan-limit';
 
-// After a change, the index is rebuilt once things have been quiet this long.
-const REBUILD_DELAY_MS = 750;
+// After a change, the index is rebuilt once things have been quiet this long (a burst of changes, a
+// branch checked out, comes within it). With the rebuild from the cache, a saved file is on the map
+// in under a second (docs/codebase-map.md, "Exit check").
+const REBUILD_DELAY_MS = 400;
 
 export class CodeMapService implements vscode.Disposable {
   private parser: ParseService | undefined;
@@ -100,11 +102,13 @@ export class CodeMapService implements vscode.Disposable {
   // The flowchart of the function around a line of a file (docs/codebase-map.md, Part 2), read from
   // the file as it is now (an editor's unsaved text included). Undefined when no function is there.
   async flowchart(folder: vscode.WorkspaceFolder, relativePath: string, line: number): Promise<Flowchart | undefined> {
-    const grammar = grammarForFile(relativePath);
-    if (!grammar) return undefined;
+    if (!grammarForFile(relativePath) && !mayBeScript(relativePath)) return undefined;
     const uri = vscode.Uri.joinPath(folder.uri, ...relativePath.split('/'));
     const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
     const text = open ? open.getText() : new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+    // (A script without an extension: by its `#!` line.)
+    const grammar = grammarForFile(relativePath) ?? grammarForShebang(text.split(/\r?\n/, 1)[0]);
+    if (!grammar) return undefined;
     this.parser ??= new ParseService(this.grammarDir());
     return this.parser.flow(grammar, text, line);
   }

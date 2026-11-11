@@ -70,6 +70,8 @@ export interface CallFlowContext {
   root?: string;
   rootLabel?: string;
   starts: number;
+  // Started from what nothing calls, the folder having no entry points.
+  uncalled?: boolean;
   depth: number;
   path?: { from: string; to: string; fromLabel: string; toLabel: string; length?: number };
 }

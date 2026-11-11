@@ -57,9 +57,15 @@ export function buildCallScene(index: CodeIndex, view: MapView): Scene {
   // (A graph file whose graphs are entry points starts from those graphs.)
   const startsFromGraphs = (e: Entity) => e.kind === 'graph-file' && (graphsOf.get(e.id) ?? []).some((g) => byId.get(g)?.entries?.length);
   const firstEdges = direction === 'callers' ? into : out;
-  const starts = root ? [root] : index.entities
-    .filter((e) => byId.has(e.id) && e.entries?.length && canStartCallFlow(e) && !startsFromGraphs(e) && (firstEdges.get(e.id)?.length ?? 0) > 0)
+  const startable = (e: Entity) => byId.has(e.id) && canStartCallFlow(e) && (firstEdges.get(e.id)?.length ?? 0) > 0;
+  let starts = root ? [root] : index.entities
+    .filter((e) => e.entries?.length && startable(e) && !startsFromGraphs(e))
     .slice(0, MAX_ENTRY_STARTS).map((e) => e.id);
+  // A folder without entry points (a library): from what nothing in it calls, as its users would.
+  const fromUncalled = !root && !starts.length;
+  if (fromUncalled) {
+    starts = index.entities.filter((e) => startable(e) && !into.get(e.id)?.length).slice(0, MAX_ENTRY_STARTS).map((e) => e.id);
+  }
   // Breadth first, each way the flow goes: each start to so many levels; an opened box one further.
   const level = new Map<string, number>(starts.map((s) => [s, 0]));
   const explored = new Set<string>();
@@ -140,7 +146,7 @@ export function buildCallScene(index: CodeIndex, view: MapView): Scene {
       arrows.push({ id: `calls:${u.from}>${id}`, from: u.from, to: id, kind: 'calls', weight: 1, certain: false });
     }
   }
-  return finish(index, view, byId, boxes, arrows, { direction, ...(root ? { root, rootLabel: labelOf(byId.get(root)!) } : {}), starts: starts.length, depth: depthLimit });
+  return finish(index, view, byId, boxes, arrows, { direction, ...(root ? { root, rootLabel: labelOf(byId.get(root)!) } : {}), ...(fromUncalled && starts.length ? { uncalled: true } : {}), starts: starts.length, depth: depthLimit });
 }
 
 // The calls that lead from one box to another: every box on a shortest path of calls between them

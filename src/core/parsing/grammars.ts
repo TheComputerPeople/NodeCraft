@@ -34,6 +34,26 @@ export function grammarForFile(fileName: string): GrammarId | undefined {
   return dot > 0 ? BY_EXTENSION[base.slice(dot).toLowerCase()] : undefined;
 }
 
+// A script without an extension (bin/greet, artisan): the grammar its `#!` line names, if any.
+const BY_INTERPRETER: Record<string, GrammarId> = { node: 'javascript', nodejs: 'javascript', tsx: 'typescript', 'ts-node': 'typescript', deno: 'typescript', bun: 'typescript', python: 'python', ruby: 'ruby', php: 'php', lua: 'lua', luajit: 'lua' };
+
+export function grammarForShebang(firstLine: string): GrammarId | undefined {
+  if (!firstLine.startsWith('#!')) return undefined;
+  // `#!/usr/bin/env [-S] ruby`, or `#!/usr/bin/python3.12`.
+  const words = firstLine.slice(2).trim().split(/\s+/);
+  const program = (words[0].endsWith('/env') ? words.slice(1).find((w) => !w.startsWith('-')) : words[0]) ?? '';
+  const name = program.split('/').pop()!.replace(/[\d.]+$/, '');
+  return BY_INTERPRETER[name];
+}
+
+// Whether a file without an extension might be a script to read its `#!` line for: in a bin/,
+// exe/ or scripts/ folder, or a framework's command (Laravel's artisan).
+export function mayBeScript(relativePath: string): boolean {
+  const parts = relativePath.replace(/\\/g, '/').split('/');
+  const base = parts.pop()!;
+  return !base.includes('.') && (base === 'artisan' || parts.some((p) => p === 'bin' || p === 'exe' || p === 'scripts'));
+}
+
 // The grammar for one of the extension's language ids ('csharp', 'cpp', ...).
 export function grammarForLanguage(language: string): GrammarId | undefined {
   if (language === 'csharp') return 'c_sharp';

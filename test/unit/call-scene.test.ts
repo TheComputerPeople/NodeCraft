@@ -44,6 +44,16 @@ describe('the call flow', () => {
     assert.ok(!ids.includes('g:Game.vgraph'), 'the graph file starts from its graph');
   });
 
+  test('without entry points (a library), it starts from what nothing calls, and says so', () => {
+    const index = sample();
+    for (const e of index.entities) delete e.entries;
+    const scene = buildCallScene(index, { mode: 'calls', expanded: [] });
+    assert.deepEqual(scene.calls, { direction: 'callees', uncalled: true, starts: 2, depth: 2 });
+    // main, and the graph file (leading into its graph); everything else is called by something.
+    assert.ok(scene.boxes.some((b) => b.id === 's:a.ts#main') && scene.boxes.some((b) => b.id === 'g:Game.vgraph'));
+    assert.ok(scene.boxes.some((b) => b.id === 'g:Game.vgraph#EventGraph'), 'the graph file leads into its graph');
+  });
+
   test(`from a function: ${CALL_DEPTH} levels, then boxes with calls left say how many`, () => {
     const scene = buildCallScene(sample(), { mode: 'calls', expanded: [], calls: { root: 's:a.ts#main' } });
     assert.deepEqual(boxes(scene), ['main*', 'load', 'run@', 'parse[1]', 'emit?']);

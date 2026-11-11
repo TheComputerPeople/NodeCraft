@@ -156,6 +156,9 @@ describe('the Codebase Map webview', () => {
     await e.send({ type: 'scene', scene: { ...flow, calls: { direction: 'callers', starts: 12, depth: 2 } } } as never);
     assert.equal(await e.page.textContent('#map-root-label'), 'From the entry points (12)');
     assert.equal(await e.page.isVisible('#map-root-clear'), false);
+    // Without any, from what nothing calls.
+    await e.send({ type: 'scene', scene: { ...flow, calls: { direction: 'callees', uncalled: true, starts: 3, depth: 2 } } } as never);
+    assert.equal(await e.page.textContent('#map-root-label'), 'No entry points: from what nothing calls (3)');
   });
 
   test("a flowchart: its boxes' code and calls, labelled arrows, Back, and the code at a box's line", async (t) => {
@@ -227,6 +230,25 @@ describe('the Codebase Map webview', () => {
     assert.deepEqual(await posted(e), [
       JSON.stringify({ type: 'toggle', id: 'f:a.ts' }), JSON.stringify({ type: 'open', id: 'f:b.ts' }), JSON.stringify({ type: 'toggle', id: 'externals' })
     ]);
+  });
+
+  test('the box opened stays where it was on the screen when the map is laid out again', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const where = async (id: string) => {
+      const b = (await e.page.locator(`.map-box[data-id="${id}"]`).boundingBox())!;
+      return { x: Math.round(b.x), y: Math.round(b.y) };
+    };
+    const moved = (dx: number, dy: number): LaidScene => ({ ...SCENE, boxes: SCENE.boxes.map((b) => ({ ...b, x: b.x + dx, y: b.y + dy })) });
+    const before = await where('externals');
+    await e.page.click('.map-box[data-id="externals"] .map-toggle');
+    // Laid out again, everything 300 to the right and 200 down: the map moves back under it.
+    await e.send({ type: 'scene', scene: moved(300, 200) } as never);
+    assert.deepEqual(await where('externals'), before);
+    // A redraw nobody asked for (the code changed) leaves the view as it is.
+    await e.send({ type: 'scene', scene: moved(400, 200) } as never);
+    const after = await where('externals');
+    assert.deepEqual({ x: after.x - before.x, y: after.y - before.y }, { x: Math.round(100 * await e.page.evaluate(() => Number((document.querySelector('#map-world') as HTMLElement).style.transform.match(/scale\(([\d.]+)\)/)![1]))), y: 0 });
   });
 
   test("a box's open button shows its code", async (t) => {

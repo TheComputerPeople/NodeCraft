@@ -142,9 +142,38 @@ Across all four:
   - Each layout's call flow from its entry point reaches its graphs and the project functions they call.
   - The control flow of one fixture function per language matches its expected flowchart, which has a branch, a loop with a break, a try/catch where the language has one, and an early return.
 - **Layout:** in every view, every edge points down except loops' and recursion's back edges, and boxes don't overlap.
-- **Scale:** this repository and the largest corpus layout are indexed in under 5 seconds on a cold cache, and a changed file updates the index in under a second. (Measured in step 3: this repository's 409 files in 1.1 s cold and 0.14 s warm; the largest corpus layout's 88 files in 0.3 s.)
+- **Scale:** this repository and the largest corpus layout are indexed in under 5 seconds on a cold cache, and a changed file updates the index in under a second. (Measured in step 3: this repository's 409 files in 1.1 s cold and 0.14 s warm; the largest corpus layout's 88 files in 0.3 s. In step 11, see below.)
 - **Bridges:** Expose as Node from the map makes a node; Open Graph opens the graph; Show in Codebase Map from a function in the code editor opens its call flow.
 - **Restricted Mode:** the map works in an untrusted workspace.
+
+**Met (step 11).** Each part is a test that runs with `npm test` or `npm run test:integration`:
+
+- **The corpus** (test/conformance/codebase-map.test.ts; the hand-written lists are in corpus-map-expected.ts). All 28 layouts, with their graphs compiled in:
+  - **Architecture,** with every project and folder open: every project and folder is on the map, with the imports listed for the layout (its entry point to its graphs, its graphs to the code they call).
+  - **Call flow** from the entry points: every layout starts from its own program, and reaches each graph listed and the project functions it calls.
+  - **Structure:** the parents listed, in six languages.
+
+  test/conformance/code-index.test.ts checks the index itself against the same lists.
+- **Control flow** (test/unit/code-flow.test.ts): one function per grammar (13, C included) matches its golden flowchart. Each has a branch, a loop left by a break, a try/catch (or an error return) and an early return.
+- **Layout:** each layout's three views and each grammar's flowchart, laid out by ELK.
+  - Every arrow points down, except loops' back edges and cycles (recursion, import cycles). An inheritance arrow points up, at the parent above.
+  - No boxes overlap, and every box is inside its open box.
+- **Scale** (measured on this machine):
+  - **Cold:** this repository's 445 files in 1.1 to 1.3 s; every layout well under 5 s, each checked.
+  - **A changed file:** the index is rebuilt from the cache in 0.36 s. The rebuild waits for 0.4 s of quiet (it was 0.75 s), so a save is on the map in under a second.
+- **Bridges** (test/integration/suite):
+  - Expose as Node from a function's box makes a node.
+  - A graph's box opens the graph editor on that graph's tab.
+  - Show Call Flow from the function at the cursor starts from it.
+- **Restricted Mode** (test/integration/restricted): the sample workspace opens untrusted. The usual test runner turns workspace trust off, so this run turns it on. The four views, a hover and the tree all work.
+
+**Left for later:**
+
+- **Ambiguous calls through the language server:** `definitionAt` asks a file's language server for one call's definition (step 4), but the map doesn't ask it when a box is opened. An ambiguous call stays dashed to every candidate.
+- **Peeking:** a box opens its code beside the map, not in a peek.
+- **Laying out only what changed:** opening a box lays the whole map out again. The box opened stays where it was on the screen (step 11), but the boxes around it can move.
+- **Zoomed in,** a box shows its members, not its signatures and code. The hover card shows those.
+- **Fields:** TypeScript interfaces' fields and Python's attributes aren't in the index (step 7).
 
 ## Steps
 
@@ -474,6 +503,26 @@ Across all four:
   - **The webview:** the card asked for once, shown and hidden, by mouse and by keys; Expose as Node on a function's menu and not a file's.
   - **Integration:** inside VS Code, a function's hover; Expose as Node from its box makes a node (only that function marked); a graph's box opens the graph editor; the tree's path down to a function, its tooltip, opening its code, Show in Codebase Map from it and Expose as Node from it; in the multi-root workspace, a branch per folder.
 11. The exit check, docs, the parity checklist and status.
+
+### Built (step 11): the exit check
+
+- **The exit check** (above) is in test/conformance/codebase-map.test.ts and test/integration/restricted. The corpus's lists moved to test/conformance/corpus-map-expected.ts, which the index's test shares.
+- **Programs the index didn't know.** Found by the check: in four layouts, nothing was an entry point, so the call flow was empty.
+  - **Scripts without an extension** (a Rails app's `bin/greet`, Laravel's `artisan`) are read by their `#!` line, when they're in a bin/, exe/ or scripts/ folder, or are named artisan. Their control flow is read the same way.
+  - **Build output:** a package.json's `main` and `bin` pointing into build output (`dist/index.js`) are their source's (`src/index.ts`).
+  - **Python scripts** in a bin/ or scripts/ folder are programs, as Lua's, Ruby's and PHP's are.
+  - **Not programs:** in such a folder, a file another file imports is the scripts' library. Generated code isn't a program either.
+- **A folder with no entry points** (a library) starts its call flow from what nothing in it calls. The call bar says so: "No entry points: from what nothing calls (N)".
+- **Imports, found by the check:**
+  - A TypeScript import of a graph file without an extension (`./Greeting.vgraph`) is its generated module, once it's compiled, so calls into it are certain.
+  - A PHP `require` of Composer's `vendor/autoload.php` isn't an unresolved import: vendor/ isn't the workspace's code.
+- **The rebuild delay** is 0.4 s: a saved file is on the map in under a second.
+- **Opening or closing a box keeps it where it was** on the screen when the map is laid out again; the map moves around it. A redraw for a change to the code leaves the view as it was.
+- **Restricted Mode needs a launch of its own:** `@vscode/test-electron` always turns workspace trust off. runTest.ts starts VS Code itself for that run, and stops its whole process tree if it hangs.
+- **Tested:**
+  - **Rules:** `#!` lines and where scripts are; build output, script folders, generated code and scripts without an extension as entry points; a graph imported without an extension; vendor/; the call flow of a folder with no entry points.
+  - **The webview:** the call bar without entry points; a box opened stays in place, and a redraw nobody asked for doesn't move the view.
+  - **Integration:** the map in Restricted Mode.
 
 ## Not in this phase
 

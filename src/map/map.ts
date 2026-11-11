@@ -25,6 +25,14 @@ let selected: string | undefined;
 let pan = { x: 20, y: 20 };
 let zoom = 1;
 let fitted = false;
+// The box being opened or closed, and where it was on the screen: the map is laid out again, and
+// moves so that box stays where it was (the rest moves around it, not it away from the pointer).
+let anchor: { id: string; x: number; y: number } | undefined;
+
+function toggleBox(box: LaidBox): void {
+  anchor = { id: box.id, x: pan.x + box.x * zoom, y: pan.y + box.y * zoom };
+  post({ type: 'toggle', id: box.id });
+}
 
 const MIN_ZOOM = 0.03;
 const MAX_ZOOM = 3;
@@ -81,7 +89,7 @@ function renderBox(box: LaidBox): HTMLElement {
     toggle.setAttribute('aria-label', box.expanded ? `Close ${box.label}` : `Open ${box.label}`);
     toggle.addEventListener('click', (e) => {
       e.stopPropagation();
-      post({ type: 'toggle', id: box.id });
+      toggleBox(box);
     });
     head.appendChild(toggle);
   }
@@ -173,7 +181,7 @@ function renderBox(box: LaidBox): HTMLElement {
   // Double-clicking a box that holds others opens or closes it; a box with nothing inside opens its code.
   el.addEventListener('dblclick', (e) => {
     e.stopPropagation();
-    if (box.expandable) post({ type: 'toggle', id: box.id });
+    if (box.expandable) toggleBox(box);
     else if (box.path) post({ type: 'open', id: box.id });
   });
   return el;
@@ -452,12 +460,15 @@ function render(): void {
   highlight();
   const shown = scene.boxes.length;
   statusEl.textContent = `${shown.toLocaleString()} box${shown === 1 ? '' : 'es'} · ${scene.arrows.length.toLocaleString()} arrow${scene.arrows.length === 1 ? '' : 's'}`;
+  const kept = anchor && scene.boxes.find((b) => b.id === anchor!.id);
   if (!fitted) {
     fitted = true;
     fit();
   } else {
+    if (kept && anchor) pan = { x: anchor.x - kept.x * zoom, y: anchor.y - kept.y * zoom };
     applyView();
   }
+  anchor = undefined;
 }
 
 // Pan by dragging the background; zoom with the wheel, around the pointer.
@@ -569,7 +580,7 @@ function menuItems(box: LaidBox): ({ label: string; run: () => void } | 'separat
   if (box.path && CODE_KINDS.has(box.kind)) items.push({ label: box.kind === 'graph-file' || box.kind === 'graph' ? 'Open the graph' : 'Open the code', run: () => post({ type: 'open', id }) });
   if (box.expandable) {
     const calls = scene?.mode === 'calls';
-    items.push({ label: calls ? (box.expanded ? 'Show fewer calls' : 'Show more calls') : box.expanded ? 'Close' : 'Open', run: () => post({ type: 'toggle', id: box.id }) });
+    items.push({ label: calls ? (box.expanded ? 'Show fewer calls' : 'Show more calls') : box.expanded ? 'Close' : 'Open', run: () => toggleBox(box) });
   }
   if (CALLABLE_KINDS.has(box.kind)) {
     items.push('separator');
@@ -898,7 +909,7 @@ canvas.addEventListener('keydown', (e) => {
     } else if (e.ctrlKey || e.metaKey || e.shiftKey || !box.expandable) {
       if (box.path) post({ type: 'open', id: entityOf(box) });
     } else {
-      post({ type: 'toggle', id: box.id });
+      toggleBox(box);
     }
   } else if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
     if (!box) return;
@@ -1140,7 +1151,7 @@ window.addEventListener('message', (event: MessageEvent<MapHostMessage>) => {
           : `No calls lead from ${path.fromLabel} to ${path.toLabel}, or back`
         : calls.rootLabel
           ? `${calls.direction === 'callers' ? 'Callers of' : calls.direction === 'both' ? 'Callers and calls of' : 'From'} ${calls.rootLabel}`
-          : `From the entry points (${calls.starts})`;
+          : calls.uncalled ? `No entry points: from what nothing calls (${calls.starts})` : `From the entry points (${calls.starts})`;
       rootClear.hidden = !calls.root && !path;
       rootClear.title = path ? `Leave the path: the call flow from ${path.fromLabel}` : 'Start from the entry points';
       rootClear.setAttribute('aria-label', rootClear.title);

@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { compileDocument } from '../../src/core/compiler';
 import { builtinLanguagePacks } from '../../src/core/languages';
-import { GRAMMAR_IDS, GrammarId, grammarFileName, grammarForFile, grammarForLanguage } from '../../src/core/parsing/grammars';
+import { GRAMMAR_IDS, GrammarId, grammarFileName, grammarForFile, grammarForLanguage, grammarForShebang, mayBeScript } from '../../src/core/parsing/grammars';
 import { NodeRegistry, parseNodeDefinition } from '../../src/core/registry';
 import { parseDocument } from '../../src/core/serializer';
 import { CodeParser } from '../../src/extension/code-parser';
@@ -30,6 +30,16 @@ describe('grammars', () => {
       assert.ok(grammarForLanguage(language), `every language the extension supports has a grammar: ${language}`);
     }
     assert.equal(grammarForLanguage('cobol'), undefined);
+  });
+
+  test("a script without an extension is parsed by the grammar its #! line names", () => {
+    const cases: [string, GrammarId | undefined][] = [
+      ['#!/usr/bin/env ruby', 'ruby'], ['#!/usr/bin/env php', 'php'], ['#!/usr/bin/python3.12', 'python'], ['#! /usr/bin/env -S node --no-warnings', 'javascript'],
+      ['#!/usr/bin/env lua5.4', 'lua'], ['#!/bin/sh', undefined], ['# not a shebang', undefined], ['', undefined]
+    ];
+    for (const [line, grammar] of cases) assert.equal(grammarForShebang(line), grammar, line);
+    // Only where a program would be: a bin/, exe/ or scripts/ folder, or artisan.
+    assert.deepEqual(['bin/greet', 'app/exe/run', 'scripts/build', 'artisan', 'README', 'bin/tool.sh', 'src/greet'].map(mayBeScript), [true, true, true, true, false, false, false]);
   });
 
   test('the built grammars are the ones the manifest names, with their notices', () => {
