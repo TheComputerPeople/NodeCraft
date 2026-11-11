@@ -3,8 +3,8 @@
 import { after, afterEach, before, describe, test, TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { Browser } from 'playwright-core';
-import { GraphDocument } from '../../src/core/model';
-import { classDefinitions, declaredClass, declaredInterface, interfaceDefinitions } from '../../src/core/objects';
+import { GraphDocument, NodeDefinition } from '../../src/core/model';
+import { CodeClassInfo, classDefinitions, declaredClass, declaredInterface, interfaceDefinitions } from '../../src/core/objects';
 import { EditorPage, launchBrowser, sampleDefinitions, sampleDocument } from './harness';
 
 const enemy: GraphDocument = {
@@ -98,6 +98,24 @@ describe('objects', () => {
     assert.deepEqual(hit.nodes.map((n) => n.type), ['core:function.entry', 'core:object.parent']);
     assert.ok(hit.connections.some((c) => c.fromPin === 'amount' && c.toPin === 'amount'));
     assert.equal(await e.count('.mb-override'), 0, 'nothing left to override');
+  });
+
+  test("Class Settings lists the code's classes with their files; a class isn't a node; a missing parent says so", async (t) => {
+    if (!browser) return t.skip(skipReason);
+    const actor: CodeClassInfo = { kind: 'code-class', id: 'code:javascript:lib/actor.js#Actor', type: 'native:Actor', name: 'Actor', title: 'Actor', language: 'javascript', path: 'lib/actor.js', overridable: [] };
+    const python: CodeClassInfo = { ...actor, id: 'code:python:actor.py#Actor', language: 'python', path: 'actor.py' };
+    const definition = (info: CodeClassInfo): NodeDefinition => ({ type: info.id, version: 1, displayName: info.title, category: 'Project / Classes', inputs: [], outputs: [], implementation: { kind: 'code-class', type: info } });
+    editor = await EditorPage.open(browser);
+    const e = editor;
+    await e.send({ type: 'init', document: sampleDocument(), definitions: [...sampleDefinitions(), ...classDefinitions(declaredClass(enemy)!), definition(actor), definition(python)], saveDelay: 0 });
+    const options = await e.page.$$eval('#inspector-content select[aria-label="Parent Class"] option', (els) => els.map((el) => [(el as HTMLOptionElement).value, el.textContent]));
+    assert.deepEqual(options, [['', 'None'], ['object:Enemy', 'Enemy'], ['code:javascript:lib/actor.js#Actor', 'Actor (lib/actor.js)']], "the JavaScript graph's: not Python's");
+    assert.ok(!(await e.page.$$eval('.palette-node strong', (els) => els.map((el) => el.textContent))).includes('Actor'));
+    await e.page.selectOption('#inspector-content select[aria-label="Parent Class"]', 'code:javascript:lib/actor.js#Actor');
+    assert.equal((await saved(e, (d) => !!d.parent)).parent, 'code:javascript:lib/actor.js#Actor');
+    // Gone from the code: still chosen, and marked missing.
+    await e.send({ type: 'init', document: { ...sampleDocument(), parent: 'code:javascript:lib/gone.js#Gone' }, definitions: sampleDefinitions(), saveDelay: 0 });
+    assert.equal(await e.page.$eval('#inspector-content select[aria-label="Parent Class"]', (el) => (el as HTMLSelectElement).selectedOptions[0].textContent), 'Gone (missing)');
   });
 
   test('Class Settings adds an interface; its functions are implemented from the Override menu', async (t) => {

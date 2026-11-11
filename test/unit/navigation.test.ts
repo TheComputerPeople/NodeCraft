@@ -53,7 +53,8 @@ describe('Go to Definition', () => {
     ].join('\n'));
     const exposed = exposeFunctions(scan, { language: 'typescript', path: 'lib/a.ts', exposeAll: false });
     const lines = Object.fromEntries([...exposed.lines].map(([type, line]) => [type.slice(type.indexOf('#') + 1), line]));
-    assert.deepEqual(lines, { hit: 2, 'Player:new': 7, 'Player:heal': 9, 'Player:get:health': 5, 'Player:set:health': 5 });
+    // (And the class's own, as a class graph classes may extend.)
+    assert.deepEqual(lines, { hit: 2, Player: 3, 'Player:new': 7, 'Player:heal': 9, 'Player:get:health': 5, 'Player:set:health': 5 });
     assert.ok(exposed.definitions.every((d) => !JSON.stringify(d).includes('"line"')), 'graph files store definitions, so a moved line must not change them');
   });
 });

@@ -391,13 +391,25 @@ export function scanCSharp(source: string): CSharpScan {
         const params = parseParams(k + 1, close - 1, outs);
         const task = taskOf(returnText, modifiers);
         const returns = task && 'value' in task ? task.value : mapReturn(returnText);
-        if (!access) instanceSkip(name, 'it isn\'t public or internal, so generated code can\'t call it');
+        // What a subclass may do with it (docs/code-classes-as-parents.md): override it only when
+        // it's virtual, abstract or an override, and not sealed; a protected one is for subclasses.
+        const abstract = modifiers.includes('abstract');
+        const inheritance = {
+          ...(abstract ? { abstract: true } : {}),
+          ...(!(abstract || modifiers.includes('virtual') || modifiers.includes('override')) || modifiers.includes('sealed') ? { sealed: true } : {})
+        };
+        const overridable = !inheritance.sealed && (abstract || /^overridable\b/i.test(memberDoc.tags.find((t) => t.name === 'blueprint')?.text.trim() ?? ''));
+        const usable = !(task && 'reason' in task) && !('reason' in params) && !('reason' in returns) && !(task && outs.length) && typeParameters.length <= 2;
+        if (!access && modifiers.includes('protected') && !modifiers.includes('private') && usable) {
+          cls.methods.push({ name, line: tokens[first].line, params: params as ScannedParam[], returns: (returns as { type: TypeRef | null | undefined }).type, doc: memberDoc, protected: true, ...inheritance, ...(task ? { latent: true } : {}) });
+          if (!overridable) instanceSkip(name, 'it isn\'t public or internal, so generated code can\'t call it');
+        } else if (!access) instanceSkip(name, 'it isn\'t public or internal, so generated code can\'t call it');
         else if (typeParameters.length > 2) instanceSkip(name, TOO_MANY_TYPE_PARAMETERS);
         else if (task && 'reason' in task) instanceSkip(name, task.reason);
         else if ('reason' in params) instanceSkip(name, params.reason);
         else if (task && outs.length) instanceSkip(name, 'async methods can\'t have out parameters');
         else if ('reason' in returns) instanceSkip(name, returns.reason);
-        else cls.methods.push(task ? { name, line: tokens[first].line, params, returns: returns.type, doc: memberDoc, latent: true } : withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: memberDoc }, outs, returnText));
+        else cls.methods.push(task ? { name, line: tokens[first].line, params, returns: returns.type, doc: memberDoc, latent: true, ...inheritance } : { ...withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: memberDoc }, outs, returnText), ...inheritance });
         i = memberEnd;
         continue;
       }

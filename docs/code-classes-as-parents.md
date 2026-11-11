@@ -81,7 +81,7 @@ Each language extends the class as its code would, and imports it as its member 
 
 ## Decisions
 
-The three choices this design needs:
+The three choices this design needs. The user confirmed all three as recommended on 2026-11-10 ("Continue", after they were put to them); the alternatives are kept below each.
 
 1. **What a class allows (recommended: say it in the code, as Unreal does).**
    - A class may be extended when it is marked `@blueprint` (Unreal's `Blueprintable`), or has marked members.
@@ -113,6 +113,32 @@ The three choices this design needs:
 
 1. This design, the roadmap entry and the decisions above.
 2. The model: a code class as `parent`, what the scanners read about classes (marked classes, overridable and abstract methods, `virtual`, `final`, constructors), Class Settings' list, a missing parent's error, and graph objects wiring to their code ancestors' pins.
+
+### Built (step 2)
+
+- **A class's own definition.** A class graph classes may extend gets a definition whose type is its id, `code:<language>:<path>#<Class>` (`CodeClassInfo` in src/core/objects.ts). It isn't a node, so the palette leaves it out.
+  - **What it carries:** the class's pin type and its base's, its name in the code and the editor, whether it's abstract, its constructor's parameters, and the methods a subclass may override, with their pins.
+  - **Where it comes from:** `exposeFunctions` returns it apart from the nodes (`classes`), and the project's functions register it with them.
+  - **Which classes:** one marked `@blueprint`, or with marked members (decision 1).
+- **What the scanners read about methods** (`abstract`, `sealed`, `protected` on `ScannedFunction`):
+
+  | Language | Overridable | Abstract | Sealed | Protected |
+  |---|---|---|---|---|
+  | TypeScript, JavaScript | any method | `abstract` | — | `protected` |
+  | Python | any method | `@abstractmethod` | — | `_name` |
+  | C# | `virtual`, `abstract` or `override` | `abstract` | not virtual, or `sealed` | `protected` |
+  | C++ | `virtual`, or `override` | `= 0` (the class is abstract too) | not virtual, or `final` | `protected:` |
+  | Java | any method | `abstract` | `final` | `protected` |
+  | PHP | any method | `abstract` | `final` | `protected` |
+
+  A method is overridable when it's abstract, or marked `@blueprint overridable`, and not sealed. In Lua, GDScript and Ruby, which have neither abstract methods nor sealing, the marker alone says so. A protected method is a subclass's to override, never a node with a Target pin; one marked plain `@blueprint` says why it isn't a node.
+- **Class Settings** lists the code's classes in the languages the graph can use, after its graph classes, each with its file ("Actor (src/actor.ts)"). A parent that's gone stays chosen and says "(missing)". Languages without inheritance show no Parent Class at all, as before.
+- **Wiring.** A graph class whose chain of parents ends in a code class is that class, and each class it extends: its objects connect to their Target pins (`subclassTest`, `codeParentOf`).
+- **Compile** reports a code parent that isn't there or isn't marked (`parent-missing`), one in a language the graph can't use (`wrong-language`), and, until steps 4 to 6 generate them, any other (`code-parent-unsupported`).
+- **Found on the way:** tree-sitter's TypeScript grammar takes a member named `abstract` for the modifier. This repository's own-source parse test listed that bug by file and line; it now recognizes the line's text, so moving the code doesn't break it.
+- **Tested:**
+  - **Rules:** each scanner's abstract, sealed and protected methods and constructors (TypeScript, Python, C#, Java, C++, PHP); an unmarked class not offered; wiring to the code class and its base, directly and through a graph parent; Compile's three errors.
+  - **The webview:** Class Settings lists the graph's language's code classes with their files, the class isn't in the palette, and a missing parent says so.
 3. The editor: the parent's members on Self, Override and Parent calls for code methods, events overriding methods, abstract methods left unimplemented, and Construct's parent-constructor pins.
 4. Generated code in TypeScript, JavaScript, Python and C#.
 5. Generated code in C++ and Java.

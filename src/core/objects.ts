@@ -307,21 +307,75 @@ export function canAccess(access: Access | undefined, owner: string, from: Class
 // The class hierarchy test for types.ts: whether an object of class `from` is a `to` (the class, an
 // ancestor, or an interface it or an ancestor implements).
 export function subclassTest(definition: (type: string) => NodeDefinition | undefined, own?: ClassInfo, codeBases?: ReadonlyMap<string, string>): (from: string, to: string) => boolean {
-  return (from, to) => {
-    // A class from the project's code: up the bases its member nodes record (codeClassBases).
-    if (from.startsWith('native:')) {
-      const seen = new Set<string>();
-      for (let base = codeBases?.get(from); base && !seen.has(base); base = codeBases?.get(base)) {
-        if (base === to) return true;
-        seen.add(base);
-      }
-      return false;
+  // A class from the project's code: up the bases its member nodes record (codeClassBases).
+  const codeIs = (from: string, to: string): boolean => {
+    const seen = new Set<string>();
+    for (let base = codeBases?.get(from); base && !seen.has(base); base = codeBases?.get(base)) {
+      if (base === to) return true;
+      seen.add(base);
     }
+    return false;
+  };
+  return (from, to) => {
+    if (from.startsWith('native:')) return codeIs(from, to);
     const type = own?.id === from ? own : classById(from, definition);
     if (!type) return false;
     const chain = [type, ...ancestors(type, definition)];
-    return chain.some((c) => c.id === to || c.interfaces?.includes(to));
+    if (chain.some((c) => c.id === to || c.interfaces?.includes(to))) return true;
+    // A graph class extending a class from the code is that class, and each class it extends
+    // (docs/code-classes-as-parents.md, part 2).
+    const code = codeClassById(chain[chain.length - 1].parent, definition);
+    return !!code && (code.type === to || codeIs(code.type, to));
   };
+}
+
+// The class from the code a graph class extends, directly or through its graph ancestors.
+export function codeParentOf(type: ClassInfo, definition: (type: string) => NodeDefinition | undefined): CodeClassInfo | undefined {
+  const chain = [type, ...ancestors(type, definition)];
+  return codeClassById(chain[chain.length - 1].parent, definition);
+}
+
+// A class from the project's code that graph classes may extend (docs/code-classes-as-parents.md),
+// carried by a definition of its own whose type is its id. Not a node: the palette leaves it out.
+export interface CodeClassInfo {
+  kind: 'code-class';
+  // "code:<language>:<path>#<Class>": what a graph class's `parent` names.
+  id: string;
+  // Its objects' pin type ("native:Actor"), and its base class's.
+  type: string;
+  base?: string;
+  // Its name in the code (with its namespace or module path, as its member nodes' implementations
+  // have it), and its name in the editor.
+  name: string;
+  title: string;
+  language: string;
+  path: string;
+  module?: string;
+  // Can't be constructed until a subclass gives its abstract methods bodies.
+  abstract?: boolean;
+  // Its constructor's parameters: Construct <GraphClass>'s inputs, passed on to it.
+  init?: PinDefinition[];
+  // The methods a graph class may override: marked `@blueprint overridable`, or abstract; never one
+  // the language seals. Their data pins.
+  overridable: CodeOverridable[];
+}
+
+export interface CodeOverridable {
+  name: string;
+  inputs: PinDefinition[];
+  outputs: PinDefinition[];
+  abstract?: boolean;
+  protected?: boolean;
+  latent?: boolean;
+}
+
+export const CODE_CLASS_PREFIX = 'code:';
+
+// The code class a parent id names, from its definition.
+export function codeClassById(id: string | undefined, definition: (type: string) => NodeDefinition | undefined): CodeClassInfo | undefined {
+  if (!id?.startsWith(CODE_CLASS_PREFIX)) return undefined;
+  const implementation = definition(id)?.implementation;
+  return implementation?.kind === 'code-class' ? implementation.type : undefined;
 }
 
 // A class from the project's code, as its member nodes record it (docs/node-authoring.md, gap 2):
@@ -348,7 +402,11 @@ export function codeClasses(definitions: Iterable<NodeDefinition>): Map<string, 
 
 // The class each class from the project's code extends, by type id.
 export function codeClassBases(definitions: Iterable<NodeDefinition>): Map<string, string> {
-  return new Map([...codeClasses(definitions).values()].flatMap((c) => (c.base ? [[c.type, c.base] as [string, string]] : [])));
+  const all = [...definitions];
+  const bases = new Map([...codeClasses(all).values()].flatMap((c) => (c.base ? [[c.type, c.base] as [string, string]] : [])));
+  // (A class graph classes may extend says so too, with or without member nodes.)
+  for (const d of all) if (d.implementation?.kind === 'code-class' && d.implementation.type.base) bases.set(d.implementation.type.type, d.implementation.type.base);
+  return bases;
 }
 
 // ---- Values (Simulate) --------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 // Functions read from project code, and how they become nodes (docs/code-as-nodes.md). Each language
 // pack's scanner produces a ModuleScan; exposeFunctions turns it into node definitions.
 import { CodeMember, CodeResults, FunctionImplementation, NodeDefinition, PinDefinition } from '../model';
+import { CODE_CLASS_PREFIX, CodeClassInfo, CodeOverridable } from '../objects';
 import { TypeRef } from '../types';
 
 export interface DocComment {
@@ -40,6 +41,12 @@ export interface ScannedFunction {
   // Deprecated by the language's own marker ([Obsolete], #[deprecated], @Deprecated…), which the
   // scanner reads; a @deprecated tag says so too (docs/node-authoring.md, gap 6).
   deprecated?: { message?: string };
+  // A class's method (docs/code-classes-as-parents.md): abstract (no body; a subclass gives one),
+  // sealed (the language won't let a subclass override it: not virtual in C# and C++, final in Java
+  // and PHP), or protected (a subclass may override it, but it's no node with a Target pin).
+  abstract?: boolean;
+  sealed?: boolean;
+  protected?: boolean;
 }
 
 // A function that can't become a node, and why.
@@ -109,6 +116,9 @@ export interface ExposeOptions {
 
 export interface ExposedFunctions {
   definitions: NodeDefinition[];
+  // The classes graph classes may extend (docs/code-classes-as-parents.md): registered with the
+  // nodes, but not nodes themselves.
+  classes: NodeDefinition[];
   // Functions that were meant to be nodes but can't be: marked ones, or all of them with exposeAll.
   skipped: SkippedFunction[];
   // Each node type's declaration line (1-based), for Go to Definition. Not part of the definitions,
@@ -139,10 +149,15 @@ export function exposeFunctions(scan: ModuleScan, options: ExposeOptions): Expos
     // Class members only when marked: exposing every member would flood the palette.
     ...(scan.classes ?? []).flatMap((cls) => classDefinitions(cls, options, lines))
   ];
+  const classes = (scan.classes ?? []).flatMap((cls) => {
+    const definition = codeClassDefinition(cls, options);
+    if (definition) lines.set(definition.type, cls.line);
+    return definition ? [definition] : [];
+  });
   // With exposeAll, an unmarked function its language keeps private (not exported, not public, not
   // in the module's table) was never meant to be a node, so it isn't reported.
   const skipped = scan.skipped.filter((s) => s.marked || (options.exposeAll && !s.name.startsWith('_') && !PRIVATE_REASON.test(s.reason)));
-  return { definitions, skipped, lines };
+  return { definitions, classes, skipped, lines };
 }
 
 const PRIVATE_REASON = /\bisn't (exported|pub\b|public|static\b)|\(private\)|not the table the module returns|doesn't end with `return`|belong to their file/i;
@@ -297,7 +312,8 @@ function classDefinitions(cls: ScannedClass, options: ExposeOptions, lines: Map<
     });
     lines.set(type('new'), init?.line ?? cls.line);
   }
-  for (const method of cls.methods.filter((m) => isMarked(m.doc))) {
+  // A protected method is a subclass's to override, not a node with a Target pin.
+  for (const method of cls.methods.filter((m) => isMarked(m.doc) && !m.protected)) {
     const base = definitionFor(method, options, `Project / ${simple}`);
     const exec = base.inputs.filter((p) => p.kind === 'exec');
     const own = base.implementation as FunctionImplementation;
@@ -325,6 +341,44 @@ function classDefinitions(cls: ScannedClass, options: ExposeOptions, lines: Map<
     }
   }
   return definitions;
+}
+
+// A class graph classes may extend (docs/code-classes-as-parents.md, decision 1): one marked
+// `@blueprint` (Unreal's Blueprintable), or with marked members. Its definition carries what Class
+// Settings, Override and Construct need: its constructor's parameters and the methods a subclass may
+// override (marked `@blueprint overridable`, or abstract, and not sealed by the language).
+function codeClassDefinition(cls: ScannedClass, options: ExposeOptions): NodeDefinition | undefined {
+  const simple = cls.title ?? cls.name.split(/::|\.|\\/).pop()!;
+  const marked = isMarked(cls.doc) || (cls.init && isMarked(cls.init.doc)) || cls.methods.some((m) => isMarked(m.doc)) || cls.properties.some((p) => isMarked(p.doc));
+  if (!marked) return undefined;
+  const dataPins = (pins: PinDefinition[]) => pins.filter((p) => p.kind === 'data');
+  const overridable: CodeOverridable[] = cls.methods
+    .filter((m) => !m.sealed && (m.abstract || /^overridable\b/i.test(m.doc.tags.find((t) => t.name === MARKER)?.text.trim() ?? '')))
+    .map((m) => {
+      const def = definitionFor(m, options);
+      return {
+        name: m.name, inputs: dataPins(def.inputs), outputs: dataPins(def.outputs),
+        ...(m.abstract ? { abstract: true } : {}), ...(m.protected ? { protected: true } : {}), ...(m.latent ? { latent: true } : {})
+      };
+    });
+  const id = codeClassId(options.language, options.path, cls.name);
+  const info: CodeClassInfo = {
+    kind: 'code-class', id, type: cls.type.id, ...(cls.base ? { base: cls.base.id } : {}),
+    name: cls.name, title: simple, language: options.language, path: options.path, ...(options.module ? { module: options.module } : {}),
+    ...(cls.abstract ? { abstract: true } : {}),
+    ...(cls.init?.params.length ? { init: dataPins(definitionFor(cls.init, options).inputs) } : {}),
+    overridable
+  };
+  return {
+    type: id, version: 1, displayName: simple, category: 'Project / Classes',
+    ...(cls.doc.description ? { description: cls.doc.description } : {}),
+    inputs: [], outputs: [], implementation: { kind: 'code-class', type: info }
+  };
+}
+
+// What a graph class's `parent` names for a class from the code.
+export function codeClassId(language: string, path: string, name: string): string {
+  return `${CODE_CLASS_PREFIX}${language}:${path}#${name}`;
 }
 
 const EXEC_IN: PinDefinition = { id: 'execIn', name: '', kind: 'exec', direction: 'input' };

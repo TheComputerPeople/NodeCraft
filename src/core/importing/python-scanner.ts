@@ -229,14 +229,21 @@ function scanClass(lines: LogicalLine[], i: number, result: ModuleScan, typeVars
     const decorators: string[] = [];
     for (let d = k - 1; d >= 0 && body[d].indent === indent && body[d].text.startsWith('@'); d--) decorators.push(body[d].text);
     const memberName = def.name;
+    // (docs/code-classes-as-parents.md) An abstract method is a subclass's to give a body; a method
+    // named `_like_this` is protected by convention: a subclass's to override, but no node.
+    const abstract = decorators.some((d) => /^@(?:abc\.)?abstractmethod\b/.test(d));
+    const overridable = abstract || /^overridable\b/i.test(def.doc.tags.find((t) => t.name === 'blueprint')?.text.trim() ?? '');
     if (decorators.some((d) => /^@(staticmethod|classmethod)\b/.test(d))) skip(memberName, 'static methods of a class have no object; make it a module function instead', def.doc);
-    else if (memberName.startsWith('_') && memberName !== '__init__') skip(memberName, "it isn't public", def.doc);
+    else if (/^_[^_]/.test(memberName) && !('reason' in def.result) && !decorators.some((d) => /^@(property|functools\.cached_property|cached_property)\b|\.setter\b/.test(d))) {
+      cls.methods.push({ ...def.result, protected: true, ...(abstract ? { abstract: true } : {}) });
+      if (!overridable) skip(memberName, "it isn't public", def.doc);
+    } else if (memberName.startsWith('_') && memberName !== '__init__') skip(memberName, "it isn't public", def.doc);
     else if (decorators.some((d) => new RegExp(`^@${memberName}\\.setter\\b`).test(d))) setters.add(memberName);
     else if ('reason' in def.result) skip(memberName, def.result.reason, def.doc);
     else if (decorators.some((d) => /^@(property|functools\.cached_property|cached_property)\b/.test(d))) {
       getters.set(memberName, { name: memberName, line: def.line, ...(def.result.returns ? { type: def.result.returns } : {}), readonly: true, doc: def.doc, ...(def.result.deprecated ? { deprecated: def.result.deprecated } : {}) });
     } else if (memberName === '__init__') cls.init = { ...def.result, returns: null };
-    else cls.methods.push(def.result);
+    else cls.methods.push({ ...def.result, ...(abstract ? { abstract: true } : {}) });
   }
   for (const [getter, property] of getters) cls.properties.push({ ...property, readonly: !setters.has(getter) });
   return cls;

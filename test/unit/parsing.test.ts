@@ -118,12 +118,13 @@ describe('the parser', () => {
 
 // Bugs of the grammars in grammars/: valid code each parses with an error, and where this
 // repository has such code ("file:line").
-const KNOWN_GRAMMAR_BUGS: { what: string; grammar: GrammarId; example: string; seenAt: string[] }[] = [
+// `line`: the lines of this repository's source the bug gives errors on.
+const KNOWN_GRAMMAR_BUGS: { what: string; grammar: GrammarId; example: string; line: RegExp }[] = [
   {
     what: 'tree-sitter-typescript 0.23.2 takes a member named `abstract` for the modifier',
     grammar: 'typescript',
     example: 'interface A { abstract?: boolean; }\n',
-    seenAt: ['src/core/importing/symbols.ts:73']
+    line: /^\s*abstract\?: /
   }
 ];
 
@@ -148,12 +149,13 @@ describe('the parsing worker', () => {
   });
   after(() => service.dispose());
 
-  // `known`: errors a grammar's own bug gives on valid code (KNOWN_GRAMMAR_BUGS), as "file:line".
-  async function assertParses(files: { name: string; text: string }[], known: string[] = []): Promise<void> {
+  // `known`: errors a grammar's own bug gives on valid code (KNOWN_GRAMMAR_BUGS), by the line's text.
+  async function assertParses(files: { name: string; text: string }[], known: RegExp[] = []): Promise<void> {
     const failures: string[] = [];
     await Promise.all(files.map(async ({ name, text }) => {
       const summary = await service.summarizeFile(name, text);
-      const errors = summary?.errors.filter((e) => !known.includes(`${name.replace(/\\/g, '/')}:${e.line}`));
+      const lines = text.split('\n');
+      const errors = summary?.errors.filter((e) => !known.some((line) => line.test(lines[e.line - 1] ?? '')));
       if (!summary) failures.push(`${name}: no grammar`);
       else if (errors?.length) failures.push(`${name} (${summary.grammar}): ${errors.slice(0, 3).map((e) => `${e.missing ? 'missing token' : 'error'} at ${e.line}:${e.column}`).join(', ')}`);
     }));
@@ -193,7 +195,7 @@ describe('the parsing worker', () => {
   test("this repository's own source parses without errors", async () => {
     const files = [...sourceFiles(path.join(repoRoot, 'src')), ...sourceFiles(path.join(repoRoot, 'test'), /^(fixtures|node_modules)$/), ...sourceFiles(path.join(repoRoot, 'sample')), ...sourceFiles(path.join(repoRoot, 'scripts'))];
     assert.ok(files.length > 200, `${files.length} files`);
-    await assertParses(files.map((file) => ({ name: path.relative(repoRoot, file), text: fs.readFileSync(file, 'utf8') })), KNOWN_GRAMMAR_BUGS.flatMap((bug) => bug.seenAt));
+    await assertParses(files.map((file) => ({ name: path.relative(repoRoot, file), text: fs.readFileSync(file, 'utf8') })), KNOWN_GRAMMAR_BUGS.map((bug) => bug.line));
   });
 
   // Valid code a grammar gets wrong. Each stays here while its example still fails, so an update of

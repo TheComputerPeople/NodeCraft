@@ -52,7 +52,8 @@ export function languageCapabilities(): LanguageCapabilities {
 export function paletteEntries(): PaletteEntry[] {
   const kind = state.graph?.kind;
   const entries: PaletteEntry[] = state.definitions
-    .filter((d) => d.type !== VARIABLE_GET && d.type !== VARIABLE_SET && callable(d))
+    // (A class from the code that graph classes may extend isn't a node.)
+    .filter((d) => d.type !== VARIABLE_GET && d.type !== VARIABLE_SET && d.implementation?.kind !== 'code-class' && callable(d))
     // A function has one entry node and a macro one pair of tunnels; calls and macros are offered
     // one by one; Return Nodes only fit in functions, and events only in event graphs (as in
     // Unreal's action menu).

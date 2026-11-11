@@ -347,8 +347,16 @@ export function scanCpp(source: string): ModuleScan {
         const close = skipGroup(open);
         const declEnd = skipDeclaration(close);
         const returnText = text(i, nameIndex).trim();
+        // What a subclass may do with it (docs/code-classes-as-parents.md): override it when it's
+        // virtual (or an override) and not final; `= 0` leaves it, and the class, abstract.
+        const after = text(close, declEnd);
+        const virtual = specifiers.includes('virtual') || /\boverride\b/.test(after);
+        const pure = /=\s*0\s*;?\s*$/.test(after.replace(/\{[\s\S]*$/, ''));
+        if (pure) cls.abstract = true;
+        const inheritance = { ...(pure ? { abstract: true } : {}), ...(!virtual || /\bfinal\b/.test(after) ? { sealed: true } : {}), ...(access === 'protected' ? { protected: true } : {}) };
+        const overridable = !inheritance.sealed && (pure || /^overridable\b/i.test(docComment.tags.find((t) => t.name === 'blueprint')?.text.trim() ?? ''));
         if (/\boperator\b/.test(text(i, open))) skip(name, "operators can't be nodes");
-        else if (access !== 'public') skip(name, "it isn't public");
+        else if (access !== 'public' && !(access === 'protected' && overridable)) skip(name, "it isn't public");
         else if (specifiers.includes('static')) skip(name, 'static member functions have no object; make it a free function instead');
         else if (returnText === '' || returnText === 'auto') skip(name, 'its return type has to be written out');
         else {
@@ -357,7 +365,7 @@ export function scanCpp(source: string): ModuleScan {
           const returns = mapReturn(returnText);
           if ('reason' in params) skip(name, params.reason);
           else if ('reason' in returns) skip(name, returns.reason);
-          else cls.methods.push(withFuture(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment }, outs, returnText), returnText, outs));
+          else cls.methods.push({ ...withFuture(withOutputs({ name, line: tokens[first].line, params, returns: returns.type, doc: docComment }, outs, returnText), returnText, outs), ...inheritance });
         }
         i = declEnd;
         continue;

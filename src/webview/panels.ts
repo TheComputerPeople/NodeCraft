@@ -23,7 +23,7 @@ import { screenToWorld } from './view';
 import { UserType, listUserTypes } from '../core/user-types';
 import { CUSTOM_EVENT } from '../core/events';
 import { TEST_CASE } from '../core/tests';
-import { ClassInfo, ancestors, classTypeId } from '../core/objects';
+import { ClassInfo, CodeClassInfo, ancestors, classTypeId } from '../core/objects';
 import { renderDispatcherDetails, renderEventDetails, renderTestDetails } from './event-details';
 
 export function renderPalette(): void {
@@ -127,7 +127,13 @@ function renderClassSettings(): void {
   wrapper.innerHTML = `<div class="inspector-name">${escapeHtml(doc.name)}</div><div class="muted inspector-type">Class Settings</div>`;
   const fields = document.createElement('div');
   fields.className = 'details-fields';
-  const parent = select([{ id: '', label: 'None' }, ...candidates.map((t) => ({ id: t.id, label: t.name }))], doc.parent ?? '', 'Parent Class');
+  // Classes from the project's code too, in the languages this graph can use, with their files
+  // (docs/code-classes-as-parents.md, part 1).
+  const code = codeParentCandidates();
+  const options = [{ id: '', label: 'None' }, ...candidates.map((t) => ({ id: t.id, label: t.name })), ...code.map((c) => ({ id: c.id, label: `${c.title} (${c.path})` }))];
+  // A parent that's gone (renamed, moved, unmarked) stays chosen, and says so.
+  if (doc.parent && !options.some((o) => o.id === doc.parent)) options.push({ id: doc.parent, label: `${doc.parent.replace(/^object:/, '').replace(/^code:.*#/, '')} (missing)` });
+  const parent = select(options, doc.parent ?? '', 'Parent Class');
   const changed = (): void => {
     updateClassHierarchy();
     markDirty();
@@ -489,6 +495,15 @@ export function typePicker<T extends TypeRef | 'exec'>(type: T, label: string, a
 // structure itself, which can't contain itself).
 export function typeOptions(exclude?: string): { id: string; label: string }[] {
   return [...basicTypes(), ...workspaceTypes().filter((t) => t.id !== exclude).map((t) => ({ id: t.id, label: t.name }))];
+}
+
+// The classes from the project's code a graph class in this language may extend.
+export function codeParentCandidates(): CodeClassInfo[] {
+  const language = state.languages.find((l) => l.id === state.document?.language);
+  return state.definitions
+    .flatMap((d) => (d.implementation?.kind === 'code-class' ? [d.implementation.type] : []))
+    .filter((c) => (language ? language.callable.includes(c.language) : !state.document?.language || c.language === state.document.language))
+    .sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path));
 }
 
 export function workspaceTypes(): UserType[] {

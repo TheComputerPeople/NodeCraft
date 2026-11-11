@@ -172,7 +172,8 @@ export class ProjectFunctions implements vscode.Disposable, vscode.CodeActionPro
       const module = codeModuleFor(pack.id, uri.fsPath, folder.uri.fsPath);
       const linkage = pack.id === 'cpp' ? cppHeaderLinkage(uri.fsPath) : undefined;
       const exposed = exposeFunctions(scan, { language: pack.id, path: relative, module, exposeAll, ...(linkage ? { linkage } : {}) });
-      definitions.push(...exposed.definitions);
+      // (Classes graph classes may extend are registered with the nodes; they aren't nodes.)
+      definitions.push(...exposed.definitions, ...exposed.classes);
       skipped.push(...exposed.skipped);
       for (const [type, line] of exposed.lines) lines.set(type, line);
     }
@@ -295,7 +296,7 @@ export class ProjectFunctions implements vscode.Disposable, vscode.CodeActionPro
   // Tells the user, once per change, which marked functions couldn't become nodes and why.
   private report(files: FileFunctions[]): void {
     const lines = files.flatMap((f) => f.skipped.map((s) => `  ${f.path}:${s.line} ${s.name}: ${s.reason}`));
-    const count = files.reduce((n, f) => n + f.definitions.length, 0);
+    const count = files.reduce((n, f) => n + f.definitions.filter((d) => d.implementation?.kind !== 'code-class').length, 0);
     const text = lines.length ? [`Project functions: ${count} node${count === 1 ? '' : 's'}. These functions can't be nodes:`, ...lines].join('\n') : '';
     if (text === this.lastReport) return;
     this.lastReport = text;

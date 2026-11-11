@@ -278,7 +278,8 @@ describe('Python classes', () => {
     const [cls] = scanPython(source).classes!;
     assert.deepEqual([cls.name, cls.base], ['Player', { id: 'native:Entity' }]);
     assert.deepEqual(cls.init!.params, [{ name: 'name', type: { id: 'string' } }, { name: 'start', type: { id: 'float' }, defaultValue: 10 }]);
-    assert.deepEqual(cls.methods.map((m) => [m.name, m.params.map((p) => p.name)]), [['heal', ['amount']]]);
+    // `_hidden` is protected: a subclass's to override, but no node (docs/code-classes-as-parents.md).
+    assert.deepEqual(cls.methods.map((m) => [m.name, m.params.map((p) => p.name), !!m.protected]), [['heal', ['amount'], false], ['_hidden', [], true]]);
     assert.deepEqual(cls.properties.map((p) => [p.name, p.readonly, p.type]), [['health', false, { id: 'float' }], ['alive', true, { id: 'bool' }], ['label', false, { id: 'string' }]]);
     assert.deepEqual(scanPython(source).skipped.map((s) => s.name), ['Player.make', 'Player._hidden']);
   });

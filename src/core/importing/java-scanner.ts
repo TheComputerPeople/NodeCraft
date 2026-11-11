@@ -265,13 +265,18 @@ export function scanJava(source: string): ModuleScan {
           const name = tokens[k - 1].text;
           const returnText = typeText(typeStart, k - 1);
           const close = skipGroup(k);
-          if (!modifiers.has('public')) memberSkip(name, "it isn't public, so generated code can't call it");
+          // What a subclass may do with it (docs/code-classes-as-parents.md): override it unless it's
+          // final; a protected one is for subclasses alone.
+          const inheritance = { ...(modifiers.has('abstract') ? { abstract: true } : {}), ...(modifiers.has('final') ? { sealed: true } : {}) };
+          const isProtected = modifiers.has('protected');
+          const overridable = !modifiers.has('final') && (modifiers.has('abstract') || /^overridable\b/i.test(memberDoc.tags.find((t) => t.name === 'blueprint')?.text.trim() ?? ''));
+          if (!modifiers.has('public') && !(isProtected && overridable)) memberSkip(name, "it isn't public, so generated code can't call it");
           else if (typeParameters.length > 2) memberSkip(name, TOO_MANY_TYPE_PARAMETERS);
           else if (at(close, 'throws')) memberSkip(name, "methods that declare checked exceptions can't be nodes yet");
           else {
             const params = parseParams(k + 1, close - 1);
             if ('reason' in params) memberSkip(name, params.reason);
-            else cls.methods.push({ name, line: tokens[first].line, params, ...returnsOf(returnText), doc: memberDoc });
+            else cls.methods.push({ name, line: tokens[first].line, params, ...returnsOf(returnText), doc: memberDoc, ...inheritance, ...(isProtected ? { protected: true } : {}) });
           }
           j = skipMember(close);
           continue;

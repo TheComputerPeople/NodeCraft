@@ -7,7 +7,7 @@ import type { NodePreview } from './preview';
 import type { TypeRef } from './types';
 import type { EnumInfo, Enumerator, StructInfo } from './user-types';
 import type { Dispatcher } from './events';
-import type { ClassInfo, InterfaceInfo } from './objects';
+import type { ClassInfo, CodeClassInfo, InterfaceInfo } from './objects';
 
 export type { TypeRef } from './types';
 
@@ -87,7 +87,10 @@ export type NodeImplementation =
   // A class's Construct node, which carries the class's public members, and its Cast To node; an
   // interface's Cast To node, which carries its functions (src/core/objects.ts).
   | { kind: 'class'; operation: 'construct' | 'cast'; type: ClassInfo }
-  | { kind: 'interface'; operation: 'cast'; type: InterfaceInfo };
+  | { kind: 'interface'; operation: 'cast'; type: InterfaceInfo }
+  // A class from the project's code that graph classes may extend: not a node
+  // (docs/code-classes-as-parents.md).
+  | { kind: 'code-class'; type: CodeClassInfo };
 
 // A macro of a macro library (src/core/libraries.ts): its graph, with the library's other macros
 // already expanded in it, so it can be expanded anywhere (src/core/macros.ts).

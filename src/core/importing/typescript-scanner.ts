@@ -347,6 +347,8 @@ class DeclarationParser {
       const generator = this.at(p, '*');
       if (generator) p++;
       const hidden = modifiers.has('private') || modifiers.has('protected') || this.at(p, '#');
+      // A protected method is a subclass's to override (docs/code-classes-as-parents.md).
+      const inherited = modifiers.has('protected') && !modifiers.has('private');
       if (this.at(p, '#')) p++;
       const nameToken = this.tokens[p];
       if (!nameToken || nameToken.kind !== 'name' || p >= end) {
@@ -360,19 +362,24 @@ class DeclarationParser {
         if (isMarked(jsdoc)) cls.skipped.push({ name: `${cls.scan.name}.${name}`, line, reason, marked: true });
       };
       if (this.at(p + 1, '(') || this.at(p + 1, '<')) {
-        const parsed = this.signature(p + 1, first.doc, false, modifiers.has('async'));
+        const abstract = modifiers.has('abstract');
+        const parsed = this.signature(p + 1, first.doc, false, modifiers.has('async'), abstract);
         m = Math.max(parsed.end, p + 2);
-        // An overload or abstract method has no body; the implementation (if any) follows.
-        if (parsed.overload) continue;
+        // An overload has no body; the implementation follows. An abstract method has none at all.
+        if (parsed.overload && !abstract) continue;
         const signature = parsed.signature;
-        if (hidden) skip("it isn't public");
+        const overridable = abstract || /^overridable\b/i.test(jsdoc.tags.find((t) => t.name === 'blueprint')?.text.trim() ?? '');
+        if (inherited && !modifiers.has('static') && !('reason' in signature) && !modifiers.has('get') && !modifiers.has('set') && name !== 'constructor') {
+          cls.scan.methods.push({ name, line, params: signature.params, returns: signature.returns, doc: jsdoc, protected: true, ...(abstract ? { abstract: true } : {}), ...(signature.latent ? { latent: true } : {}) });
+          if (!overridable) skip("it isn't public");
+        } else if (hidden) skip("it isn't public");
         else if (modifiers.has('static')) skip('static methods of a class have no object; make it a module function instead');
         else if (generator) skip("generator functions can't be nodes");
         else if ('reason' in signature) skip(signature.reason || "its parameters couldn't be read");
         else if (modifiers.has('get')) getters.set(name, { name, line, ...(signature.returns ? { type: signature.returns } : {}), readonly: true, doc: jsdoc });
         else if (modifiers.has('set')) setters.add(name);
         else if (name === 'constructor') cls.scan.init = { name, line, params: signature.params, returns: null, doc: jsdoc };
-        else cls.scan.methods.push({ name, line, params: signature.params, returns: signature.returns, doc: jsdoc, ...(signature.outputs && signature.results ? { outputs: signature.outputs, results: signature.results } : {}), ...(signature.latent ? { latent: true } : {}) });
+        else cls.scan.methods.push({ name, line, params: signature.params, returns: signature.returns, doc: jsdoc, ...(abstract ? { abstract: true } : {}), ...(signature.outputs && signature.results ? { outputs: signature.outputs, results: signature.results } : {}), ...(signature.latent ? { latent: true } : {}) });
         continue;
       }
       // A field: `name?: Type = value;`.
@@ -417,7 +424,8 @@ class DeclarationParser {
 
   // Reads `<T>(params): Type {body}` or `(params): Type =>`, starting at `<` or `(`.
   // `isAsync`: declared `async`, so it returns a Promise whatever its annotation says.
-  private signature(i: number, doc: string | undefined, arrow = false, isAsync = false): { signature: Signature | { reason: string }; end: number; overload?: boolean; arrow?: boolean } {
+  // `bodiless`: an abstract method's declaration, read as a signature rather than an overload.
+  private signature(i: number, doc: string | undefined, arrow = false, isAsync = false, bodiless = false): { signature: Signature | { reason: string }; end: number; overload?: boolean; arrow?: boolean } {
     // Type parameters are wildcard pins (docs/node-authoring.md, gap 10): TypeScript's <T>, or
     // JSDoc's @template T.
     const { doc: jsdoc, parameters: templates } = templated(parseJsDoc(doc));
@@ -441,9 +449,12 @@ class DeclarationParser {
     }
     const isArrow = this.at(j, '=>');
     if (arrow && !isArrow) return { signature: { reason: '' }, end: j };
-    // A declaration without a body is a TypeScript overload signature.
-    if (!isArrow && !this.at(j, '{')) return { signature: { reason: '' }, end: this.at(j, ';') ? j + 1 : j, overload: true };
-    const end = this.bodyEnd(j, isArrow);
+    // A declaration without a body is a TypeScript overload signature (or an abstract method's).
+    const noBody = !isArrow && !this.at(j, '{');
+    if (noBody && !bodiless) return { signature: { reason: '' }, end: this.at(j, ';') ? j + 1 : j, overload: true };
+    const end = noBody ? (this.at(j, ';') ? j + 1 : j) : this.bodyEnd(j, isArrow);
+    // (Without a body, an unannotated result is nothing.)
+    const returnsValue = () => !noBody && this.returnsValue(j, isArrow);
     if (typeParameters.length > 2) return { signature: { reason: TOO_MANY_TYPE_PARAMETERS }, end, arrow: isArrow };
     // The declared return type (annotation, else @returns), else whether the body returns a value.
     if ('reason' in params) return { signature: params, end, arrow: isArrow };
@@ -453,7 +464,7 @@ class DeclarationParser {
     if (isAsync || promise) {
       const inner = promise?.[1] !== undefined ? mapReturnText(promise[1]) : promise ? { type: undefined } : undefined;
       if (inner && 'reason' in inner) return { signature: inner, end, arrow: isArrow };
-      const returns = inner ? inner.type : this.returnsValue(j, isArrow) ? undefined : null;
+      const returns = inner ? inner.type : returnsValue() ? undefined : null;
       return { signature: { params, returns, jsdoc, latent: true }, end, arrow: isArrow };
     }
     // Several outputs: an object type's fields, or a tuple's positions.
@@ -461,7 +472,7 @@ class DeclarationParser {
     if (several) return { signature: { params, returns: undefined, jsdoc, ...several }, end, arrow: isArrow };
     const declared = returnText !== undefined ? mapReturnText(returnText) : jsdocReturns(jsdoc);
     if (declared && 'reason' in declared) return { signature: declared, end, arrow: isArrow };
-    const returns = declared ? declared.type : this.returnsValue(j, isArrow) ? undefined : null;
+    const returns = declared ? declared.type : returnsValue() ? undefined : null;
     return { signature: { params, returns, jsdoc }, end, arrow: isArrow };
   }
 

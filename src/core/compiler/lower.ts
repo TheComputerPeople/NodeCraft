@@ -13,7 +13,7 @@ import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrPinValue, IrProgram, IrSlot, IrStatement, IrTest, ProgramTypes, SourceRef, exprType, readsStorageOnly } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
-import { ClassInfo, InterfaceInfo, PARENT_START, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest, codeClassBases, codeClasses } from '../objects';
+import { CODE_CLASS_PREFIX, ClassInfo, InterfaceInfo, PARENT_START, codeClassById, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest, codeClassBases, codeClasses } from '../objects';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup, userTypeProblems } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
@@ -483,6 +483,23 @@ class Lowerer {
     };
   }
 
+  // A class from the code as the parent: it must be there, marked to be extended, and in the graph's
+  // language. (Generated code for it comes with docs/code-classes-as-parents.md, steps 4 to 6.)
+  private checkCodeParent(id: string): void {
+    const code = codeClassById(id, (t) => this.options.registry.get(t));
+    const [, language, rest] = /^code:([^:]+):(.*)$/.exec(id) ?? [];
+    const [path, name] = (rest ?? '').split('#');
+    if (!code) {
+      this.error('parent-missing', `There is no class ${name} in ${path} to inherit from: it isn't there, or isn't marked @blueprint (or has no marked members).`);
+      return;
+    }
+    if (!this.options.importLanguages.includes(language)) {
+      this.error('wrong-language', `${code.title} is a ${this.languageName(language)} class (${code.path}); a ${this.options.languageName} graph can't extend it.`);
+      return;
+    }
+    this.error('code-parent-unsupported', `Generated code can't extend a class from your code (${code.title}) in ${this.options.languageName} yet.`);
+  }
+
   // The parent class must exist and not loop; a subclass's members must not take its ancestors'
   // names, except functions that override with the same signature.
   private checkInheritance(): void {
@@ -505,7 +522,13 @@ class Lowerer {
       }
     }
     if (!own?.parent) return;
-    const parentName = own.parent.replace(/^object:/, '');
+    const parentName = own.parent.replace(/^object:/, '').replace(/^code:.*#/, '');
+    // A class from the project's code at the top of the chain (docs/code-classes-as-parents.md).
+    const top = (this.ancestors[this.ancestors.length - 1] ?? own).parent;
+    if (top?.startsWith(CODE_CLASS_PREFIX)) {
+      this.checkCodeParent(top);
+      if (top === own.parent) return;
+    }
     if (!this.ancestors.length) {
       this.error('parent-missing', `There is no class ${parentName} in the workspace to inherit from.`);
       return;
