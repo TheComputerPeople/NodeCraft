@@ -29,6 +29,8 @@ export interface LowerOptions {
   snippetLanguages: string[];
   // Languages of project code the target can import (docs/code-as-nodes.md, "Node identity").
   importLanguages: string[];
+  // The target's classes can extend a class from the project's code (CodeGenerator.codeParents).
+  codeParents?: boolean;
   // The pack's own implementations of library nodes, by node type (CodeGenerator.snippets).
   snippets?: Record<string, string>;
   // Display names of other languages, for messages (the registered packs').
@@ -163,10 +165,14 @@ class Lowerer {
     // Custom events are methods too; registered first, so Call nodes anywhere find them. So are
     // entry events (Main, framework packs' events), whose methods something outside runs.
     const isEntryEvent = (info: GraphInfo, node: GraphNode) => info.definitions.get(node.id)?.implementation?.kind === 'event';
-    const events = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === CUSTOM_EVENT || isEntryEvent(info, n)).map((node) => ({ info, node, fn: this.registerEvent(info, node) })));
+    const events = eventGraphs.flatMap((info) => info.graph.nodes.filter((n) => n.type === CUSTOM_EVENT || n.type === OVERRIDE_EVENT || isEntryEvent(info, n)).map((node) => ({ info, node, fn: this.registerEvent(info, node) })));
     for (const info of functionGraphs) this.lowerFunction(info);
     for (const { info, node, fn } of events) this.lowerEvent(info, node, fn);
     const tests = this.lowerTests(eventGraphs);
+    // A test runs on a new object, made with no arguments.
+    const code = tests.length && this.ownClass ? codeParentOf(this.ownClass, (t) => this.options.registry.get(t)) : undefined;
+    if (code?.init?.length) this.error('test-construct', `Test Case events run on a new ${this.ownClass!.name}, which can't be made without arguments: ${code.title}'s constructor takes ${list(code.init.map((p) => p.name))}.`);
+    else if (code && abstractLeft(this.ownClass!, (t) => this.options.registry.get(t)).length) this.error('test-construct', `Test Case events run on a new ${this.ownClass!.name}, which can't be made while it leaves abstract methods of ${code.title}.`);
     const start = entries.flatMap(({ info, start: node }) => this.lowerNode(info, node.id));
     this.checkInheritance();
     if (hasErrors(this.diagnostics)) return { diagnostics: this.diagnostics };
@@ -185,6 +191,7 @@ class Lowerer {
       pinValues: this.debugPins(),
       ...(this.ownClass ? { classInfo: this.ownClass } : {}),
       ...(this.ancestors.length ? { ancestors: this.ancestors } : {}),
+      ...(this.ownClass && abstractLeft(this.ownClass, (t) => this.options.registry.get(t)).length ? { abstract: true } : {}),
       ...this.interfacePlan(),
       hasStart: entries.length > 0,
       dispatchers: documentDispatchers(this.doc).map((d): IrDispatcher => ({ id: d.id, name: d.name, params: d.inputs.filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.name, type: p.type })) }))
@@ -248,8 +255,12 @@ class Lowerer {
   // maps keyed by them aren't supported yet: their order and hashing differ between languages.
   private importTypes(program: IrProgram): void {
     const used = new Map<string, UserType>();
+    // The classes from the code that class chains end in (docs/code-classes-as-parents.md).
+    const code = new Map<string, CodeClassInfo>();
     const visit = (value: unknown): void => {
       if (typeof value === 'string') {
+        const found = value.startsWith(CODE_CLASS_PREFIX) ? codeClassById(value, (t) => this.options.registry.get(t)) : undefined;
+        if (found) code.set(value, found);
         const type = isUserTypeId(value) ? this.types(value) : undefined;
         if (type && !used.has(value)) {
           used.set(value, type);
@@ -278,6 +289,10 @@ class Lowerer {
       declaration.type.fields.forEach((f) => visit(f.type));
       declaration.initial.forEach(visit);
     }
+    if (code.size) program.codeClasses = [...code.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    // The class's own code parent, which it extends: imported as its member nodes import it.
+    const parent = code.get(this.ownClass?.parent ?? '');
+    if (parent) program.imports.push({ id: parent.id, name: parent.name, language: parent.language, path: parent.path, ...(parent.module ? { module: parent.module } : {}), params: [] });
     for (const [id, type] of [...used].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
       if ((declaration && declaration.type.id === id) || this.ownClass?.id === id) continue;
       if (type.language && type.language !== (this.doc.language || type.language)) continue;
@@ -363,6 +378,15 @@ class Lowerer {
       ...(signature.access && signature.access !== 'public' ? { access: signature.access } : {}),
       body: []
     };
+    // A method of the code parent: its name, its parameters' names and its access are the code's.
+    const method = this.ownClass && codeParentMethod(this.ownClass, graph.name, (t) => this.options.registry.get(t));
+    if (method) {
+      fn.overrides = true;
+      fn.code = method.name;
+      fn.params = fn.params.map((p, i) => ({ ...p, name: method.inputs[i]?.id ?? p.name }));
+      if (method.protected) fn.access = 'protected';
+      else delete fn.access;
+    }
     // Registered before the body, so calls inside it (recursion) can find it.
     this.functions.push(fn);
     this.currentFunction = graph.id;
@@ -376,6 +400,7 @@ class Lowerer {
   // ---- Custom events (src/core/events.ts) ----------------------------------------------------
 
   private registerEvent(info: GraphInfo, node: GraphNode): IrFunction {
+    if (node.type === OVERRIDE_EVENT) return this.registerOverride(info, node);
     const implementation = info.definitions.get(node.id)?.implementation;
     const entry = implementation?.kind === 'event' ? implementation.method : undefined;
     const name = entry ?? eventName(node);
@@ -393,6 +418,31 @@ class Lowerer {
       pure: false,
       body: [],
       event: { stores: [], ...(entry ? { entry } : {}) }
+    };
+    this.functions.push(fn);
+    return fn;
+  }
+
+  // Event <Method>: the code parent's method, with the code's names for it and its parameters
+  // (the event's outputs are its parameters, by their names in the code).
+  private registerOverride(info: GraphInfo, node: GraphNode): IrFunction {
+    const name = String(node.properties.method ?? '');
+    const method = this.ownClass && codeParentMethod(this.ownClass, name, (t) => this.options.registry.get(t));
+    // (With a code parent, checkOverrides says what's wrong with the event.)
+    if (!this.ownClass || !codeParentOf(this.ownClass, (t) => this.options.registry.get(t))) {
+      this.error('override-missing', `Event ${name} overrides a method of a class from your code, and ${this.ownClass?.name ?? 'this graph'} doesn't extend one.`, info.graph.id, node.id);
+    }
+    const fn: IrFunction = {
+      id: eventFunctionId(info.graph.id, node.id),
+      name,
+      params: (info.definitions.get(node.id)?.outputs ?? []).filter((p) => p.kind === 'data').map((p) => ({ id: p.id, name: p.id, type: p.type })),
+      outputs: [],
+      pure: false,
+      body: [],
+      overrides: true,
+      code: name,
+      ...(method?.protected ? { access: 'protected' as const } : {}),
+      event: { stores: [] }
     };
     this.functions.push(fn);
     return fn;
@@ -519,7 +569,23 @@ class Lowerer {
       return;
     }
     this.checkOverrides(code);
-    this.error('code-parent-unsupported', `Generated code can't extend a class from your code (${code.title}) in ${this.options.languageName} yet.`);
+    this.checkCodeNames(code);
+    if (!this.options.codeParents) this.error('code-parent-unsupported', `Generated code can't extend a class from your code (${code.title}) in ${this.options.languageName} yet.`);
+  }
+
+  // The class's own members can't take its code parent's names (but for the methods it overrides),
+  // nor can the code take start, which every generated class has (its Start events).
+  private checkCodeNames(code: CodeClassInfo): void {
+    const own = this.ownClass!;
+    const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const members = new Map((code.members ?? []).map((m) => [key(m), m]));
+    const overridable = new Set(code.overridable.map((m) => m.name));
+    if (members.has('start')) this.error('inherited-name', `${code.title} has a member named "${members.get('start')}", which a class from a graph can't extend: generated classes have a start method of their own, for Start.`);
+    const names = [...own.variables.map((v) => v.name), ...own.events.map((e) => e.name), ...own.dispatchers.map((d) => d.name), ...own.functions.filter((f) => !overridable.has(f.name)).map((f) => f.name)];
+    for (const name of names) {
+      const taken = members.get(key(name));
+      if (taken) this.error('inherited-name', `${code.title} already has a member named "${taken}", so "${name}" needs another name.`);
+    }
   }
 
   // What this class overrides of its code parent: functions with the method's name and signature,
@@ -645,7 +711,8 @@ class Lowerer {
         }
         return [{ kind: 'parentCall', start: true, args: [], results: [], source }, ...next('execOut')];
       }
-      if (!parentFunction(this.ownClass, name, definition)) {
+      const graphParent = !!parentFunction(this.ownClass, name, definition);
+      if (!graphParent) {
         // The code's version of a method this class overrides (docs/code-classes-as-parents.md).
         const method = codeParentMethod(this.ownClass, name, definition);
         if (!method) {
@@ -658,7 +725,7 @@ class Lowerer {
         }
       }
       const results = def.outputs.filter((p) => p.kind === 'data').map((p) => ({ output: p.id, slot: this.slot(info, node, def, p.id) }));
-      return [{ kind: 'parentCall', function: name, args: dataInputs(def).map((p) => input(p.id)), results, source }, ...next('execOut')];
+      return [{ kind: 'parentCall', function: name, ...(graphParent ? {} : { code: true }), args: dataInputs(def).map((p) => input(p.id)), results, source }, ...next('execOut')];
     }
     if (!['object-set', 'object-call', 'object-event', 'object-dispatcher'].includes(operation)) return undefined;
     const type = this.memberClass(info, node);
@@ -939,6 +1006,7 @@ class Lowerer {
       case 'end':
         return [];
       case 'custom-event':
+      case 'override-event':
         return next('execOut');
       case 'delay':
       case 'retriggerable-delay': {
@@ -1189,7 +1257,7 @@ class Lowerer {
     }
     // A custom event's inputs: its method's parameters inside its own flow; elsewhere, the values
     // it last ran with, which its method keeps in slots.
-    if (operation === 'custom-event' || sourceDef.implementation?.kind === 'event') {
+    if (operation === 'custom-event' || operation === 'override-event' || sourceDef.implementation?.kind === 'event') {
       const event = eventFunctionId(info.graph.id, sourceNode.id);
       if (source.pin === DELEGATE_PIN) return { kind: 'default', type: pin?.type };
       if (this.currentEvent === event) return { kind: 'param', function: event, id: source.pin };

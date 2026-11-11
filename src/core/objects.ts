@@ -412,6 +412,9 @@ export interface CodeClassInfo {
   // The methods a graph class may override: marked `@blueprint overridable`, or abstract; never one
   // the language seals. Their data pins.
   overridable: CodeOverridable[];
+  // The names of all its methods and properties, marked or not: a generated subclass names its own
+  // members apart from them.
+  members?: string[];
 }
 
 export interface CodeOverridable {

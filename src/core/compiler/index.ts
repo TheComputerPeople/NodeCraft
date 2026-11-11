@@ -44,6 +44,7 @@ export function compileDocument(doc: GraphDocument, options: CompileOptions): Co
   if (hasErrors(unsupported)) return { diagnostics: unsupported };
   const lowered = lowerDocument(doc, {
     registry: options.registry, languageName: pack.displayName, snippetLanguages: generator.snippetLanguages, importLanguages: generator.importLanguages,
+    ...(generator.codeParents ? { codeParents: true } : {}),
     languageNames: (id) => options.languages.get(id)?.displayName,
     ...(generator.snippets ? { snippets: generator.snippets } : {})
   });

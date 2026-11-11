@@ -1,7 +1,7 @@
 // Generates TypeScript, or JavaScript with JSDoc types, from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, canComplete, classInfo, importKey, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, canComplete, classInfo, codeParentInfo, importKey, exprType, interfaceInfo, isCodeClassId, programClassSpec, userTypes } from '../compiler/ir';
 import { relativeSpecifier, typescriptSpecifier } from '../compiler/module-paths';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, PinExpression } from '../language-pack';
@@ -106,6 +106,7 @@ export function typescriptGenerator(flavor: TypeScriptFlavor): CodeGenerator {
     libraryExports: (_name, functions) => ({ names: typescriptExportNames(functions) }),
     snippetLanguages: flavor.typed ? ['typescript', 'javascript'] : ['javascript'],
     importLanguages: flavor.typed ? ['typescript', 'javascript'] : ['javascript'],
+    codeParents: true,
     outputFileName: (graphFileName) => `${graphFileName}.${flavor.typed ? 'ts' : 'js'}`,
     testFileName: (graphFileName) => `${graphFileName}.test.${flavor.typed ? 'ts' : 'js'}`,
     generate: (program, options) => new TypeScriptEmitter(program, options, flavor).emit(),
@@ -153,7 +154,8 @@ class TypeScriptEmitter {
     const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
     this.classNames.set(`object:${program.className}`, own);
     for (const f of program.functions) {
-      this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
+      // An override event takes the code's name for its method, which the code parent's names hold.
+      this.functionNames.set(f.id, f.event && f.code ? f.code : (f.event ? own.events : own.functions).get(f.id)!);
       this.outputFields.set(f.id, resultFields(f.outputs));
     }
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
@@ -168,7 +170,7 @@ class TypeScriptEmitter {
     // Member variables keep their names; internal fields are private (TypeScript) or underscored (JavaScript).
     // A subclass's internal fields and methods carry its name: its parent's private ones may share theirs.
     const base = flavor.typed || this.library ? '' : '_';
-    const internal = program.ancestors?.length ? `${base}${toIdentifier(program.className, 'camel')}_` : base;
+    const internal = program.classInfo?.parent ? `${base}${toIdentifier(program.className, 'camel')}_` : base;
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'keep', internal));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', internal));
@@ -187,9 +189,15 @@ class TypeScriptEmitter {
     if (this.program.declaration) return this.emitDeclaration();
     if (this.library) return this.emitLibrary();
     const parent = this.program.classInfo?.parent;
+    // A graph parent, which has a start of its own (a class from the code has none).
+    const graphParent = !!parent && !isCodeClassId(parent);
     const interfaces = (this.program.interfaces ?? []).map((i) => this.userTypeName(i.type.id)!);
     const implementsClause = flavor.typed && interfaces.length ? ` implements ${interfaces.join(', ')}` : '';
-    out.line(`${esm ? 'export ' : ''}class ${this.className}${parent ? ` extends ${this.userTypeName(parent)}` : ''}${implementsClause} {`);
+    // A class from the code is extended as it's imported (docs/code-classes-as-parents.md); one
+    // leaving its abstract methods to a subclass is abstract.
+    const parentName = parent && (isCodeClassId(parent) ? this.importNames.get(parent) : this.userTypeName(parent));
+    const abstract = flavor.typed && this.program.abstract ? 'abstract ' : '';
+    out.line(`${esm ? 'export ' : ''}${abstract}class ${this.className}${parentName ? ` extends ${parentName}` : ''}${implementsClause} {`);
     out.indent();
     // Each interface's tag, which its type guard looks for.
     for (const local of interfaces) out.line(flavor.typed ? `readonly [${this.interfaceTag(local)}] = true as const;` : `[${this.interfaceTag(local)}] = true;`);
@@ -210,7 +218,7 @@ class TypeScriptEmitter {
     if (members.length || slots.length || dispatchers.length) out.line();
 
     // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay.
-    if (!parent || this.program.hasStart) this.method('start', [], undefined, false, () => this.statements(this.program.start), !!parent);
+    if (!graphParent || this.program.hasStart) this.method('start', [], undefined, false, () => this.statements(this.program.start), graphParent);
     for (const fn of this.program.functions) this.functionMethod(fn);
     this.interfaceStubs();
     // Test Case events: methods the test file calls, named after every other member.
@@ -338,6 +346,9 @@ class TypeScriptEmitter {
     const seen = new Set<string>();
     for (let parent = info?.parent; parent && !seen.has(parent);) {
       seen.add(parent);
+      // A class from the code ends the chain: its members keep the code's names.
+      const code = isCodeClassId(parent) ? this.program.codeClasses?.find((c) => c.id === parent) : undefined;
+      if (code) chain.push(codeInheritedMembers(code));
       const ancestor = classInfo(this.program, parent);
       const names = ancestor && this.membersOf(parent);
       if (!ancestor || !names) break;
@@ -627,8 +638,10 @@ class TypeScriptEmitter {
       const list = params.map((p) => `${p.name}: ${this.typeName(p.type)}`).join(', ');
       out.line(`${keyword}${this.library ? '' : modifier(internal)}${overrides ? 'override ' : ''}${name}(${list}): ${returnText ?? 'void'} {`);
     } else {
-      if (params.length || returnText) {
+      // (JSDoc's @override is TypeScript's override, which noImplicitOverride asks checkJs for.)
+      if (params.length || returnText || overrides) {
         out.line('/**');
+        if (overrides) out.line(' * @override');
         for (const p of params) out.line(` * @param {${this.mapType(p.type ?? { id: 'any' })}} ${p.name}`);
         if (returnText) out.line(` * @returns {${returnText}}`);
         out.line(' */');
@@ -646,7 +659,8 @@ class TypeScriptEmitter {
   private functionMethod(fn: IrFunction): void {
     const scope = new NameScope(RESERVED, ['this']);
     const params = fn.params.map((p) => {
-      const name = scope.claim(p.name, 'camel');
+      // A method of the code's keeps its parameters' names.
+      const name = scope.claim(p.name, fn.code ? 'keep' : 'camel');
       this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
       return { name, type: p.type };
     });
@@ -923,10 +937,11 @@ class TypeScriptEmitter {
           out.line('super.start();');
           break;
         }
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === s.function);
+        // A graph ancestor's function, or the code parent's method (its name as the code has it).
+        const fn = s.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === s.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === s.function);
         const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `super.${this.parentFunctionName(s.function!)}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        const call = `super.${s.code ? s.function : this.parentFunctionName(s.function!)}(${s.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
         if (!s.results.length) out.line(`${call};`);
         else if (outputs.length === 1) out.line(`${this.slotRef(s.results[0].slot)} = ${call};`);
         else {
@@ -935,10 +950,13 @@ class TypeScriptEmitter {
         }
         break;
       }
-      case 'construct':
-        out.line(`${this.slotRef(s.slot)} = new ${this.userTypeName(s.type)}();`);
+      case 'construct': {
+        // The code parent's constructor takes its arguments (docs/code-classes-as-parents.md).
+        const init = codeParentInfo(this.program, s.type)?.init ?? [];
+        out.line(`${this.slotRef(s.slot)} = new ${this.userTypeName(s.type)}(${(s.args ?? []).map((a, i) => this.coerce(a, init[i]?.type)).join(', ')});`);
         out.line(`${this.slotRef(s.slot)}.start();`);
         break;
+      }
       case 'setObjectVariable':
         out.line(`${this.targetRef(s.target)}.${this.membersOf(s.type)?.variables.get(s.variable)} = ${this.coerce(s.value, classInfo(this.program, s.type)?.variables.find((v) => v.id === s.variable)?.type)};`);
         break;
@@ -1045,9 +1063,9 @@ class TypeScriptEmitter {
         return e.output ? `${call}.${resultFields(fn?.outputs.filter((p) => p.kind === 'data') ?? []).get(e.output)}` : call;
       }
       case 'parentCall': {
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const fn = e.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === e.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const params = fn?.inputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `super.${this.parentFunctionName(e.function)}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
+        const call = `super.${e.code ? e.function : this.parentFunctionName(e.function)}(${e.args.map((a, i) => this.coerce(a, params[i]?.type)).join(', ')})`;
         return e.output ? `${call}.${resultFields(fn?.outputs.filter((p) => p.kind === 'data') ?? []).get(e.output)}` : call;
       }
       case 'isValid':

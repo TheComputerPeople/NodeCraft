@@ -169,6 +169,38 @@ The three choices this design needs. The user confirmed all three as recommended
   - **The webview:** the event graph's palette offers Event hit; Override lists the three methods; hit becomes an event wired to its Parent call; score becomes a function with its Parent call and Return Node.
   - **Not yet:** Self as an unwired code Target shows in generated code, so step 4 tests it.
 4. Generated code in TypeScript, JavaScript, Python and C#.
+
+### Built (step 4)
+
+- **What the generated class does** in TypeScript, JavaScript, Python and C# (`CodeGenerator.codeParents`):
+
+  | | TypeScript, JavaScript | Python | C# |
+  |---|---|---|---|
+  | Extends | `extends Actor`, imported as its member nodes import it | `class Knight(Actor)` | `: global::Game.Actor` |
+  | Overrides | `override hit(damage: number)` (JavaScript: `@override`, which checkJs asks for) | `def hit(self, damage: int)` | `public override void Hit(int damage)` |
+  | Parent: <Method> | `super.hit(damage)` | `super().hit(damage)` | `base.Hit(damage)` |
+  | Constructor | none: the code's is inherited | `__init__(self, name)` calling `super().__init__(name)`, when the class has fields | `public Knight(string name) : base(name) { }` |
+  | Abstract methods left | `abstract class` (TypeScript) | the code's ABC | `public abstract class` |
+
+  - **Names.** An override has the code's names for the method and its parameters, as strict checkers ask (Pyright compares parameter names). A protected method stays protected in C#.
+  - **The code's names are taken.** Generated names avoid every method and property of the code parent, marked or not (`CodeClassInfo.members`, `codeInheritedMembers`). Internal fields carry the class's name, as under a graph parent.
+  - **Start.** A class straight from the code has a start method of its own; one under a graph parent keeps that parent's, as before.
+  - **Types in C# signatures.** An override's or constructor's parameter of a type from the code is written as the code writes it, with a `using` of the code's namespace.
+- **The IR.** A function or override event overriding a code method carries the method's name (`IrFunction.code`), and a Parent call to the code's version says so (`code`). The program lists the code classes its class chains end in (`codeClasses`), imports its own, and says whether it's abstract.
+- **Override events** are lowered as methods, their outputs the method's parameters.
+- **Wiring.** A graph object now connects to its code ancestors' Target pins. Step 2 had the rule (`subclassTest`), but the pin check never asked it for a code type.
+- **Compile** reports:
+  - a graph member named like one of the code parent's (`inherited-name`);
+  - a code parent with a member named start, which every generated class has;
+  - an Event <Method> in a class with no code parent (`override-missing`);
+  - Test Case events in a class that can't be made without arguments, or is abstract (`test-construct`).
+
+  A Python class that can't be made without arguments isn't run as a script.
+- **Tested:**
+  - **Every target runs it.** In TypeScript, both kinds of JavaScript module, Python and C#, a code `Actor` (a constructor taking a name, a health property, greet, an overridable hit, an abstract describe, and a template method turn calling both) is extended by a graph Knight. Knight's Start sets health and greets on Self, Event hit calls Parent: hit, and describe is a function. A Game graph constructs a Knight and runs turn, printing the same five lines in every language.
+  - **The strictest checkers.** `tsc --strict` with `noImplicitOverride` and no unused locals or parameters (TypeScript and checkJs), `mypy --strict`, and Pyright's strict mode.
+  - **Subclasses.** A Squire extending Knight passes the name on and overrides hit again; its Parent: hit reaches Knight's.
+  - **Rules:** an abstract class when describe is left, the names check, and Compile's new errors.
 5. Generated code in C++ and Java.
 6. Generated code in Lua, GDScript, Ruby and PHP.
 7. Rust and Go reported; Simulate's message.

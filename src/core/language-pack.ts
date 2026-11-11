@@ -160,6 +160,8 @@ export interface CodeGenerator {
   snippetLanguages: string[];
   // Languages of project code that generated code can import and call (docs/code-as-nodes.md).
   importLanguages: string[];
+  // Generated classes can extend a class from the project's code (docs/code-classes-as-parents.md).
+  codeParents?: boolean;
   // Implementations of library nodes in the language, by node type, for nodes whose definitions
   // have none for it (a declarative pack's `snippets`): function bodies over the node's inputs.
   snippets?: Record<string, string>;

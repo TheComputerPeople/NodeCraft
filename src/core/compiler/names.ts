@@ -92,6 +92,14 @@ export interface InheritedMembers {
   functions: { id: string; name: string }[];
 }
 
+// A class from the project's code as the last ancestor (docs/code-classes-as-parents.md): its
+// members' names are taken as the code has them, and a function named like one of its overridable
+// methods overrides it, so it takes the method's name.
+export function codeInheritedMembers(code: { overridable: { name: string }[]; members?: string[] }): InheritedMembers {
+  const names = new Map([...(code.members ?? []), ...code.overridable.map((m) => m.name)].map((n) => [n, n]));
+  return { names: { functions: names, events: new Map(), variables: new Map(), dispatchers: new Map() }, functions: code.overridable.map((m) => ({ id: m.name, name: m.name })) };
+}
+
 // `inherited`: the class's ancestors. Their names are taken, and a function named like one of
 // theirs overrides it, so it takes that function's name.
 export function claimClassMembers(scope: NameScope, spec: ClassMemberSpec, styles: ClassMemberStyles, inherited: InheritedMembers[] = []): ClassMemberNames {

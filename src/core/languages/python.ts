@@ -1,8 +1,8 @@
 // Python pack: generates a typed Python 3 module (one class per graph) from Visual IR.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, broadcastParams, canComplete, classInfo, exprType, importKey, interfaceInfo, programClassSpec, userTypes, targetCallParams } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, broadcastParams, canComplete, classInfo, codeParentInfo, exprType, importKey, interfaceInfo, isCodeClassId, programClassSpec, userTypes, targetCallParams } from '../compiler/ir';
 import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression } from '../language-pack';
@@ -314,6 +314,7 @@ const pythonGenerator: CodeGenerator = {
   libraryExports: (_name, functions) => ({ names: pythonExportNames(functions) }),
   snippetLanguages: ['python'],
   importLanguages: ['python'],
+  codeParents: true,
   outputFileName: pythonOutputFileName,
   testFileName: (graphFileName) => `test_${pythonOutputFileName(graphFileName)}`,
   moduleName: (generatedFileName) => generatedFileName.replace(/\.py$/, ''),
@@ -373,7 +374,8 @@ class PythonEmitter {
     // Public members first, as every module that uses the class names them.
     const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
     this.classNames.set(`object:${program.className}`, own);
-    for (const f of program.functions) this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
+    // An override event takes the code's name for its method, which the code parent's names hold.
+    for (const f of program.functions) this.functionNames.set(f.id, f.event && f.code ? f.code : (f.event ? own.events : own.functions).get(f.id)!);
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
     for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     const moduleScope = this.library ? this.names : new NameScope(RESERVED, [this.className, ...MODULE_NAMES]);
@@ -384,7 +386,7 @@ class PythonEmitter {
       this.importNames.set(i.id, local);
     }
     // A subclass's internal attributes and methods carry its name: its parent's may share theirs.
-    const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'snake')}_` : '_';
+    const internal = program.classInfo?.parent ? `_${toIdentifier(program.className, 'snake')}_` : '_';
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'snake', internal));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', internal));
@@ -411,13 +413,17 @@ class PythonEmitter {
       ...this.program.slots.filter((x) => !x.function).map((x) => ({ name: this.slotNames.get(x.id)!, type: x.type, initial: this.defaultFor(x.type) }))
     ];
     if (fields.length) {
-      this.method('__init__', [], undefined, () => {
-        if (parent) body.line('super().__init__()');
+      // A class from the code's constructor takes arguments: this one takes them on.
+      const scope = new NameScope(RESERVED);
+      const init = (codeParentInfo(this.program)?.init ?? []).map((p) => ({ name: scope.claim(p.id, 'keep'), type: p.type }));
+      this.method('__init__', init, undefined, () => {
+        if (parent) body.line(`super().__init__(${init.map((p) => p.name).join(', ')})`);
         for (const f of fields) body.line(`self.${f.name}: ${f.type === 'dispatcher' ? '_EventDispatcher' : this.typeName(f.type)} = ${f.initial}`);
       });
     }
     // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay.
-    if (!parent || this.program.hasStart) this.method('start', [], undefined, () => this.statements(this.program.start));
+    // (A class from the code has no start.)
+    if (!parent || isCodeClassId(parent) || this.program.hasStart) this.method('start', [], undefined, () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
     // The interface functions the class gives no body: they do nothing and return defaults.
     for (const { type, stubs } of this.program.interfaces ?? []) {
@@ -438,7 +444,9 @@ class PythonEmitter {
     for (const helper of this.program.helpers) this.helperMethod(helper);
     body.trimTrailingBlank();
     body.dedent();
-    return this.finish(true);
+    // A class that can't be made without arguments (its code parent's constructor takes them) or
+    // at all (it's abstract) isn't run as a script.
+    return this.finish(!this.program.abstract && !codeParentInfo(this.program)?.init?.length);
   }
 
   // A structure (a frozen dataclass: its values are never changed, Set Members makes a new one) or
@@ -501,6 +509,9 @@ class PythonEmitter {
     const seen = new Set<string>();
     for (let parent = info?.parent; parent && !seen.has(parent);) {
       seen.add(parent);
+      // A class from the code ends the chain: its members keep the code's names.
+      const code = isCodeClassId(parent) ? this.program.codeClasses?.find((c) => c.id === parent) : undefined;
+      if (code) chain.push(codeInheritedMembers(code));
       const ancestor = classInfo(this.program, parent);
       const names = ancestor && this.membersOf(parent);
       if (!ancestor || !names) break;
@@ -708,7 +719,8 @@ class PythonEmitter {
   private functionMethod(fn: IrFunction): void {
     const scope = new NameScope(RESERVED);
     const params = fn.params.map((p) => {
-      const name = scope.claim(p.name, 'snake');
+      // A method of the code's keeps its parameters' names.
+      const name = scope.claim(p.name, fn.code ? 'keep' : 'snake');
       this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
       return { name, type: p.type };
     });
@@ -926,14 +938,18 @@ class PythonEmitter {
           out.line('super().start()');
           break;
         }
-        const call = `super().${this.parentFunctionName(s.function!)}(${this.args(s.args, targetCallParams(this.program, s))})`;
+        // A graph ancestor's function, or the code parent's method (its name as the code has it).
+        const call = `super().${s.code ? s.function : this.parentFunctionName(s.function!)}(${this.args(s.args, targetCallParams(this.program, s))})`;
         out.line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
         break;
       }
-      case 'construct':
-        out.line(`${this.slotRef(s.slot)} = ${this.userTypeName(s.type)}()`);
+      case 'construct': {
+        // The code parent's constructor takes its arguments (docs/code-classes-as-parents.md).
+        const init = codeParentInfo(this.program, s.type)?.init ?? [];
+        out.line(`${this.slotRef(s.slot)} = ${this.userTypeName(s.type)}(${this.args(s.args ?? [], init)})`);
         out.line(`${this.slotRef(s.slot)}.start()`);
         break;
+      }
       case 'setObjectVariable':
         out.line(`${this.targetRef(s.target)}.${this.membersOf(s.type)?.variables.get(s.variable)} = ${this.value(s.value, classInfo(this.program, s.type)?.variables.find((v) => v.id === s.variable)?.type)}`);
         break;
@@ -1021,9 +1037,9 @@ class PythonEmitter {
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'parentCall': {
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const fn = e.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === e.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `super().${this.parentFunctionName(e.function)}(${this.args(e.args, targetCallParams(this.program, e))})`;
+        const call = `super().${e.code ? e.function : this.parentFunctionName(e.function)}(${this.args(e.args, targetCallParams(this.program, e))})`;
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'isValid':

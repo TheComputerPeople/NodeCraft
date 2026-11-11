@@ -5,7 +5,7 @@ import type { CodeMember, CodeResults } from '../model';
 import { TypeRef } from '../types';
 import type { ClassMemberSpec } from './names';
 import { EnumInfo, StructInfo, UserType } from '../user-types';
-import type { ClassInfo, InterfaceInfo } from '../objects';
+import type { ClassInfo, CodeClassInfo, InterfaceInfo } from '../objects';
 
 // The node a piece of IR came from, for diagnostics and node markers in generated code.
 export interface SourceRef {
@@ -57,8 +57,9 @@ export type IrExpr =
   | { kind: 'objectVariable'; target: IrExpr; type: string; variable: string }
   // A pure function of the Target object, reading one of its outputs when it has several.
   | { kind: 'objectCall'; target: IrExpr; type: string; function: string; args: IrExpr[]; output?: string }
-  // The parent class's version of a pure function (by name), reading one of its outputs.
-  | { kind: 'parentCall'; function: string; args: IrExpr[]; output?: string }
+  // The parent class's version of a pure function (by name), reading one of its outputs. `code`: the
+  // version in the class from the project's code the chain ends in, a method of that name.
+  | { kind: 'parentCall'; function: string; args: IrExpr[]; output?: string; code?: boolean }
   // A pure interface function (by graph id) of the Target object, reading one of its outputs.
   | { kind: 'interfaceCall'; target: IrExpr; type: string; function: string; args: IrExpr[]; output?: string };
 
@@ -115,7 +116,8 @@ export type IrStatement =
   // Calls an interface function (by graph id) of the Target object, each output into a slot.
   | { kind: 'interfaceCall'; target: IrExpr; type: string; function: string; args: IrExpr[]; results: { output: string; slot: string }[]; source: SourceRef }
   // Runs the parent class's version of a function (by name; each output into a slot), or its start.
-  | { kind: 'parentCall'; function?: string; start?: boolean; args: IrExpr[]; results: { output: string; slot: string }[]; source: SourceRef }
+  // `code`: the version in the class from the project's code the chain ends in, a method of that name.
+  | { kind: 'parentCall'; function?: string; start?: boolean; code?: boolean; args: IrExpr[]; results: { output: string; slot: string }[]; source: SourceRef }
   // Calls a function (each output into a slot) or runs a custom event (by name) of the Target object.
   | { kind: 'objectCall'; target: IrExpr; type: string; function?: string; event?: string; args: IrExpr[]; results: { output: string; slot: string }[]; source: SourceRef };
 
@@ -154,6 +156,10 @@ export interface IrFunction {
   body: IrStatement[];
   // Replaces the parent class's function of the same name (C# needs `override`).
   overrides?: boolean;
+  // Overrides the method of this name of the class from the project's code the class extends
+  // (docs/code-classes-as-parents.md): generated with the code's names for it and its parameters
+  // (`params[].name`). A function, or an override event (with `event`).
+  code?: string;
   // Its access (public when absent).
   access?: 'protected' | 'private';
   // A custom event (docs/program-structure.md, "Custom events and event dispatchers"): its inputs
@@ -289,6 +295,12 @@ export interface IrProgram {
   ancestors?: ClassInfo[];
   // Whether the graph has Start nodes: a subclass without any keeps its parent's start.
   hasStart?: boolean;
+  // The classes from the project's code that the chains of this class and the classes it uses end
+  // in (docs/code-classes-as-parents.md): generated code names members apart from theirs. The
+  // class's own code parent is imported too (`imports`, by its id).
+  codeClasses?: CodeClassInfo[];
+  // The class leaves abstract methods of its code parent for a subclass to override.
+  abstract?: boolean;
   // The interfaces the class itself declares (not those its ancestors already implement), with the
   // functions it gives no body, which get empty ones.
   interfaces?: { type: InterfaceInfo; stubs: ClassInfo['functions'] }[];
@@ -325,6 +337,24 @@ export function classInfo(program: Pick<IrProgram, 'imports' | 'classInfo'> & { 
   return type?.kind === 'class' ? type : undefined;
 }
 
+// Whether a class's parent is a class from the project's code ("code:<language>:<path>#<Class>"),
+// not a graph class.
+export function isCodeClassId(id: string | undefined): boolean {
+  return !!id?.startsWith('code:');
+}
+
+// The class from the project's code that the chain of class `id` (the program's own when absent)
+// ends in (docs/code-classes-as-parents.md).
+export function codeParentInfo(program: Pick<IrProgram, 'imports' | 'classInfo'> & { ancestors?: ClassInfo[]; codeClasses?: CodeClassInfo[] }, id?: string): CodeClassInfo | undefined {
+  const seen = new Set<string>();
+  for (let info = id ? classInfo(program, id) : program.classInfo; info && !seen.has(info.id);) {
+    seen.add(info.id);
+    if (isCodeClassId(info.parent)) return program.codeClasses?.find((c) => c.id === info!.parent);
+    info = info.parent ? classInfo(program, info.parent) : undefined;
+  }
+  return undefined;
+}
+
 // The data pins of a function's or event's inputs: the parameters a call passes, in order.
 export function dataPins<P extends { kind: string; type?: TypeRef }>(pins: readonly P[] | undefined): P[] {
   return pins?.filter((p) => p.kind === 'data') ?? [];
@@ -338,11 +368,12 @@ export function broadcastParams(program: Pick<IrProgram, 'imports' | 'classInfo'
 
 // The parameters an interface, parent or object call passes, in order.
 type TargetCall = Extract<IrStatement | IrExpr, { kind: 'interfaceCall' | 'parentCall' | 'objectCall' }>;
-export function targetCallParams(program: Pick<IrProgram, 'imports' | 'classInfo' | 'allInterfaces' | 'declaration'> & { ancestors?: ClassInfo[] }, call: TargetCall): { type?: TypeRef }[] {
+export function targetCallParams(program: Pick<IrProgram, 'imports' | 'classInfo' | 'allInterfaces' | 'declaration'> & { ancestors?: ClassInfo[]; codeClasses?: CodeClassInfo[] }, call: TargetCall): { type?: TypeRef }[] {
   switch (call.kind) {
     case 'interfaceCall':
       return dataPins(interfaceInfo(program, call.type)?.functions.find((f) => f.id === call.function)?.inputs);
     case 'parentCall':
+      if (call.code) return dataPins(codeParentInfo(program)?.overridable.find((m) => m.name === call.function)?.inputs);
       return dataPins(program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === call.function)?.inputs);
     case 'objectCall': {
       const info = classInfo(program, call.type);
@@ -357,7 +388,7 @@ export function userTypes(program: Pick<IrProgram, 'imports'>): Map<string, User
 }
 
 // Static type of an expression, as far as it is known.
-export type ProgramTypes = Pick<IrProgram, 'members' | 'slots' | 'helpers' | 'imports' | 'functions' | 'className' | 'classInfo' | 'ancestors' | 'allInterfaces' | 'declaration'>;
+export type ProgramTypes = Pick<IrProgram, 'members' | 'slots' | 'helpers' | 'imports' | 'functions' | 'className' | 'classInfo' | 'ancestors' | 'allInterfaces' | 'declaration' | 'codeClasses'>;
 
 export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefined {
   switch (expr.kind) {
@@ -414,7 +445,7 @@ export function exprType(expr: IrExpr, program: ProgramTypes): TypeRef | undefin
       return (expr.output ? outputs.find((p) => p.id === expr.output) : outputs[0])?.type;
     }
     case 'parentCall': {
-      const fn = program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === expr.function);
+      const fn = expr.code ? codeParentInfo(program)?.overridable.find((m) => m.name === expr.function) : program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === expr.function);
       const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
       return (expr.output ? outputs.find((p) => p.id === expr.output) : outputs[0])?.type;
     }
@@ -436,7 +467,8 @@ function literalType(value: unknown): TypeRef | undefined {
 export function programClassSpec(program: IrProgram): ClassMemberSpec {
   return {
     functions: program.functions.filter((f) => !f.event).map((f) => ({ id: f.id, name: f.name, ...(f.access ? { access: f.access } : {}) })),
-    events: program.functions.filter((f) => f.event).map((f) => ({ id: f.id, name: f.name })),
+    // (An override event is named by the code: it isn't one of the class's events.)
+    events: program.functions.filter((f) => f.event && !f.code).map((f) => ({ id: f.id, name: f.name })),
     variables: program.members.filter((m) => !m.function).map((m) => ({ id: m.id, name: m.name, ...(m.access ? { access: m.access } : {}) })),
     dispatchers: (program.dispatchers ?? []).map((d) => ({ id: d.id, name: d.name }))
   };

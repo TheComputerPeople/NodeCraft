@@ -367,7 +367,8 @@ function codeClassDefinition(cls: ScannedClass, options: ExposeOptions): NodeDef
     name: cls.name, title: simple, language: options.language, path: options.path, ...(options.module ? { module: options.module } : {}),
     ...(cls.abstract ? { abstract: true } : {}),
     ...(cls.init?.params.length ? { init: dataPins(definitionFor(cls.init, options).inputs) } : {}),
-    overridable
+    overridable,
+    members: [...new Set([...cls.methods.map((m) => m.name), ...cls.properties.map((p) => p.name)])]
   };
   return {
     type: id, version: 1, displayName: simple, category: 'Project / Classes',

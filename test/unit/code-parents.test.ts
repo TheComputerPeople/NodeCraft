@@ -17,6 +17,7 @@ import { Graph, GraphDocument, GraphNode, NodeDefinition } from '../../src/core/
 import { overrideEvent } from '../../src/core/blueprint-edits';
 import { CodeClassInfo, OVERRIDE_EVENT, PARENT_CALL, abstractLeft, classDefinitions, codeClassBases, codeClassById, declaredClass, subclassTest } from '../../src/core/objects';
 import { createResolver } from '../../src/core/resolve';
+import { lowerDocument } from '../../src/core/compiler/lower';
 import { NodeRegistry } from '../../src/core/registry';
 
 function classesOf(scan: ModuleScan, options: Partial<ExposeOptions> & { language: string; path: string }): CodeClassInfo[] {
@@ -199,7 +200,7 @@ describe('a graph class extending a class from the code', () => {
     assert.ok(subclassTest(definition, declaredClass(squire)!, codeClassBases(registry.all()))('object:Squire', 'native:Actor'));
   });
 
-  test('Compile: a missing code class, one in another language, and (until generated) any other', () => {
+  test("Compile: a missing code class, one in another language, and (until generated) Java's", () => {
     const errors = (doc: GraphDocument, registry: NodeRegistry) => compileDocument(doc, { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Knight.vgraph' } }).diagnostics
       .filter((d) => d.severity === 'error').map((d) => `${d.code}: ${d.message}`);
     const missing = workspace(codeClassId('typescript', 'src/gone.ts', 'Gone'));
@@ -207,7 +208,48 @@ describe('a graph class extending a class from the code', () => {
     const python = workspace();
     assert.match(errors({ ...python.knight, language: 'python' }, python.registry).join('\n'), /^wrong-language: Actor is a TypeScript class \(src\/actor\.ts\); a Python graph can't extend it\.$/);
     const later = workspace();
-    assert.deepEqual(errors(later.knight, later.registry), ["code-parent-unsupported: Generated code can't extend a class from your code (Actor) in TypeScript yet."]);
+    const java = codeClassId('java', 'src/Actor.java', 'Actor');
+    const actor = later.registry.get(later.knight.parent!)!;
+    if (actor.implementation?.kind !== 'code-class') throw new Error('no Actor');
+    later.registry.register({ ...actor, type: java, implementation: { kind: 'code-class', type: { ...actor.implementation.type, id: java, language: 'java', path: 'src/Actor.java' } } });
+    assert.deepEqual(errors({ ...later.knight, language: 'java', parent: java }, later.registry), ["code-parent-unsupported: Generated code can't extend a class from your code (Actor) in Java yet."]);
+    // TypeScript's generated code extends it (docs/code-classes-as-parents.md, step 4).
+    assert.deepEqual(errors(later.knight, later.registry), []);
+  });
+});
+
+describe('generated code for a class extending the code', () => {
+  const errors = (doc: GraphDocument, registry: NodeRegistry) => compileDocument(doc, { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: `${doc.name}.vgraph` } }).diagnostics
+    .filter((d) => d.severity === 'error').map((d) => `${d.code}: ${d.message}`);
+  const at = (id: string, type: string, properties: Record<string, unknown> = {}): GraphNode => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const actorOf = (registry: NodeRegistry, id: string): CodeClassInfo => {
+    const implementation = registry.get(id)?.implementation;
+    if (implementation?.kind !== 'code-class') throw new Error('no Actor');
+    return implementation.type;
+  };
+
+  test('Event <Method> in a class with no code parent overrides nothing', () => {
+    const { registry, knight } = workspace();
+    const doc: GraphDocument = { ...knight, parent: undefined, graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], connections: [], nodes: [at('e', OVERRIDE_EVENT, { method: 'hit' })] }] };
+    assert.deepEqual(errors(doc, registry), ["override-missing: Event hit overrides a method of a class from your code, and Knight doesn't extend one."]);
+  });
+
+  test("Test Case events need a class made with no arguments; the code can't have a start", () => {
+    const { registry, knight } = workspace();
+    const describe: Graph = { id: 'd', name: 'describe', kind: 'function', comments: [], connections: [], signature: { inputs: [], outputs: [{ id: 'returnValue', name: 'Return Value', kind: 'data', type: { id: 'string' } }] }, nodes: [at('entry', 'core:function.entry', { graph: 'd' })] };
+    const tested: GraphDocument = { ...knight, graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], connections: [], nodes: [at('t', 'core:test.case', { name: 'Works' })] }, describe] };
+    assert.deepEqual(errors(tested, registry), ["test-construct: Test Case events run on a new Knight, which can't be made without arguments: Actor's constructor takes name."]);
+    const actor = actorOf(registry, knight.parent!);
+    registry.register({ ...registry.get(actor.id)!, implementation: { kind: 'code-class', type: { ...actor, members: ['start', 'hit'] } } });
+    assert.match(errors({ ...knight, graphs: [knight.graphs[0], describe] }, registry).join('\n'), /^inherited-name: Actor has a member named "start"/);
+  });
+
+  test('the program names the code classes its chains end in, and imports its own', () => {
+    const { registry, knight } = workspace();
+    const lowered = lowerDocument(knight, { registry, languageName: 'TypeScript', snippetLanguages: ['typescript'], importLanguages: ['typescript'], codeParents: true });
+    assert.deepEqual(lowered.program?.codeClasses?.map((c) => c.id), [knight.parent]);
+    assert.deepEqual(lowered.program?.imports.map((i) => [i.id, i.name, i.path]), [[knight.parent, 'Actor', 'src/actor.ts']]);
+    assert.equal(lowered.program?.abstract, true, 'describe is left');
   });
 });
 
@@ -275,7 +317,7 @@ describe('overriding and constructing a class from the code', () => {
       ]
     };
     assert.deepEqual(codes(wrong), [
-      'error:code-parent-unsupported', 'error:override-duplicate', 'error:override-mismatch', 'error:override-missing', 'error:override-returns', 'error:parent-abstract', 'error:parent-missing', 'warning:abstract-left'
+      'error:override-duplicate', 'error:override-mismatch', 'error:override-missing', 'error:override-returns', 'error:parent-abstract', 'error:parent-missing', 'warning:abstract-left'
     ]);
     // Constructing Knight (describe left abstract) from another graph.
     for (const d of classDefinitions(declaredClass(knight)!)) registry.register(d);

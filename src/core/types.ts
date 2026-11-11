@@ -74,7 +74,8 @@ export function setClassHierarchy(test: ((from: string, to: string) => boolean) 
 
 function elementsConnect(from: string, to: string): boolean {
   if (from === to || from.startsWith('wildcard') || to.startsWith('wildcard')) return true;
-  if (from.startsWith('object:') && (to.startsWith('object:') || to.startsWith('interface:'))) return !!isSubclass?.(from, to);
+  // (A graph class extending a class from the code is that class: docs/code-classes-as-parents.md.)
+  if (from.startsWith('object:') && (to.startsWith('object:') || to.startsWith('interface:') || to.startsWith('native:'))) return !!isSubclass?.(from, to);
   // A class from the project's code: its objects connect where a class it extends is expected.
   if (from.startsWith('native:') && to.startsWith('native:')) return !!isSubclass?.(from, to);
   // Numeric pins connect both ways until Phase 2 adds Unreal-style conversion nodes.
