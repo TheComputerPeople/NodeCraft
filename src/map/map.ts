@@ -3,7 +3,7 @@
 // Zoomed out, boxes show less.
 import type { FoundEntity, MapFilters } from '../core/codemap/find';
 import type { MapHostMessage, MapMessage } from '../core/codemap/map-protocol';
-import type { LaidArrow, LaidBox, LaidScene } from '../core/codemap/scene';
+import type { CallDirection, LaidArrow, LaidBox, LaidScene } from '../core/codemap/scene';
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState?(): unknown; setState?(state: unknown): void };
 const vscode = acquireVsCodeApi();
@@ -33,6 +33,7 @@ function applyView(): void {
   // Levels of detail: zoomed out, details and then small labels go.
   canvas.classList.toggle('far', zoom < 0.45);
   canvas.classList.toggle('very-far', zoom < 0.16);
+  drawMinimap();
 }
 
 export function fit(): void {
@@ -107,7 +108,7 @@ function renderBox(box: LaidBox): HTMLElement {
     calls.setAttribute('aria-label', `Show the call flow of ${box.label}`);
     calls.addEventListener('click', (e) => {
       e.stopPropagation();
-      post({ type: 'calls', id: box.id });
+      post({ type: 'calls', id: entityOf(box) });
     });
     head.appendChild(calls);
   }
@@ -158,8 +159,7 @@ function renderBox(box: LaidBox): HTMLElement {
   });
   el.addEventListener('click', (e) => {
     e.stopPropagation();
-    selected = selected === box.id ? undefined : box.id;
-    highlight();
+    clickBox(box);
   });
   // Double-clicking a box that holds others opens or closes it; a box with nothing inside opens its code.
   el.addEventListener('dblclick', (e) => {
@@ -242,13 +242,41 @@ function renderFlowBox(box: LaidBox, el: HTMLElement): HTMLElement {
     e.stopPropagation();
     if (box.line) post({ type: 'openLine', line: box.line });
   });
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    clickBox(box);
+  });
   return el;
+}
+
+// The entity a box stands for (a file's group in the call flow stands for its file).
+function entityOf(box: LaidBox): string {
+  return box.id.startsWith('in:') ? box.id.slice('in:'.length) : box.id;
+}
+
+// A click selects a box (or lets it go); while picking where a path leads, it's the path's end.
+function clickBox(box: LaidBox): void {
+  if (pathFrom) {
+    if (CALLABLE_KINDS.has(box.kind) && entityOf(box) !== pathFrom.id) finishPath(entityOf(box));
+    return;
+  }
+  select(selected === box.id ? undefined : box.id);
+}
+
+function select(id: string | undefined): void {
+  selected = id;
+  highlight();
 }
 
 // The arrows of the box pointed at (or selected), and of everything inside it, drawn over the map
 // (which dims), with the boxes they reach marked.
 function highlight(): void {
   if (!scene) return;
+  showCrumbs();
+  drawMinimap();
+  const current = selected ? boxesEl.querySelector(`.map-box[data-id="${CSS.escape(selected)}"]`) : null;
+  if (current?.id) canvas.setAttribute('aria-activedescendant', current.id);
+  else canvas.removeAttribute('aria-activedescendant');
   arrowsSvg.querySelector('#map-highlight')?.remove();
   for (const el of boxesEl.querySelectorAll('.map-box.active, .map-box.linked')) el.classList.remove('active', 'linked');
   const active = hovered ?? selected;
@@ -293,7 +321,12 @@ function render(): void {
   if (!scene) return;
   boxesEl.textContent = '';
   // Outer boxes first, so inner ones are drawn over them.
-  for (const box of scene.boxes) boxesEl.appendChild(renderBox(box));
+  scene.boxes.forEach((box, i) => {
+    const el = renderBox(box);
+    el.id = `map-box-${i}`;
+    if (pathFrom && entityOf(box) === pathFrom.id) el.classList.add('path-start');
+    boxesEl.appendChild(el);
+  });
   arrowsSvg.setAttribute('width', String(Math.max(1, scene.width)));
   arrowsSvg.setAttribute('height', String(Math.max(1, scene.height)));
   const ns = 'http://www.w3.org/2000/svg';
@@ -363,9 +396,15 @@ window.addEventListener('mousemove', (e) => {
 window.addEventListener('mouseup', (e) => {
   // A press on the background that didn't pan lets go of the selected box.
   const moved = drag && Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3;
-  if (drag && !moved && selected && !(e.target instanceof Element && e.target.closest('.map-box'))) {
-    selected = undefined;
-    highlight();
+  const onBox = e.target instanceof Element ? e.target.closest<HTMLElement>('.map-box') : null;
+  if (drag && !moved && e.button === 2 && onBox && scene) {
+    const box = scene.boxes.find((b) => b.id === onBox.dataset.id);
+    if (box) {
+      select(box.id);
+      showMenu(box, e.clientX, e.clientY);
+    }
+  } else if (drag && !moved && e.button === 0 && selected && !onBox) {
+    select(undefined);
   }
   drag = undefined;
   canvas.classList.remove('panning');
@@ -384,18 +423,371 @@ canvas.addEventListener('wheel', (e) => {
 element<HTMLElement>('map-fit').addEventListener('click', fit);
 const flowBar = element<HTMLElement>('map-flow');
 const flowLabel = element<HTMLElement>('map-flow-label');
-const flowBack = element<HTMLButtonElement>('map-flow-back');
-const flowForward = element<HTMLButtonElement>('map-flow-forward');
-flowBack.addEventListener('click', () => post({ type: 'history', direction: 'back' }));
-flowForward.addEventListener('click', () => post({ type: 'history', direction: 'forward' }));
 const callsBar = element<HTMLElement>('map-calls');
 const rootLabel = element<HTMLElement>('map-root-label');
 const rootClear = element<HTMLElement>('map-root-clear');
-rootClear.addEventListener('click', () => post({ type: 'calls' }));
+const depthSelect = element<HTMLSelectElement>('map-depth');
+// The × leaves a path for the call flow from its start; otherwise it starts from the entry points.
+rootClear.addEventListener('click', () => post(scene?.calls?.path ? { type: 'calls', id: scene.calls.path.from, direction: 'callees' } : { type: 'calls' }));
+depthSelect.addEventListener('change', () => post({ type: 'depth', depth: Number(depthSelect.value) }));
 for (const button of document.querySelectorAll<HTMLElement>('.map-direction')) {
   button.addEventListener('click', () => {
-    if (button.getAttribute('aria-checked') !== 'true') post({ type: 'direction', direction: button.dataset.direction as 'callees' | 'callers' });
+    if (button.getAttribute('aria-checked') !== 'true') post({ type: 'direction', direction: button.dataset.direction as CallDirection });
   });
+}
+
+// Back and Forward, through the places the map has been.
+const backButton = element<HTMLButtonElement>('map-back');
+const forwardButton = element<HTMLButtonElement>('map-forward');
+backButton.addEventListener('click', () => post({ type: 'history', direction: 'back' }));
+forwardButton.addEventListener('click', () => post({ type: 'history', direction: 'forward' }));
+window.addEventListener('mouseup', (e) => {
+  if (e.button === 3 && !backButton.disabled) post({ type: 'history', direction: 'back' });
+  if (e.button === 4 && !forwardButton.disabled) post({ type: 'history', direction: 'forward' });
+});
+
+// The breadcrumb: the selected box and the boxes holding it, each a click away.
+const crumbs = element<HTMLElement>('map-crumbs');
+function showCrumbs(): void {
+  crumbs.textContent = '';
+  const byId = new Map((scene?.boxes ?? []).map((b) => [b.id, b]));
+  const chain: LaidBox[] = [];
+  for (let b = selected ? byId.get(selected) : undefined; b; b = b.parent ? byId.get(b.parent) : undefined) chain.unshift(b);
+  if (!chain.length) {
+    const none = document.createElement('li');
+    none.className = 'map-crumb-none';
+    none.textContent = 'Select a box to see where it is';
+    crumbs.appendChild(none);
+    return;
+  }
+  for (const box of chain) {
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.textContent = box.label;
+    button.title = `${box.label} (${KIND_NAMES[box.kind] || box.kind})`;
+    button.dataset.id = box.id;
+    button.addEventListener('click', () => {
+      select(box.id);
+      centreOn(box.id);
+    });
+    item.appendChild(button);
+    crumbs.appendChild(item);
+  }
+}
+
+// A box's menu: what can be done with it.
+const menu = element<HTMLElement>('map-menu');
+let menuActive = 0;
+
+function menuItems(box: LaidBox): ({ label: string; run: () => void } | 'separator')[] {
+  const id = entityOf(box);
+  const items: ({ label: string; run: () => void } | 'separator')[] = [];
+  if (box.kind === 'flow') {
+    if (box.line) items.push({ label: `Show the code (line ${box.line})`, run: () => post({ type: 'openLine', line: box.line! }) });
+    return items;
+  }
+  if (box.path && CODE_KINDS.has(box.kind)) items.push({ label: box.kind === 'graph-file' || box.kind === 'graph' ? 'Open the graph' : 'Open the code', run: () => post({ type: 'open', id }) });
+  if (box.expandable) {
+    const calls = scene?.mode === 'calls';
+    items.push({ label: calls ? (box.expanded ? 'Show fewer calls' : 'Show more calls') : box.expanded ? 'Close' : 'Open', run: () => post({ type: 'toggle', id: box.id }) });
+  }
+  if (CALLABLE_KINDS.has(box.kind)) {
+    items.push('separator');
+    items.push({ label: 'Call flow from here', run: () => post({ type: 'calls', id, direction: 'callees' }) });
+    items.push({ label: 'Callers', run: () => post({ type: 'calls', id, direction: 'callers' }) });
+    items.push({ label: 'Focus: its callers and calls', run: () => post({ type: 'calls', id, direction: 'both' }) });
+    if (box.kind === 'function' || box.kind === 'type') items.push({ label: 'Control flow', run: () => post({ type: 'flow', id }) });
+    items.push('separator');
+    if (pathFrom && pathFrom.id !== id) items.push({ label: `Path from ${pathFrom.label} to here`, run: () => finishPath(id) });
+    items.push({ label: 'Path from here to…', run: () => startPath(id, box.label) });
+  }
+  return items;
+}
+
+function showMenu(box: LaidBox, x: number, y: number): void {
+  const items = menuItems(box);
+  if (!items.length) return;
+  menu.textContent = '';
+  for (const item of items) {
+    const li = document.createElement('li');
+    if (item === 'separator') {
+      li.setAttribute('role', 'separator');
+    } else {
+      li.setAttribute('role', 'menuitem');
+      li.tabIndex = -1;
+      li.textContent = item.label;
+      li.addEventListener('mousedown', (e) => e.stopPropagation());
+      li.addEventListener('click', () => {
+        closeMenu();
+        item.run();
+      });
+    }
+    menu.appendChild(li);
+  }
+  // (A separator first or last, or two together, isn't drawn.)
+  for (const li of [...menu.children]) {
+    const prev = li.previousElementSibling;
+    if (li.getAttribute('role') === 'separator' && (!prev || prev.getAttribute('role') === 'separator' || !li.nextElementSibling)) li.remove();
+  }
+  menu.hidden = false;
+  const rect = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(2, Math.min(x, window.innerWidth - rect.width - 2))}px`;
+  menu.style.top = `${Math.max(2, Math.min(y, window.innerHeight - rect.height - 2))}px`;
+  menuActive = 0;
+  focusMenuItem();
+}
+
+function focusMenuItem(): void {
+  const entries = [...menu.querySelectorAll<HTMLElement>('li[role="menuitem"]')];
+  entries.forEach((li, i) => li.classList.toggle('active', i === menuActive));
+  entries[menuActive]?.focus();
+}
+
+function closeMenu(): void {
+  if (menu.hidden) return;
+  menu.hidden = true;
+  canvas.focus();
+}
+
+menu.addEventListener('keydown', (e) => {
+  const entries = [...menu.querySelectorAll<HTMLElement>('li[role="menuitem"]')];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    menuActive = (menuActive + (e.key === 'ArrowDown' ? 1 : entries.length - 1)) % entries.length;
+    focusMenuItem();
+  } else if (e.key === 'Enter' || e.key === ' ') {
+    entries[menuActive]?.click();
+  } else if (e.key === 'Escape' || e.key === 'Tab') {
+    closeMenu();
+  } else {
+    return;
+  }
+  e.preventDefault();
+  e.stopPropagation();
+});
+window.addEventListener('mousedown', (e) => {
+  if (!menu.hidden && !(e.target instanceof Element && e.target.closest('#map-menu'))) closeMenu();
+});
+
+// A path: its start chosen from a box's menu, then its end picked (a click, or Find).
+const pickingEl = element<HTMLElement>('map-picking');
+let pathFrom: { id: string; label: string } | undefined;
+
+function startPath(id: string, label: string): void {
+  pathFrom = { id, label };
+  pickingEl.textContent = `Path from ${label}: pick where it leads (Esc to stop)`;
+  pickingEl.hidden = false;
+  canvas.classList.add('picking');
+  render();
+}
+
+function finishPath(to: string): void {
+  const from = pathFrom?.id;
+  stopPath();
+  if (from && from !== to) post({ type: 'path', from, to });
+}
+
+function stopPath(): void {
+  if (!pathFrom) return;
+  pathFrom = undefined;
+  pickingEl.hidden = true;
+  canvas.classList.remove('picking');
+  boxesEl.querySelector('.map-box.path-start')?.classList.remove('path-start');
+}
+
+// The minimap: the whole map small, with the view's place on it; a click or drag moves the view there.
+// It shows only when the map doesn't fit the view.
+const minimap = element<HTMLCanvasElement>('map-minimap');
+const MINIMAP = { width: 180, height: 120 };
+let minimapScale = 1;
+
+function drawMinimap(): void {
+  if (!scene || !scene.boxes.length) {
+    minimap.hidden = true;
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const view = { x: -pan.x / zoom, y: -pan.y / zoom, width: rect.width / zoom, height: rect.height / zoom };
+  const whole = view.x <= 0 && view.y <= 0 && view.x + view.width >= scene.width && view.y + view.height >= scene.height;
+  minimap.hidden = whole;
+  if (whole) return;
+  minimapScale = Math.min(MINIMAP.width / Math.max(1, scene.width), MINIMAP.height / Math.max(1, scene.height));
+  const width = Math.max(24, Math.round(scene.width * minimapScale));
+  const height = Math.max(24, Math.round(scene.height * minimapScale));
+  const ratio = window.devicePixelRatio || 1;
+  if (minimap.width !== width * ratio || minimap.height !== height * ratio) {
+    minimap.width = width * ratio;
+    minimap.height = height * ratio;
+    minimap.style.width = `${width}px`;
+    minimap.style.height = `${height}px`;
+  }
+  const g = minimap.getContext('2d');
+  if (!g) return;
+  const style = getComputedStyle(document.documentElement);
+  const muted = style.getPropertyValue('--muted').trim() || '#999';
+  const accent = style.getPropertyValue('--accent').trim() || '#007acc';
+  g.setTransform(ratio * minimapScale, 0, 0, ratio * minimapScale, 0, 0);
+  g.clearRect(0, 0, scene.width, scene.height);
+  for (const box of scene.boxes) {
+    const open = box.expanded && scene.boxes.some((b) => b.parent === box.id);
+    if (open) {
+      g.globalAlpha = 0.5;
+      g.strokeStyle = muted;
+      g.lineWidth = 1 / minimapScale;
+      g.strokeRect(box.x, box.y, box.width, box.height);
+    } else {
+      g.globalAlpha = box.id === selected ? 1 : 0.45;
+      g.fillStyle = box.id === selected ? accent : muted;
+      g.fillRect(box.x, box.y, box.width, box.height);
+    }
+  }
+  g.globalAlpha = 1;
+  g.strokeStyle = accent;
+  g.lineWidth = 2 / minimapScale;
+  g.strokeRect(view.x, view.y, view.width, view.height);
+}
+
+// Moves the view so a point of the map (from the minimap) is in its middle.
+function minimapTo(e: MouseEvent): void {
+  const at = minimap.getBoundingClientRect();
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - at.left) / minimapScale;
+  const y = (e.clientY - at.top) / minimapScale;
+  pan = { x: rect.width / 2 - x * zoom, y: rect.height / 2 - y * zoom };
+  applyView();
+}
+
+let minimapDrag = false;
+minimap.addEventListener('mousedown', (e) => {
+  e.stopPropagation();
+  e.preventDefault();
+  minimapDrag = true;
+  minimapTo(e);
+});
+window.addEventListener('mousemove', (e) => {
+  if (minimapDrag) minimapTo(e);
+});
+window.addEventListener('mouseup', () => {
+  minimapDrag = false;
+});
+
+// Keyboard: the arrow keys move the selection (up and down along the arrows, left and right beside
+// it), Enter opens a box, Shift+F10 shows its menu; + and - zoom; Home fits; Alt+Left and Alt+Right
+// go back and forward.
+const announcer = document.createElement('div');
+announcer.className = 'map-announce';
+announcer.setAttribute('aria-live', 'polite');
+announcer.setAttribute('role', 'status');
+Object.assign(announcer.style, { position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)' });
+document.body.appendChild(announcer);
+// The boxes the last move along the arrows could have gone to (Left and Right go between them).
+let followed: { from: string; to: string[] } | undefined;
+
+const middle = (b: LaidBox) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+
+function within(id: string, holder: string, byId: Map<string, LaidBox>): boolean {
+  for (let b = byId.get(id); b; b = b.parent ? byId.get(b.parent) : undefined) if (b.id === holder) return true;
+  return false;
+}
+
+// The boxes the arrows of a box (and of what's inside it) lead to, or come from.
+function alongArrows(box: LaidBox, down: boolean, byId: Map<string, LaidBox>): LaidBox[] {
+  if (!scene) return [];
+  const arrows = scene.details.length ? scene.details : scene.arrows;
+  const ends = new Set<string>();
+  for (const a of arrows) {
+    const [near, far] = down ? [a.from, a.to] : [a.to, a.from];
+    if (within(near, box.id, byId) && !within(far, box.id, byId)) ends.add(far);
+  }
+  return [...ends].map((id) => byId.get(id)!).filter(Boolean).sort((a, b) => middle(a).x - middle(b).x);
+}
+
+function moveSelection(key: string, alt: boolean): void {
+  if (!scene || !scene.boxes.length) return;
+  const byId = new Map(scene.boxes.map((b) => [b.id, b]));
+  const current = selected ? byId.get(selected) : undefined;
+  if (!current) {
+    const top = scene.boxes.filter((b) => !b.parent).sort((a, b) => a.y - b.y || a.x - b.x)[0];
+    goTo(top, undefined);
+    return;
+  }
+  const here = middle(current);
+  if (alt) {
+    // Into the box (its first box, if it's open) or out of it.
+    const target = key === 'ArrowDown'
+      ? scene.boxes.filter((b) => b.parent === current.id).sort((a, b) => a.y - b.y || a.x - b.x)[0]
+      : current.parent ? byId.get(current.parent) : undefined;
+    goTo(target, undefined);
+    return;
+  }
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    // Between the boxes the last move along the arrows could have reached; otherwise beside it.
+    if (followed && followed.to.includes(current.id)) {
+      const i = followed.to.indexOf(current.id) + (key === 'ArrowRight' ? 1 : -1);
+      const next = followed.to[(i + followed.to.length) % followed.to.length];
+      goTo(byId.get(next), followed);
+      return;
+    }
+    const right = key === 'ArrowRight';
+    const beside = scene.boxes
+      .filter((b) => b.parent === current.parent && b.id !== current.id && (right ? middle(b).x > here.x : middle(b).x < here.x))
+      .sort((a, b) => cost(a) - cost(b))[0];
+    goTo(beside, undefined);
+    return;
+  }
+  const down = key === 'ArrowDown';
+  const ends = alongArrows(current, down, byId);
+  if (ends.length) {
+    const nearest = [...ends].sort((a, b) => Math.hypot(middle(a).x - here.x, middle(a).y - here.y) - Math.hypot(middle(b).x - here.x, middle(b).y - here.y))[0];
+    goTo(nearest, { from: current.id, to: ends.map((b) => b.id) });
+    return;
+  }
+  // No arrows that way: the nearest box beside it, below or above.
+  const next = scene.boxes
+    .filter((b) => b.parent === current.parent && b.id !== current.id && (down ? middle(b).y > here.y : middle(b).y < here.y))
+    .sort((a, b) => cost(a) - cost(b))[0];
+  goTo(next, undefined);
+
+  function cost(b: LaidBox): number {
+    const m = middle(b);
+    return Math.abs(m.x - here.x) + Math.abs(m.y - here.y) * 2;
+  }
+}
+
+function goTo(box: LaidBox | undefined, along: typeof followed): void {
+  if (!box) return;
+  followed = along;
+  select(box.id);
+  scrollIntoView(box);
+  const ways = along && along.to.length > 1 ? ` (${along.to.indexOf(box.id) + 1} of ${along.to.length}: Left and Right for the others)` : '';
+  announcer.textContent = `${box.label}, ${KIND_NAMES[box.kind] || box.flowKind || box.kind}${box.detail ? `, ${box.detail}` : ''}${ways}`;
+}
+
+// Pans so a box is in view (without zooming), if it isn't.
+function scrollIntoView(box: LaidBox): void {
+  const rect = canvas.getBoundingClientRect();
+  const left = pan.x + box.x * zoom;
+  const top = pan.y + box.y * zoom;
+  const right = left + box.width * zoom;
+  const bottom = top + box.height * zoom;
+  const margin = 24;
+  if (left >= margin && top >= margin && right <= rect.width - margin && bottom <= rect.height - margin) return;
+  if (box.width * zoom > rect.width - margin * 2 || box.height * zoom > rect.height - margin * 2) {
+    pan = { x: rect.width / 2 - (box.x + box.width / 2) * zoom, y: margin - box.y * zoom };
+  } else {
+    pan = {
+      x: left < margin ? pan.x + margin - left : right > rect.width - margin ? pan.x - (right - rect.width + margin) : pan.x,
+      y: top < margin ? pan.y + margin - top : bottom > rect.height - margin ? pan.y - (bottom - rect.height + margin) : pan.y
+    };
+  }
+  applyView();
+}
+
+function zoomBy(factor: number): void {
+  const rect = canvas.getBoundingClientRect();
+  const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
+  pan = { x: rect.width / 2 - ((rect.width / 2 - pan.x) / zoom) * next, y: rect.height / 2 - ((rect.height / 2 - pan.y) / zoom) * next };
+  zoom = next;
+  applyView();
 }
 for (const button of document.querySelectorAll<HTMLElement>('.map-mode')) {
   button.addEventListener('click', () => {
@@ -403,9 +795,50 @@ for (const button of document.querySelectorAll<HTMLElement>('.map-mode')) {
   });
 }
 canvas.addEventListener('keydown', (e) => {
+  const box = selected ? scene?.boxes.find((b) => b.id === selected) : undefined;
   if (e.key === 'Home') {
     fit();
+  } else if (e.key.startsWith('Arrow') && !e.ctrlKey && !e.metaKey) {
+    if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
+    moveSelection(e.key, e.altKey);
+  } else if (e.key === 'Enter' && box) {
+    if (box.kind === 'flow') {
+      if (box.line) post({ type: 'openLine', line: box.line });
+    } else if (pathFrom) {
+      clickBox(box);
+    } else if (e.ctrlKey || e.metaKey || e.shiftKey || !box.expandable) {
+      if (box.path) post({ type: 'open', id: entityOf(box) });
+    } else {
+      post({ type: 'toggle', id: box.id });
+    }
+  } else if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
+    if (!box) return;
+    const el = boxesEl.querySelector(`.map-box[data-id="${CSS.escape(box.id)}"]`)?.getBoundingClientRect();
+    showMenu(box, el ? el.left + 8 : 8, el ? el.bottom - 4 : 8);
+  } else if (e.key === 'Escape') {
+    if (pathFrom) stopPath();
+    else if (box) {
+      // Out to the box holding it; at the top, nothing selected.
+      const holder = box.parent ? scene?.boxes.find((b) => b.id === box.parent) : undefined;
+      if (holder) goTo(holder, undefined);
+      else select(undefined);
+    } else return;
+  } else if (e.key === '+' || e.key === '=') {
+    zoomBy(1.25);
+  } else if (e.key === '-' || e.key === '_') {
+    zoomBy(0.8);
+  } else {
+    return;
+  }
+  e.preventDefault();
+});
+window.addEventListener('keydown', (e) => {
+  if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !(e.target instanceof HTMLInputElement)) {
+    const back = e.key === 'ArrowLeft';
+    if (!(back ? backButton : forwardButton).disabled) post({ type: 'history', direction: back ? 'back' : 'forward' });
     e.preventDefault();
+  } else if (e.key === 'Escape' && pathFrom && e.target === document.body) {
+    stopPath();
   }
 });
 
@@ -476,7 +909,8 @@ function pick(i: number): void {
   const f = found[i];
   if (!f) return;
   foundList.hidden = true;
-  post({ type: 'reveal', id: f.id });
+  if (pathFrom) finishPath(f.id);
+  else post({ type: 'reveal', id: f.id });
 }
 
 findInput.addEventListener('input', () => {
@@ -600,20 +1034,32 @@ window.addEventListener('message', (event: MessageEvent<MapHostMessage>) => {
     scene = message.scene;
     if (message.title) titleEl.textContent = message.title;
     for (const button of document.querySelectorAll<HTMLElement>('.map-mode')) button.setAttribute('aria-checked', String(button.dataset.mode === scene.mode));
-    // The flowchart's bar: Back, Forward, and whose flow it is.
+    // The flowchart's bar: whose flow it is.
     flowBar.hidden = scene.mode !== 'flow';
-    if (scene.flow) {
-      flowLabel.textContent = `Control flow of ${scene.flow.label}`;
-      flowBack.disabled = !scene.flow.back;
-      flowForward.disabled = !scene.flow.forward;
-    }
-    // The call flow's bar: its direction and where it starts.
+    if (scene.flow) flowLabel.textContent = `Control flow of ${scene.flow.label}`;
+    // The call flow's bar: its direction, how many levels, and where it starts (or the path shown).
     callsBar.hidden = scene.mode !== 'calls';
     if (scene.calls) {
-      for (const button of document.querySelectorAll<HTMLElement>('.map-direction')) button.setAttribute('aria-checked', String(button.dataset.direction === scene.calls.direction));
-      rootLabel.textContent = scene.calls.rootLabel ? `${scene.calls.direction === 'callers' ? 'Callers of' : 'From'} ${scene.calls.rootLabel}` : `From the entry points (${scene.calls.starts})`;
-      rootClear.hidden = !scene.calls.root;
+      const calls = scene.calls;
+      for (const button of document.querySelectorAll<HTMLElement>('.map-direction')) button.setAttribute('aria-checked', String(button.dataset.direction === calls.direction));
+      callsBar.classList.toggle('path', !!calls.path);
+      if (!calls.path) depthSelect.value = String(calls.depth);
+      const path = calls.path;
+      rootLabel.textContent = path
+        ? path.length !== undefined
+          ? `Path from ${path.fromLabel} to ${path.toLabel}: ${path.length} call${path.length === 1 ? '' : 's'}`
+          : `No calls lead from ${path.fromLabel} to ${path.toLabel}, or back`
+        : calls.rootLabel
+          ? `${calls.direction === 'callers' ? 'Callers of' : calls.direction === 'both' ? 'Callers and calls of' : 'From'} ${calls.rootLabel}`
+          : `From the entry points (${calls.starts})`;
+      rootClear.hidden = !calls.root && !path;
+      rootClear.title = path ? `Leave the path: the call flow from ${path.fromLabel}` : 'Start from the entry points';
+      rootClear.setAttribute('aria-label', rootClear.title);
     }
+    // Back and Forward.
+    backButton.disabled = !message.history?.back;
+    forwardButton.disabled = !message.history?.forward;
+    closeMenu();
     // Filters on: the button says how many.
     const on = filtersOn(scene.filters);
     filterButton.textContent = on ? `Filter (${on})` : 'Filter';

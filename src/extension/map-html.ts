@@ -22,18 +22,6 @@ export function renderMapHtml({ cspSource, nonce, scriptUri, styleUri }: Webview
       <button class="map-mode" data-mode="calls" role="radio" aria-checked="false" title="What calls what, from the entry points or a function, flowing down">Call flow</button>
       <button class="map-mode" data-mode="flow" role="radio" aria-checked="false" title="A function's control flow (choose one with its ⧉ button)">Control flow</button>
     </span>
-    <span id="map-flow" hidden>
-      <button id="map-flow-back" title="Back to the flowchart before" aria-label="Back">&#x2190;</button>
-      <button id="map-flow-forward" title="Forward to the next flowchart" aria-label="Forward">&#x2192;</button>
-      <span id="map-flow-label"></span>
-    </span>
-    <span id="map-calls" hidden>
-      <span id="map-directions" role="radiogroup" aria-label="Direction">
-        <button class="map-direction" data-direction="callees" role="radio" aria-checked="true" title="The calls it makes, flowing down">Calls made</button>
-        <button class="map-direction" data-direction="callers" role="radio" aria-checked="false" title="Everything that reaches it, from above">Callers</button>
-      </span>
-      <span id="map-root"><span id="map-root-label">From the entry points</span><button id="map-root-clear" title="Start from the entry points" aria-label="Start from the entry points" hidden>×</button></span>
-    </span>
     <input id="map-find" type="search" placeholder="Find (Ctrl+F)" aria-label="Find on the map" aria-controls="map-found" aria-autocomplete="list" autocomplete="off" spellcheck="false">
     <button id="map-filter" aria-haspopup="true" aria-expanded="false" title="Hide languages, projects, packages or tests">Filter</button>
     <button id="map-fit" title="Fit the map (Home)">Fit</button>
@@ -46,13 +34,35 @@ export function renderMapHtml({ cspSource, nonce, scriptUri, styleUri }: Webview
     </span>
     <span id="map-status" aria-live="polite">Reading the code…</span>
   </header>
+  <nav id="map-nav" aria-label="Where on the map">
+    <button id="map-back" title="Back (Alt+Left)" aria-label="Back" disabled>&#x2190;</button>
+    <button id="map-forward" title="Forward (Alt+Right)" aria-label="Forward" disabled>&#x2192;</button>
+    <span id="map-flow" hidden>
+      <span id="map-flow-label"></span>
+    </span>
+    <span id="map-calls" hidden>
+      <span id="map-directions" role="radiogroup" aria-label="Direction">
+        <button class="map-direction" data-direction="callees" role="radio" aria-checked="true" title="The calls it makes, flowing down">Calls made</button>
+        <button class="map-direction" data-direction="callers" role="radio" aria-checked="false" title="Everything that reaches it, from above">Callers</button>
+        <button class="map-direction" data-direction="both" role="radio" aria-checked="false" title="Its callers above it and its calls below (from a box: its ⤵ button, or right-click it)">Both</button>
+      </span>
+      <label id="map-depth-label" title="How many levels of calls to show at first">Levels <select id="map-depth" aria-label="Levels of calls">
+        <option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
+      </select></label>
+      <span id="map-root"><span id="map-root-label">From the entry points</span><button id="map-root-clear" title="Start from the entry points" aria-label="Start from the entry points" hidden>×</button></span>
+    </span>
+    <ol id="map-crumbs" aria-label="Breadcrumb"></ol>
+    <span id="map-picking" hidden></span>
+  </nav>
   <ul id="map-found" role="listbox" aria-label="Found" hidden></ul>
   <div id="map-filters" role="dialog" aria-label="Filters" hidden></div>
-  <main id="map-canvas" tabindex="0" aria-label="Codebase Map. Drag to pan, scroll to zoom, double-click a box to open it.">
+  <ul id="map-menu" role="menu" aria-label="Box" hidden></ul>
+  <main id="map-canvas" tabindex="0" role="tree" aria-label="Codebase Map. Drag to pan, scroll to zoom, double-click a box to open it. Arrow keys move between boxes and along arrows; Enter opens a box; Shift+F10 shows what a box can do.">
     <div id="map-world">
       <svg id="map-arrows" aria-hidden="true"></svg>
       <div id="map-boxes"></div>
     </div>
+    <canvas id="map-minimap" aria-label="Minimap: click or drag to move the view" hidden></canvas>
   </main>
 </div>
 <script nonce="${nonce}" src="${scriptUri}"></script>

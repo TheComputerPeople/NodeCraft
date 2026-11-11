@@ -6,7 +6,7 @@ import { CodeIndex } from '../../src/core/codemap/code-index';
 import { buildFlowchart } from '../../src/core/codemap/flow';
 import { MAX_FLOW_LINES, buildFlowScene, callsOf } from '../../src/core/codemap/flow-scene';
 
-const CONTEXT = { id: 's:a.ts#total', label: 'total', path: 'a.ts', line: 1, back: false, forward: true };
+const CONTEXT = { id: 's:a.ts#total', label: 'total', path: 'a.ts', line: 1 };
 
 // total(items): if (!items) return 0; for (const i of items) sum(i); return done();
 const chart = buildFlowchart('total', 1, 9, [

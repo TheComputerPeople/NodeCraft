@@ -131,7 +131,7 @@ describe('the Codebase Map webview', () => {
     await e.page.click('.map-box[data-id="f:a.ts"] .map-calls');
     assert.equal(await e.count('.map-box[data-id="externals"] .map-calls'), 0, "a package has no calls of its own");
     const flow: LaidScene = {
-      mode: 'calls', calls: { direction: 'callees', root: 's:a.ts#main', rootLabel: 'main', starts: 1 }, width: 300, height: 260,
+      mode: 'calls', calls: { direction: 'callees', root: 's:a.ts#main', rootLabel: 'main', starts: 1, depth: 2 }, width: 300, height: 260,
       boxes: [
         { id: 's:a.ts#main', label: 'main', kind: 'function', detail: 'a.ts', count: 0, expandable: false, expanded: false, root: true, x: 0, y: 0, width: 140, height: 48 },
         { id: 's:a.ts#run', label: 'run', kind: 'function', detail: 'a.ts', count: 2, expandable: true, expanded: false, cycle: true, x: 0, y: 100, width: 140, height: 48 },
@@ -153,16 +153,16 @@ describe('the Codebase Map webview', () => {
       JSON.stringify({ type: 'calls', id: 'f:a.ts' }), JSON.stringify({ type: 'direction', direction: 'callers' }), JSON.stringify({ type: 'calls' }), JSON.stringify({ type: 'toggle', id: 's:a.ts#run' })
     ]);
     // From the entry points, the bar says how many.
-    await e.send({ type: 'scene', scene: { ...flow, calls: { direction: 'callers', starts: 12 } } } as never);
+    await e.send({ type: 'scene', scene: { ...flow, calls: { direction: 'callers', starts: 12, depth: 2 } } } as never);
     assert.equal(await e.page.textContent('#map-root-label'), 'From the entry points (12)');
     assert.equal(await e.page.isVisible('#map-root-clear'), false);
   });
 
-  test("a flowchart: its boxes' code and calls, labelled arrows, Back and Forward, and the code at a box's line", async (t) => {
+  test("a flowchart: its boxes' code and calls, labelled arrows, Back, and the code at a box's line", async (t) => {
     const e = await open(t);
     if (!e) return;
     const flow: LaidScene = {
-      mode: 'flow', flow: { id: 's:a.ts#total', label: 'total', path: 'a.ts', line: 1, back: true, forward: false }, width: 400, height: 300,
+      mode: 'flow', flow: { id: 's:a.ts#total', label: 'total', path: 'a.ts', line: 1 }, width: 400, height: 300,
       boxes: [
         { id: 'n:n0', label: 'total', kind: 'flow', flowKind: 'start', detail: 'a.ts:1', count: 0, expandable: false, expanded: false, path: 'a.ts', line: 1, x: 0, y: 0, width: 120, height: 44 },
         { id: 'n:n2', label: '!items', kind: 'flow', flowKind: 'decision', detail: 'line 2', count: 0, expandable: false, expanded: false, path: 'a.ts', line: 2, x: 0, y: 80, width: 140, height: 44 },
@@ -174,11 +174,11 @@ describe('the Codebase Map webview', () => {
       ],
       details: []
     };
-    await e.send({ type: 'scene', scene: flow } as never);
+    await e.send({ type: 'scene', scene: flow, history: { back: true, forward: false } } as never);
     assert.equal(await e.page.isVisible('#map-flow'), true);
     assert.equal(await e.page.textContent('#map-flow-label'), 'Control flow of total');
-    assert.equal(await e.page.isDisabled('#map-flow-back'), false);
-    assert.equal(await e.page.isDisabled('#map-flow-forward'), true);
+    assert.equal(await e.page.isDisabled('#map-back'), false);
+    assert.equal(await e.page.isDisabled('#map-forward'), true);
     assert.equal(await e.count('.map-box.flow-decision'), 1);
     assert.deepEqual(await e.page.$$eval('.map-box[data-id="n:n4"] .flow-code li', (els) => els.map((el) => el.textContent)), ['sum(i)']);
     assert.deepEqual(await e.page.$$eval('.map-arrow-label', (els) => els.map((el) => el.textContent)), ['false']);
@@ -186,7 +186,7 @@ describe('the Codebase Map webview', () => {
     assert.equal(await e.count('.map-box[data-id="n:n4"] button.flow-call'), 1);
     assert.equal(await e.count('.map-box[data-id="n:n4"] span.flow-call'), 1);
     await e.page.click('.map-box[data-id="n:n4"] button.flow-call');
-    await e.page.click('#map-flow-back');
+    await e.page.click('#map-back');
     await e.page.dblclick('.map-box[data-id="n:n2"] .map-name');
     assert.deepEqual(await posted(e), [
       JSON.stringify({ type: 'flow', id: 's:a.ts#sum' }), JSON.stringify({ type: 'history', direction: 'back' }), JSON.stringify({ type: 'openLine', line: 2 })
@@ -336,5 +336,135 @@ describe('the Codebase Map webview', () => {
     assert.equal(await e.page.isChecked('#map-filters input[data-key="externals"]'), true);
     await e.page.keyboard.press('Escape');
     assert.equal(await e.page.isVisible('#map-filters'), false);
+  });
+
+  test('Back and Forward: the buttons, Alt+Left and Alt+Right', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    assert.equal(await e.page.isDisabled('#map-back'), true, 'nowhere to go back to yet');
+    await e.send({ type: 'scene', scene: SCENE, history: { back: true, forward: true } } as never);
+    await e.page.click('#map-back');
+    await e.page.click('#map-forward');
+    await e.page.click('#map-canvas', { position: { x: 600, y: 300 } });
+    await e.page.keyboard.press('Alt+ArrowLeft');
+    await e.page.keyboard.press('Alt+ArrowRight');
+    const history = (direction: string) => JSON.stringify({ type: 'history', direction });
+    assert.deepEqual(await posted(e), [history('back'), history('forward'), history('back'), history('forward')]);
+  });
+
+  test('the breadcrumb shows where the selected box is; a crumb selects its box', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    assert.equal(await e.page.textContent('#map-crumbs'), 'Select a box to see where it is');
+    await e.page.click('.map-box[data-id="f:b.ts"] .map-name');
+    assert.deepEqual(await e.page.$$eval('#map-crumbs button', (els) => els.map((el) => el.textContent)), ['shop', 'b.ts']);
+    await e.page.click('#map-crumbs button[data-id="p:"]');
+    assert.equal(await e.count('.map-box.active[data-id="p:"]'), 1);
+    assert.deepEqual(await e.page.$$eval('#map-crumbs button', (els) => els.map((el) => el.textContent)), ['shop']);
+  });
+
+  test("a box's menu: what it can do; a path picked from it to another box", async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    await e.page.click('.map-box[data-id="f:a.ts"] .map-name', { button: 'right' });
+    assert.equal(await e.page.isVisible('#map-menu'), true);
+    assert.deepEqual(await e.page.$$eval('#map-menu li[role="menuitem"]', (els) => els.map((el) => el.textContent)), [
+      'Open the code', 'Open', 'Call flow from here', 'Callers', 'Focus: its callers and calls', 'Path from here to…'
+    ]);
+    await e.page.click('#map-menu li:text("Focus: its callers and calls")');
+    assert.equal(await e.page.isVisible('#map-menu'), false);
+    // A path: from a.ts, then the box it leads to.
+    await e.page.click('.map-box[data-id="f:a.ts"] .map-name', { button: 'right' });
+    await e.page.click('#map-menu li:text("Path from here to…")');
+    assert.match((await e.page.textContent('#map-picking'))!, /Path from a\.ts: pick where it leads/);
+    assert.equal(await e.count('.map-box.path-start[data-id="f:a.ts"]'), 1);
+    await e.page.click('.map-box[data-id="f:b.ts"] .map-name');
+    assert.equal(await e.page.isVisible('#map-picking'), false);
+    // By keyboard: Shift+F10 on the selected box, the arrow keys and Enter.
+    await e.page.click('.map-box[data-id="f:b.ts"] .map-name');
+    await e.page.focus('#map-canvas');
+    await e.page.keyboard.press('Shift+F10');
+    assert.equal(await e.page.evaluate(() => document.activeElement?.textContent), 'Open the code');
+    await e.page.keyboard.press('ArrowDown');
+    await e.page.keyboard.press('Enter');
+    // A package has nothing to do but open.
+    await e.page.click('.map-box[data-id="externals"] .map-name', { button: 'right' });
+    assert.deepEqual(await e.page.$$eval('#map-menu li[role="menuitem"]', (els) => els.map((el) => el.textContent)), ['Open']);
+    await e.page.keyboard.press('Escape');
+    assert.equal(await e.page.isVisible('#map-menu'), false);
+    assert.deepEqual(await posted(e), [
+      JSON.stringify({ type: 'calls', id: 'f:a.ts', direction: 'both' }),
+      JSON.stringify({ type: 'path', from: 'f:a.ts', to: 'f:b.ts' }),
+      JSON.stringify({ type: 'calls', id: 'f:b.ts', direction: 'callees' })
+    ]);
+  });
+
+  test("the call flow's levels, Both, and a path's bar", async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const calls: LaidScene = {
+      ...SCENE, mode: 'calls', calls: { direction: 'both', root: 'f:a.ts', rootLabel: 'a.ts', starts: 1, depth: 3 },
+      boxes: SCENE.boxes.filter((b) => b.kind === 'file').map((b) => ({ ...b, parent: undefined })), arrows: [], details: []
+    };
+    await e.send({ type: 'scene', scene: calls } as never);
+    assert.equal(await e.page.textContent('#map-root-label'), 'Callers and calls of a.ts');
+    assert.equal(await e.page.getAttribute('.map-direction[data-direction="both"]', 'aria-checked'), 'true');
+    assert.equal(await e.page.inputValue('#map-depth'), '3');
+    await e.page.selectOption('#map-depth', '5');
+    // A path: what it found, no direction or levels, and the × leaves it.
+    const path = { from: 'f:a.ts', to: 'f:b.ts', fromLabel: 'a.ts', toLabel: 'b.ts' };
+    await e.send({ type: 'scene', scene: { ...calls, calls: { direction: 'callees', root: 'f:a.ts', starts: 1, depth: 1, path: { ...path, length: 1 } } } } as never);
+    assert.equal(await e.page.textContent('#map-root-label'), 'Path from a.ts to b.ts: 1 call');
+    assert.equal(await e.page.isVisible('#map-directions'), false);
+    assert.equal(await e.page.isVisible('#map-depth'), false);
+    await e.page.click('#map-root-clear');
+    await e.send({ type: 'scene', scene: { ...calls, calls: { direction: 'callees', root: 'f:a.ts', starts: 1, depth: 0, path } } } as never);
+    assert.equal(await e.page.textContent('#map-root-label'), 'No calls lead from a.ts to b.ts, or back');
+    assert.deepEqual(await posted(e), [JSON.stringify({ type: 'depth', depth: 5 }), JSON.stringify({ type: 'calls', id: 'f:a.ts', direction: 'callees' })]);
+  });
+
+  test('the keyboard: arrows along the arrows and beside them, in and out, Enter, zoom', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const active = () => e.page.$eval('#map-canvas', (el) => document.getElementById(el.getAttribute('aria-activedescendant') ?? '')?.dataset.id);
+    await e.page.focus('#map-canvas');
+    await e.page.keyboard.press('ArrowDown');
+    assert.equal(await active(), 'p:', 'the first box');
+    await e.page.keyboard.press('Alt+ArrowDown');
+    assert.equal(await active(), 'f:a.ts', 'into it');
+    // a.ts's arrows lead to b.ts (nearest) and the packages: Right goes to the other.
+    await e.page.keyboard.press('ArrowDown');
+    assert.equal(await active(), 'f:b.ts');
+    assert.match((await e.page.textContent('.map-announce'))!, /^b\.ts, file \(1 of 2: Left and Right for the others\)$/);
+    await e.page.keyboard.press('ArrowRight');
+    assert.equal(await active(), 'externals');
+    await e.page.keyboard.press('ArrowUp');
+    assert.equal(await active(), 'f:a.ts', 'back up the arrow into the packages');
+    await e.page.keyboard.press('Escape');
+    assert.equal(await active(), 'p:', 'out to the box holding it');
+    await e.page.keyboard.press('ArrowDown');
+    assert.equal(await active(), 'externals', "the project's arrow");
+    await e.page.keyboard.press('Enter');
+    await e.page.keyboard.press('Escape');
+    assert.equal(await active(), undefined, 'nothing selected');
+    const transform = () => e.page.$eval('#map-world', (el) => (el as HTMLElement).style.transform);
+    const before = await transform();
+    await e.page.keyboard.press('+');
+    assert.notEqual(await transform(), before);
+    assert.deepEqual(await posted(e), [JSON.stringify({ type: 'toggle', id: 'externals' })]);
+  });
+
+  test('the minimap shows when the map is bigger than the view, and moves the view', async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    assert.equal(await e.page.isVisible('#map-minimap'), false, 'the whole map is in view');
+    await e.page.focus('#map-canvas');
+    for (let i = 0; i < 8; i++) await e.page.keyboard.press('+');
+    assert.equal(await e.page.isVisible('#map-minimap'), true);
+    const transform = () => e.page.$eval('#map-world', (el) => (el as HTMLElement).style.transform);
+    const before = await transform();
+    const mini = (await e.page.locator('#map-minimap').boundingBox())!;
+    await e.page.mouse.click(mini.x + 3, mini.y + 3);
+    assert.notEqual(await transform(), before);
   });
 });

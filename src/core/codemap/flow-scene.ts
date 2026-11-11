@@ -19,9 +19,6 @@ export interface FlowContext {
   label: string;
   path: string;
   line: number;
-  // Whether Back and Forward can go anywhere (the flowcharts opened before and after this one).
-  back: boolean;
-  forward: boolean;
 }
 
 // A block shows this many of its lines; the rest are "…".

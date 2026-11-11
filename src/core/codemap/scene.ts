@@ -15,10 +15,11 @@ export type MapMode = 'architecture' | 'structure' | 'calls' | 'flow';
 
 export interface MapView {
   mode?: MapMode;
-  // The call flow's start (absent: the entry points), its direction, and the boxes opened in it.
-  calls?: { root?: string; direction?: 'callees' | 'callers'; explored?: string[] };
-  // The function whose control flow is shown, and the flowcharts opened before and after it.
-  flow?: { id: string; back?: string[]; forward?: string[] };
+  // The call flow's start (absent: the entry points), its direction, how many levels it goes at
+  // first, and the boxes opened in it; or the path of calls between two boxes.
+  calls?: { root?: string; direction?: CallDirection; depth?: number; explored?: string[]; path?: { from: string; to: string } };
+  // The function whose control flow is shown.
+  flow?: { id: string };
   // What's hidden (languages, projects, external packages, tests).
   filters?: MapFilters;
   // Boxes the user opened.
@@ -58,12 +59,19 @@ export interface SceneBox {
   calls?: { label: string; id?: string }[];
 }
 
-// What the call flow shows: its direction, its start (absent: the entry points), how many starts.
+// callees: the calls made, flowing down; callers: what reaches it, from above; both: its callers
+// above it and its calls below (focus).
+export type CallDirection = 'callees' | 'callers' | 'both';
+
+// What the call flow shows: its direction, its start (absent: the entry points), how many starts, how
+// many levels; or the path between two boxes (`length`: how many calls long; absent: none found).
 export interface CallFlowContext {
-  direction: 'callees' | 'callers';
+  direction: CallDirection;
   root?: string;
   rootLabel?: string;
   starts: number;
+  depth: number;
+  path?: { from: string; to: string; fromLabel: string; toLabel: string; length?: number };
 }
 
 export type ArrowKind = 'imports' | 'calls' | 'inherits' | 'flow';

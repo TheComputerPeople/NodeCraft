@@ -7,7 +7,7 @@ import { buildCallScene } from '../core/codemap/call-scene';
 import { CodeIndex, Entity } from '../core/codemap/code-index';
 import { buildFlowScene, callsOf } from '../core/codemap/flow-scene';
 import { findEntities, hiddenBy } from '../core/codemap/find';
-import { LaidScene, MapMode, MapView, Scene, buildScene, defaultView } from '../core/codemap/scene';
+import { CallDirection, LaidScene, MapMode, MapView, Scene, buildScene, defaultView } from '../core/codemap/scene';
 import { CodeMapService } from './code-map-service';
 import { renderMapHtml } from './map-html';
 import { MapLayout } from './map-layout';
@@ -15,6 +15,17 @@ import { createNonce } from './webview-html';
 
 const VIEW_TYPE = 'blueprintVisualScripting.codebaseMap';
 const GRAPH_EDITOR = 'blueprintVisualScripting.graphEditor';
+// Back goes this many places back.
+const MAX_HISTORY = 50;
+
+// A place the map has been: its view, the call flow's start or path, the flowchart, and the box
+// centred there.
+interface Place {
+  mode?: MapMode;
+  calls?: MapView['calls'];
+  flow?: MapView['flow'];
+  focus?: string;
+}
 
 interface OpenMap {
   panel: vscode.WebviewPanel;
@@ -28,6 +39,12 @@ interface OpenMap {
   // Whether the page has loaded (said it's ready): until then, a view or focus set waits for it.
   ready: boolean;
   pendingFocus?: string[];
+  // The places before and after this one (Back and Forward), while the map is open.
+  back: Place[];
+  forward: Place[];
+  // The latest render (done when it's drawn, or failed), and why the last one failed.
+  latest?: Promise<void>;
+  error?: Error;
   // Each render's outcome: its scene, or why it failed.
   rendered: vscode.EventEmitter<LaidScene | Error>;
 }
@@ -61,7 +78,7 @@ export class CodeMapPanels implements vscode.Disposable {
     const asset = (name: string) => panel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview', name)).toString();
     panel.webview.html = renderMapHtml({ cspSource: panel.webview.cspSource, nonce: createNonce(), scriptUri: asset('map.js'), styleUri: asset('map.css') });
     const saved = this.context.workspaceState.get<MapView>(this.viewKey(folder));
-    const map: OpenMap = { panel, folder, view: saved ?? { expanded: [] }, render: 0, ready: false, rendered: new vscode.EventEmitter<LaidScene | Error>() };
+    const map: OpenMap = { panel, folder, view: saved ?? { expanded: [] }, render: 0, ready: false, back: [], forward: [], rendered: new vscode.EventEmitter<LaidScene | Error>() };
     const first = !saved;
     this.maps.set(key, map);
     const firstScene = nextScene(map);
@@ -84,9 +101,13 @@ export class CodeMapPanels implements vscode.Disposable {
       } else if (message.type === 'mode') {
         await this.setMode(map, message.mode);
       } else if (message.type === 'calls') {
-        await this.showCalls(map, message.id);
+        await this.showCalls(map, message.id, message.direction);
       } else if (message.type === 'direction') {
-        await this.update(map, { ...map.view, calls: { ...map.view.calls, direction: message.direction, explored: [] } });
+        await this.navigate(map, { ...map.view, calls: { ...withoutPath(map.view.calls), direction: message.direction, explored: [] } });
+      } else if (message.type === 'depth') {
+        await this.update(map, { ...map.view, calls: { ...map.view.calls, depth: message.depth, explored: [] } });
+      } else if (message.type === 'path') {
+        await this.showPath(map, message.from, message.to);
       } else if (message.type === 'flow') {
         await this.showFlow(map, message.id);
       } else if (message.type === 'history') {
@@ -111,18 +132,28 @@ export class CodeMapPanels implements vscode.Disposable {
     return this.maps.get(folder.uri.toString())?.scene;
   }
 
-  // The call flow from a box (none: from the entry points).
-  async showCalls(map: OpenMap, id?: string): Promise<void> {
-    await this.update(map, { ...map.view, mode: 'calls', calls: { direction: map.view.calls?.direction ?? 'callees', ...(id ? { root: id } : {}), explored: [] } });
+  // The call flow from a box (none: from the entry points), the way it went before unless told.
+  async showCalls(map: OpenMap, id?: string, direction?: CallDirection): Promise<void> {
+    const way = direction ?? map.view.calls?.direction ?? 'callees';
+    await this.navigate(map, { ...map.view, mode: 'calls', calls: { direction: way, ...(map.view.calls?.depth ? { depth: map.view.calls.depth } : {}), ...(id ? { root: id } : {}), explored: [] } });
   }
 
-  async callsIn(folder: vscode.WorkspaceFolder, id?: string, direction?: 'callees' | 'callers'): Promise<LaidScene | undefined> {
+  async callsIn(folder: vscode.WorkspaceFolder, id?: string, direction?: CallDirection): Promise<LaidScene | undefined> {
     const map = this.maps.get(folder.uri.toString());
     if (!map) return undefined;
-    const next = nextScene(map);
-    if (direction) map.view = { ...map.view, calls: { ...map.view.calls, direction } };
-    await this.showCalls(map, id);
-    return next;
+    return this.settled(map, () => this.showCalls(map, id, direction));
+  }
+
+  // The calls that lead from one box to another.
+  async showPath(map: OpenMap, from: string, to: string): Promise<void> {
+    const calls = map.view.calls;
+    await this.navigate(map, { ...map.view, mode: 'calls', calls: { direction: 'callees', ...(calls?.depth ? { depth: calls.depth } : {}), root: from, explored: [], path: { from, to } } });
+  }
+
+  async pathIn(folder: vscode.WorkspaceFolder, from: string, to: string): Promise<LaidScene | undefined> {
+    const map = this.maps.get(folder.uri.toString());
+    if (!map) return undefined;
+    return this.settled(map, () => this.showPath(map, from, to));
   }
 
   // Shows an entity on the map: in the view that has it (declarations are the structure's; the call
@@ -140,23 +171,18 @@ export class CodeMapPanels implements vscode.Disposable {
     for (let p = entity.parent ? byId.get(entity.parent) : undefined; p; p = p.parent ? byId.get(p.parent) : undefined) ancestors.push(p.id);
     if (entity.kind === 'external') ancestors.push('externals');
     const filters = map.view.filters && hiddenBy(index, map.view.filters).has(id) ? undefined : map.view.filters;
-    map.view = { ...map.view, mode, expanded: [...new Set([...map.view.expanded, ...ancestors])], ...(filters ? { filters } : { filters: undefined }) };
-    await this.context.workspaceState.update(this.viewKey(map.folder), map.view);
-    await this.render(map, [id, ...ancestors]);
+    await this.navigate(map, { ...map.view, mode, expanded: [...new Set([...map.view.expanded, ...ancestors])], ...(filters ? { filters } : { filters: undefined }) }, [id, ...ancestors]);
   }
 
   async revealIn(folder: vscode.WorkspaceFolder, id: string): Promise<{ scene: LaidScene; focus?: string } | undefined> {
     const map = this.maps.get(folder.uri.toString());
     if (!map) return undefined;
-    const next = nextScene(map);
-    await this.reveal(map, id);
-    const scene = await next;
+    const scene = await this.settled(map, () => this.reveal(map, id));
     return { scene, ...(map.focus ? { focus: map.focus } : {}) };
   }
 
-  // A function's control flow; the flowchart shown before goes on the Back list. A graph opens in the
-  // graph editor (its flow is the graph itself); a type's flow is its constructor's; anything else
-  // without a flowchart opens its code.
+  // A function's control flow. A graph opens in the graph editor (its flow is the graph itself); a
+  // type's flow is its constructor's; anything else without a flowchart opens its code.
   async showFlow(map: OpenMap, id: string): Promise<void> {
     const index = await this.codeMap.codeIndex(map.folder);
     const target = flowTarget(index, id);
@@ -164,28 +190,44 @@ export class CodeMapPanels implements vscode.Disposable {
       await this.open(map, id);
       return;
     }
-    const current = map.view.mode === 'flow' ? map.view.flow?.id : undefined;
-    const back = [...(map.view.flow?.back ?? []), ...(current && current !== target ? [current] : [])];
-    await this.update(map, { ...map.view, mode: 'flow', flow: { id: target, back: current ? back : map.view.flow?.back ?? [], forward: [] } });
+    await this.navigate(map, { ...map.view, mode: 'flow', flow: { id: target } });
   }
 
   async flowIn(folder: vscode.WorkspaceFolder, id: string): Promise<LaidScene | undefined> {
     const map = this.maps.get(folder.uri.toString());
     if (!map) return undefined;
-    const next = nextScene(map);
-    await this.showFlow(map, id);
-    return next;
+    return this.settled(map, () => this.showFlow(map, id));
   }
 
-  // Back or Forward through the flowcharts opened.
+  // Back or Forward through the places the map has been: its view, call flow or flowchart, and the
+  // box centred there. (The boxes opened and the filters stay as they are.)
   private async history(map: OpenMap, direction: 'back' | 'forward'): Promise<void> {
-    const flow = map.view.flow;
-    if (!flow) return;
-    const from = direction === 'back' ? [...(flow.back ?? [])] : [...(flow.forward ?? [])];
-    const to = from.pop();
+    const to = (direction === 'back' ? map.back : map.forward).pop();
     if (!to) return;
-    const other = direction === 'back' ? [...(flow.forward ?? []), flow.id] : [...(flow.back ?? []), flow.id];
-    await this.update(map, { ...map.view, mode: 'flow', flow: direction === 'back' ? { id: to, back: from, forward: other } : { id: to, back: other, forward: from } });
+    (direction === 'back' ? map.forward : map.back).push(placeOf(map));
+    map.view = { ...map.view, mode: to.mode, calls: to.calls, flow: to.flow };
+    await this.context.workspaceState.update(this.viewKey(map.folder), map.view);
+    await this.render(map, to.focus ? [to.focus] : undefined);
+  }
+
+  async historyIn(folder: vscode.WorkspaceFolder, direction: 'back' | 'forward'): Promise<LaidScene | undefined> {
+    const map = this.maps.get(folder.uri.toString());
+    if (!map || !(direction === 'back' ? map.back : map.forward).length) return undefined;
+    return this.settled(map, () => this.history(map, direction));
+  }
+
+  // Goes somewhere else on the map: where it was goes on the Back list.
+  private async navigate(map: OpenMap, view: MapView, focus?: string[]): Promise<void> {
+    const here = placeOf(map);
+    const there: Place = { mode: view.mode, calls: view.calls, flow: view.flow };
+    if (map.scene && (JSON.stringify({ ...here, focus: undefined }) !== JSON.stringify(there) || focus)) {
+      map.back.push(here);
+      if (map.back.length > MAX_HISTORY) map.back.shift();
+      map.forward = [];
+    }
+    map.view = view;
+    await this.context.workspaceState.update(this.viewKey(map.folder), map.view);
+    await this.render(map, focus);
   }
 
   // The flowchart's file at a line.
@@ -205,10 +247,7 @@ export class CodeMapPanels implements vscode.Disposable {
     if (!flow || !entity?.path) throw new Error('Choose a function to see its control flow (its ⧉ button, in any view).');
     const chart = await this.codeMap.flowchart(map.folder, entity.path, entity.line ?? 1);
     if (!chart) throw new Error(`${entity.name} has no body to draw.`);
-    return buildFlowScene(chart, callsOf(index, entity.id), {
-      id: entity.id, label: entity.name, path: entity.path, line: entity.line ?? 1,
-      back: (flow.back?.length ?? 0) > 0, forward: (flow.forward?.length ?? 0) > 0
-    });
+    return buildFlowScene(chart, callsOf(index, entity.id), { id: entity.id, label: entity.name, path: entity.path, line: entity.line ?? 1 });
   }
 
   private async update(map: OpenMap, view: MapView): Promise<void> {
@@ -242,47 +281,69 @@ export class CodeMapPanels implements vscode.Disposable {
 
   // Switches the map's view (each view keeps the same open boxes).
   async setMode(map: OpenMap, mode: MapMode): Promise<void> {
-    map.view = { ...map.view, mode };
-    await this.context.workspaceState.update(this.viewKey(map.folder), map.view);
-    await this.render(map);
+    await this.navigate(map, { ...map.view, mode });
   }
 
   async modeIn(folder: vscode.WorkspaceFolder, mode: MapMode): Promise<LaidScene | undefined> {
     const map = this.maps.get(folder.uri.toString());
     if (!map) return undefined;
-    const next = nextScene(map);
-    await this.setMode(map, mode);
-    return next;
+    return this.settled(map, () => this.setMode(map, mode));
   }
 
   async toggleIn(folder: vscode.WorkspaceFolder, id: string): Promise<LaidScene | undefined> {
     const map = this.maps.get(folder.uri.toString());
     if (!map) return undefined;
-    const next = nextScene(map);
-    await this.toggle(map, id);
-    return next;
+    return this.settled(map, () => this.toggle(map, id));
+  }
+
+  // Does something to the map, and resolves with the scene it then shows: the one its own render
+  // drew (or a newer one), not one drawn meanwhile for something else (a change to the code).
+  private async settled(map: OpenMap, action: () => Promise<void>): Promise<LaidScene> {
+    if (!map.ready) {
+      // (Until the page is ready, nothing is drawn: its first scene is the one wanted.)
+      const next = nextScene(map);
+      await action();
+      return next;
+    }
+    await action();
+    await map.latest;
+    if (map.error) throw map.error;
+    return map.scene!;
   }
 
   // Draws the map; `focus`: ids to centre and select, the first that's a box.
-  private async render(map: OpenMap, focus?: string[]): Promise<void> {
+  private render(map: OpenMap, focus?: string[]): Promise<void> {
     if (!map.ready) {
       if (focus) map.pendingFocus = focus;
-      return;
+      return Promise.resolve();
     }
     const number = ++map.render;
+    const drawing = this.draw(map, number, focus);
+    map.latest = drawing;
+    return drawing;
+  }
+
+  // Draws one render; one overtaken by a newer render waits for that instead.
+  private async draw(map: OpenMap, number: number, focus?: string[]): Promise<void> {
     try {
       const index = await this.codeMap.codeIndex(map.folder);
       const built = map.view.mode === 'calls' ? buildCallScene(index, map.view) : map.view.mode === 'flow' ? await this.flowScene(map, index) : buildScene(index, map.view);
       const scene = await this.layout.layout(built);
-      if (number !== map.render) return;
+      if (number !== map.render) return map.latest;
       map.scene = scene;
+      map.error = undefined;
       const boxes = new Set(scene.boxes.map((b) => b.id));
       map.focus = focus?.find((id) => boxes.has(id));
-      const message: MapHostMessage = { type: 'scene', scene, title: `Codebase Map: ${map.folder.name}`, ...(map.focus ? { focus: map.focus } : {}) };
+      const message: MapHostMessage = {
+        type: 'scene', scene, title: `Codebase Map: ${map.folder.name}`, ...(map.focus ? { focus: map.focus } : {}),
+        history: { back: map.back.length > 0, forward: map.forward.length > 0 }
+      };
       void map.panel.webview.postMessage(message);
       map.rendered.fire(scene);
     } catch (error) {
-      if (number === map.render) map.rendered.fire(error instanceof Error ? error : new Error(String(error)));
+      if (number !== map.render) return map.latest;
+      map.error = error instanceof Error ? error : new Error(String(error));
+      map.rendered.fire(map.error);
       const message: MapHostMessage = { type: 'status', text: `The map couldn't be drawn: ${error instanceof Error ? error.message : String(error)}` };
       void map.panel.webview.postMessage(message);
     }
@@ -315,6 +376,18 @@ export class CodeMapPanels implements vscode.Disposable {
     this.disposables.forEach((d) => d.dispose());
     void this.layout.dispose();
   }
+}
+
+// Where the map is now.
+function placeOf(map: OpenMap): Place {
+  return { mode: map.view.mode, calls: map.view.calls, flow: map.view.flow, ...(map.focus ? { focus: map.focus } : {}) };
+}
+
+// The call flow's settings, without a path (going another way leaves the path).
+function withoutPath(calls: MapView['calls']): MapView['calls'] {
+  if (!calls?.path) return calls;
+  const { path: _path, ...rest } = calls;
+  return rest;
 }
 
 // The map's next scene, or its render's error.

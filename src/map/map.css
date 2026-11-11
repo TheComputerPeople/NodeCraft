@@ -12,9 +12,12 @@
   --cycle: #e05252;
 }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--vscode-font-family, sans-serif); font-size: 12px; }
-#map-app { display: grid; grid-template-rows: 36px minmax(0, 1fr); height: 100vh; }
+#map-app { display: grid; grid-template-rows: 36px 26px minmax(0, 1fr); height: 100vh; }
 #map-toolbar { display: flex; align-items: center; gap: 12px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
-#map-title { font-weight: 600; }
+#map-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; min-width: 60px; flex: 0 1 auto; }
+#map-modes, #map-filter, #map-fit, #map-toolbar button { flex: none; }
+.map-legend { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+#map-status { min-width: 0; }
 #map-toolbar button { height: 24px; border: 1px solid var(--border); border-radius: 4px; background: var(--vscode-button-secondaryBackground, #3a3d41); color: var(--vscode-button-secondaryForeground, #fff); cursor: pointer; }
 #map-status { margin-left: auto; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 .map-legend { display: flex; gap: 10px; color: var(--muted); }
@@ -23,7 +26,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); c
 .legend-item[data-kind="calls"]::before { border-color: var(--calls); }
 .legend-item[data-kind="inherits"]::before { border-color: var(--inherits); }
 .legend-item.guess::before { border-top-style: dashed; }
-#map-canvas { position: relative; overflow: hidden; cursor: grab; outline: none; background-image: radial-gradient(circle, color-mix(in srgb, var(--fg) 10%, transparent) 1px, transparent 1px); background-size: 24px 24px; }
+#map-canvas { position: relative; overflow: hidden; cursor: grab; outline: none; min-height: 0; background-image: radial-gradient(circle, color-mix(in srgb, var(--fg) 10%, transparent) 1px, transparent 1px); background-size: 24px 24px; }
 #map-canvas.panning { cursor: grabbing; }
 #map-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 #map-arrows { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 2; }
@@ -80,9 +83,39 @@ button.flow-call:hover { border-color: var(--calls); }
 .map-flow-open:hover { color: var(--accent); }
 #map-flow { display: inline-flex; align-items: center; gap: 4px; }
 #map-flow[hidden] { display: none; }
-#map-flow button { height: 22px; padding: 0 6px; }
-#map-flow button:disabled { opacity: .4; cursor: default; }
 #map-flow-label { margin-left: 4px; color: var(--muted); }
+#map-depth-label { color: var(--muted); }
+#map-depth { height: 22px; background: var(--vscode-dropdown-background, #3c3c3c); color: var(--vscode-dropdown-foreground, var(--fg)); border: 1px solid var(--vscode-dropdown-border, var(--border)); border-radius: 3px; }
+#map-calls.path #map-directions, #map-calls.path #map-depth-label { display: none; }
+
+/* Back, Forward and the breadcrumb of the selected box. */
+#map-nav { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-bottom: 1px solid var(--border); background: var(--bg); white-space: nowrap; overflow: hidden; }
+#map-nav button { height: 20px; padding: 0 6px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--fg); cursor: pointer; }
+#map-nav button:hover:not(:disabled) { border-color: var(--border); }
+#map-nav button:disabled { opacity: .35; cursor: default; }
+#map-crumbs { display: flex; align-items: center; list-style: none; margin: 0 0 0 6px; padding: 0 0 0 10px; border-left: 1px solid var(--border); overflow: hidden; min-width: 0; }
+#map-nav #map-calls button, #map-nav #map-root-clear { height: 20px; border: 1px solid var(--border); }
+#map-nav #map-directions .map-direction { border: 0; }
+#map-calls, #map-flow { flex: none; }
+#map-crumbs li { display: flex; align-items: center; min-width: 0; }
+#map-crumbs li + li::before { content: "›"; margin: 0 4px; color: var(--muted); }
+#map-crumbs button { max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+#map-crumbs li:last-child button { color: var(--fg); font-weight: 600; }
+#map-crumbs .map-crumb-none { color: var(--muted); }
+#map-picking { margin-left: auto; color: var(--accent); }
+#map-picking[hidden] { display: none; }
+
+/* A box's menu (right-click, or Shift+F10). */
+#map-menu { position: fixed; z-index: 30; min-width: 200px; margin: 0; padding: 4px; list-style: none; background: var(--vscode-menu-background, var(--panel)); color: var(--vscode-menu-foreground, var(--fg)); border: 1px solid var(--vscode-menu-border, var(--border)); border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+#map-menu[hidden] { display: none; }
+#map-menu li[role="menuitem"] { padding: 3px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+#map-menu li[role="menuitem"]:hover, #map-menu li[role="menuitem"].active { background: var(--vscode-menu-selectionBackground, color-mix(in srgb, var(--accent) 45%, transparent)); color: var(--vscode-menu-selectionForeground, var(--fg)); }
+#map-menu li[role="separator"] { height: 1px; margin: 4px 2px; background: var(--border); }
+#map-canvas.picking .map-box { cursor: crosshair; }
+
+/* The minimap: the whole map small, and where the view is on it. */
+#map-minimap { position: absolute; right: 12px; bottom: 12px; z-index: 5; border: 1px solid var(--border); border-radius: 4px; background: color-mix(in srgb, var(--panel) 88%, transparent); cursor: pointer; }
+#map-minimap[hidden] { display: none; }
 #map-calls { display: inline-flex; align-items: center; gap: 8px; }
 #map-calls[hidden] { display: none; }
 #map-directions { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
@@ -90,7 +123,7 @@ button.flow-call:hover { border-color: var(--calls); }
 #map-directions .map-direction[aria-checked="true"] { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 #map-root { color: var(--muted); }
 #map-root-clear { margin-left: 4px; height: 20px; padding: 0 6px; }
-#map-find { height: 22px; width: 160px; min-width: 80px; flex: 0 1 auto; box-sizing: border-box; padding: 0 6px; border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 4px; background: var(--vscode-input-background, #3c3c3c); color: var(--vscode-input-foreground, var(--fg)); }
+#map-find { height: 22px; width: 160px; min-width: 110px; flex: 0 1 auto; box-sizing: border-box; padding: 0 6px; border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 4px; background: var(--vscode-input-background, #3c3c3c); color: var(--vscode-input-foreground, var(--fg)); }
 #map-find:focus { outline: 1px solid var(--accent); }
 #map-toolbar #map-filter.on { border-color: var(--accent); }
 #map-found, #map-filters { position: fixed; z-index: 20; min-width: 220px; max-width: 340px; max-height: 60vh; overflow: auto; margin: 0; padding: 4px; list-style: none; background: var(--vscode-editorWidget-background, var(--panel)); border: 1px solid var(--vscode-editorWidget-border, var(--border)); border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
@@ -125,6 +158,7 @@ button.flow-call:hover { border-color: var(--calls); }
 #map-arrows.focused .map-arrow:not(.highlight) { opacity: .1; }
 .map-arrow.highlight { opacity: 1; }
 .map-box.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+.map-box.path-start { box-shadow: 0 0 0 2px var(--accent); }
 .map-box.linked { outline: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); }
 
 /* Levels of detail: zoomed out, the second line goes, then small boxes' names. */

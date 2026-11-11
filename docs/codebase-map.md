@@ -411,6 +411,43 @@ Across all four:
   - **Rules:** ranking and the limit; what counts as a test; what each filter hides; the options offered; the architecture and call flow without what's hidden.
   - **The webview:** Ctrl+F, an answer to an older query ignored, picking with the keys and the mouse, "Nothing found", centring a focused box, and the filter panel (its groups, what it sends, the button's count, closing it).
   - **Integration:** inside VS Code, Show in Codebase Map on a graph file and at a method in the editor, and Show Call Flow and Show Control Flow at the cursor.
+
+### Built (step 10, part 2): focus, paths, Back and Forward, the minimap, the keyboard
+
+- **Focus** on a box shows its callers above it and its calls below, in one call flow.
+  - **Where:** the call bar's **Both** direction, or a box's menu.
+  - **Levels:** the call bar's Levels (1 to 6) sets how many levels each way show at first, in every direction.
+  - **Opening further:** a box left to open says how many calls it has left (below the start) or callers (above it), and opening it goes on that way.
+- **A path** shows the calls that lead from one box to another.
+  - **Asking for one:** choose "Path from here to…" on a box's menu, then click the box it leads to, or pick it with Find. While you pick, the start is outlined and the bar says so; Esc stops.
+  - **What's shown:** every box on a shortest path of calls between the two, both ends marked, in the call flow's view.
+  - **No path:** if none leads that way, it's looked for the other way round. If none leads either way, the bar says so.
+  - **Leaving it:** the bar's × leaves the path for the call flow from its start.
+  - *(Paths follow calls, not imports: the architecture already draws what a file imports, and a selected box's arrows show it.)*
+- **A box's menu** (right-click, or Shift+F10 on the selected box) lists what it can do:
+  - open its code or graph, and open or close it;
+  - the call flow from it, its callers, focus, and its control flow;
+  - a path from it.
+- **Back and Forward** (the buttons under the toolbar, Alt+Left and Alt+Right, or the mouse's back and forward buttons) go through the places the map has been.
+  - **A place** is a view, a call flow (its start, way, levels, or path), or a flowchart, with the box centred there.
+  - **What isn't history:** opening boxes and the filters stay as they are.
+  - **How long:** history lasts while the map is open, up to 50 places back.
+  - *(This replaces the flowchart's own Back and Forward from step 9.)*
+- **The breadcrumb** beside them shows where the selected box is: the boxes holding it, each a click away.
+- **The second row:** the call flow's bar (its direction, levels and start) moved down beside Back and Forward. *(Found by looking: with all of it in one row, the toolbar squeezed out two of the view buttons and most of Find.)*
+- **The minimap** shows in the corner whenever the map is bigger than the view. It's the whole map small, with the selected box and the view's place on it; a click or drag moves the view.
+- **The keyboard,** on the map:
+  - **Up and Down** follow the selected box's arrows: down to what it leads to, up to what leads to it. Each goes to the nearest box, and when there are several, Left and Right go between them.
+  - **Left and Right,** otherwise, go to the boxes beside it.
+  - **In and out:** Alt+Down goes into an open box, and Alt+Up or Esc goes out to the box holding it.
+  - **Enter** opens or closes a box (one with nothing inside opens its code); Ctrl+Enter opens its code.
+  - **Zoom:** + and - zoom; Home fits.
+  - **Screen readers:** the selected box is the map's active item, and where a move went (and which of how many) is announced.
+- **Commands wait for their own render.** Found while testing: the integration helpers waited for "the next scene drawn". A redraw for a change to the code (opening a file) could finish first and be taken for theirs. Now a command resolves with the scene its own render drew, or a newer one.
+- **Tested:**
+  - **Rules:** focus both ways, its counts and opening a caller further; Levels and their limits; paths found either way round, every shortest path, through a graph file, and none.
+  - **The webview:** Back and Forward (buttons and keys), the breadcrumb, the menu (by mouse and keyboard, a package's), picking a path, the call bar's Both, Levels and path, the keyboard's moves and announcements, and the minimap showing and moving the view.
+  - **Integration:** inside VS Code, focus, a path from the game's event graph, and Back and Forward through them.
 11. The exit check, docs, the parity checklist and status.
 
 ## Not in this phase

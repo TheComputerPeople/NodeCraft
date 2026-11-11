@@ -188,6 +188,40 @@ test('Show Codebase Map draws the folder, and opening a box shows what it holds'
   }
 });
 
+// docs/codebase-map.md, Part 3: focus on a box's callers and calls, the path of calls between two
+// boxes, and Back and Forward through where the map has been.
+test('the Codebase Map focuses on a box, finds the calls between two, and goes back and forward', async () => {
+  const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
+  const folder = vscode.workspace.workspaceFolders![0];
+  const game = 'g:arena/Game.vgraph#EventGraph';
+  try {
+    await vscode.commands.executeCommand('blueprintVisualScripting.showCodebaseMap', folder.uri);
+    const fromGame = await api.codeMapPanels.callsIn(folder, game, 'callees');
+    // (Something the game's calls reach, past what it calls itself.)
+    const called = new Set(fromGame?.arrows.filter((a) => a.from === game).map((a) => a.to));
+    const reached = fromGame?.boxes.find((b) => !b.root && !b.id.startsWith('in:') && b.kind !== 'unresolved' && !called.has(b.id))
+      ?? fromGame?.boxes.find((b) => called.has(b.id));
+    assert.ok(reached, 'the game calls something');
+    // Focus: what it calls below it, what calls it above.
+    const focus = await api.codeMapPanels.callsIn(folder, reached.id, 'both');
+    assert.equal(focus?.calls?.direction, 'both');
+    assert.ok(focus?.arrows.some((a) => a.to === reached.id), 'its callers are above it');
+    // The path from the game to it.
+    const path = await api.codeMapPanels.pathIn(folder, game, reached.id);
+    assert.ok((path?.calls?.path?.length ?? 0) >= 1, 'a path of calls');
+    assert.ok(path?.boxes.some((b) => b.id === game && b.root) && path.boxes.some((b) => b.id === reached.id && b.root), 'both ends are marked');
+    // Back to the focus, back to the game's flow, forward to the focus.
+    assert.equal((await api.codeMapPanels.historyIn(folder, 'back'))?.calls?.direction, 'both');
+    const before = await api.codeMapPanels.historyIn(folder, 'back');
+    assert.equal(before?.calls?.root, game);
+    assert.equal(before?.calls?.path, undefined);
+    assert.equal((await api.codeMapPanels.historyIn(folder, 'forward'))?.calls?.root, reached.id);
+    await api.codeMapPanels.modeIn(folder, 'architecture');
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  }
+});
+
 // docs/codebase-map.md, Part 3: Show in Codebase Map, Show Call Flow and Show Control Flow, from a
 // file in the Explorer or the function at the cursor.
 test('Show in Codebase Map reveals a file, or the function at the cursor; the flows start from it', async () => {
@@ -848,6 +882,14 @@ test('a shared struct is generated for each of its languages, and graphs in each
 });
 
 // What activation returns (src/extension/extension.ts), as far as these tests use it.
+// A call flow as the map draws it.
+interface CallScene {
+  mode: string;
+  calls?: { root?: string; starts: number; direction: string; depth: number; path?: { from: string; to: string; length?: number } };
+  boxes: { id: string; root?: boolean; kind: string }[];
+  arrows: { kind: string; from: string; to: string }[];
+}
+
 interface ExtensionApi {
   testing: ExtensionInternals;
 }
@@ -884,12 +926,9 @@ interface ExtensionInternals {
   };
   codeMapPanels: {
     toggleIn(folder: vscode.WorkspaceFolder, id: string): Promise<{ boxes: { id: string; kind: string; parent?: string; expanded: boolean }[] } | undefined>;
-    callsIn(folder: vscode.WorkspaceFolder, id?: string, direction?: 'callees' | 'callers'): Promise<{
-      mode: string;
-      calls?: { root?: string; starts: number };
-      boxes: { id: string; root?: boolean }[];
-      arrows: { kind: string; from: string; to: string }[];
-    } | undefined>;
+    callsIn(folder: vscode.WorkspaceFolder, id?: string, direction?: 'callees' | 'callers' | 'both'): Promise<CallScene | undefined>;
+    pathIn(folder: vscode.WorkspaceFolder, from: string, to: string): Promise<CallScene | undefined>;
+    historyIn(folder: vscode.WorkspaceFolder, direction: 'back' | 'forward'): Promise<CallScene | undefined>;
     flowIn(folder: vscode.WorkspaceFolder, id: string): Promise<{ mode: string; flow?: { label: string }; boxes: { flowKind?: string }[] } | undefined>;
     modeIn(folder: vscode.WorkspaceFolder, mode: 'architecture' | 'structure' | 'calls'): Promise<{
       mode: string;
