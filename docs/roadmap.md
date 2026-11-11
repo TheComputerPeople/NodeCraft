@@ -442,7 +442,7 @@ Before it: graph classes extend other graph classes (Parent Class, overrides, Pa
 - **Generated code** extends the code class and imports it, in each language with inheritance. Rust and Go, which have none, report it (or embed, if the design finds that sound).
 - **Run and debugging** across the boundary: stepping from the graph into the parent's code and back.
 
-Design and steps: written when the phase starts.
+Design and steps: [code-classes-as-parents.md](code-classes-as-parents.md) (2026-11-10). Its three decisions, with recommendations, are put to the user before step 2: what a class allows (markers, as Unreal's `Blueprintable` and native events), a parent's constructor arguments (Construct passes them), and Rust and Go (not offered, said why).
 
 ### Phase 14: Release
 
