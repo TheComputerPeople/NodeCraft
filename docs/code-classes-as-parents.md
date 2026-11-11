@@ -247,7 +247,28 @@ The three choices this design needs. The user confirmed all three as recommended
   - **Both run it.** The Actor program prints the same five lines in PHP and Ruby. The PHP Actor's describe is abstract and protected. The Ruby Actor's describe has a body (Ruby has no abstract methods), and it lives in module `Guild`, since the graph's Game is a top-level class.
   - **The strictest settings** of the corpus's PHP and Ruby projects: PHPStan at level 9 over the code, the generated files and the runtime, and a run under `ruby -w` that writes nothing to stderr. (Generated Ruby is RuboCop's to skip, as `# rubocop:disable all` says.)
   - **Subclasses.** Squire passes the name on and its Parent: hit reaches Knight's.
-  - **Rules:** a PHP class leaving describe abstract, and Compile's "not yet" error, now shown for Lua.
+  - **Rules:** a PHP class leaving describe abstract.
+
+### Built (step 6, part 2: Lua and GDScript)
+
+- **What the generated class does** in Lua and GDScript:
+
+  | | Lua | GDScript |
+  |---|---|---|
+  | Extends | the class table's metatable `__index` is the code's table, required as its member nodes require it | `extends "../lib/actor.gd"` |
+  | Overrides | `function Knight:hit(damage)` | `func hit(damage: int) -> void:`, with the code's return type (Godot checks the signature) |
+  | Parent: <Method> | `actor.hit(self, damage)` | `super.hit(damage)` |
+  | Constructor | `Knight.new(name)`: the code's constructor (`Actor.new`, or the function the scanner found, `initName`) makes the object, which then becomes a Knight | `_init(name: String)` calling `super(name)` |
+
+  - **Lua objects.** The class directly under the code has `__vg_new`, which calls the code's constructor; subclasses inherit it through their metatables, so Squire's `new` makes its object the same way. `__init` sets the class's fields, its graph parents' first, as before. The code has none to call.
+  - **GDScript's runtime constant.** A class straight from the code declares `vg` itself, since the code's script has none; a subclass of it inherits Knight's, as before.
+  - **A class from the code is no graph class.** It has no `start`, and in GDScript no `vg_interfaces`, so the class straight from it declares both as a class with no parent would.
+  - **Internal names** carry the class's name under any parent. Godot won't let a subclass declare a parent's variable again, and Lua's fields share one table.
+- **Every language with inheritance now generates it**, so Compile's `code-parent-unsupported` is left for a pack that doesn't (`CodeGenerator.codeParents`). Rust and Go report that they have no inheritance, as for a graph parent (step 7 says why in Class Settings too).
+- **Tested:**
+  - **Both run it.** The Actor program prints the same five lines in Lua and GDScript, under Godot 4.7, with no script error or warning on stderr. The Lua module returns the class itself, and its describe has a body (Lua and GDScript have no abstract methods).
+  - **Subclasses.** Squire's Lua `new` uses Knight's `__vg_new`, and its Parent: hit reaches Knight's. Squire's GDScript passes the name on and has Knight's `vg`.
+  - **Not checked:** luacheck, the corpus's Lua linter, isn't installed here, and generated Lua is marked for it to skip.
 7. Rust and Go reported; Simulate's message.
 8. Debugging across the boundary.
 9. The exit check, docs, the parity checklist and status.

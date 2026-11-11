@@ -3,9 +3,9 @@
 // (gdscript-runtime.ts) by its name: a copy goes next to every generated file. GDScript has no
 // exceptions, so a failure is recorded (vg.fail) and generated code returns after any statement that
 // may have failed.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, codeParentInfo, isCodeClassId, targetCallParams } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
@@ -180,6 +180,7 @@ const gdscriptGenerator: CodeGenerator = {
   libraryExports: (_name, functions) => ({ names: gdscriptExportNames(functions) }),
   snippetLanguages: ['gdscript'],
   importLanguages: ['gdscript'],
+  codeParents: true,
   outputFileName: gdscriptOutputFileName,
   placement: gdscriptPlacement,
   generate: (program, options) => new GdscriptEmitter(program, options).emit(),
@@ -232,7 +233,8 @@ class GdscriptEmitter {
     this.names = new NameScope(RESERVED);
     const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
     this.classNames.set(`object:${program.className}`, own);
-    for (const f of program.functions) this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
+    // An override event takes the code's name for its method, which the code parent's names hold.
+    for (const f of program.functions) this.functionNames.set(f.id, f.event && f.code ? f.code : (f.event ? own.events : own.functions).get(f.id)!);
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
     for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     for (const i of program.imports) {
@@ -246,7 +248,9 @@ class GdscriptEmitter {
       // A struct, enum or class is the script itself, as is a code class whose members a graph uses.
       this.importNames.set(i.id, i.userType || i.member ? this.scriptConsts.get(script)! : `${this.scriptConsts.get(script)}.${i.name}`);
     }
-    const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'snake')}_` : '_';
+    // A subclass can't declare its parent's variables again (a code parent's too), so its internal
+    // ones carry its name.
+    const internal = program.classInfo?.parent ? `_${toIdentifier(program.className, 'snake')}_` : '_';
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'snake', internal));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'snake', internal));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', internal));
@@ -260,13 +264,22 @@ class GdscriptEmitter {
       for (const d of this.program.dispatchers ?? []) body.line(`var ${this.dispatcherNames.get(d.id)} = vg.dispatcher()`);
       for (const x of this.program.slots.filter((s) => !s.function)) body.line(`var ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)}`);
       body.line();
+      // A class from the code is no graph class: it has no vg_interfaces or start of its own.
       const parent = this.program.classInfo?.parent;
+      const graphParent = !!parent && !isCodeClassId(parent);
       const interfaces = (this.program.interfaces ?? []).map((i) => this.userTypeName(i.type.id));
-      if (!parent || interfaces.length) {
-        // Cast To an interface asks the object which it implements (vg.implements).
-        this.method('vg_interfaces', [], '-> Array', () => body.line(`return ${parent ? 'super.vg_interfaces() + ' : ''}[${interfaces.join(', ')}]`));
+      // Its constructor's arguments, passed on (docs/code-classes-as-parents.md).
+      const init = parent ? codeParentInfo(this.program)?.init ?? [] : [];
+      if (init.length) {
+        const scope = new NameScope(RESERVED);
+        const params = init.map((p) => ({ name: scope.claim(p.id, 'keep'), type: p.type }));
+        this.method('_init', params.map((p) => `${p.name}${annotation(p.type)}`), '-> void', () => body.line(`super(${params.map((p) => p.name).join(', ')})`));
       }
-      if (!parent || this.program.hasStart) this.method('start', [], '-> void', () => this.statements(this.program.start));
+      if (!graphParent || interfaces.length) {
+        // Cast To an interface asks the object which it implements (vg.implements).
+        this.method('vg_interfaces', [], '-> Array', () => body.line(`return ${graphParent ? 'super.vg_interfaces() + ' : ''}[${interfaces.join(', ')}]`));
+      }
+      if (!graphParent || this.program.hasStart) this.method('start', [], '-> void', () => this.statements(this.program.start));
     }
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const { type, stubs } of this.program.interfaces ?? []) {
@@ -327,8 +340,8 @@ class GdscriptEmitter {
     const parentImport = parent && this.program.imports.find((i) => i.id === parent);
     header.line(`extends ${parentImport ? JSON.stringify(this.preload(this.importScript(parentImport))) : 'RefCounted'}`);
     header.line();
-    // A subclass has its parent's vg.
-    if (!parentImport) header.line(`const vg = preload("${GDSCRIPT_RUNTIME_FILE}")`);
+    // A subclass has its parent's vg; a class from the code has none.
+    if (!parentImport || isCodeClassId(parent)) header.line(`const vg = preload("${GDSCRIPT_RUNTIME_FILE}")`);
     for (const [script, name] of [...this.scriptConsts].sort(([, a], [, b]) => compare(a, b))) header.line(`const ${name} = preload(${JSON.stringify(this.preload(script))})`);
     header.line();
     header.line();
@@ -369,6 +382,9 @@ class GdscriptEmitter {
     const seen = new Set<string>();
     for (let parent = info?.parent; parent && !seen.has(parent);) {
       seen.add(parent);
+      // A class from the code ends the chain: its members keep the code's names.
+      const code = isCodeClassId(parent) ? this.program.codeClasses?.find((c) => c.id === parent) : undefined;
+      if (code) chain.push(codeInheritedMembers(code));
       const ancestor = classInfo(this.program, parent);
       const names = ancestor && this.membersOf(parent);
       if (!ancestor || !names) break;
@@ -431,8 +447,9 @@ class GdscriptEmitter {
 
   private functionMethod(fn: IrFunction): void {
     const scope = new NameScope(RESERVED);
+    // A method of the code's keeps its parameters' names.
     const params = fn.params.map((p) => {
-      const name = scope.claim(p.name, 'snake');
+      const name = scope.claim(p.name, fn.code ? 'keep' : 'snake');
       this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
       return `${name}${annotation(p.type)}`;
     });
@@ -441,7 +458,8 @@ class GdscriptEmitter {
     const slots = this.program.slots.filter((x) => x.function === fn.id);
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name, 'snake'));
     const defaults = fn.outputs.map((o) => this.defaultFor(o.type));
-    const returns = fn.outputs.length > 1 ? '-> Array' : fn.outputs.length === 1 ? '' : '-> void';
+    // Godot checks an override's signature against the code's, its return type too.
+    const returns = fn.outputs.length > 1 ? '-> Array' : fn.outputs.length === 1 ? (fn.code && annotation(fn.outputs[0].type) ? `-> ${annotation(fn.outputs[0].type).slice(2)}` : '') : '-> void';
     this.failReturn = fn.outputs.length === 0 ? 'return' : `return ${fn.outputs.length === 1 ? defaults[0] : `[${defaults.join(', ')}]`}`;
     this.method(this.functionNames.get(fn.id)!, params, returns, () => {
       if (fn.description) this.out.line(`# ${fn.description.replace(/\s+/g, ' ')}`);
@@ -668,13 +686,15 @@ class GdscriptEmitter {
           out.line('super.start()');
           break;
         }
-        const call = `super.${this.parentFunctionName(s.function!)}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
+        // A graph ancestor's function, or the code parent's method (its name as the code has it).
+        const call = `super.${s.code ? s.function : this.parentFunctionName(s.function!)}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
         if (s.results.length) this.results(s.results, call);
         else out.line(call);
         break;
       }
       case 'construct':
-        out.line(`${this.slotRef(s.slot)} = ${this.userTypeName(s.type)}.new()`);
+        // The code parent's constructor takes its arguments (docs/code-classes-as-parents.md).
+        out.line(`${this.slotRef(s.slot)} = ${this.userTypeName(s.type)}.new(${this.args(s.args ?? [], codeParentInfo(this.program, s.type)?.init ?? []).join(', ')})`);
         out.line(`${this.slotRef(s.slot)}.start()`);
         break;
       case 'setObjectVariable':
@@ -769,9 +789,9 @@ class GdscriptEmitter {
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'parentCall': {
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const fn = e.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === e.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `super.${this.parentFunctionName(e.function)}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
+        const call = `super.${e.code ? e.function : this.parentFunctionName(e.function)}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'isValid':

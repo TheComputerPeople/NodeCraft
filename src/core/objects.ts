@@ -410,6 +410,8 @@ export interface CodeClassInfo {
   // Its constructor's parameters: Construct <GraphClass>'s inputs, passed on to it. Absent when the
   // class declares no constructor.
   init?: PinDefinition[];
+  // Its name in the code: Lua calls it (`new`, or another function returning the class).
+  initName?: string;
   // Their types as the code writes them (C++, Java: CodeSpelling).
   initSpelling?: string[];
   // The methods a graph class may override: marked `@blueprint overridable`, or abstract; never one

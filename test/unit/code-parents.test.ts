@@ -205,7 +205,7 @@ describe('a graph class extending a class from the code', () => {
     assert.ok(subclassTest(definition, declaredClass(squire)!, codeClassBases(registry.all()))('object:Squire', 'native:Actor'));
   });
 
-  test("Compile: a missing code class, one in another language, and (until generated) Lua's", () => {
+  test("Compile: a missing code class, one in another language, and one in a language without inheritance (Rust)", () => {
     const errors = (doc: GraphDocument, registry: NodeRegistry) => compileDocument(doc, { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: 'Knight.vgraph' } }).diagnostics
       .filter((d) => d.severity === 'error').map((d) => `${d.code}: ${d.message}`);
     const missing = workspace(codeClassId('typescript', 'src/gone.ts', 'Gone'));
@@ -213,11 +213,11 @@ describe('a graph class extending a class from the code', () => {
     const python = workspace();
     assert.match(errors({ ...python.knight, language: 'python' }, python.registry).join('\n'), /^wrong-language: Actor is a TypeScript class \(src\/actor\.ts\); a Python graph can't extend it\.$/);
     const later = workspace();
-    const lua = codeClassId('lua', 'src/actor.lua', 'Actor');
+    const rust = codeClassId('rust', 'src/actor.rs', 'Actor');
     const actor = later.registry.get(later.knight.parent!)!;
     if (actor.implementation?.kind !== 'code-class') throw new Error('no Actor');
-    later.registry.register({ ...actor, type: lua, implementation: { kind: 'code-class', type: { ...actor.implementation.type, id: lua, language: 'lua', path: 'src/actor.lua' } } });
-    assert.deepEqual(errors({ ...later.knight, language: 'lua', parent: lua }, later.registry), ["code-parent-unsupported: Generated code can't extend a class from your code (Actor) in Lua yet."]);
+    later.registry.register({ ...actor, type: rust, implementation: { kind: 'code-class', type: { ...actor.implementation.type, id: rust, language: 'rust', path: 'src/actor.rs' } } });
+    assert.deepEqual(errors({ ...later.knight, language: 'rust', parent: rust }, later.registry), ["unsupported: Rust has no inheritance, so a Parent Class can't be compiled to it."]);
     // TypeScript's generated code extends it (docs/code-classes-as-parents.md, step 4).
     assert.deepEqual(errors(later.knight, later.registry), []);
   });

@@ -1,5 +1,5 @@
-// Code classes as parents (docs/code-classes-as-parents.md), in TypeScript, JavaScript, Python, C#,
-// Java, C++, PHP and Ruby: an Actor from the project's code, with a constructor taking a name, a health property, a
+// Code classes as parents (docs/code-classes-as-parents.md), in every language with inheritance
+// (TypeScript, JavaScript, Python, C#, Java, C++, PHP, Ruby, Lua and GDScript): an Actor from the project's code, with a constructor taking a name, a health property, a
 // method (greet), an overridable method (hit), an abstract one (describe) and a template method
 // (turn) calling both. A Knight graph extends it: its Start sets health and greets on Self, Event
 // hit says so and calls Parent: hit, and describe is a function. A Game graph constructs a Knight
@@ -332,6 +332,96 @@ const MODULES: Record<string, { path: string; text: string; module?: string }> =
       'end',
       ''
     ].join('\n')
+  },
+  // A module returning the class, made by Actor.new. (Lua has no abstract methods either.)
+  lua: {
+    path: 'lib/actor.lua',
+    text: [
+      '---@class Actor',
+      '---@field health integer Its health. @blueprint',
+      'local Actor = {}',
+      'Actor.__index = Actor',
+      '',
+      '---@blueprint',
+      '---@param name string',
+      'function Actor.new(name)',
+      '  local self = setmetatable({}, Actor)',
+      '  self.name = name',
+      '  self.health = 100',
+      '  return self',
+      'end',
+      '',
+      '---@blueprint',
+      '---@return string',
+      'function Actor:greet()',
+      '  return self.name .. " has " .. self.health',
+      'end',
+      '',
+      '---@blueprint overridable',
+      '---@param damage integer',
+      'function Actor:hit(damage)',
+      '  self.health = self.health - damage',
+      '  print(self.name .. " takes " .. damage)',
+      'end',
+      '',
+      '---@blueprint overridable',
+      '---@return string',
+      'function Actor:describe()',
+      '  return "someone"',
+      'end',
+      '',
+      '---@blueprint',
+      'function Actor:turn()',
+      '  print(self.name .. " is " .. self:describe())',
+      '  self:hit(3)',
+      '  print(self:greet())',
+      'end',
+      '',
+      'return Actor',
+      ''
+    ].join('\n')
+  },
+  // A script class; Godot has no abstract methods.
+  gdscript: {
+    path: 'lib/actor.gd',
+    text: [
+      'class_name Actor',
+      'extends RefCounted',
+      '',
+      '## @blueprint',
+      'var health: int = 100',
+      '',
+      'var _name: String',
+      '',
+      '',
+      '## @blueprint',
+      'func _init(name: String) -> void:',
+      '\t_name = name',
+      '',
+      '',
+      '## @blueprint',
+      'func greet() -> String:',
+      '\treturn "%s has %d" % [_name, health]',
+      '',
+      '',
+      '## @blueprint overridable',
+      'func hit(damage: int) -> void:',
+      '\thealth -= damage',
+      '\tprint("%s takes %d" % [_name, damage])',
+      '',
+      '',
+      '## @blueprint overridable',
+      'func describe() -> String:',
+      '\treturn "someone"',
+      '',
+      '',
+      '## @blueprint',
+      'func turn() -> void:',
+      '\tprint("%s is %s" % [_name, describe()])',
+      '\thit(3)',
+      '\tprint(greet())',
+      ''
+    ].join('\n')
   }
 };
 
@@ -343,9 +433,10 @@ interface Code {
   definitions: NodeDefinition[];
 }
 
-// An Actor member node's type, by its name in any case ("greet", "set:health").
+// An Actor member node's type, by its name in any case ("greet", "set:health"). (A Lua module that
+// returns the class names no class: "#:greet".)
 function member(code: Code, name: string): string {
-  const found = code.definitions.find((d) => d.type.toLowerCase().endsWith(`actor:${name}`));
+  const found = code.definitions.find((d) => d.type.toLowerCase().endsWith(`actor:${name}`) || d.type.endsWith(`#:${name}`));
   assert.ok(found, `no Actor:${name} in ${code.definitions.map((d) => d.type).join(', ')}`);
   return found.type;
 }
@@ -430,6 +521,7 @@ function build(name: string, key: string, language: string, generate: Partial<Ge
   fs.mkdirSync(path.join(dir, 'graphs'), { recursive: true });
   fs.writeFileSync(path.join(dir, module.path), module.text);
   if (language === 'python') fs.writeFileSync(path.join(dir, path.dirname(module.path), '__init__.py'), '');
+  if (language === 'gdscript') fs.writeFileSync(path.join(dir, 'project.godot'), 'config_version=5\n');
   const code = scan(language, key);
   const r = registryFor(language, code);
   const texts: Record<string, string> = {};
@@ -461,7 +553,9 @@ const TARGETS = [
   { label: 'Java', key: 'java', language: 'java' },
   { label: 'C++', key: 'cpp', language: 'cpp' },
   { label: 'PHP', key: 'php', language: 'php' },
-  { label: 'Ruby', key: 'ruby', language: 'ruby' }
+  { label: 'Ruby', key: 'ruby', language: 'ruby' },
+  { label: 'Lua', key: 'lua', language: 'lua' },
+  { label: 'GDScript', key: 'gdscript', language: 'gdscript' }
 ];
 
 // The sources a compiled language's Run builds besides the program's own file: the code's, and the
@@ -528,13 +622,29 @@ describe('code classes as parents', () => {
     assert.match(ruby.Knight, /^ {2}def describe$/m);
     assert.match(ruby.Knight, /^ {4}self\.health = 50$/m);
     assert.match(ruby.Game, /Knight\.new\("Bors"\)/);
+    const lua = build('lua-text', 'lua', 'lua').texts;
+    assert.match(lua.Knight, /^setmetatable\(Knight, \{ __index = actor \}\)$/m);
+    assert.match(lua.Knight, /^function Knight\.__vg_new\(name\)\n {2}return actor\.new\(name\)\nend$/m);
+    assert.match(lua.Knight, /^function Knight\.new\(name\)\n {2}local self = setmetatable\(Knight\.__vg_new\(name\), Knight\)$/m);
+    assert.match(lua.Knight, /^function Knight:hit\(damage\)$/m);
+    assert.match(lua.Knight, /^ {2}actor\.hit\(self, damage\)$/m);
+    assert.match(lua.Knight, /^function Knight:describe\(\)$/m);
+    assert.match(lua.Game, /Knight\.new\("Bors"\)/);
+    const gd = build('gdscript-text', 'gdscript', 'gdscript').texts;
+    assert.match(gd.Knight, /^extends "\.\.\/lib\/actor\.gd"$/m);
+    assert.match(gd.Knight, /^const vg = preload\(/m, "the code's script has no vg");
+    assert.match(gd.Knight, /^func _init\(name: String\) -> void:\n\tsuper\(name\)$/m);
+    assert.match(gd.Knight, /^func hit\(damage: int\) -> void:$/m);
+    assert.match(gd.Knight, /^\tsuper\.hit\(damage\)$/m);
+    assert.match(gd.Knight, /^func describe\(\) -> String:$/m, "Godot checks the return type against the code's");
+    assert.match(gd.Game, /\.new\("Bors"\)/);
   });
 
   // Squire extends Knight: a variable of its own, and hit overridden again, its Parent call
   // reaching Knight's version through the code's name.
   test('a graph class extending the graph class: the constructor passes the name on, Parent: hit is the nearest', () => {
     const texts: Record<string, string> = {};
-    for (const language of ['typescript', 'python', 'csharp', 'java', 'cpp', 'php', 'ruby']) {
+    for (const language of ['typescript', 'python', 'csharp', 'java', 'cpp', 'php', 'ruby', 'lua', 'gdscript']) {
       const code = scan(language, language);
       const hit = method(code, 'hit');
       const r = registryFor(language, code);
@@ -566,6 +676,12 @@ describe('code classes as parents', () => {
     assert.match(texts.php, /^ {8}parent::hit\(\$damage\);$/m);
     assert.match(texts.ruby, /^ {2}def initialize\(name\)\n {4}super\(name\)$/m);
     assert.match(texts.ruby, /^ {4}Knight\.instance_method\(:hit\)\.bind_call\(self, damage\)$/m);
+    // Lua: Knight's __vg_new is Squire's, through its metatable; its __init is Knight's first.
+    assert.match(texts.lua, /^function Squire\.new\(name\)\n {2}local self = setmetatable\(Squire\.__vg_new\(name\), Squire\)$/m);
+    assert.doesNotMatch(texts.lua, /__vg_new\(name\)\n {2}return/);
+    assert.match(texts.lua, /^ {2}Knight\.hit\(self, damage\)$/m);
+    assert.match(texts.gdscript, /^func _init\(name: String\) -> void:\n\tsuper\(name\)$/m);
+    assert.doesNotMatch(texts.gdscript, /^const vg = /m, "Knight's vg is Squire's");
   });
 
   test('a class leaving an abstract method is abstract (TypeScript, C#, Java, PHP)', () => {
@@ -597,12 +713,16 @@ describe('code classes as parents', () => {
       let outcome;
       try {
         const sources = ['csharp', 'java', 'cpp'].includes(target.language) ? otherSources(built) : undefined;
-        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, built.file, built.className, { cwd: path.join(built.dir, 'graphs'), importRoots: built.importRoots, sources, timeoutMs: 180000 });
+        outcome = await runGeneratedCode(languages.get(target.language)!.generator!.runner!, built.file, built.className, {
+          cwd: path.join(built.dir, 'graphs'), importRoots: built.importRoots, sources, timeoutMs: 180000, ...(target.language === 'gdscript' ? { projectDir: built.dir } : {})
+        });
       } catch (error) {
         if (error instanceof ToolNotFoundError) return t.skip(error.message);
         throw error;
       }
       assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').split('\n').filter(Boolean), EXPECTED, `stderr:\n${outcome.stderr}`);
+      // Godot reports a script's errors and warnings as it loads it (the override's signature among them).
+      if (target.language === 'gdscript') assert.doesNotMatch(outcome.stderr, /SCRIPT ERROR|WARNING/, outcome.stderr);
     });
   }
 

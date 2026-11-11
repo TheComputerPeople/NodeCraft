@@ -1,8 +1,8 @@
 // Lua pack (docs/more-languages.md, "Lua"): generates a Lua 5.4 module (one class per graph) from
 // Visual IR. Containers, formatting, classes, dispatchers and the latent queue come from the support
 // module (lua-runtime.ts), which generated code requires as "vgraph_runtime".
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams, canComplete } from '../compiler/ir';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, codeParentInfo, isCodeClassId, targetCallParams, canComplete } from '../compiler/ir';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
@@ -204,6 +204,7 @@ const luaGenerator: CodeGenerator = {
   libraryExports: (_name, functions) => ({ names: luaExportNames(functions) }),
   snippetLanguages: ['lua'],
   importLanguages: ['lua'],
+  codeParents: true,
   outputFileName: luaOutputFileName,
   moduleName: (generatedFileName) => luaModuleName(generatedFileName),
   placement: luaPlacement,
@@ -259,7 +260,8 @@ class LuaEmitter {
     this.names = this.library ? new NameScope(RESERVED) : new NameScope(RESERVED, ['start']);
     const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
     this.classNames.set(`object:${program.className}`, own);
-    for (const f of program.functions) this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
+    // An override event takes the code's name for its method, which the code parent's names hold.
+    for (const f of program.functions) this.functionNames.set(f.id, f.event && f.code ? f.code : (f.event ? own.events : own.functions).get(f.id)!);
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
     for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     this.moduleScope = new NameScope(RESERVED, [this.className, 'M']);
@@ -273,7 +275,8 @@ class LuaEmitter {
       // A class's members: the module's table itself when the module returns the class (no name).
       this.importNames.set(i.id, i.name ? `${this.moduleLocals.get(module)}.${i.name}` : this.moduleLocals.get(module)!);
     }
-    const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'snake')}_` : '_';
+    // A subclass's internal fields carry its name, apart from its parent's (a code parent's too).
+    const internal = program.classInfo?.parent ? `_${toIdentifier(program.className, 'snake')}_` : '_';
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'keep', internal));
     for (const b of program.blocks) this.blockNames.set(b.id, this.library ? this.moduleScope.claim(b.name, 'snake') : this.names.claim(b.name, 'snake', internal));
     this.helperTable = program.helpers.length + this.moduleLocals.size > MAX_HELPER_LOCALS ? this.moduleScope.claim('vg_helpers', 'snake') : undefined;
@@ -303,19 +306,32 @@ class LuaEmitter {
       ...(this.program.dispatchers ?? []).map((d) => ({ name: this.dispatcherNames.get(d.id)!, initial: 'vg.dispatcher()' })),
       ...this.program.slots.filter((x) => !x.function).map((x) => ({ name: this.slotNames.get(x.id)!, initial: this.defaultFor(x.type) }))
     ];
-    // new() makes an object; __init sets its fields, its parent's first.
-    body.line(`function ${this.className}.new()`);
-    body.line(`  local self = setmetatable({}, ${this.className})`);
+    // new() makes an object; __init sets its fields, its parent's first. Under a class from the code,
+    // the code's constructor makes the object (__vg_new, which subclasses inherit), and it becomes
+    // one of this class (docs/code-classes-as-parents.md).
+    const code = parent ? codeParentInfo(this.program) : undefined;
+    const initScope = new NameScope(RESERVED);
+    const init = code?.init ? code.init.map((p) => initScope.claim(p.id, 'keep')) : [];
+    if (parent && isCodeClassId(parent) && code?.init) {
+      body.line(`function ${this.className}.__vg_new(${init.join(', ')})`);
+      body.line(`  return ${this.userTypeName(parent)}.${code.initName ?? 'new'}(${init.join(', ')})`);
+      body.line('end');
+      body.line();
+    }
+    body.line(`function ${this.className}.new(${init.join(', ')})`);
+    body.line(`  local self = setmetatable(${code?.init ? `${this.className}.__vg_new(${init.join(', ')})` : '{}'}, ${this.className})`);
     body.line('  self:__init()');
     body.line('  return self');
     body.line('end');
     body.line();
     this.method('__init', [], () => {
-      if (parent) body.line(`${this.userTypeName(parent)}.__init(self)`);
+      if (parent && !isCodeClassId(parent)) body.line(`${this.userTypeName(parent)}.__init(self)`);
       for (const f of fields) body.line(`self.${f.name} = ${f.initial}`);
     });
-    // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay.
-    if (!parent || this.program.hasStart) this.method('start', [], () => this.statements(this.program.start));
+    // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay (a class
+    // from the code has none).
+    const graphParent = !!parent && !isCodeClassId(parent);
+    if (!graphParent || this.program.hasStart) this.method('start', [], () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const { type, stubs } of this.program.interfaces ?? []) {
       for (const fn of stubs) {
@@ -436,6 +452,9 @@ class LuaEmitter {
     const seen = new Set<string>();
     for (let parent = info?.parent; parent && !seen.has(parent);) {
       seen.add(parent);
+      // A class from the code ends the chain: its members keep the code's names.
+      const code = isCodeClassId(parent) ? this.program.codeClasses?.find((c) => c.id === parent) : undefined;
+      if (code) chain.push(codeInheritedMembers(code));
       const ancestor = classInfo(this.program, parent);
       const names = ancestor && this.membersOf(parent);
       if (!ancestor || !names) break;
@@ -496,8 +515,9 @@ class LuaEmitter {
 
   private functionMethod(fn: IrFunction): void {
     const scope = new NameScope(RESERVED);
+    // A method of the code's keeps its parameters' names.
     const params = fn.params.map((p) => {
-      const name = scope.claim(p.name, 'snake');
+      const name = scope.claim(p.name, fn.code ? 'keep' : 'snake');
       this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
       return name;
     });
@@ -730,12 +750,14 @@ class LuaEmitter {
           line(`${parent}.start(self)`);
           break;
         }
-        const call = `${parent}.${this.parentFunctionName(s.function!)}(${['self', ...this.args(s.args, targetCallParams(this.program, s))].join(', ')})`;
+        // A graph ancestor's function, or the code parent's method (its name as the code has it).
+        const call = `${parent}.${s.code ? s.function : this.parentFunctionName(s.function!)}(${['self', ...this.args(s.args, targetCallParams(this.program, s))].join(', ')})`;
         line(s.results.length ? `${s.results.map((r) => this.slotRef(r.slot)).join(', ')} = ${call}` : call);
         break;
       }
       case 'construct':
-        line(`${this.slotRef(s.slot)} = ${this.userTypeName(s.type)}.new()`);
+        // The code parent's constructor takes its arguments (docs/code-classes-as-parents.md).
+        line(`${this.slotRef(s.slot)} = ${this.userTypeName(s.type)}.new(${this.args(s.args ?? [], codeParentInfo(this.program, s.type)?.init ?? []).join(', ')})`);
         line(`${this.slotRef(s.slot)}:start()`);
         break;
       case 'setObjectVariable':
@@ -830,10 +852,10 @@ class LuaEmitter {
         return e.output && outputs.length > 1 ? nth(call, outputs.findIndex((o) => o.id === e.output) + 1) : call;
       }
       case 'parentCall': {
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const fn = e.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === e.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
         const parent = this.userTypeName(this.program.classInfo!.parent!);
-        const call = `${parent}.${this.parentFunctionName(e.function)}(${['self', ...this.args(e.args, targetCallParams(this.program, e))].join(', ')})`;
+        const call = `${parent}.${e.code ? e.function : this.parentFunctionName(e.function)}(${['self', ...this.args(e.args, targetCallParams(this.program, e))].join(', ')})`;
         return e.output && outputs.length > 1 ? nth(call, outputs.findIndex((o) => o.id === e.output) + 1) : call;
       }
       case 'isValid':
