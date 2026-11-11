@@ -369,7 +369,8 @@ function codeClassDefinition(cls: ScannedClass, options: ExposeOptions): NodeDef
     kind: 'code-class', id, type: cls.type.id, ...(cls.base ? { base: cls.base.id } : {}),
     name: cls.name, title: simple, language: options.language, path: options.path, ...(options.module ? { module: options.module } : {}),
     ...(cls.abstract ? { abstract: true } : {}),
-    ...(cls.init?.params.length ? { init: dataPins(definitionFor(cls.init, options).inputs), ...(cls.init.spelling ? { initSpelling: cls.init.spelling.params } : {}) } : {}),
+    // (None, when the class declares no constructor: PHP calls parent::__construct only when there's one.)
+    ...(cls.init ? { init: dataPins(definitionFor(cls.init, options).inputs), ...(cls.init.spelling ? { initSpelling: cls.init.spelling.params } : {}) } : {}),
     overridable,
     members: [...new Set([...cls.methods.map((m) => m.name), ...cls.properties.map((p) => p.name)])]
   };

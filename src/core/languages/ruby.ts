@@ -1,9 +1,9 @@
 // Ruby pack (docs/more-languages.md, "Ruby"): generates a Ruby file (one class per graph) from Visual
 // IR. Files require each other with require_relative, and the support file (ruby-runtime.ts) is a
 // companion: a copy goes next to every generated file.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, dataPins, targetCallParams, canComplete } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, codeParentInfo, isCodeClassId, dataPins, targetCallParams, canComplete } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
@@ -126,6 +126,7 @@ const rubyGenerator: CodeGenerator = {
   libraryExports: (_name, functions) => ({ names: rubyExportNames(functions) }),
   snippetLanguages: ['ruby'],
   importLanguages: ['ruby'],
+  codeParents: true,
   outputFileName: rubyOutputFileName,
   generate: (program, options) => new RubyEmitter(program, options).emit(),
   runner: rubyRunner,
@@ -172,16 +173,21 @@ class RubyEmitter {
     this.names = this.library ? new NameScope(RESERVED) : new NameScope(RESERVED, ['start']);
     const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
     this.classNames.set(`object:${program.className}`, own);
-    for (const f of program.functions) this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
+    // An override event takes the code's name for its method, which the code parent's names hold.
+    for (const f of program.functions) this.functionNames.set(f.id, f.event && f.code ? f.code : (f.event ? own.events : own.functions).get(f.id)!);
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
     for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     for (const i of program.imports) {
       // A struct, enum or class is its constant; a project function is called on its module or
       // class (the scanner's container), or alone when it's a top-level method.
       if (i.userType) this.importNames.set(i.id, new NameScope(RESERVED).claim(i.userType.name, 'pascal'));
+      // The class from the code this one extends: its constant.
+      else if (isCodeClassId(i.id)) this.importNames.set(i.id, i.name);
       else this.importNames.set(i.id, i.module ? `${i.module}.${i.name}` : i.name);
     }
-    const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'snake')}_` : '_';
+    // A subclass's internal names carry its name, apart from its parent's instance variables (a
+    // code parent's too).
+    const internal = program.classInfo?.parent ? `_${toIdentifier(program.className, 'snake')}_` : '_';
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'snake', internal));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'snake', internal));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'snake', internal));
@@ -215,13 +221,19 @@ class RubyEmitter {
     ];
     if (accessors.length) body.line(`attr_accessor ${accessors.map((a) => `:${a}`).join(', ')}`);
     if (accessors.length || this.program.interfaces?.length) body.line();
-    this.method('initialize', [], () => {
-      if (parent) body.line('super()');
+    // It takes a code parent's constructor's arguments and passes them on
+    // (docs/code-classes-as-parents.md).
+    const initScope = new NameScope(RESERVED);
+    const init = (parent ? codeParentInfo(this.program)?.init ?? [] : []).map((p) => initScope.claim(p.id, 'keep'));
+    this.method('initialize', init, () => {
+      if (parent) body.line(`super(${init.join(', ')})`);
       for (const m of this.program.members.filter((x) => !x.function)) body.line(`@${this.memberNames.get(m.id)} = ${this.value(m.initial, m.type)}`);
       for (const d of this.program.dispatchers ?? []) body.line(`@${this.dispatcherNames.get(d.id)} = Vg::Dispatcher.new`);
       for (const x of this.program.slots.filter((s) => !s.function)) body.line(`@${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)}`);
     });
-    if (!parent || this.program.hasStart) this.method('start', [], () => this.statements(this.program.start));
+    // A subclass without Start nodes keeps its parent's start (a class from the code has none).
+    const graphParent = !!parent && !isCodeClassId(parent);
+    if (!graphParent || this.program.hasStart) this.method('start', [], () => this.statements(this.program.start));
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const { type, stubs } of this.program.interfaces ?? []) {
       for (const fn of stubs) {
@@ -323,6 +335,9 @@ class RubyEmitter {
     const seen = new Set<string>();
     for (let parent = info?.parent; parent && !seen.has(parent);) {
       seen.add(parent);
+      // A class from the code ends the chain: its members keep the code's names.
+      const code = isCodeClassId(parent) ? this.program.codeClasses?.find((c) => c.id === parent) : undefined;
+      if (code) chain.push(codeInheritedMembers(code));
       const ancestor = classInfo(this.program, parent);
       const names = ancestor && this.membersOf(parent);
       if (!ancestor || !names) break;
@@ -384,8 +399,9 @@ class RubyEmitter {
 
   private functionMethod(fn: IrFunction): void {
     const scope = new NameScope(RESERVED);
+    // A method of the code's keeps its parameters' names (keyword arguments would use them).
     const params = fn.params.map((p) => {
-      const name = scope.claim(p.name, 'snake');
+      const name = scope.claim(p.name, fn.code ? 'keep' : 'snake');
       this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
       return name;
     });
@@ -606,13 +622,14 @@ class RubyEmitter {
       }
       case 'parentCall': {
         const parent = this.userTypeName(this.program.classInfo!.parent!);
-        const call = s.start ? `${parent}.instance_method(:start).bind_call(self)` : this.parentCall(s.function!, s.args);
+        const call = s.start ? `${parent}.instance_method(:start).bind_call(self)` : this.parentCall(s.function!, s.args, s.code);
         if (s.results.length) this.results(s.results, call);
         else out.line(call);
         break;
       }
       case 'construct':
-        out.line(`${this.slotRef(s.slot)} = ${this.userTypeName(s.type)}.new`);
+        // The code parent's constructor takes its arguments (docs/code-classes-as-parents.md).
+        out.line(`${this.slotRef(s.slot)} = ${this.userTypeName(s.type)}.new${s.args?.length ? `(${this.args(s.args, codeParentInfo(this.program, s.type)?.init ?? []).join(', ')})` : ''}`);
         out.line(`${this.slotRef(s.slot)}.start`);
         break;
       case 'setObjectVariable':
@@ -635,7 +652,12 @@ class RubyEmitter {
   }
 
   // The parent class's version of a function: Ruby's super only reaches the method of the same name.
-  private parentCall(name: string, args: IrExpr[]): string {
+  // A code parent's method (`code`) is the code's name for it, found from the parent on.
+  private parentCall(name: string, args: IrExpr[], code?: boolean): string {
+    if (code) {
+      const params = dataPins(codeParentInfo(this.program)?.overridable.find((m) => m.name === name)?.inputs);
+      return `${this.userTypeName(this.program.classInfo!.parent!)}.instance_method(:${name}).bind_call(${['self', ...this.args(args, params)].join(', ')})`;
+    }
     const target = this.parentFunction(name);
     return `${target?.owner ?? 'super'}.instance_method(:${target?.method ?? name}).bind_call(${['self', ...this.args(args, dataPins(this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === name)?.inputs))].join(', ')})`;
   }
@@ -705,9 +727,9 @@ class RubyEmitter {
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'parentCall': {
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const fn = e.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === e.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = this.parentCall(e.function, e.args);
+        const call = this.parentCall(e.function, e.args, e.code);
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'isValid':
@@ -745,7 +767,8 @@ class RubyEmitter {
     // A class's member (docs/node-authoring.md, gap 2), on the Target pin's object.
     if (member.kind === 'construct') return `${this.importNames.get(callee.id)}.new(${list})`;
     const [target, ...rest] = args;
-    const object = `(${this.expr(target)})`;
+    // Self is the object (docs/code-classes-as-parents.md).
+    const object = target.kind === 'self' ? 'self' : `(${this.expr(target)})`;
     const values = this.args(rest, params.slice(1)).join(', ');
     return member.kind === 'get' ? `${object}.${member.name}` : member.kind === 'set' ? `${object}.${member.name} = ${values}` : `${object}.${member.name}(${values})`;
   }

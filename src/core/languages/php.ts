@@ -2,9 +2,9 @@
 // IR. Files require each other with require_once; the support file (php-runtime.ts) is a companion
 // next to every generated file. Containers are the support file's VgList, VgMap and VgSet, shared by
 // reference, since PHP copies its arrays on assignment.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, targetCallParams } from '../compiler/ir';
+import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, codeParentInfo, isCodeClassId, targetCallParams } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
@@ -144,6 +144,7 @@ const phpGenerator: CodeGenerator = {
   libraryExports: (name, functions) => ({ names: phpExportNames(functions), container: phpClassName(name) }),
   snippetLanguages: ['php'],
   importLanguages: ['php'],
+  codeParents: true,
   outputFileName: phpOutputFileName,
   // Graph files in one folder share its namespace.
   moduleName: (_generatedFileName, options) => options.namespace,
@@ -196,18 +197,22 @@ class PhpEmitter {
     this.names = this.library ? new NameScope(RESERVED) : new NameScope(RESERVED, ['start']);
     const own = claimClassMembers(this.names, programClassSpec(program), CLASS_STYLES, this.inheritedMembers(program.classInfo));
     this.classNames.set(`object:${program.className}`, own);
-    for (const f of program.functions) this.functionNames.set(f.id, (f.event ? own.events : own.functions).get(f.id)!);
+    // An override event takes the code's name for its method, which the code parent's names hold.
+    for (const f of program.functions) this.functionNames.set(f.id, f.event && f.code ? f.code : (f.event ? own.events : own.functions).get(f.id)!);
     for (const [id, name] of own.variables) this.memberNames.set(id, name);
     for (const [id, name] of own.dispatchers) this.dispatcherNames.set(id, name);
     for (const i of program.imports) {
       if (i.userType) this.importNames.set(i.id, this.typeReference(i.userType));
+      // The class from the code this one extends, by its qualified name.
+      else if (isCodeClassId(i.id)) this.importNames.set(i.id, `\\${i.name.replace(/^\\/, '')}`);
       // A library's or project's static method by its class's qualified name (written with dots by
       // graph libraries, as C# names them); a function by its namespace (ending with \) and name.
       else if (i.module?.endsWith('\\')) this.importNames.set(i.id, `\\${i.module}${i.name}`);
       else this.importNames.set(i.id, i.module ? `\\${i.module.replace(/\./g, '\\')}::${i.name}` : `\\${i.name}`);
       if (i.member && !i.userType) this.codeClasses.set(i.member.type, this.importNames.get(i.id)!);
     }
-    const internal = program.ancestors?.length ? `_${toIdentifier(program.className, 'camel')}_` : '_';
+    // A subclass's internal names carry its name, apart from its parent's (a code parent's too).
+    const internal = program.classInfo?.parent ? `_${toIdentifier(program.className, 'camel')}_` : '_';
     for (const s of program.slots) if (!s.function) this.slotNames.set(s.id, this.names.claim(s.name, 'camel', internal));
     for (const b of program.blocks) this.blockNames.set(b.id, this.names.claim(b.name, 'camel', internal));
     for (const h of program.helpers) this.helperNames.set(h.id, this.names.claim(h.name, 'camel', internal));
@@ -237,7 +242,8 @@ class PhpEmitter {
     }
     const parent = this.program.classInfo?.parent;
     const interfaces = (this.program.interfaces ?? []).map((i) => this.userTypeName(i.type.id));
-    body.line(`class ${this.className}${parent ? ` extends ${this.userTypeName(parent)}` : ''}${interfaces.length ? ` implements ${interfaces.join(', ')}` : ''}`);
+    // A class leaving its code parent's abstract methods to a subclass is abstract.
+    body.line(`${this.program.abstract ? 'abstract ' : ''}class ${this.className}${parent ? ` extends ${this.userTypeName(parent)}` : ''}${interfaces.length ? ` implements ${interfaces.join(', ')}` : ''}`);
     body.line('{');
     body.indent();
     const members = this.program.members.filter((m) => !m.function);
@@ -246,14 +252,21 @@ class PhpEmitter {
     for (const d of this.program.dispatchers ?? []) body.line(`public VgDispatcher $${this.dispatcherNames.get(d.id)};`);
     for (const x of slots) this.property(this.slotNames.get(x.id)!, x.type);
     if (members.length || slots.length || this.program.dispatchers?.length) body.line();
-    // Property defaults must be constants in PHP, so the constructor sets them.
-    this.method('__construct', [], () => {
-      if (parent) body.line('parent::__construct();');
+    // Property defaults must be constants in PHP, so the constructor sets them. It takes a code
+    // parent's constructor's arguments and passes them on (docs/code-classes-as-parents.md); a code
+    // parent that declares no constructor has none to call.
+    const code = parent ? codeParentInfo(this.program) : undefined;
+    const initScope = new NameScope(RESERVED);
+    const init = (code?.init ?? []).map((p) => this.param(initScope.claim(p.id, 'keep'), p.type));
+    this.method('__construct', init, () => {
+      if (parent && (!isCodeClassId(parent) || code?.init)) body.line(`parent::__construct(${init.map((p) => `$${p.name}`).join(', ')});`);
       for (const m of members) body.line(`$this->${this.memberNames.get(m.id)} = ${this.value(m.initial, m.type)};`);
       for (const d of this.program.dispatchers ?? []) body.line(`$this->${this.dispatcherNames.get(d.id)} = new VgDispatcher();`);
       for (const x of slots) body.line(`$this->${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
     });
-    if (!parent || this.program.hasStart) this.method('start', [], () => this.statements(this.program.start), 'public', false, VOID);
+    // A subclass without Start nodes keeps its parent's start (a class from the code has none).
+    const graphParent = !!parent && !isCodeClassId(parent);
+    if (!graphParent || this.program.hasStart) this.method('start', [], () => this.statements(this.program.start), 'public', false, VOID);
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const { type, stubs } of this.program.interfaces ?? []) {
       for (const fn of stubs) {
@@ -383,6 +396,9 @@ class PhpEmitter {
     const seen = new Set<string>();
     for (let parent = info?.parent; parent && !seen.has(parent);) {
       seen.add(parent);
+      // A class from the code ends the chain: its members keep the code's names.
+      const code = isCodeClassId(parent) ? this.program.codeClasses?.find((c) => c.id === parent) : undefined;
+      if (code) chain.push(codeInheritedMembers(code));
       const ancestor = classInfo(this.program, parent);
       const names = ancestor && this.membersOf(parent);
       if (!ancestor || !names) break;
@@ -460,7 +476,7 @@ class PhpEmitter {
     return { name, type: this.phpType(type) };
   }
 
-  private method(name: string, params: (string | PhpParam)[], body: () => void, visibility: 'public' | 'private' = 'public', isStatic = this.library, returns?: PhpType): void {
+  private method(name: string, params: (string | PhpParam)[], body: () => void, visibility: 'public' | 'protected' | 'private' = 'public', isStatic = this.library, returns?: PhpType): void {
     this.out.endNode();
     // PHPDoc where PHP's own types say less (containers' elements, several results).
     const docs = [
@@ -485,8 +501,9 @@ class PhpEmitter {
 
   private functionMethod(fn: IrFunction): void {
     const scope = new NameScope(RESERVED);
+    // A method of the code's keeps its parameters' names (PHP's named arguments use them).
     const params = fn.params.map((p) => {
-      const name = scope.claim(p.name, 'camel');
+      const name = scope.claim(p.name, fn.code ? 'keep' : 'camel');
       this.paramNames.set(`${fn.id}\u0000${p.id}`, name);
       return this.param(name, p.type);
     });
@@ -501,7 +518,7 @@ class PhpEmitter {
       for (const x of slots) this.out.line(`$${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);
       this.statements(fn.body);
       if (fn.outputs.length && canComplete(fn.body)) this.out.line(`return ${this.returned(fn, [])};`);
-    }, 'public', this.library, fn.outputs.length ? this.phpTypes(fn.outputs.map((o) => o.type)) : VOID);
+    }, fn.code && fn.access === 'protected' ? 'protected' : 'public', this.library, fn.outputs.length ? this.phpTypes(fn.outputs.map((o) => o.type)) : VOID);
   }
 
   private returned(fn: IrFunction, values: IrExpr[]): string {
@@ -747,13 +764,15 @@ class PhpEmitter {
         break;
       }
       case 'parentCall': {
-        const call = s.start ? 'parent::start()' : `parent::${this.parentFunctionName(s.function!)}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
+        // A graph ancestor's function, or the code parent's method (its name as the code has it).
+        const call = s.start ? 'parent::start()' : `parent::${s.code ? s.function : this.parentFunctionName(s.function!)}(${this.args(s.args, targetCallParams(this.program, s)).join(', ')})`;
         if (s.results.length) this.results(s.results, call);
         else out.line(`${call};`);
         break;
       }
       case 'construct':
-        out.line(`${this.slotRef(s.slot)} = new ${this.userTypeName(s.type)}();`);
+        // The code parent's constructor takes its arguments (docs/code-classes-as-parents.md).
+        out.line(`${this.slotRef(s.slot)} = new ${this.userTypeName(s.type)}(${this.args(s.args ?? [], codeParentInfo(this.program, s.type)?.init ?? []).join(', ')});`);
         out.line(`${this.slotRef(s.slot)}->start();`);
         break;
       case 'setObjectVariable':
@@ -843,9 +862,9 @@ class PhpEmitter {
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'parentCall': {
-        const fn = this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
+        const fn = e.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === e.function) : this.program.ancestors?.flatMap((a) => a.functions).find((f) => f.name === e.function);
         const outputs = fn?.outputs.filter((p) => p.kind === 'data') ?? [];
-        const call = `parent::${this.parentFunctionName(e.function)}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
+        const call = `parent::${e.code ? e.function : this.parentFunctionName(e.function)}(${this.args(e.args, targetCallParams(this.program, e)).join(', ')})`;
         return e.output && outputs.length > 1 ? `${call}[${outputs.findIndex((o) => o.id === e.output)}]` : call;
       }
       case 'isValid':
@@ -885,7 +904,8 @@ class PhpEmitter {
     // A class's member (docs/node-authoring.md, gap 2), on the Target pin's object.
     if (member.kind === 'construct') return `new ${this.importNames.get(callee.id)}(${list})`;
     const [target, ...rest] = args;
-    const object = this.phpType(this.typeOf(target)).native.startsWith('?') ? `Vg::object(${this.expr(target)})` : `(${this.expr(target)})`;
+    // Self is the object (docs/code-classes-as-parents.md).
+    const object = target.kind === 'self' ? '$this' : this.phpType(this.typeOf(target)).native.startsWith('?') ? `Vg::object(${this.expr(target)})` : `(${this.expr(target)})`;
     const values = [...this.args(rest, params.slice(1)), ...extra].join(', ');
     return member.kind === 'get' ? `${object}->${member.name}` : member.kind === 'set' ? `${object}->${member.name} = ${values}` : `${object}->${member.name}(${values})`;
   }

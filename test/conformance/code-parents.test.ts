@@ -1,5 +1,5 @@
 // Code classes as parents (docs/code-classes-as-parents.md), in TypeScript, JavaScript, Python, C#,
-// Java and C++: an Actor from the project's code, with a constructor taking a name, a health property, a
+// Java, C++, PHP and Ruby: an Actor from the project's code, with a constructor taking a name, a health property, a
 // method (greet), an overridable method (hit), an abstract one (describe) and a template method
 // (turn) calling both. A Knight graph extends it: its Start sets health and greets on Self, Event
 // hit says so and calls Parent: hit, and describe is a function. A Game graph constructs a Knight
@@ -18,7 +18,7 @@ import { GraphDocument, NodeDefinition } from '../../src/core/model';
 import { CodeClassInfo, OVERRIDE_EVENT, PARENT_CALL, classDefinitions, declaredClass } from '../../src/core/objects';
 import { NodeRegistry } from '../../src/core/registry';
 import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
-import { PYTHON } from './corpus';
+import { PYTHON, corpusToolsFolder } from './corpus';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 const languages = builtinLanguagePacks();
@@ -231,6 +231,107 @@ const MODULES: Record<string, { path: string; text: string; module?: string }> =
       '}  // namespace game',
       ''
     ].join('\n')
+  },
+  // describe is protected.
+  php: {
+    path: 'lib/Actor.php',
+    text: [
+      '<?php',
+      '',
+      'declare(strict_types=1);',
+      '',
+      'namespace Game;',
+      '',
+      '/** @blueprint */',
+      'abstract class Actor',
+      '{',
+      '    /** @blueprint */',
+      '    public int $health = 100;',
+      '',
+      '    private string $name;',
+      '',
+      '    /** @blueprint */',
+      '    public function __construct(string $name)',
+      '    {',
+      '        $this->name = $name;',
+      '    }',
+      '',
+      '    /** @blueprint */',
+      '    public function greet(): string',
+      '    {',
+      '        return "{$this->name} has {$this->health}";',
+      '    }',
+      '',
+      '    /** @blueprint overridable */',
+      '    public function hit(int $damage): void',
+      '    {',
+      '        $this->health -= $damage;',
+      '        echo "{$this->name} takes {$damage}\\n";',
+      '    }',
+      '',
+      '    abstract protected function describe(): string;',
+      '',
+      '    /** @blueprint */',
+      '    public function turn(): void',
+      '    {',
+      '        echo "{$this->name} is {$this->describe()}\\n";',
+      '        $this->hit(3);',
+      '        echo $this->greet(), "\\n";',
+      '    }',
+      '}',
+      ''
+    ].join('\n')
+  },
+  // Ruby has no abstract methods: describe has a body the Knight replaces. (Its module isn't Game,
+  // the graph's top-level class.)
+  ruby: {
+    path: 'lib/guild/actor.rb',
+    text: [
+      '# frozen_string_literal: true',
+      '',
+      'module Guild',
+      '  # @blueprint',
+      '  class Actor',
+      '    # @blueprint',
+      '    # @return [Integer]',
+      '    attr_accessor :health',
+      '',
+      '    # @blueprint',
+      '    # @param name [String]',
+      '    def initialize(name)',
+      '      @name = name',
+      '      @health = 100',
+      '    end',
+      '',
+      '    # @blueprint',
+      '    # @return [String]',
+      '    def greet',
+      '      "#{@name} has #{@health}"',
+      '    end',
+      '',
+      '    # @blueprint overridable',
+      '    # @param damage [Integer]',
+      '    def hit(damage)',
+      '      @health -= damage',
+      '      puts "#{@name} takes #{damage}"',
+      '    end',
+      '',
+      '    # @blueprint overridable',
+      '    # @return [String]',
+      '    def describe',
+      "      'someone'",
+      '    end',
+      '',
+      '    # @blueprint',
+      '    def turn',
+      '      puts "#{@name} is #{describe}"',
+      '      hit(3)',
+      '      puts greet',
+      '    end',
+      '  end',
+      'end',
+      ''
+    ].join('\n')
   }
 };
 
@@ -308,7 +409,7 @@ function registryFor(language: string, code: Code): NodeRegistry {
   r.registerMany(code.definitions);
   const generator = languages.get(language)!.generator!;
   const file = generator.outputFileName('Knight.vgraph');
-  const module = language === 'python' ? file.replace(/\.py$/, '') : language === 'csharp' || language === 'java' ? 'Arena' : undefined;
+  const module = language === 'python' ? file.replace(/\.py$/, '') : ['csharp', 'java', 'php'].includes(language) ? 'Arena' : undefined;
   r.registerMany(classDefinitions(declaredClass(knight(language, code), { document: 'graphs/Knight.vgraph', generatedPath: `graphs/${file}`, ...(module ? { module } : {}) })!));
   return r;
 }
@@ -358,7 +459,9 @@ const TARGETS = [
   { label: 'Python', key: 'python', language: 'python' },
   { label: 'C#', key: 'csharp', language: 'csharp' },
   { label: 'Java', key: 'java', language: 'java' },
-  { label: 'C++', key: 'cpp', language: 'cpp' }
+  { label: 'C++', key: 'cpp', language: 'cpp' },
+  { label: 'PHP', key: 'php', language: 'php' },
+  { label: 'Ruby', key: 'ruby', language: 'ruby' }
 ];
 
 // The sources a compiled language's Run builds besides the program's own file: the code's, and the
@@ -408,13 +511,30 @@ describe('code classes as parents', () => {
     assert.match(cpp.Knight, /^std::string Knight::describe\(\) const \{\n {4}return const_cast<Knight\*>\(this\)->describeGraph\(\);\n\}$/m);
     assert.match(cpp.Knight, /^ {4}\(\*this\)\.health = 50;$/m);
     assert.match(cpp.Game, /std::make_shared<::Knight>\(std::string\("Bors"\)\)/);
+    const php = build('php-text', 'php', 'php').texts;
+    assert.match(php.Knight, /^require_once __DIR__ \. '\/\.\.\/lib\/Actor\.php';$/m);
+    assert.match(php.Knight, /^class Knight extends \\Game\\Actor$/m);
+    assert.match(php.Knight, /^ {4}public function __construct\(string \$name\)\n {4}\{\n {8}parent::__construct\(\$name\);$/m);
+    assert.match(php.Knight, /^ {4}public function hit\(int \$damage\): void$/m);
+    assert.match(php.Knight, /^ {8}parent::hit\(\$damage\);$/m);
+    assert.match(php.Knight, /^ {4}protected function describe\(\): string$/m);
+    assert.match(php.Knight, /^ {8}\$this->health = 50;$/m);
+    assert.match(php.Game, / = new \\Arena\\Knight\('Bors'\);$/m);
+    const ruby = build('ruby-text', 'ruby', 'ruby').texts;
+    assert.match(ruby.Knight, /^class Knight < Guild::Actor$/m);
+    assert.match(ruby.Knight, /^ {2}def initialize\(name\)\n {4}super\(name\)$/m);
+    assert.match(ruby.Knight, /^ {2}def hit\(damage\)$/m);
+    assert.match(ruby.Knight, /^ {4}Guild::Actor\.instance_method\(:hit\)\.bind_call\(self, damage\)$/m);
+    assert.match(ruby.Knight, /^ {2}def describe$/m);
+    assert.match(ruby.Knight, /^ {4}self\.health = 50$/m);
+    assert.match(ruby.Game, /Knight\.new\("Bors"\)/);
   });
 
   // Squire extends Knight: a variable of its own, and hit overridden again, its Parent call
   // reaching Knight's version through the code's name.
   test('a graph class extending the graph class: the constructor passes the name on, Parent: hit is the nearest', () => {
     const texts: Record<string, string> = {};
-    for (const language of ['typescript', 'python', 'csharp', 'java', 'cpp']) {
+    for (const language of ['typescript', 'python', 'csharp', 'java', 'cpp', 'php', 'ruby']) {
       const code = scan(language, language);
       const hit = method(code, 'hit');
       const r = registryFor(language, code);
@@ -442,13 +562,18 @@ describe('code classes as parents', () => {
     assert.match(texts['cpp.h'], /^class Squire : public ::Knight \{$/m);
     assert.match(texts['cpp.h'], /^ {4}using ::Knight::Knight;$/m);
     assert.match(texts.cpp, /^ {4}::Knight::hit\(damage\);$/m);
+    assert.match(texts.php, /^ {4}public function __construct\(string \$name\)\n {4}\{\n {8}parent::__construct\(\$name\);$/m);
+    assert.match(texts.php, /^ {8}parent::hit\(\$damage\);$/m);
+    assert.match(texts.ruby, /^ {2}def initialize\(name\)\n {4}super\(name\)$/m);
+    assert.match(texts.ruby, /^ {4}Knight\.instance_method\(:hit\)\.bind_call\(self, damage\)$/m);
   });
 
-  test('a class leaving an abstract method is abstract (TypeScript, C#, Java)', () => {
+  test('a class leaving an abstract method is abstract (TypeScript, C#, Java, PHP)', () => {
     for (const [language, key, pattern] of [
       ['typescript', 'typescript', /^export abstract class Knight extends Actor \{$/m],
       ['csharp', 'csharp', /^public abstract class Knight : global::Game\.Actor$/m],
-      ['java', 'java', /^public abstract class Knight extends game\.Actor \{$/m]
+      ['java', 'java', /^public abstract class Knight extends game\.Actor \{$/m],
+      ['php', 'php', /^abstract class Knight extends \\Game\\Actor$/m]
     ] as const) {
       const code = scan(language, key);
       const doc = knight(language, code);
@@ -516,6 +641,25 @@ describe('code classes as parents', () => {
       const result = spawnSync('g++', ['-std=c++20', '-Wall', '-Wextra', '-Wpedantic', '-Wshadow', '-Wconversion', '-Werror', '-fsyntax-only', file], { cwd: path.dirname(file), encoding: 'utf8' });
       assert.equal(result.status, 0, `${path.basename(file)}:\n${result.stdout}${result.stderr}`);
     }
+  });
+
+  // The corpus's PHP projects' PHPStan level, over the code, the generated files and the runtime.
+  test('PHP: the subclass passes PHPStan at level 9', (t) => {
+    const phpstan = path.join(corpusToolsFolder(), 'phar', 'phpstan.phar');
+    if (!fs.existsSync(phpstan)) return t.skip("PHPStan isn't installed (npm run corpus:tools)");
+    const built = build('phpstan', 'php', 'php');
+    const result = spawnSync('php', [phpstan, 'analyse', '--level', '9', '--no-progress', '--memory-limit=2G', 'lib', 'graphs'], { cwd: built.dir, encoding: 'utf8', env: { ...process.env, XDEBUG_MODE: 'off' } });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+
+  // The corpus's Ruby runs (-w): warnings fail it.
+  test('Ruby: the program runs under -w without a warning', (t) => {
+    if (spawnSync('ruby', ['--version'], { encoding: 'utf8' }).error) return t.skip("Ruby isn't installed");
+    const built = build('ruby-w', 'ruby', 'ruby');
+    const result = spawnSync('ruby', ['-w', '-e', `require './graphs/${path.basename(built.file)}'; ${built.className}.new.start`], { cwd: built.dir, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(result.stdout.replace(/\r\n/g, '\n').split('\n').filter(Boolean), EXPECTED);
   });
 
   for (const checker of [{ name: 'mypy --strict', args: ['mypy', '--strict'] }, { name: 'Pyright (strict)', args: ['pyright'] }]) {

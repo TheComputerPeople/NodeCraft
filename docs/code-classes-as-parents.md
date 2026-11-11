@@ -227,6 +227,27 @@ The three choices this design needs. The user confirmed all three as recommended
   - **Rules:** the scanners' spelling of the Java and C++ Actors' methods and constructor, a Java class leaving describe abstract, and Compile's "not yet" error, now shown for PHP.
   - **Not yet:** a C++ method with out parameters (`int&`) has no spelling, so its override wouldn't match. In both languages, a type from the code's namespace or package is written as the code writes it, which only resolves where the code's name does.
 6. Generated code in Lua, GDScript, Ruby and PHP.
+
+### Built (step 6, part 1: PHP and Ruby)
+
+- **What the generated class does** in PHP and Ruby:
+
+  | | PHP | Ruby |
+  |---|---|---|
+  | Extends | `class Knight extends \Game\Actor`, its file required as its member nodes' are | `class Knight < Guild::Actor`, its file required |
+  | Overrides | `public function hit(int $damage): void` | `def hit(damage)` |
+  | Parent: <Method> | `parent::hit($damage)` | `Guild::Actor.instance_method(:hit).bind_call(self, damage)`, as for a graph parent's function |
+  | Constructor | `__construct(string $name)` calling `parent::__construct($name)`, then setting the class's properties | `initialize(name)` calling `super(name)` |
+  | Abstract methods left | `abstract class` | Ruby has none |
+
+  - **Names.** An override keeps the code's parameter names (both languages' named arguments use them), and a protected method stays protected in PHP. Internal properties and instance variables carry the class's name under any parent, as under a graph parent: a Ruby subclass shares its parent's instance variables.
+  - **PHP constructors.** A code parent that declares no constructor has none to call, so the generated one calls `parent::__construct` only when the code declares one. A class's `init` is now an empty list for a constructor taking nothing, and absent for none.
+  - **Self** is `$this` and `self` as a code member's Target.
+- **Tested:**
+  - **Both run it.** The Actor program prints the same five lines in PHP and Ruby. The PHP Actor's describe is abstract and protected. The Ruby Actor's describe has a body (Ruby has no abstract methods), and it lives in module `Guild`, since the graph's Game is a top-level class.
+  - **The strictest settings** of the corpus's PHP and Ruby projects: PHPStan at level 9 over the code, the generated files and the runtime, and a run under `ruby -w` that writes nothing to stderr. (Generated Ruby is RuboCop's to skip, as `# rubocop:disable all` says.)
+  - **Subclasses.** Squire passes the name on and its Parent: hit reaches Knight's.
+  - **Rules:** a PHP class leaving describe abstract, and Compile's "not yet" error, now shown for Lua.
 7. Rust and Go reported; Simulate's message.
 8. Debugging across the boundary.
 9. The exit check, docs, the parity checklist and status.

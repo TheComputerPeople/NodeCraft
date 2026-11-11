@@ -407,7 +407,8 @@ export interface CodeClassInfo {
   module?: string;
   // Can't be constructed until a subclass gives its abstract methods bodies.
   abstract?: boolean;
-  // Its constructor's parameters: Construct <GraphClass>'s inputs, passed on to it.
+  // Its constructor's parameters: Construct <GraphClass>'s inputs, passed on to it. Absent when the
+  // class declares no constructor.
   init?: PinDefinition[];
   // Their types as the code writes them (C++, Java: CodeSpelling).
   initSpelling?: string[];
