@@ -111,6 +111,13 @@ button.flow-call:hover { border-color: var(--calls); }
 #map-menu li[role="menuitem"] { padding: 3px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
 #map-menu li[role="menuitem"]:hover, #map-menu li[role="menuitem"].active { background: var(--vscode-menu-selectionBackground, color-mix(in srgb, var(--accent) 45%, transparent)); color: var(--vscode-menu-selectionForeground, var(--fg)); }
 #map-menu li[role="separator"] { height: 1px; margin: 4px 2px; background: var(--border); }
+
+/* A type's or function's hover card: its signature, doc comment, and where it is. */
+#map-hover { position: fixed; z-index: 25; max-width: min(520px, calc(100vw - 8px)); padding: 6px 8px; background: var(--vscode-editorHoverWidget-background, var(--panel)); color: var(--vscode-editorHoverWidget-foreground, var(--fg)); border: 1px solid var(--vscode-editorHoverWidget-border, var(--border)); border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); pointer-events: none; }
+#map-hover[hidden] { display: none; }
+.map-hover-signature { display: block; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.map-hover-doc { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.map-hover-about { margin-top: 6px; color: var(--muted); font-size: 11px; }
 #map-canvas.picking .map-box { cursor: crosshair; }
 
 /* The minimap: the whole map small, and where the view is on it. */

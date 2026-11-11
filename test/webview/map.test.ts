@@ -399,6 +399,49 @@ describe('the Codebase Map webview', () => {
     ]);
   });
 
+  test("a function's hover card: its signature and doc comment, asked for once; its menu exposes it as a node", async (t) => {
+    const e = await open(t);
+    if (!e) return;
+    const fnScene: LaidScene = { ...SCENE, boxes: [...SCENE.boxes, { id: 's:b.ts#g', parent: 'p:', label: 'g', kind: 'function', detail: 'function', count: 0, expandable: false, expanded: false, x: 200, y: 150, width: 120, height: 48, path: 'b.ts', line: 3 }] };
+    await e.send({ type: 'scene', scene: fnScene } as never);
+    assert.equal(await e.page.getAttribute('.map-box[data-id="s:b.ts#g"]', 'title'), null, 'the card, not a tooltip');
+    assert.match((await e.page.getAttribute('.map-box[data-id="f:b.ts"]', 'title'))!, /^b\.ts\nfile\nb\.ts$/, 'a file keeps its tooltip');
+    await e.page.hover('.map-box[data-id="s:b.ts#g"] .map-name');
+    await e.page.waitForTimeout(600);
+    assert.deepEqual(await posted(e), [JSON.stringify({ type: 'hover', id: 's:b.ts#g' })]);
+    assert.equal(await e.page.isVisible('#map-hover'), false, 'nothing until the answer');
+    await e.send({ type: 'hover', id: 's:b.ts#g', summary: { signature: 'function g(n: number): string', doc: 'Names a number.' } } as never);
+    assert.equal(await e.page.isVisible('#map-hover'), true);
+    assert.equal(await e.page.textContent('.map-hover-signature'), 'function g(n: number): string');
+    assert.equal(await e.page.textContent('.map-hover-doc'), 'Names a number.');
+    assert.equal(await e.page.textContent('.map-hover-about'), 'function · b.ts:3');
+    assert.equal(await e.page.getAttribute('.map-box[data-id="s:b.ts#g"]', 'aria-describedby'), 'map-hover');
+    // Leaving hides it; coming back shows it again without asking.
+    await e.page.mouse.move(5, 300);
+    assert.equal(await e.page.isVisible('#map-hover'), false);
+    await e.page.hover('.map-box[data-id="s:b.ts#g"] .map-name');
+    await e.page.waitForSelector('#map-hover', { state: 'visible' });
+    assert.equal((await posted(e)).length, 1, 'asked once');
+    // Its menu (which hides the card): Expose as Node, last.
+    await e.page.click('.map-box[data-id="s:b.ts#g"] .map-name', { button: 'right' });
+    assert.equal(await e.page.isVisible('#map-hover'), false);
+    const items = await e.page.$$eval('#map-menu li[role="menuitem"]', (els) => els.map((el) => el.textContent));
+    assert.equal(items[items.length - 1], 'Expose as Node');
+    await e.page.click('#map-menu li:text("Expose as Node")');
+    assert.equal((await posted(e))[1], JSON.stringify({ type: 'expose', id: 's:b.ts#g' }));
+    // A file has no card and can't be exposed.
+    await e.page.click('.map-box[data-id="f:b.ts"] .map-name', { button: 'right' });
+    assert.ok(!(await e.page.$$eval('#map-menu li[role="menuitem"]', (els) => els.map((el) => el.textContent))).includes('Expose as Node'));
+    await e.page.keyboard.press('Escape');
+    // Reached with the keys (from b.ts, which the right-click selected), the card shows at once (its
+    // answer known); a new scene forgets it.
+    await e.page.focus('#map-canvas');
+    await e.page.keyboard.press('ArrowRight');
+    await e.page.waitForSelector('#map-hover', { state: 'visible' });
+    await e.send({ type: 'scene', scene: fnScene } as never);
+    assert.equal(await e.page.isVisible('#map-hover'), false);
+  });
+
   test("the call flow's levels, Both, and a path's bar", async (t) => {
     const e = await open(t);
     if (!e) return;

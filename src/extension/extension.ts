@@ -29,12 +29,14 @@ import { SetupView } from './setup-view';
 import { ExposeAnswers, exposeFunctions } from './expose-command';
 import { CodeMapService } from './code-map-service';
 import { CodeMapPanels } from './map-panel';
+import { MapBridges, exposeEntity, openEntity } from './map-bridges';
+import { OPEN_ENTITY, STRUCTURE_VIEW, StructureNode, StructureTree, isStructureNode } from './structure-view';
 import { entityAt } from '../core/codemap/code-index';
 
 // What activation returns: the public API (src/core/api.ts), and, for this extension's own
 // integration tests only, a few internals.
 export interface ExtensionApi extends BlueprintVisualScriptingApi {
-  testing: { marks: DebugMarks; provider: GraphEditorProvider; outputPlans: OutputPlans; registry: NodeRegistry; codeMap: CodeMapService; codeMapPanels: CodeMapPanels };
+  testing: { marks: DebugMarks; provider: GraphEditorProvider; outputPlans: OutputPlans; registry: NodeRegistry; codeMap: CodeMapService; codeMapPanels: CodeMapPanels; structureTree: StructureTree };
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
@@ -62,11 +64,28 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   context.subscriptions.push(projectFunctions);
   // The Codebase Map's index of each folder (docs/codebase-map.md), built when the map is first used.
   const codeMap = new CodeMapService(context);
-  const codeMapPanels = new CodeMapPanels(context, codeMap);
-  context.subscriptions.push(codeMap, codeMapPanels);
-  // Show Codebase Map: the folder's map (of the folder chosen in the Explorer, or the active file's).
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showCodebaseMap', async (uri?: vscode.Uri) => {
-    const folderUri = await commandFolder(uri);
+  // Its bridges into Blueprint: Open Graph (on the graph's tab) and Expose as Node. (The graph
+  // editor is made further down; nothing calls these before then.)
+  const bridges: MapBridges = {
+    openGraph: (uri, graphId, column) => provider.openGraph(uri, graphId, column),
+    expose: (uri, only, given) => exposeFunctions(projectFunctions, uri, given, only)
+  };
+  const codeMapPanels = new CodeMapPanels(context, codeMap, bridges);
+  // The same index as a tree in the Explorer (its accessible form).
+  const structureTree = new StructureTree(codeMap);
+  context.subscriptions.push(codeMap, codeMapPanels, structureTree, vscode.window.createTreeView(STRUCTURE_VIEW, { treeDataProvider: structureTree, showCollapseAll: true }));
+  context.subscriptions.push(vscode.commands.registerCommand(OPEN_ENTITY, async (node: StructureNode) => {
+    const entity = await structureTree.entityOf(node);
+    if (entity) await openEntity(node.folder, entity, bridges, vscode.ViewColumn.Active);
+  }));
+  // Expose as Node, on a function in the tree (the map's box menu has its own).
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.exposeAsNode', async (node?: StructureNode, given?: ExposeAnswers) => {
+    const entity = isStructureNode(node) ? await structureTree.entityOf(node) : undefined;
+    return entity ? exposeEntity(node!.folder, entity, bridges, given) : undefined;
+  }));
+  // Show Codebase Map: the folder's map (of the folder chosen in the Explorer or the tree, or the active file's).
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showCodebaseMap', async (uri?: vscode.Uri | StructureNode) => {
+    const folderUri = await commandFolder(isStructureNode(uri) ? uri.folder.uri : uri);
     const folder = folderUri && vscode.workspace.getWorkspaceFolder(folderUri);
     if (!folder) {
       void vscode.window.showInformationMessage('Open a folder to see its Codebase Map.');
@@ -75,8 +94,12 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     return codeMapPanels.show(folder);
   }));
   // What a command acts on in the map: the declaration at the cursor in a code editor, else the file,
-  // graph or folder (from the Explorer, or the editor's tab).
-  const mapTarget = async (uri: vscode.Uri | undefined, atCursor: boolean): Promise<{ folder: vscode.WorkspaceFolder; id: string } | undefined> => {
+  // graph or folder (from the Explorer, or the editor's tab), or an item of the tree.
+  const mapTarget = async (uri: vscode.Uri | StructureNode | undefined, atCursor: boolean): Promise<{ folder: vscode.WorkspaceFolder; id: string } | undefined> => {
+    if (isStructureNode(uri)) {
+      const entity = await structureTree.entityOf(uri);
+      return entity ? { folder: uri.folder, id: entity.id } : undefined;
+    }
     const editor = vscode.window.activeTextEditor;
     const target = uri instanceof vscode.Uri ? uri : editor?.document.uri ?? activeFile();
     const folder = target && vscode.workspace.getWorkspaceFolder(target);
@@ -102,20 +125,20 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     return { folder, id };
   };
   // Show in Codebase Map: the file, graph, folder or (in a code editor) declaration at the cursor.
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showInCodebaseMap', async (uri?: vscode.Uri) => {
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showInCodebaseMap', async (uri?: vscode.Uri | StructureNode) => {
     const target = await mapTarget(uri, true);
     if (!target) return undefined;
     void codeMapPanels.show(target.folder);
     return codeMapPanels.revealIn(target.folder, target.id);
   }));
   // Show Call Flow and Show Control Flow: of the function at the cursor (a file's: its top level).
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showCallFlow', async (uri?: vscode.Uri) => {
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showCallFlow', async (uri?: vscode.Uri | StructureNode) => {
     const target = await mapTarget(uri, true);
     if (!target) return undefined;
     void codeMapPanels.show(target.folder);
     return codeMapPanels.callsIn(target.folder, target.id);
   }));
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showControlFlow', async (uri?: vscode.Uri) => {
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showControlFlow', async (uri?: vscode.Uri | StructureNode) => {
     const target = await mapTarget(uri, true);
     if (!target) return undefined;
     void codeMapPanels.show(target.folder);
@@ -337,7 +360,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       .then((choice) => choice && channel.show());
     return reports;
   }));
-  return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans, registry, codeMap, codeMapPanels } };
+  return { ...createApi(languages, nodeLibraries, output), testing: { marks, provider, outputPlans, registry, codeMap, codeMapPanels, structureTree } };
 }
 
 export function deactivate(): void {}

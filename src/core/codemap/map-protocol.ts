@@ -1,6 +1,7 @@
 // The messages between the Codebase Map's webview (src/map/map.ts) and the extension
 // (src/extension/map-panel.ts).
 import type { FoundEntity, MapFilters } from './find';
+import type { DeclarationSummary } from './hover';
 import type { CallDirection, LaidScene, MapMode } from './scene';
 
 // ready: the page loaded; toggle: open or close a box (or show a box's "N more…", or explore a call
@@ -26,12 +27,19 @@ export type MapMessage =
   // the map (its box opened up to, centred and selected); filters: what to hide.
   | { type: 'find'; query: string }
   | { type: 'reveal'; id: string }
-  | { type: 'filters'; filters: MapFilters };
+  | { type: 'filters'; filters: MapFilters }
+  // hover: a box's signature and doc comment (answered by 'hover'); expose: make a function a
+  // Blueprint node (Expose as Node, as the Explorer's command does).
+  | { type: 'hover'; id: string }
+  | { type: 'expose'; id: string };
 
 // scene: the laid-out map to draw (with `focus`, the box to centre and select, and whether Back and
-// Forward go anywhere); status: a line for the toolbar (while reading the code); found: what Find found.
+// Forward go anywhere); status: a line for the toolbar (while reading the code); found: what Find found;
+// hover: the box `id`'s signature and doc comment (none when its code has neither).
 export interface MapHostMessage {
-  type: 'scene' | 'status' | 'found';
+  type: 'scene' | 'status' | 'found' | 'hover';
+  id?: string;
+  summary?: DeclarationSummary;
   scene?: LaidScene;
   focus?: string;
   history?: { back: boolean; forward: boolean };

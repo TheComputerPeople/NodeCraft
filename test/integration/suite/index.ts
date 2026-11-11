@@ -251,6 +251,79 @@ test('Show in Codebase Map reveals a file, or the function at the cursor; the fl
   }
 });
 
+// docs/codebase-map.md, Part 3: the bridges into Blueprint (Expose as Node makes a node; a graph's box
+// opens the graph), a box's hover, and the same index as a tree in the Explorer.
+test("the Codebase Map's bridges: hover, Expose as Node and Open Graph; its tree opens, shows and exposes", async () => {
+  const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
+  const folder = vscode.workspace.workspaceFolders![0];
+  const source = workspaceFile('node-authoring/lib/map_bridge.ts');
+  const id = 's:node-authoring/lib/map_bridge.ts#doubleIt';
+  const halve = 's:node-authoring/lib/map_bridge.ts#halveIt';
+  fs.writeFileSync(source.fsPath, '/** Doubles a number. */\nexport function doubleIt(n: number): number {\n  return n * 2;\n}\n\n// Halves a number.\nexport function halveIt(n: number): number {\n  return n / 2;\n}\n');
+  try {
+    let index = await api.codeMap.codeIndex(folder);
+    const deadline = Date.now() + 15000;
+    while (!index.entities.some((e) => e.id === halve) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      index = await api.codeMap.codeIndex(folder);
+    }
+    await vscode.commands.executeCommand('blueprintVisualScripting.showCodebaseMap', folder.uri);
+    // A function's hover: its signature and doc comment, from its code.
+    assert.deepEqual(await api.codeMapPanels.hoverIn(folder, id), { signature: 'export function doubleIt(n: number): number', doc: 'Doubles a number.' });
+    assert.equal(await api.codeMapPanels.hoverIn(folder, 'f:node-authoring/lib/map_bridge.ts'), undefined, 'a file has none');
+
+    // The tree: the folder's code, down to the function, in the Explorer.
+    await vscode.commands.executeCommand('blueprintVisualScripting.codebaseStructure.focus');
+    const tree = api.structureTree;
+    const node = { folder, id: halve };
+    const chain: { folder: vscode.WorkspaceFolder; id?: string }[] = [node];
+    for (let up = await tree.getParent(node); up; up = await tree.getParent(up)) chain.unshift(up);
+    for (let i = 0; i < chain.length; i++) {
+      const siblings = await tree.getChildren(i ? chain[i - 1] : undefined);
+      assert.ok(siblings.some((n) => n.id === chain[i].id), `${chain[i].id} is under ${chain[i - 1]?.id ?? 'the top'}`);
+    }
+    assert.ok(chain.some((n) => n.id === 'f:node-authoring/lib/map_bridge.ts'), 'in its file');
+    const item = await tree.getTreeItem(node);
+    assert.equal(item.label, 'halveIt');
+    assert.equal(item.contextValue, 'codemap-function-exposable');
+    assert.equal(item.command?.command, 'blueprintVisualScripting.openMapEntity');
+    const resolved = await tree.resolveTreeItem(item, node);
+    const tooltip = (resolved.tooltip as vscode.MarkdownString).value;
+    assert.match(tooltip, /export function halveIt\(n: number\): number/);
+    assert.match(tooltip, /Halves a number\./);
+    // Its items open their code and show on the map.
+    await vscode.commands.executeCommand(item.command!.command, ...item.command!.arguments!);
+    assert.equal(vscode.window.activeTextEditor?.document.uri.fsPath, source.fsPath);
+    assert.equal(vscode.window.activeTextEditor?.selection.active.line, 6);
+    const shown = await vscode.commands.executeCommand<{ focus?: string }>('blueprintVisualScripting.showInCodebaseMap', node);
+    assert.equal(shown?.focus, halve);
+
+    // Open Graph: a graph's box opens its file in the graph editor.
+    await api.codeMapPanels.openIn(folder, 'g:arena/Game.vgraph#EventGraph');
+    await waitFor(() => {
+      const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+      return input instanceof vscode.TabInputCustom && input.viewType === 'blueprintVisualScripting.graphEditor' && input.uri.path.endsWith('/arena/Game.vgraph');
+    }, 'the game in the graph editor', 15000);
+
+    // Expose as Node, from its box: only it is marked, and it becomes a node.
+    const changed = await api.codeMapPanels.exposeIn(folder, id, {});
+    assert.deepEqual(changed?.map((f) => path.basename(f)), ['map_bridge.ts']);
+    const marked = await readText(source);
+    assert.match(marked, /Doubles a number\.\r?\n \* @blueprint\r?\n \*\/\r?\nexport function doubleIt/);
+    assert.ok(!marked.split('export function doubleIt')[1].includes('@blueprint'), 'only the function chosen');
+    await waitFor(() => !!api.registry.get('fn:typescript:node-authoring/lib/map_bridge.ts#doubleIt'), 'the Double It node', 20000);
+    // And from the tree, as a pure node.
+    const exposed = await vscode.commands.executeCommand<string[]>('blueprintVisualScripting.exposeAsNode', node, { pure: true });
+    assert.deepEqual(exposed?.map((f) => path.basename(f)), ['map_bridge.ts']);
+    assert.match(await readText(source), /\/\/ Halves a number\.[\s\S]*@blueprint pure[^\n]*\r?\nexport function halveIt/);
+    await waitFor(() => !!api.registry.get('fn:typescript:node-authoring/lib/map_bridge.ts#halveIt'), 'the Halve It node', 20000);
+    await api.codeMapPanels.modeIn(folder, 'architecture');
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    fs.rmSync(source.fsPath, { force: true });
+  }
+});
+
 // docs/multi-language.md, gap 1: a repository with a TypeScript web/ and a Python api/.
 test("a new graph takes its folder's language, and the folder's setting wins", async () => {
   const folder = workspaceFile('multi').fsPath;
@@ -935,6 +1008,15 @@ interface ExtensionInternals {
       boxes: { id: string; members?: string[] }[];
       arrows: { kind: string; from: string; to: string }[];
     } | undefined>;
+    hoverIn(folder: vscode.WorkspaceFolder, id: string): Promise<{ signature: string; doc?: string } | undefined>;
+    exposeIn(folder: vscode.WorkspaceFolder, id: string, given: { names?: string[]; pure?: boolean }): Promise<string[] | undefined>;
+    openIn(folder: vscode.WorkspaceFolder, id: string): Promise<void>;
+  };
+  structureTree: {
+    getChildren(node?: { folder: vscode.WorkspaceFolder; id?: string }): Promise<{ folder: vscode.WorkspaceFolder; id?: string }[]>;
+    getParent(node: { folder: vscode.WorkspaceFolder; id?: string }): Promise<{ folder: vscode.WorkspaceFolder; id?: string } | undefined>;
+    getTreeItem(node: { folder: vscode.WorkspaceFolder; id?: string }): Promise<vscode.TreeItem>;
+    resolveTreeItem(item: vscode.TreeItem, node: { folder: vscode.WorkspaceFolder; id?: string }): Promise<vscode.TreeItem>;
   };
 }
 

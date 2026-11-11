@@ -57,6 +57,7 @@ export function renderMapHtml({ cspSource, nonce, scriptUri, styleUri }: Webview
   <ul id="map-found" role="listbox" aria-label="Found" hidden></ul>
   <div id="map-filters" role="dialog" aria-label="Filters" hidden></div>
   <ul id="map-menu" role="menu" aria-label="Box" hidden></ul>
+  <div id="map-hover" role="tooltip" hidden></div>
   <main id="map-canvas" tabindex="0" role="tree" aria-label="Codebase Map. Drag to pan, scroll to zoom, double-click a box to open it. Arrow keys move between boxes and along arrows; Enter opens a box; Shift+F10 shows what a box can do.">
     <div id="map-world">
       <svg id="map-arrows" aria-hidden="true"></svg>

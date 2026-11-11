@@ -2,6 +2,7 @@
 // sends, top to bottom, with pan and zoom; double-clicking a box opens it (its contents, or its code).
 // Zoomed out, boxes show less.
 import type { FoundEntity, MapFilters } from '../core/codemap/find';
+import type { DeclarationSummary } from '../core/codemap/hover';
 import type { MapHostMessage, MapMessage } from '../core/codemap/map-protocol';
 import type { CallDirection, LaidArrow, LaidBox, LaidScene } from '../core/codemap/scene';
 
@@ -34,6 +35,7 @@ function applyView(): void {
   canvas.classList.toggle('far', zoom < 0.45);
   canvas.classList.toggle('very-far', zoom < 0.16);
   drawMinimap();
+  hideHover();
 }
 
 export function fit(): void {
@@ -67,8 +69,9 @@ function renderBox(box: LaidBox): HTMLElement {
   if (box.kind === 'flow') return renderFlowBox(box, el);
   el.setAttribute('role', 'treeitem');
   if (box.expandable) el.setAttribute('aria-expanded', String(box.expanded));
-  const what = box.detail && box.kind !== 'project' ? box.detail : KIND_NAMES[box.kind] ?? box.kind;
-  el.title = [box.label, what, box.path ? `${box.path}${box.line ? `:${box.line}` : ''}` : '', box.entry ? `entry point (${box.entry})` : '', box.expandable ? `${box.count} inside` : '', box.cycle ? 'in an import cycle' : ''].filter(Boolean).join('\n');
+  const what = whatOf(box);
+  // (A type's or function's hover card says this, with its signature and doc comment.)
+  if (!hasHover(box)) el.title = [box.label, ...aboutBox(box)].join('\n');
   const head = document.createElement('div');
   head.className = 'map-head';
   if (box.expandable) {
@@ -152,10 +155,16 @@ function renderBox(box: LaidBox): HTMLElement {
   el.addEventListener('mouseenter', () => {
     hovered = box.id;
     highlight();
+    if (hasHover(box)) scheduleHover(box);
   });
   el.addEventListener('mouseleave', () => {
     if (hovered === box.id) hovered = undefined;
     highlight();
+    if (hoverFor === box.id) hideHover();
+  });
+  // (A button's own tooltip, not the card.)
+  el.addEventListener('mouseover', (e) => {
+    if (hoverFor === box.id && e.target instanceof Element && e.target.closest('button')) hideHover();
   });
   el.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -168,6 +177,77 @@ function renderBox(box: LaidBox): HTMLElement {
     else if (box.path) post({ type: 'open', id: box.id });
   });
   return el;
+}
+
+function whatOf(box: LaidBox): string {
+  return box.detail && box.kind !== 'project' ? box.detail : KIND_NAMES[box.kind] ?? box.kind;
+}
+
+// What a box's tooltip says under its name.
+function aboutBox(box: LaidBox): string[] {
+  return [whatOf(box), box.path ? `${box.path}${box.line ? `:${box.line}` : ''}` : '', box.entry ? `entry point (${box.entry})` : '', box.expandable ? (scene?.mode === 'calls' ? `${box.count} more to explore` : `${box.count} inside`) : '', box.cycle ? 'in an import cycle' : ''].filter(Boolean);
+}
+
+// Hovering a type's or function's box (or reaching it with the keys) shows a card with its
+// signature and doc comment, which the extension reads from its code.
+const hoverCard = element<HTMLElement>('map-hover');
+const HOVER_KINDS = new Set(['type', 'function']);
+// By entity id (null: its code has none); cleared with each scene, as the code may have changed.
+const summaries = new Map<string, DeclarationSummary | null>();
+let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+// The box whose card is shown, or asked for.
+let hoverFor: string | undefined;
+const HOVER_DELAY = 450;
+
+function hasHover(box: LaidBox): boolean {
+  return HOVER_KINDS.has(box.kind) && !!box.path && box.line !== undefined;
+}
+
+function scheduleHover(box: LaidBox): void {
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => requestHover(box), HOVER_DELAY);
+}
+
+function requestHover(box: LaidBox): void {
+  hoverFor = box.id;
+  if (summaries.has(entityOf(box))) showHover(box);
+  else post({ type: 'hover', id: entityOf(box) });
+}
+
+function showHover(box: LaidBox): void {
+  const el = boxesEl.querySelector<HTMLElement>(`.map-box[data-id="${CSS.escape(box.id)}"]`);
+  if (hoverFor !== box.id || !menu.hidden || !el) return;
+  const summary = summaries.get(entityOf(box));
+  hoverCard.textContent = '';
+  const signature = document.createElement('code');
+  signature.className = 'map-hover-signature';
+  signature.textContent = summary?.signature ?? box.label;
+  hoverCard.appendChild(signature);
+  if (summary?.doc) {
+    const doc = document.createElement('div');
+    doc.className = 'map-hover-doc';
+    doc.textContent = summary.doc;
+    hoverCard.appendChild(doc);
+  }
+  const about = document.createElement('div');
+  about.className = 'map-hover-about';
+  about.textContent = aboutBox(box).join(' · ');
+  hoverCard.appendChild(about);
+  hoverCard.hidden = false;
+  const rect = el.getBoundingClientRect();
+  const card = hoverCard.getBoundingClientRect();
+  let top = rect.bottom + 6;
+  if (top + card.height > window.innerHeight - 2) top = Math.max(2, rect.top - card.height - 6);
+  hoverCard.style.left = `${Math.max(2, Math.min(rect.left, window.innerWidth - card.width - 2))}px`;
+  hoverCard.style.top = `${top}px`;
+  el.setAttribute('aria-describedby', 'map-hover');
+}
+
+function hideHover(): void {
+  clearTimeout(hoverTimer);
+  if (hoverFor) boxesEl.querySelector(`.map-box[data-id="${CSS.escape(hoverFor)}"]`)?.removeAttribute('aria-describedby');
+  hoverFor = undefined;
+  hoverCard.hidden = true;
 }
 
 // A routed arrow follows its points; a two-point arrow is a curve, down, or around the left side when
@@ -501,12 +581,18 @@ function menuItems(box: LaidBox): ({ label: string; run: () => void } | 'separat
     if (pathFrom && pathFrom.id !== id) items.push({ label: `Path from ${pathFrom.label} to here`, run: () => finishPath(id) });
     items.push({ label: 'Path from here to…', run: () => startPath(id, box.label) });
   }
+  // The bridge into Blueprint: the function made a node.
+  if (box.kind === 'function' && box.path) {
+    items.push('separator');
+    items.push({ label: 'Expose as Node', run: () => post({ type: 'expose', id }) });
+  }
   return items;
 }
 
 function showMenu(box: LaidBox, x: number, y: number): void {
   const items = menuItems(box);
   if (!items.length) return;
+  hideHover();
   menu.textContent = '';
   for (const item of items) {
     const li = document.createElement('li');
@@ -758,6 +844,9 @@ function goTo(box: LaidBox | undefined, along: typeof followed): void {
   followed = along;
   select(box.id);
   scrollIntoView(box);
+  // (Its card, at once: the keys' hover.)
+  hideHover();
+  if (hasHover(box)) requestHover(box);
   const ways = along && along.to.length > 1 ? ` (${along.to.indexOf(box.id) + 1} of ${along.to.length}: Left and Right for the others)` : '';
   announcer.textContent = `${box.label}, ${KIND_NAMES[box.kind] || box.flowKind || box.kind}${box.detail ? `, ${box.detail}` : ''}${ways}`;
 }
@@ -1065,10 +1154,16 @@ window.addEventListener('message', (event: MessageEvent<MapHostMessage>) => {
     filterButton.textContent = on ? `Filter (${on})` : 'Filter';
     filterButton.classList.toggle('on', on > 0);
     if (message.focus) selected = message.focus;
+    summaries.clear();
+    hideHover();
     render();
     if (message.focus) centreOn(message.focus);
   } else if (message.type === 'status' && message.text !== undefined) {
     statusEl.textContent = message.text;
+  } else if (message.type === 'hover' && message.id) {
+    summaries.set(message.id, message.summary ?? null);
+    const box = scene?.boxes.find((b) => b.id === hoverFor);
+    if (box && entityOf(box) === message.id) showHover(box);
   } else if (message.type === 'found' && message.query === findInput.value) {
     found = message.results ?? [];
     foundActive = 0;

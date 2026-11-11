@@ -5,16 +5,18 @@ import * as vscode from 'vscode';
 import type { MapHostMessage, MapMessage } from '../core/codemap/map-protocol';
 import { buildCallScene } from '../core/codemap/call-scene';
 import { CodeIndex, Entity } from '../core/codemap/code-index';
+import { DeclarationSummary } from '../core/codemap/hover';
 import { buildFlowScene, callsOf } from '../core/codemap/flow-scene';
 import { findEntities, hiddenBy } from '../core/codemap/find';
 import { CallDirection, LaidScene, MapMode, MapView, Scene, buildScene, defaultView } from '../core/codemap/scene';
 import { CodeMapService } from './code-map-service';
+import { ExposeAnswers } from './expose-command';
+import { MapBridges, exposeEntity, openEntity, summaryOf } from './map-bridges';
 import { renderMapHtml } from './map-html';
 import { MapLayout } from './map-layout';
 import { createNonce } from './webview-html';
 
 const VIEW_TYPE = 'blueprintVisualScripting.codebaseMap';
-const GRAPH_EDITOR = 'blueprintVisualScripting.graphEditor';
 // Back goes this many places back.
 const MAX_HISTORY = 50;
 
@@ -54,7 +56,7 @@ export class CodeMapPanels implements vscode.Disposable {
   private readonly layout = new MapLayout();
   private readonly disposables: vscode.Disposable[] = [];
 
-  constructor(private readonly context: vscode.ExtensionContext, private readonly codeMap: CodeMapService) {
+  constructor(private readonly context: vscode.ExtensionContext, private readonly codeMap: CodeMapService, private readonly bridges: MapBridges) {
     codeMap.onDidChange((folder) => {
       const map = this.maps.get(folder.uri.toString());
       if (map) void this.render(map);
@@ -122,6 +124,11 @@ export class CodeMapPanels implements vscode.Disposable {
         await this.reveal(map, message.id);
       } else if (message.type === 'filters') {
         await this.update(map, { ...map.view, filters: message.filters });
+      } else if (message.type === 'hover') {
+        const reply: MapHostMessage = { type: 'hover', id: message.id, summary: await this.summary(map, message.id) };
+        void panel.webview.postMessage(reply);
+      } else if (message.type === 'expose') {
+        await this.expose(map, message.id);
       }
     }, undefined, this.disposables);
     return firstScene;
@@ -191,6 +198,37 @@ export class CodeMapPanels implements vscode.Disposable {
       return;
     }
     await this.navigate(map, { ...map.view, mode: 'flow', flow: { id: target } });
+  }
+
+  // A box's signature and doc comment (a call flow's file group's box is its file's).
+  private async summary(map: OpenMap, id: string): Promise<DeclarationSummary | undefined> {
+    const index = await this.codeMap.codeIndex(map.folder);
+    const entity = index.entities.find((e) => e.id === id);
+    return entity ? summaryOf(map.folder, entity) : undefined;
+  }
+
+  // Expose as Node, from a function's box.
+  private async expose(map: OpenMap, id: string, given?: ExposeAnswers): Promise<string[] | undefined> {
+    const index = await this.codeMap.codeIndex(map.folder);
+    const entity = index.entities.find((e) => e.id === id);
+    return entity ? exposeEntity(map.folder, entity, this.bridges, given) : undefined;
+  }
+
+  // (For tests: as the box menu's Expose as Node, with the answers given; and a box's hover.)
+  async exposeIn(folder: vscode.WorkspaceFolder, id: string, given: ExposeAnswers): Promise<string[] | undefined> {
+    const map = this.maps.get(folder.uri.toString());
+    return map ? this.expose(map, id, given) : undefined;
+  }
+
+  async hoverIn(folder: vscode.WorkspaceFolder, id: string): Promise<DeclarationSummary | undefined> {
+    const map = this.maps.get(folder.uri.toString());
+    return map ? this.summary(map, id) : undefined;
+  }
+
+  // (For tests: as the box menu's Open the code or Open the graph.)
+  async openIn(folder: vscode.WorkspaceFolder, id: string): Promise<void> {
+    const map = this.maps.get(folder.uri.toString());
+    if (map) await this.open(map, id);
   }
 
   async flowIn(folder: vscode.WorkspaceFolder, id: string): Promise<LaidScene | undefined> {
@@ -349,22 +387,11 @@ export class CodeMapPanels implements vscode.Disposable {
     }
   }
 
-  // A box's code in an editor, at its line; a graph in the graph editor.
+  // A box's code in an editor, at its line; a graph in the graph editor, on its tab.
   private async open(map: OpenMap, id: string): Promise<void> {
     const index = await this.codeMap.codeIndex(map.folder);
-    const entity = index.entities.find((e) => e.id === id);
-    if (!entity?.path) return;
-    const uri = vscode.Uri.joinPath(map.folder.uri, ...entity.path.split('/'));
-    if (entity.kind === 'graph-file' || entity.kind === 'graph') {
-      await vscode.commands.executeCommand('vscode.openWith', uri, GRAPH_EDITOR, vscode.ViewColumn.Beside);
-      return;
-    }
-    if (entity.kind === 'project' || entity.kind === 'module') {
-      await vscode.commands.executeCommand('revealInExplorer', uri);
-      return;
-    }
-    const line = Math.max(0, (entity.line ?? 1) - 1);
-    await vscode.window.showTextDocument(uri, { viewColumn: vscode.ViewColumn.Beside, selection: new vscode.Range(line, 0, line, 0), preserveFocus: false });
+    const entity = index.entities.find((e) => e.id === id.replace(/^in:/, ''));
+    if (entity) await openEntity(map.folder, entity, this.bridges);
   }
 
   private viewKey(folder: vscode.WorkspaceFolder): string {

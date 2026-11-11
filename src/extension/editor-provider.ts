@@ -307,13 +307,19 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   // Opens another graph file at a Find in All Blueprints hit.
-  private async reveal(target: RevealTarget): Promise<void> {
+  private async reveal(target: RevealTarget, column?: vscode.ViewColumn): Promise<void> {
     const uri = vscode.Uri.parse(target.uri!);
     const key = uri.toString();
     const open = this.panelsByDocument.get(key);
     if (open?.size) open.forEach((panel) => this.post(panel, { type: 'reveal', target }));
     else this.pendingReveals.set(key, target);
-    await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+    await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE, column);
+  }
+
+  // A graph file in the graph editor, on one of its graphs' tabs (the Codebase Map's Open Graph).
+  async openGraph(uri: vscode.Uri, graphId?: string, column?: vscode.ViewColumn): Promise<void> {
+    if (graphId) await this.reveal({ uri: uri.toString(), kind: 'graph', id: graphId, graphId }, column);
+    else await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE, column);
   }
 
   // Whether each editor's graph tabs can go Back or Forward: Alt+Left and Alt+Right go through its

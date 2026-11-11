@@ -154,6 +154,16 @@
         "category": "Blueprint Visual Scripting"
       },
       {
+        "command": "blueprintVisualScripting.exposeAsNode",
+        "title": "Expose as Node",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
+        "command": "blueprintVisualScripting.openMapEntity",
+        "title": "Open",
+        "category": "Blueprint Visual Scripting"
+      },
+      {
         "command": "blueprintVisualScripting.graphBack",
         "title": "Back to the Previous Graph",
         "category": "Blueprint Visual Scripting"
@@ -211,6 +221,16 @@
         "priority": "default"
       }
     ],
+    "views": {
+      "explorer": [
+        {
+          "id": "blueprintVisualScripting.codebaseStructure",
+          "name": "Codebase Map",
+          "icon": "$(type-hierarchy)",
+          "visibility": "collapsed"
+        }
+      ]
+    },
     "configuration": {
       "title": "Blueprint Visual Scripting",
       "properties": {
@@ -379,6 +399,53 @@
         {
           "command": "blueprintVisualScripting.refreshAllNodes",
           "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
+        },
+        {
+          "command": "blueprintVisualScripting.exposeAsNode",
+          "when": "false"
+        },
+        {
+          "command": "blueprintVisualScripting.openMapEntity",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "blueprintVisualScripting.showCodebaseMap",
+          "when": "view == blueprintVisualScripting.codebaseStructure",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "blueprintVisualScripting.showInCodebaseMap",
+          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem =~ /^codemap-(project|module|file|graph-file|graph|type|function|external)/",
+          "group": "inline"
+        },
+        {
+          "command": "blueprintVisualScripting.showCodebaseMap",
+          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem == codemap-folder",
+          "group": "inline"
+        },
+        {
+          "command": "blueprintVisualScripting.showInCodebaseMap",
+          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem =~ /^codemap-(project|module|file|graph-file|graph|type|function|external)/",
+          "group": "blueprint@1"
+        },
+        {
+          "command": "blueprintVisualScripting.showCallFlow",
+          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem =~ /^codemap-(file|graph-file|graph|type|function)/",
+          "group": "blueprint@2"
+        },
+        {
+          "command": "blueprintVisualScripting.showControlFlow",
+          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem =~ /^codemap-(type|function)/",
+          "group": "blueprint@3"
+        },
+        {
+          "command": "blueprintVisualScripting.exposeAsNode",
+          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem =~ /-exposable$/",
+          "group": "blueprint@4"
         }
       ]
     },

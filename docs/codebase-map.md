@@ -448,6 +448,31 @@ Across all four:
   - **Rules:** focus both ways, its counts and opening a caller further; Levels and their limits; paths found either way round, every shortest path, through a graph file, and none.
   - **The webview:** Back and Forward (buttons and keys), the breadcrumb, the menu (by mouse and keyboard, a package's), picking a path, the call bar's Both, Levels and path, the keyboard's moves and announcements, and the minimap showing and moving the view.
   - **Integration:** inside VS Code, focus, a path from the game's event graph, and Back and Forward through them.
+
+### Built (step 10, part 3): the bridges, hovers, and the tree
+
+- **Expose as Node** is on a function's box menu (last, on its own).
+  - **What it does:** the same as the Explorer's Expose Functions as Nodes (Phase 11), for that one function: it asks only whether to make plain or pure nodes, and the edit opens in the Refactor Preview.
+  - **Which function:** the one at the box's line, else the functions of its name in its file. A C or C++ source's function goes through its header, as from the Explorer.
+  - **Nothing to do:** a function that's a node already, or can't be one, says so (the Output panel's Blueprint channel says why).
+- **Open Graph:** a graph's box opens its file in the graph editor on that graph's tab, not just the file. A graph file's box opens the file.
+- **Hovering** a type's or function's box shows a card with its signature and doc comment, and where it is.
+  - **Read when asked:** the index keeps neither, so the extension reads them from the file (an editor's text, saved or not) when the card is wanted.
+  - **The signature:** the declaration's head up to its body, its parameters joined over lines, decorators and attributes left out.
+  - **The doc comment:** the comment right above it in its language's style (`/** */`, `///`, `//`, `#`, `##`, `--`), or Python's docstring. C#'s XML documentation is read as text.
+  - **When:** after a moment's pointing; at once when the keys reach the box. The card replaces those boxes' plain tooltips, and is the box's description for screen readers.
+- **The tree:** the same index as a tree in the Explorer, **Codebase Map** (collapsed until opened; nothing is read before then, as for the map).
+  - **What's in it:** projects, folders, files, types and functions, graph files and their graphs, then the external packages imported. With several workspace folders, each is a branch.
+  - **Choosing an item** opens it: its code at its line, or its graph on its tab.
+  - **An item's menu:** Show in Codebase Map (also its inline button), Show Call Flow, Show Control Flow and, on a function, Expose as Node.
+  - **Its tooltip** has the same signature and doc comment as the map's card.
+  - **It follows changes:** when the index is rebuilt, so is the tree, keeping what's open.
+  - *(The design called it "Codebase Map: Structure"; in the Explorer, its name is just Codebase Map.)*
+- **Call flow wording:** a box's tooltip said "13 inside" for the calls it had left to explore. It now says "13 more to explore".
+- **Tested:**
+  - **Rules:** signatures and doc comments in each language's style (TypeScript, Python, C#, Rust, Go, Lua, Ruby, GDScript, C++), over several lines, after decorators, and cut short.
+  - **The webview:** the card asked for once, shown and hidden, by mouse and by keys; Expose as Node on a function's menu and not a file's.
+  - **Integration:** inside VS Code, a function's hover; Expose as Node from its box makes a node (only that function marked); a graph's box opens the graph editor; the tree's path down to a function, its tooltip, opening its code, Show in Codebase Map from it and Expose as Node from it; in the multi-root workspace, a branch per folder.
 11. The exit check, docs, the parity checklist and status.
 
 ## Not in this phase

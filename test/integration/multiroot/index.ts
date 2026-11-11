@@ -11,8 +11,20 @@ import type { NodeRegistry } from '../../../src/core/registry';
 
 const EXTENSION_ID = 'local.blueprint-visual-scripting';
 
+interface StructureNode {
+  folder: vscode.WorkspaceFolder;
+  id?: string;
+}
+
 interface ExtensionApi {
-  testing: { registry: NodeRegistry };
+  testing: {
+    registry: NodeRegistry;
+    structureTree: {
+      getChildren(node?: StructureNode): Promise<StructureNode[]>;
+      getParent(node: StructureNode): Promise<StructureNode | undefined>;
+      getTreeItem(node: StructureNode): Promise<vscode.TreeItem>;
+    };
+  };
 }
 
 const tests: { name: string; run: () => Promise<void> }[] = [];
@@ -60,6 +72,20 @@ for (const [name, language, graph, output, command] of [
     assert.equal(run.stdout.trim(), 'Hello, Ada!');
   });
 }
+
+// docs/codebase-map.md, Part 3: the Codebase Map's tree has a branch for each folder, each with its own code.
+test("the Codebase Map's tree has each folder, with its own code", async () => {
+  const api = (await vscode.extensions.getExtension(EXTENSION_ID)!.activate() as ExtensionApi).testing;
+  const top = await api.structureTree.getChildren();
+  assert.deepEqual(top.map((n) => [n.folder.name, n.id]), [['web', undefined], ['api', undefined]]);
+  for (const node of top) {
+    const item = await api.structureTree.getTreeItem(node);
+    assert.equal(item.label, node.folder.name);
+    const inside = await api.structureTree.getChildren(node);
+    assert.ok(inside.length && inside.every((n) => n.folder === node.folder && n.id), `${node.folder.name} has its code`);
+    assert.deepEqual(await api.structureTree.getParent(inside[0]), { folder: node.folder }, 'under its folder');
+  }
+});
 
 test("Set Up reports each folder's project, in its own language", async () => {
   for (const [name, language] of [['web', 'typescript'], ['api', 'python']] as const) {
