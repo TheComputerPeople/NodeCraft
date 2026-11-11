@@ -5,7 +5,7 @@ import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables } fro
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from './macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, CUSTOM_EVENT, DELEGATE_PIN, Dispatcher, UNBIND_EVENT, customEvents, documentDispatchers, eventName, isDispatcherNode, isEventNode } from './events';
 import { libraryNodeType } from './libraries';
-import { PARENT_CALL, SELF, isObjectNode } from './objects';
+import { CodeOverridable, OVERRIDE_EVENT, PARENT_CALL, SELF, isObjectNode } from './objects';
 import { DocumentKind, Graph, GraphConnection, GraphDocument, GraphKind, GraphNode, GraphPin, GraphVariable, NodeDefinition } from './model';
 import { VARIABLE_GET, VARIABLE_SET } from './resolve';
 import { createEmptyDocument, createGraph } from './serializer';
@@ -765,6 +765,22 @@ export function overrideFunction(doc: GraphDocument, inherited: { name: string; 
     if (inherited.pure) graph.connections = graph.connections.filter((c) => !(c.toNode === parent.id && c.toPin === 'execIn'));
   }
   return graph;
+}
+
+// Overriding a method of the class from the code as an event (docs/code-classes-as-parents.md,
+// part 2): Event <Method> in the event graph, at `position`, wired to Parent: <Method> with its
+// parameters, as a new function override is (none for an abstract method: the code has no version).
+export function overrideEvent(graph: Graph, method: Pick<CodeOverridable, 'name' | 'inputs' | 'abstract'>, position: { x: number; y: number }, connectionId: () => string): GraphNode {
+  const ids = graph.nodes.map((n) => n.id);
+  const event: GraphNode = { id: uniqueName(`override_${method.name}`, ids), type: OVERRIDE_EVENT, position, properties: { method: method.name } };
+  graph.nodes.push(event);
+  if (!method.abstract) {
+    const parent: GraphNode = { id: uniqueName(`parent_${method.name}`, [...ids, event.id]), type: PARENT_CALL, position: { x: position.x + 300, y: position.y }, properties: { function: method.name } };
+    graph.nodes.push(parent);
+    graph.connections.push({ id: connectionId(), fromNode: event.id, fromPin: 'execOut', toNode: parent.id, toPin: 'execIn' });
+    for (const p of method.inputs) graph.connections.push({ id: connectionId(), fromNode: event.id, fromPin: p.id, toNode: parent.id, toPin: p.id });
+  }
+  return event;
 }
 
 // Implementing an interface function: a function with its name and signature (a Return Node when it

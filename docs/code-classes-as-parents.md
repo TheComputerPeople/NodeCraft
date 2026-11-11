@@ -140,6 +140,34 @@ The three choices this design needs. The user confirmed all three as recommended
   - **Rules:** each scanner's abstract, sealed and protected methods and constructors (TypeScript, Python, C#, Java, C++, PHP); an unmarked class not offered; wiring to the code class and its base, directly and through a graph parent; Compile's three errors.
   - **The webview:** Class Settings lists the graph's language's code classes with their files, the class isn't in the palette, and a missing parent says so.
 3. The editor: the parent's members on Self, Override and Parent calls for code methods, events overriding methods, abstract methods left unimplemented, and Construct's parent-constructor pins.
+
+### Built (step 3)
+
+- **Overriding as an event.** A new node, **Event <Method>** (`core:event.override`, `properties.method`), overrides a code method that returns nothing.
+  - **Its outputs** are the method's parameters. It belongs in event graphs, as Unreal's implementable and native events do.
+  - **Offered** in the event graph's palette for each such method not yet overridden, and from My Blueprint's Override.
+  - **What Override places:** the event, below the graph's nodes, wired to **Parent: <Method>** with its parameters. An abstract method gets no Parent call, since the code has no version of it.
+- **Overriding as a function.** Override lists the code parent's methods not yet overridden, after the graph parents' functions, as "hit (Actor)" or "describe (Actor, abstract)". A method returning a value becomes a function with its name and signature. It's wired to Parent: <Method> and a Return Node, or, for an abstract one, just the Return Node.
+- **Parent: <Method>** calls the code's own version from a function or event overriding it, and the palette offers it there. For an abstract method it says the code has none. Parent: Start in a class straight from the code is an error: code classes have no Start.
+- **The parent's members on Self.** A code member node (a method, Get or Set of the code parent or a class it extends), with its Target left unwired, acts on Self. The editor already offers those nodes.
+- **Construct <GraphClass>** gets the code parent constructor's parameters as inputs, also for classes extending that graph class (decision 2). The IR's construct carries them (`args`), for steps 4 to 6.
+- **Compile** checks:
+
+  | Problem | Code |
+  |---|---|
+  | A function overriding a method with other inputs or outputs, or pure | `override-mismatch` |
+  | An event for a method that isn't there or isn't overridable | `override-missing` |
+  | An event for a method that returns a value | `override-returns` |
+  | A method overridden twice (two events, or an event and a function) | `override-duplicate` |
+  | Parent: <Method> of an abstract method | `parent-abstract` |
+  | Abstract methods left: a warning on the class | `abstract-left` |
+  | Construct of a class with abstract methods left: an error where it's constructed | `construct-abstract` |
+
+  A graph class may leave abstract methods for a subclass to override, as an abstract class in the code may.
+- **Tested:**
+  - **Rules:** the event's and Parent call's pins, Construct's arguments through a graph parent, the abstract methods left, the Override event edit, and every Compile check above.
+  - **The webview:** the event graph's palette offers Event hit; Override lists the three methods; hit becomes an event wired to its Parent call; score becomes a function with its Parent call and Return Node.
+  - **Not yet:** Self as an unwired code Target shows in generated code, so step 4 tests it.
 4. Generated code in TypeScript, JavaScript, Python and C#.
 5. Generated code in C++ and Java.
 6. Generated code in Lua, GDScript, Ruby and PHP.

@@ -13,7 +13,7 @@ import { CompileDiagnostic, hasErrors } from './diagnostics';
 import { IrBlock, IrCallee, IrCodeHelper, IrDeclaration, IrDispatcher, IrExpr, IrFunction, IrImport, IrMember, IrPinValue, IrProgram, IrSlot, IrStatement, IrTest, ProgramTypes, SourceRef, exprType, readsStorageOnly } from './ir';
 import { FUNCTION_ENTRY, functionGraph } from '../functions';
 import { CUSTOM_EVENT, DELEGATE_PIN, boundDispatcher, calledEvent, documentDispatchers, eventInputs, eventName } from '../events';
-import { CODE_CLASS_PREFIX, ClassInfo, InterfaceInfo, PARENT_START, codeClassById, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest, codeClassBases, codeClasses } from '../objects';
+import { CODE_CLASS_PREFIX, ClassInfo, CodeClassInfo, InterfaceInfo, OVERRIDE_EVENT, PARENT_START, abstractLeft, codeClassById, codeParentMethod, codeParentOf, ancestors, canAccess, declaredClass, declaredInterface, dispatcherAction, implementedInterfaces, interfaceById, isObjectNode, nodeClass, parentFunction, subclassTest, codeClassBases, codeClasses } from '../objects';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS, MacroLookup, expandMacros, isMacroInnerNode, macroLookup, visibleNodeId } from '../macros';
 import { TypeLookup, UserType, declaredType, expandSplitPins, isUserTypeId, typeLookup, userTypeProblems } from '../user-types';
 import { TypeRef, setClassHierarchy } from '../types';
@@ -323,6 +323,12 @@ class Lowerer {
 
   // An unconnected input's value: stored on the node, else the pin's default, else the type default.
   private unconnectedExpr(node: GraphNode, pin: PinDefinition | undefined, pinId: string): IrExpr {
+    // A member of the class from the code this class extends (or of a class it extends): Self, as
+    // for a graph parent's members (docs/code-classes-as-parents.md, part 2).
+    if (pinId === 'target' && pin?.type && this.isCodeSelf(pin.type.id)) {
+      const implementation = this.resolve(node)?.implementation;
+      if (implementation?.kind === 'function' && implementation.member && implementation.member.kind !== 'construct') return { kind: 'self' };
+    }
     const stored = node.properties[`pin:${pinId}`];
     if (stored !== undefined) return this.literalOf(stored, pin?.type);
     if (pin?.defaultValue !== undefined) return this.literalOf(pin.defaultValue, pin.type);
@@ -462,6 +468,21 @@ class Lowerer {
     return type;
   }
 
+  // Whether this object is a `type` from the code: its code parent, or a class that one extends.
+  private isCodeSelf(type: string): boolean {
+    if (!this.ownClass || !type.startsWith('native:')) return false;
+    const code = codeParentOf(this.ownClass, (t) => this.options.registry.get(t));
+    if (!code) return false;
+    if (code.type === type) return true;
+    const bases = codeClassBases(this.options.registry.all());
+    const seen = new Set<string>();
+    for (let base = bases.get(code.type); base && !seen.has(base); base = bases.get(base)) {
+      if (base === type) return true;
+      seen.add(base);
+    }
+    return false;
+  }
+
   // Whether a member of `type` is this object's own (its class's or an ancestor's).
   private isOwn(type: ClassInfo): boolean {
     return type.id === this.ownClass?.id || this.ancestors.some((a) => a.id === type.id);
@@ -497,7 +518,36 @@ class Lowerer {
       this.error('wrong-language', `${code.title} is a ${this.languageName(language)} class (${code.path}); a ${this.options.languageName} graph can't extend it.`);
       return;
     }
+    this.checkOverrides(code);
     this.error('code-parent-unsupported', `Generated code can't extend a class from your code (${code.title}) in ${this.options.languageName} yet.`);
+  }
+
+  // What this class overrides of its code parent: functions with the method's name and signature,
+  // events for methods returning nothing, each method once; abstract methods left say so.
+  private checkOverrides(code: CodeClassInfo): void {
+    const own = this.ownClass!;
+    const definition = (t: string) => this.options.registry.get(t);
+    const signature = (pins: { kind: string; type?: TypeRef }[]) => JSON.stringify(pins.filter((p) => p.kind === 'data').map((p) => p.type?.id ?? 'any'));
+    const functions = new Map(this.doc.graphs.filter((g) => g.kind === 'function').map((g) => [g.name, g]));
+    for (const method of code.overridable) {
+      const fn = functions.get(method.name);
+      if (fn && (signature(fn.signature?.inputs ?? []) !== signature(method.inputs) || signature(fn.signature?.outputs ?? []) !== signature(method.outputs) || fn.signature?.pure)) {
+        this.error('override-mismatch', `"${method.name}" overrides ${code.title}'s method, so it needs the same inputs and outputs, and isn't pure.`, fn.id);
+      }
+    }
+    const events = new Map<string, number>();
+    for (const graph of this.doc.graphs.filter((g) => g.kind === 'event')) {
+      for (const node of graph.nodes.filter((n) => n.type === OVERRIDE_EVENT)) {
+        const name = String(node.properties.method ?? '');
+        const method = code.overridable.find((m) => m.name === name);
+        events.set(name, (events.get(name) ?? 0) + 1);
+        if (!method) this.error('override-missing', `${code.title} has no method "${name}" to override (it isn't there, or isn't marked overridable).`, graph.id, node.id);
+        else if (method.outputs.length) this.error('override-returns', `${name} returns a value: override it as a function, from My Blueprint's Override.`, graph.id, node.id);
+        else if (events.get(name) === 2 || functions.has(name)) this.error('override-duplicate', `${name} is overridden twice: keep one event or function for it.`, graph.id, node.id);
+      }
+    }
+    const left = abstractLeft(own, definition);
+    if (left.length) this.warning('abstract-left', `${own.name} doesn't override ${list(left)}, abstract in ${code.title}, so it can't be constructed yet; a class extending it can override them.`);
   }
 
   // The parent class must exist and not loop; a subclass's members must not take its ancestors'
@@ -562,7 +612,13 @@ class Lowerer {
     const implementation = def.implementation;
     if (implementation?.kind === 'class' && implementation.operation === 'construct') {
       const slot = this.slot(info, node, def, 'object');
-      return [{ kind: 'construct', type: implementation.type.id, slot, source }, ...next('execOut')];
+      const definition = (t: string) => this.options.registry.get(t);
+      // A class whose code parent's abstract methods aren't all overridden can't be made.
+      const own = implementation.type.id === this.ownClass?.id ? this.ownClass : implementation.type;
+      const left = abstractLeft(own, definition);
+      if (left.length) this.error('construct-abstract', `${implementation.type.name} can't be constructed: it doesn't override ${list(left)}, abstract in ${codeParentOf(own, definition)!.title}.`, info.graph.id, node.id);
+      const args = dataInputs(def).map((p) => input(p.id));
+      return [{ kind: 'construct', type: implementation.type.id, slot, ...(args.length ? { args } : {}), source }, ...next('execOut')];
     }
     if (implementation?.kind === 'interface' || (implementation?.kind === 'class' && implementation.operation === 'cast')) {
       const slot = this.slot(info, node, def, 'as');
@@ -576,14 +632,30 @@ class Lowerer {
     }
     if (operation === 'parent-call') {
       const name = String(node.properties.function ?? PARENT_START);
-      if (!this.ancestors.length) {
+      if (!this.ownClass?.parent) {
         this.error('parent-missing', 'Only a class with a parent class can call its parent.', info.graph.id, node.id);
         return next('execOut');
       }
-      if (name === PARENT_START) return [{ kind: 'parentCall', start: true, args: [], results: [], source }, ...next('execOut')];
-      if (!parentFunction(this.ownClass!, name, (t) => this.options.registry.get(t))) {
-        this.error('parent-missing', `The parent class has no function "${name}".`, info.graph.id, node.id);
-        return next('execOut');
+      const definition = (t: string) => this.options.registry.get(t);
+      if (name === PARENT_START) {
+        // Start is a graph class's: a class straight from the code has none.
+        if (!this.ancestors.length) {
+          this.error('parent-missing', "The parent class is your code's, which has no Start to call.", info.graph.id, node.id);
+          return next('execOut');
+        }
+        return [{ kind: 'parentCall', start: true, args: [], results: [], source }, ...next('execOut')];
+      }
+      if (!parentFunction(this.ownClass, name, definition)) {
+        // The code's version of a method this class overrides (docs/code-classes-as-parents.md).
+        const method = codeParentMethod(this.ownClass, name, definition);
+        if (!method) {
+          this.error('parent-missing', `The parent class has no function "${name}".`, info.graph.id, node.id);
+          return next('execOut');
+        }
+        if (method.abstract) {
+          this.error('parent-abstract', `${name} is abstract in ${method.owner.title}: the code has no version of it to call.`, info.graph.id, node.id);
+          return next('execOut');
+        }
       }
       const results = def.outputs.filter((p) => p.kind === 'data').map((p) => ({ output: p.id, slot: this.slot(info, node, def, p.id) }));
       return [{ kind: 'parentCall', function: name, args: dataInputs(def).map((p) => input(p.id)), results, source }, ...next('execOut')];
@@ -1495,3 +1567,8 @@ function dataInputs(def: NodeDefinition): PinDefinition[] {
 
 // When no pack registry names them (lowerDocument called directly).
 const LANGUAGE_NAMES: Record<string, string> = { typescript: 'TypeScript', javascript: 'JavaScript', python: 'Python' };
+
+// "a", "a and b", "a, b and c".
+function list(names: string[]): string {
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}

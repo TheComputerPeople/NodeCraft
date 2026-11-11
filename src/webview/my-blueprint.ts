@@ -7,6 +7,7 @@ import { FUNCTION_CALL } from '../core/functions';
 import { MACRO_INSTANCE } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, UNBIND_ALL, UNBIND_EVENT, documentDispatchers } from '../core/events';
 import { GraphKind, GraphVariable } from '../core/model';
+import { CodeOverridable, codeParentOf, declaredClass } from '../core/objects';
 import { VARIABLE_GET, VARIABLE_SET } from '../core/resolve';
 import { addNode } from './actions';
 import { documentAncestors, documentInterfaceFunctions, lookupDefinition, markDirty, languageCapabilities, shownType } from './document';
@@ -25,6 +26,29 @@ const GRAPH_SECTIONS: { kind: GraphKind; title: string; add: string }[] = [
   { kind: 'function', title: 'Functions', add: 'Add Function' },
   { kind: 'macro', title: 'Macros', add: 'Add Macro' }
 ];
+
+// A code parent's method overridden from the Override menu: one returning nothing as an event in
+// the event graph, else as a function with its name and signature (with Parent: <Method>, unless
+// it's abstract).
+function overrideCodeMethod(method: CodeOverridable): void {
+  const doc = state.document!;
+  const pins = (list: CodeOverridable['inputs']) => list.map((p) => ({ id: p.id, name: p.name, kind: 'data' as const, ...(p.type ? { type: p.type } : {}), ...(p.defaultValue !== undefined ? { defaultValue: p.defaultValue } : {}) }));
+  if (method.outputs.length) {
+    const declared = { name: method.name, inputs: pins(method.inputs), outputs: pins(method.outputs), pure: false };
+    const graph = method.abstract ? edits.implementFunction(doc, declared, newConnectionId) : edits.overrideFunction(doc, declared, newConnectionId);
+    markDirty();
+    openGraph(graph.id);
+    return;
+  }
+  const graph = doc.graphs.find((g) => g.kind === 'event');
+  if (!graph) return;
+  const below = graph.nodes.reduce((y, n) => Math.max(y, n.position.y), -200) + 200;
+  const event = edits.overrideEvent(graph, method, { x: 0, y: below }, newConnectionId);
+  markDirty();
+  openGraph(graph.id);
+  state.selectedNodeId = event.id;
+  render();
+}
 
 export function renderMyBlueprint(): void {
   const root = dom.myBlueprint;
@@ -52,7 +76,12 @@ export function renderMyBlueprint(): void {
     const fresh = <T extends { name: string }>(list: T[]) => list.filter((f, i, all) => all.findIndex((x) => x.name === f.name) === i && !graphs.some((g) => g.name === f.name));
     const overridable = section.kind === 'function' ? fresh(documentAncestors().flatMap((a) => a.functions)) : [];
     const implementable = section.kind === 'function' ? fresh(documentInterfaceFunctions()).filter((f) => !overridable.some((o) => o.name === f.name)) : [];
-    if (overridable.length || implementable.length) {
+    // The methods of the class from the code this class extends, not overridden yet as a function
+    // or an event (docs/code-classes-as-parents.md, part 2).
+    const self = section.kind === 'function' ? declaredClass(doc) : undefined;
+    const code = self && codeParentOf(self, (t) => state.defByType.get(t));
+    const methods = code ? code.overridable.filter((m) => !graphs.some((g) => g.name === m.name) && !(self!.overrides ?? []).includes(m.name) && !overridable.some((o) => o.name === m.name)) : [];
+    if (overridable.length || implementable.length || methods.length) {
       const override = document.createElement('button');
       override.className = 'mb-override';
       override.textContent = 'Override ▾';
@@ -64,7 +93,8 @@ export function renderMyBlueprint(): void {
         };
         showFloatingMenu([
           ...overridable.map((f) => ({ label: f.name, action: () => open(edits.overrideFunction(doc, f, newConnectionId)) })),
-          ...implementable.map((f) => ({ label: `${f.name} (interface)`, action: () => open(edits.implementFunction(doc, f, newConnectionId)) }))
+          ...implementable.map((f) => ({ label: `${f.name} (interface)`, action: () => open(edits.implementFunction(doc, f, newConnectionId)) })),
+          ...methods.map((m) => ({ label: `${m.name} (${code!.title}${m.abstract ? ', abstract' : ''})`, action: () => overrideCodeMethod(m) }))
         ], e.clientX, e.clientY);
       });
       el.querySelector('.mb-header')?.insertBefore(override, el.querySelector('.mb-header button'));

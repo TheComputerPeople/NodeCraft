@@ -9,7 +9,7 @@ import { libraryChange, libraryChangeMessage, syncLibraryVersions } from '../cor
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN } from '../core/functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from '../core/macros';
 import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, UNBIND_ALL, UNBIND_EVENT, customEvents, documentDispatchers, eventName } from '../core/events';
-import { INTERFACE_CALL, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, PARENT_START, ancestors, canAccess, classTypeId, declaredClass, implementedInterfaces, interfaceById, subclassTest, codeClassBases } from '../core/objects';
+import { INTERFACE_CALL, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, OVERRIDE_EVENT, PARENT_CALL, PARENT_START, ancestors, codeParentOf, canAccess, classTypeId, declaredClass, implementedInterfaces, interfaceById, subclassTest, codeClassBases } from '../core/objects';
 import { DEFAULT_TERMS, LanguageTerms, localizeDefinition, typeText } from '../core/terms';
 import { TypeRef, setClassHierarchy } from '../core/types';
 import { listUserTypes } from '../core/user-types';
@@ -57,7 +57,7 @@ export function paletteEntries(): PaletteEntry[] {
     // A function has one entry node and a macro one pair of tunnels; calls and macros are offered
     // one by one; Return Nodes only fit in functions, and events only in event graphs (as in
     // Unreal's action menu).
-    .filter((d) => ![FUNCTION_ENTRY, FUNCTION_CALL, MACRO_INPUTS, MACRO_OUTPUTS, MACRO_INSTANCE, CALL_EVENT, CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL, INTERFACE_CALL].includes(d.type))
+    .filter((d) => ![FUNCTION_ENTRY, FUNCTION_CALL, MACRO_INPUTS, MACRO_OUTPUTS, MACRO_INSTANCE, CALL_EVENT, CALL_DISPATCHER, BIND_EVENT, UNBIND_EVENT, UNBIND_ALL, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL, INTERFACE_CALL, OVERRIDE_EVENT].includes(d.type))
     // Entry events (Main, framework packs' events) belong in event graphs too.
     .filter((d) => (kind === 'event' || !kind ? d.type !== FUNCTION_RETURN : !d.type.startsWith('core:event.') && d.implementation?.kind !== 'event' && (kind === 'function' || d.type !== FUNCTION_RETURN)))
     // A macro library's macro can't use itself.
@@ -83,11 +83,28 @@ export function paletteEntries(): PaletteEntry[] {
   }
   // Parent: Start in event graphs, and Parent: <Function> in a function that overrides one.
   const parents = documentAncestors();
-  if (parents.length) {
-    const name = kind === 'event' ? PARENT_START : kind === 'function' && parents.some((a) => a.functions.some((f) => f.name === state.graph?.name)) ? state.graph?.name : undefined;
+  const offerParent = (name: string | undefined): void => {
     const properties = { function: name };
     const definition = name && lookupDefinition({ id: '', type: PARENT_CALL, position: { x: 0, y: 0 }, properties });
     if (definition) entries.push({ key: `${PARENT_CALL}:${name}`, type: PARENT_CALL, properties, definition });
+  };
+  if (parents.length) offerParent(kind === 'event' ? PARENT_START : kind === 'function' && parents.some((a) => a.functions.some((f) => f.name === state.graph?.name)) ? state.graph?.name : undefined);
+  // The class from the code this class extends (docs/code-classes-as-parents.md, part 2): in an
+  // event graph, an event for each method returning nothing that isn't overridden yet, and Parent:
+  // <Method> for those overridden here; in a function overriding a method, its Parent call. (Not
+  // an abstract method's: the code has no version of it.)
+  const self = state.document ? declaredClass(state.document) : undefined;
+  const code = self && codeParentOf(self, (t) => state.defByType.get(t));
+  if (self && code) {
+    const overridden = new Set([...self.functions.map((f) => f.name), ...(self.overrides ?? [])]);
+    if (kind === 'event') {
+      for (const method of code.overridable.filter((m) => !m.outputs.length && !overridden.has(m.name))) {
+        const properties = { method: method.name };
+        const definition = lookupDefinition({ id: '', type: OVERRIDE_EVENT, position: { x: 0, y: 0 }, properties });
+        if (definition) entries.push({ key: `${OVERRIDE_EVENT}:${method.name}`, type: OVERRIDE_EVENT, properties, definition });
+      }
+      for (const name of self.overrides ?? []) if (!code.overridable.find((m) => m.name === name)?.abstract) offerParent(name);
+    } else if (kind === 'function' && code.overridable.some((m) => m.name === state.graph?.name && !m.abstract)) offerParent(state.graph?.name);
   }
   // Other classes' members, each with a Target pin, under the class's name (src/core/objects.ts).
   const own = state.document ? classTypeId(state.document.name) : '';

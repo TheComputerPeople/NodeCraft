@@ -5,7 +5,7 @@ import { CompileDiagnostic } from './compiler/diagnostics';
 import { BIND_EVENT, CALL_DISPATCHER, UNBIND_ALL, UNBIND_EVENT } from './events';
 import { LanguageCapabilities } from './language-pack';
 import { Capability, Graph, GraphDocument, GraphNode, GraphPin, NodeDefinition } from './model';
-import { INTERFACE_CALL, IS_VALID, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, PARENT_CALL, SELF } from './objects';
+import { INTERFACE_CALL, IS_VALID, OBJECT_CALL, OBJECT_DISPATCHER, OBJECT_EVENT, OBJECT_GET, OBJECT_SET, OVERRIDE_EVENT, PARENT_CALL, SELF } from './objects';
 import { TypeRef } from './types';
 
 export type { Capability } from './model';
@@ -54,6 +54,7 @@ const BY_TYPE: Record<string, Capability[]> = {
   [OBJECT_EVENT]: ['classes'],
   [OBJECT_DISPATCHER]: ['classes', 'delegates'],
   [PARENT_CALL]: ['inheritance'],
+  [OVERRIDE_EVENT]: ['inheritance'],
   [INTERFACE_CALL]: ['interfaces'],
   [CALL_DISPATCHER]: ['delegates'],
   [BIND_EVENT]: ['delegates'],

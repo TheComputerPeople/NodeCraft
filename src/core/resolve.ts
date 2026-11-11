@@ -9,7 +9,7 @@ import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables, func
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS, macroNodeDefinition } from './macros';
 import { Dispatcher, eventNodeDefinition, isDispatcherNode, isEventNode } from './events';
 import { TEST_CASE, testCaseDefinition } from './tests';
-import { declaredClass, isObjectNode, objectNodeDefinition } from './objects';
+import { constructWithParentInputs, declaredClass, isObjectNode, objectNodeDefinition } from './objects';
 import { Graph, GraphDocument, GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
 import { applySplits, setMembersDefinition, splitPinIds } from './user-types';
 
@@ -86,6 +86,8 @@ export function createUnsplitResolver(registry: ResolveContext, doc: ResolverDoc
     if (node.type === SEQUENCE) return { ...base, outputs: Array.from({ length: sequencePinCount(node) }, (_, i) => execPin(`then${i}`, `Then ${i}`, 'output')) };
     if (node.type === REROUTE) return rerouteDefinition(base, node);
     if (base.implementation?.kind === 'struct' && base.implementation.operation === 'set-members') return setMembersDefinition(base, node.properties.members);
+    // Construct <Class> takes the parent constructor's arguments when the class extends code that needs them.
+    if (base.implementation?.kind === 'class' && base.implementation.operation === 'construct') return constructWithParentInputs(base, (type) => registry.get(type));
     if (node.type === MULTIGATE || node.type === SWITCH_INT || node.type === SWITCH_STRING) return flowControlDefinition(base, node);
     // Wildcard pins take the element types the node adopted (src/core/containers.ts).
     if (node.type === MAKE_ARRAY || node.type === MAKE_SET || node.type === MAKE_MAP) return resolveWildcards(makeDefinition(base, node), node);

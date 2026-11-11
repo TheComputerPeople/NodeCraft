@@ -118,6 +118,41 @@ describe('objects', () => {
     assert.equal(await e.page.$eval('#inspector-content select[aria-label="Parent Class"]', (el) => (el as HTMLSelectElement).selectedOptions[0].textContent), 'Gone (missing)');
   });
 
+  test("Override lists the code parent's methods: one returning nothing becomes an event, one returning a value a function", async (t) => {
+    if (!browser) return t.skip(skipReason);
+    const pin = (id: string, type: string, direction: 'input' | 'output' = 'input') => ({ id, name: id, kind: 'data' as const, direction, type: { id: type } });
+    const actor: CodeClassInfo = {
+      kind: 'code-class', id: 'code:javascript:lib/actor.js#Actor', type: 'native:Actor', name: 'Actor', title: 'Actor', language: 'javascript', path: 'lib/actor.js',
+      overridable: [
+        { name: 'hit', inputs: [pin('damage', 'int')], outputs: [] },
+        { name: 'describe', inputs: [], outputs: [pin('returnValue', 'string', 'output')], abstract: true },
+        { name: 'score', inputs: [], outputs: [pin('returnValue', 'int', 'output')] }
+      ]
+    };
+    editor = await EditorPage.open(browser);
+    const e = editor;
+    const definition: NodeDefinition = { type: actor.id, version: 1, displayName: 'Actor', category: 'Project / Classes', inputs: [], outputs: [], implementation: { kind: 'code-class', type: actor } };
+    await e.send({ type: 'init', document: { ...sampleDocument(), parent: actor.id }, definitions: [...sampleDefinitions(), definition], saveDelay: 0 });
+    // In the event graph, the palette offers Event hit (the method returning nothing).
+    assert.ok((await e.page.$$eval('.palette-node strong', (els) => els.map((el) => el.textContent))).includes('Event hit'));
+    await e.page.click('.mb-override');
+    const labels = await e.page.$$eval('#floating-menu button', (els) => els.map((el) => el.textContent));
+    assert.deepEqual(labels, ['hit (Actor)', 'describe (Actor, abstract)', 'score (Actor)']);
+    await e.page.locator('#floating-menu button', { hasText: 'hit (Actor)' }).click();
+    const withEvent = await saved(e, (d) => d.graphs.some((g) => g.nodes.some((n) => n.type === 'core:event.override')));
+    const events = withEvent.graphs.find((g) => g.kind === 'event')!;
+    assert.deepEqual(events.nodes.filter((n) => n.type === 'core:event.override' || n.type === 'core:object.parent').map((n) => [n.type, n.properties]), [['core:event.override', { method: 'hit' }], ['core:object.parent', { function: 'hit' }]]);
+    assert.ok(await e.page.locator('.node', { hasText: 'Event hit' }).isVisible(), 'the event is in the open event graph');
+    // Then the function returning a value: a function with its name and Parent call.
+    await e.page.click('.mb-override');
+    assert.ok(!(await e.page.$$eval('#floating-menu button', (els) => els.map((el) => el.textContent))).includes('hit (Actor)'), 'hit is overridden now');
+    await e.page.locator('#floating-menu button', { hasText: 'score (Actor)' }).click();
+    const withFunction = await saved(e, (d) => d.graphs.some((g) => g.name === 'score'));
+    const score = withFunction.graphs.find((g) => g.name === 'score')!;
+    assert.deepEqual(score.signature?.outputs.map((p) => p.type?.id), ['int']);
+    assert.deepEqual(score.nodes.map((n) => n.type), ['core:function.entry', 'core:object.parent', 'core:function.return']);
+  });
+
   test('Class Settings adds an interface; its functions are implemented from the Override menu', async (t) => {
     const e = await open(t);
     if (!e) return;

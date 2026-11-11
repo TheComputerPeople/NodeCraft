@@ -26,7 +26,7 @@ const STRUCTURAL = new Set([
   'core:function.entry', 'core:function.return', 'core:function.call', 'core:macro.inputs', 'core:macro.outputs', 'core:macro.instance',
   'core:dispatcher.call', 'core:dispatcher.bind', 'core:dispatcher.unbind', 'core:dispatcher.unbind-all',
   'core:object.self', 'core:object.get', 'core:object.set', 'core:object.call', 'core:object.event', 'core:object.dispatcher', 'core:object.parent',
-  'core:interface.call', 'core:test.case', 'core:test.assert-true', 'core:test.assert-equal',
+  'core:interface.call', 'core:event.override', 'core:test.case', 'core:test.assert-true', 'core:test.assert-equal',
   // Its input is an object.
   'core:object.is-valid'
 ]);

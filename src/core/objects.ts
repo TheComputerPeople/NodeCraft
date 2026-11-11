@@ -33,6 +33,8 @@ export interface ClassInfo {
   events: (ClassMember & { inputs: GraphPin[] })[];
   variables: (ClassMember & { type: TypeRef })[];
   dispatchers: (ClassMember & { inputs: GraphPin[] })[];
+  // The code parent's methods it overrides as events (OVERRIDE_EVENT nodes), by name.
+  overrides?: string[];
 }
 
 export function classTypeId(name: string): string {
@@ -53,8 +55,14 @@ export function declaredClass(doc: GraphDocument, source?: TypeSource): ClassInf
     })),
     events: customEvents(doc.graphs).map(({ node }) => ({ id: eventName(node), name: eventName(node), inputs: eventInputs(node) })),
     variables: doc.variables.map((v) => ({ id: v.id, name: v.name, type: v.type, ...(v.access && v.access !== 'public' ? { access: v.access } : {}) })),
-    dispatchers: documentDispatchers(doc).map((d) => ({ id: d.id, name: d.name, inputs: d.inputs }))
+    dispatchers: documentDispatchers(doc).map((d) => ({ id: d.id, name: d.name, inputs: d.inputs })),
+    ...overrideEvents(doc)
   };
+}
+
+function overrideEvents(doc: GraphDocument): { overrides?: string[] } {
+  const names = [...new Set(doc.graphs.filter((g) => g.kind === 'event').flatMap((g) => g.nodes.filter((n) => n.type === OVERRIDE_EVENT).map((n) => String(n.properties.method ?? ''))))].filter(Boolean);
+  return names.length ? { overrides: names } : {};
 }
 
 // An interface: function signatures that classes implementing it give bodies (Unreal's Blueprint
@@ -100,6 +108,9 @@ export const PARENT_CALL = 'core:object.parent';
 export const PARENT_START = 'Start';
 // A function of an interface, called on an object that implements it (Unreal's interface call).
 export const INTERFACE_CALL = 'core:interface.call';
+// A method of the class from the code this class extends, overridden as an event (Unreal's
+// implementable and native events; docs/code-classes-as-parents.md, part 2): `properties.method`.
+export const OVERRIDE_EVENT = 'core:event.override';
 
 // What an object dispatcher node does with the dispatcher.
 export type DispatcherAction = 'call' | 'bind' | 'unbind' | 'unbind-all';
@@ -133,7 +144,8 @@ export function objectDefinitions(): NodeDefinition[] {
     member(OBJECT_EVENT, 'Call Event', 'object-event', 'Runs a custom event of the Target object.'),
     member(OBJECT_DISPATCHER, 'Event Dispatcher', 'object-dispatcher', "Calls, binds or unbinds the Target object's event dispatcher."),
     member(PARENT_CALL, 'Parent', 'parent-call', "Runs the parent class's version of this function (or of Start)."),
-    member(INTERFACE_CALL, 'Interface Call', 'interface-call', 'Calls an interface function of the Target object.')
+    member(INTERFACE_CALL, 'Interface Call', 'interface-call', 'Calls an interface function of the Target object.'),
+    { ...member(OVERRIDE_EVENT, 'Event', 'override-event', "Runs when the class's code calls this method: this class's version of it."), color: '#8f1e1e' }
   ];
 }
 
@@ -198,10 +210,25 @@ export function objectNodeDefinition(base: NodeDefinition, node: GraphNode, own:
     const name = String(node.properties.function ?? PARENT_START);
     if (name === PARENT_START) return { ...base, displayName: 'Parent: Start', inputs: [execIn], outputs: [execOut] };
     const inherited = own && parentFunction(own, name, definition);
-    if (!inherited) return { ...base, displayName: `Parent: ${name} (missing)`, inputs: [execIn], outputs: [execOut] };
+    if (!inherited) {
+      // The code's own version of a method this class overrides (not an abstract one: it has none).
+      const method = own && codeParentMethod(own, name, definition);
+      if (method && !method.abstract) return { ...base, displayName: `Parent: ${name}`, inputs: [execIn, ...method.inputs], outputs: [execOut, ...method.outputs] };
+      return { ...base, displayName: `Parent: ${name} (${method ? 'abstract: the code has no version of it' : 'missing'})`, inputs: [execIn], outputs: [execOut] };
+    }
     const ins = inherited.inputs.filter((p) => p.kind === 'data').map((p) => data(p, 'input'));
     const outs = inherited.outputs.filter((p) => p.kind === 'data').map((p) => data(p, 'output'));
     return { ...base, displayName: `Parent: ${name}`, inputs: [...(inherited.pure ? [] : [execIn]), ...ins], outputs: [...(inherited.pure ? [] : [execOut]), ...outs] };
+  }
+  if (node.type === OVERRIDE_EVENT) {
+    const name = String(node.properties.method ?? '');
+    const method = own && codeParentMethod(own, name, definition);
+    if (!method) return { ...base, displayName: `Event ${name} (missing)`, outputs: [execOut] };
+    return {
+      ...base, displayName: `Event ${name}`, category: method.owner.title,
+      description: `Runs when ${method.owner.title}'s code calls ${name}: this class's version of it${method.abstract ? '' : ', in place of the code\'s (Parent: ' + name + ' runs that)'}.`,
+      outputs: [execOut, ...method.inputs.map((p) => ({ ...p, direction: 'output' as const }))]
+    };
   }
   const type = nodeClass(node, own, definition);
   const target: PinDefinition = { id: 'target', name: 'Target', kind: 'data', direction: 'input', type: { id: type?.id ?? String(node.properties.class ?? 'object:') } };
@@ -252,7 +279,7 @@ export function dispatcherAction(node: GraphNode): DispatcherAction {
 }
 
 export function isObjectNode(type: string): boolean {
-  return [SELF, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL, INTERFACE_CALL].includes(type);
+  return [SELF, OBJECT_GET, OBJECT_SET, OBJECT_CALL, OBJECT_EVENT, OBJECT_DISPATCHER, PARENT_CALL, INTERFACE_CALL, OVERRIDE_EVENT].includes(type);
 }
 
 export function interfaceById(id: string, definition: (type: string) => NodeDefinition | undefined): InterfaceInfo | undefined {
@@ -327,6 +354,33 @@ export function subclassTest(definition: (type: string) => NodeDefinition | unde
     const code = codeClassById(chain[chain.length - 1].parent, definition);
     return !!code && (code.type === to || codeIs(code.type, to));
   };
+}
+
+// A method of the class from the code this class extends that a subclass may override, with that class.
+export function codeParentMethod(type: ClassInfo, name: string, definition: (type: string) => NodeDefinition | undefined): (CodeOverridable & { owner: CodeClassInfo }) | undefined {
+  const code = codeParentOf(type, definition);
+  const method = code?.overridable.find((m) => m.name === name);
+  return code && method ? { ...method, owner: code } : undefined;
+}
+
+// The abstract methods of the code parent no class in the chain overrides (as a function or an
+// event): the class can't be constructed until none are left.
+export function abstractLeft(type: ClassInfo, definition: (type: string) => NodeDefinition | undefined): string[] {
+  const code = codeParentOf(type, definition);
+  if (!code) return [];
+  const chain = [type, ...ancestors(type, definition)];
+  const given = new Set(chain.flatMap((c) => [...c.functions.map((f) => f.name), ...(c.overrides ?? [])]));
+  return code.overridable.filter((m) => m.abstract && !given.has(m.name)).map((m) => m.name);
+}
+
+// Construct <Class> with the parent constructor's parameters as inputs, when the class (or an
+// ancestor) extends a class from the code that takes them (docs/code-classes-as-parents.md, decision 2).
+export function constructWithParentInputs(base: NodeDefinition, definition: (type: string) => NodeDefinition | undefined): NodeDefinition {
+  const implementation = base.implementation;
+  if (implementation?.kind !== 'class' || implementation.operation !== 'construct') return base;
+  const init = codeParentOf(implementation.type, definition)?.init;
+  if (!init?.length) return base;
+  return { ...base, inputs: [...base.inputs.filter((p) => p.kind === 'exec'), ...init, ...base.inputs.filter((p) => p.kind !== 'exec')] };
 }
 
 // The class from the code a graph class extends, directly or through its graph ancestors.

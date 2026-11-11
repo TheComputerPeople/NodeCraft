@@ -98,7 +98,8 @@ export type IrStatement =
   // Runs every event bound to the dispatcher, in the order they were bound.
   | { kind: 'broadcast'; dispatcher: string; args: IrExpr[]; target?: IrExpr; type?: string; source: SourceRef }
   // A new object of class `type` into `slot`, its Start events run.
-  | { kind: 'construct'; type: string; slot: string; source: SourceRef }
+  // `args`: the parent constructor's, for a class extending code that takes them (docs/code-classes-as-parents.md).
+  | { kind: 'construct'; type: string; slot: string; args?: IrExpr[]; source: SourceRef }
   | { kind: 'setObjectVariable'; target: IrExpr; type: string; variable: string; value: IrExpr; source: SourceRef }
   // A Delay: unless it is already waiting (`pending`, a bool slot), `then` runs after `duration`
   // seconds while the code after it goes on. A retriggerable one starts over instead: `generation`
