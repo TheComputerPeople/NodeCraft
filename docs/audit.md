@@ -41,11 +41,14 @@ bugs, and the fixes, one step each. A "Built" section after each step says what 
      first search, even in Restricted Mode.
    - The token also went to whatever host the registry named for the download, and over plain http.
    - The user's own `~/.npmrc`, where private-registry tokens usually live, wasn't read.
-2. **Stop and re-run left C#, Rust and Godot programs running on Windows** (bug, medium).
-   - `runCommand` aborts only the process it started. For C# that's `dotnet run`, for Rust
-     `cargo run`, and for GDScript Godot's console launcher, and each starts the real program as a
-     child.
-   - Runs are hidden, so a stopped program went on unseen.
+2. **Stop, re-run and timeouts ended only the launcher** (bug, medium).
+   - `runCommand` killed only the process it started. Several runners are launchers whose child is
+     the program: `dotnet run` for C#, `cargo run` for Rust, and Godot's console executable, which
+     starts Godot's own.
+   - On Windows, killing a process leaves its children running unless the launcher put them in a
+     job that ends with it. Node and Cargo do that, `cmd` doesn't (checked), and `dotnet run` is
+     known not to. Godot's console executable wasn't checked.
+   - Runs are hidden, so a program left behind went on unseen.
 3. **A malformed graph file crashes the compiler** (robustness, medium).
    - `parseDocument` checks a file's outline but not the nodes, connections, pins, signatures or
      variables in it.
@@ -96,3 +99,17 @@ Not covered by this pass, and left for another:
   - integration: the existing test no longer depends on the machine's `~/.npmrc`, and a new
     Restricted Mode test checks that the workspace's `.npmrc` is ignored and the user's used.
 - **Docs:** node-authoring.md's npm section.
+
+### Built (step 2)
+
+- **Ending a run** (`killTree`, runner.ts) ends the process and everything it started:
+  - on Windows with `taskkill /T /F`;
+  - elsewhere by signalling its process group, since it's spawned leading one (`detached`).
+  - Stop and re-run (the run's abort signal) and a run's timeout use it, so do the conformance runs'
+    timeouts.
+- A run aborted before it starts starts nothing.
+- **Tests** (runner.test.ts): a launcher that starts a sleeping program, the way `dotnet run` does,
+  ended by an abort and by a timeout; the program must end too. Both fail with the old runner. On
+  Windows the test's launcher starts the program detached, because node otherwise puts it in a job
+  that ends with the launcher, which would hide the bug.
+- Checked on Windows only: the process group path (macOS and Linux) has no machine here.

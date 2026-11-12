@@ -1,6 +1,6 @@
 // Runs generated code with the project's own toolchain (node, python, ...), as a language pack's
 // runner describes. Kept free of the vscode API so the conformance tests use the same code.
-import { spawn } from 'node:child_process';
+import { ChildProcess, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -127,23 +127,48 @@ export function writeScaffold(dir: string, files: Record<string, string>): void 
   }
 }
 
+// Ends a process and every process it started. Many runners are launchers whose child is the
+// program (`dotnet run`, `cargo run`, Godot's console executable), and killing the launcher alone
+// leaves the program running, unseen. On Windows `taskkill /T` ends the tree; elsewhere the process
+// leads its own process group (spawned detached), which is signalled as a whole.
+export function killTree(child: ChildProcess): void {
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
+  if (process.platform === 'win32') {
+    const taskkill = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+    taskkill.on('error', () => child.kill());
+    return;
+  }
+  try {
+    process.kill(-child.pid, 'SIGKILL');
+  } catch {
+    child.kill('SIGKILL');
+  }
+}
+
 // Resolves undefined when the executable doesn't exist, so the next candidate can be tried.
 export function runCommand(command: string[], options: RunOptions & { env?: Record<string, string> }): Promise<RunOutcome | undefined> {
   return new Promise((resolve) => {
     const [executable, ...args] = command;
+    if (options.signal?.aborted) {
+      resolve({ command, exitCode: null, stdout: '', stderr: '', timedOut: false, aborted: true });
+      return;
+    }
     // Python on Windows otherwise writes in the console code page, garbling non-ASCII output.
     const env: NodeJS.ProcessEnv = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', ...(options.env ?? {}) };
     delete env.ELECTRON_RUN_AS_NODE;
     // Set inside a node --test run; it makes a nested node --test report to it instead of printing.
     delete env.NODE_TEST_CONTEXT;
-    const child = spawn(executable, args, { cwd: options.cwd, env, windowsHide: true, signal: options.signal });
+    // Its own process group outside Windows, so killTree ends what it starts too.
+    const child = spawn(executable, args, { cwd: options.cwd, env, windowsHide: true, detached: process.platform !== 'win32' });
     let stdout = '';
     let stderr = '';
     let timedOut = false;
     const timer = options.timeoutMs ? setTimeout(() => {
       timedOut = true;
-      child.kill();
+      killTree(child);
     }, options.timeoutMs) : undefined;
+    const abort = () => killTree(child);
+    options.signal?.addEventListener('abort', abort, { once: true });
 
     child.stdout.setEncoding('utf8').on('data', (text: string) => {
       stdout += text;
@@ -155,12 +180,13 @@ export function runCommand(command: string[], options: RunOptions & { env?: Reco
     });
     child.on('error', (error: NodeJS.ErrnoException) => {
       clearTimeout(timer);
+      options.signal?.removeEventListener('abort', abort);
       if (error.code === 'ENOENT') resolve(undefined);
-      else if (error.name === 'AbortError') resolve({ command, exitCode: null, stdout, stderr, timedOut, aborted: true });
-      else resolve({ command, exitCode: null, stdout, stderr: stderr + error.message, timedOut, aborted: false });
+      else resolve({ command, exitCode: null, stdout, stderr: stderr + error.message, timedOut, aborted: options.signal?.aborted ?? false });
     });
     child.on('close', (exitCode) => {
       clearTimeout(timer);
+      options.signal?.removeEventListener('abort', abort);
       resolve({ command, exitCode, stdout, stderr, timedOut, aborted: options.signal?.aborted ?? false });
     });
   });
