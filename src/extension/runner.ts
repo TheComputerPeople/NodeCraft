@@ -128,9 +128,10 @@ export function writeScaffold(dir: string, files: Record<string, string>): void 
 }
 
 // Ends a process and every process it started. Many runners are launchers whose child is the
-// program (`dotnet run`, `cargo run`, Godot's console executable), and killing the launcher alone
-// leaves the program running, unseen. On Windows `taskkill /T` ends the tree; elsewhere the process
-// leads its own process group (spawned detached), which is signalled as a whole.
+// program (`dotnet run`, `cargo run`, `py -3`, `cmd /c`, Godot's console executable). Not every
+// launcher ends its program when it's killed (`cmd` doesn't), and a program left behind runs
+// unseen. On Windows `taskkill /T` ends the tree; elsewhere the process leads its own process group
+// (spawned detached), which is signalled as a whole.
 export function killTree(child: ChildProcess): void {
   if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
   if (process.platform === 'win32') {

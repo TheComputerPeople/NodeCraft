@@ -1,8 +1,9 @@
 // Ending a run (src/extension/runner.ts, docs/audit.md step 2): Stop, a re-run and a timeout end
-// the program, not only the launcher that started it, as `dotnet run`, `cargo run` and Godot's
-// console executable start the program as their child. The launcher here is node starting a node
-// that sleeps. On Windows node puts what it starts in a job that ends with it, which dotnet, cargo
-// and Godot don't, so there the launcher starts the program outside it (detached).
+// the program, not only the launcher that started it, as `dotnet run`, `cargo run`, `py -3`, `cmd /c`
+// and Godot's console executable start the program as their child. The launcher here is node
+// starting a node that sleeps. On Windows node, like dotnet, cargo, py and Godot, ends what it
+// started when it's killed, which `cmd` doesn't; there the launcher starts the program outside its
+// job (detached), as `cmd` would leave it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';

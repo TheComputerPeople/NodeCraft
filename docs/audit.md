@@ -41,13 +41,17 @@ bugs, and the fixes, one step each. A "Built" section after each step says what 
      first search, even in Restricted Mode.
    - The token also went to whatever host the registry named for the download, and over plain http.
    - The user's own `~/.npmrc`, where private-registry tokens usually live, wasn't read.
-2. **Stop, re-run and timeouts ended only the launcher** (bug, medium).
+2. **Stop, re-run and timeouts ended only the launcher** (bug, low on Windows).
    - `runCommand` killed only the process it started. Several runners are launchers whose child is
-     the program: `dotnet run` for C#, `cargo run` for Rust, and Godot's console executable, which
-     starts Godot's own.
-   - On Windows, killing a process leaves its children running unless the launcher put them in a
-     job that ends with it. Node and Cargo do that, `cmd` doesn't (checked), and `dotnet run` is
-     known not to. Godot's console executable wasn't checked.
+     the program: `dotnet run` for C#, `cargo run` for Rust, `py -3` for Python on Windows, and
+     Godot's console executable, which starts Godot's own.
+   - On Windows, killing a process leaves its children running unless the launcher ends them
+     itself. Checked by starting each with a program that sleeps and killing only the launcher:
+     `dotnet run` (SDK 9), `cargo run`, `py -3` and Godot 4.7's console executable all end their
+     program, and so does node. `cmd /c` doesn't: its program was left running. The only `cmd /c`
+     is the Maven and Gradle version check in New Project, under a 30-second timeout.
+   - Not checked on macOS or Linux, where a launcher that doesn't pass the signal on to its program
+     would leave it running.
    - Runs are hidden, so a program left behind went on unseen.
 3. **A malformed graph file crashes the compiler** (robustness, medium).
    - `parseDocument` checks a file's outline but not the nodes, connections, pins, signatures or
@@ -113,3 +117,7 @@ Not covered by this pass, and left for another:
   Windows the test's launcher starts the program detached, because node otherwise puts it in a job
   that ends with the launcher, which would hide the bug.
 - Checked on Windows only: the process group path (macOS and Linux) has no machine here.
+- **The real launchers, checked afterwards** (by process ID, not by name): `dotnet run`,
+  `cargo run`, `py -3`, Godot's console executable and `cmd /c`, each starting a program that sleeps
+  30 seconds. Killing only the launcher left the program running under `cmd /c` alone; `killTree`
+  ended the program under every launcher.
