@@ -979,7 +979,7 @@ interface ExtensionInternals {
   marks: { breakpoints: { set(uri: vscode.Uri, breakpoints: { graphId: string; nodeId: string; enabled: boolean }[]): Promise<void> } };
   provider: {
     currentDebug(): {
-      stack?: { graphId: string; nodeId: string; external?: boolean }[];
+      stack?: { graphId: string; nodeId: string; nodeName: string; uri: vscode.Uri; external?: boolean }[];
       act(action: string): void;
       read(file: vscode.Uri, pins: { graphId: string; nodeId: string; pinId: string }[]): Promise<{ value?: string; unavailable?: string }[]>;
     } | undefined;
@@ -1376,6 +1376,166 @@ test('exit check: debugging a function graph in generated JavaScript', () => exi
 test('exit check: debugging a function graph in generated Python', async () => {
   if (!vscode.extensions.getExtension('ms-python.debugpy')) throw new Skip('the Python Debugger extension is not loaded');
   await exitCheck('python');
+});
+
+// Phase 13's exit check (docs/code-classes-as-parents.md, part 4): a graph class extending a class
+// from the code, debugged across the boundary. The code's Actor has an overridable hit and a template
+// method turn that calls it; Knight's Event hit prints and calls Parent: hit; Arena constructs a Knight
+// and runs turn. A breakpoint in Event hit stops when the code calls it; Step Into the Parent call
+// reaches the code's hit, and Step Out comes back to the graph.
+const ACTOR_SOURCES = {
+  typescript: [
+    '/** @blueprint */',
+    'export abstract class Actor {',
+    '  /** @blueprint */',
+    '  health = 100;',
+    '  readonly name: string;',
+    '  /** @blueprint */',
+    '  constructor(name: string) {',
+    '    this.name = name;',
+    '  }',
+    '  /** @blueprint overridable */',
+    '  hit(damage: number): void {',
+    '    this.health -= damage;',
+    '    console.log(`${this.name} takes ${damage}`);',
+    '  }',
+    '  /** @blueprint */',
+    '  abstract describe(): string;',
+    '  /** @blueprint */',
+    '  turn(): void {',
+    '    console.log(`${this.name} is ${this.describe()}`);',
+    '    this.hit(3);',
+    '  }',
+    '}',
+    ''
+  ],
+  python: [
+    'from abc import ABC, abstractmethod',
+    '',
+    '',
+    'class Actor(ABC):',
+    '    """@blueprint"""',
+    '',
+    '    def __init__(self, name: str) -> None:',
+    '        """@blueprint"""',
+    '        self.name = name',
+    '        self.health = 100',
+    '',
+    '    def hit(self, damage: int) -> None:',
+    '        """@blueprint overridable"""',
+    '        self.health -= damage',
+    '        print(f"{self.name} takes {damage}")',
+    '',
+    '    @abstractmethod',
+    '    def describe(self) -> str:',
+    '        """@blueprint"""',
+    '',
+    '    def turn(self) -> None:',
+    '        """@blueprint"""',
+    '        print(f"{self.name} is {self.describe()}")',
+    '        self.hit(3)',
+    ''
+  ]
+};
+
+async function codeParentDebug(language: 'typescript' | 'python'): Promise<void> {
+  const prefix = language === 'typescript' ? 'Ts' : 'Py';
+  const actorPath = language === 'typescript' ? 'parents/actor.ts' : 'parents_py/actor.py';
+  const write = (name: string, text: string) => vscode.workspace.fs.writeFile(workspaceFile(name), new TextEncoder().encode(text));
+  const lines = ACTOR_SOURCES[language];
+  await write(actorPath, lines.join('\n'));
+  if (language === 'python') await write('parents_py/__init__.py', '');
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const wire = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin });
+  const actor = `code:${language}:${actorPath}#Actor`;
+  const knightName = `${prefix}Knight`;
+  const knight = {
+    schemaVersion: 3, name: knightName, kind: 'class', language, parent: actor, variables: [],
+    graphs: [
+      {
+        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+        nodes: [node('hit', 'core:event.override', { method: 'hit' }), node('p2', 'core:console.print', { 'pin:value': 'Knight blocks' }), node('parent', 'core:object.parent', { function: 'hit' })],
+        connections: [wire('hit', 'execOut', 'p2', 'execIn'), wire('p2', 'execOut', 'parent', 'execIn'), wire('hit', 'damage', 'parent', 'damage')]
+      },
+      {
+        id: 'Describe', name: 'describe', kind: 'function', comments: [],
+        signature: { inputs: [], outputs: [{ id: 'returnValue', name: 'Return Value', kind: 'data', type: { id: 'string' } }] },
+        nodes: [node('entry', 'core:function.entry', { graph: 'Describe' }), node('return', 'core:function.return', { graph: 'Describe', 'pin:returnValue': 'a knight' })],
+        connections: [wire('entry', 'execOut', 'return', 'execIn')]
+      }
+    ]
+  };
+  const arena = {
+    schemaVersion: 3, name: `${prefix}Arena`, kind: 'class', language, variables: [],
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('s', 'core:event.start'), node('make', `object:${knightName}.construct`, { 'pin:name': 'Bors' }), node('turn', `fn:${language}:${actorPath}#Actor:turn`)],
+      connections: [wire('s', 'execOut', 'make', 'execIn'), wire('make', 'execOut', 'turn', 'execIn'), wire('make', 'object', 'turn', 'target')]
+    }]
+  };
+  const knightFile = `parents_${language}_knight.vgraph`;
+  const arenaFile = `parents_${language}_arena.vgraph`;
+  const knightGraph = workspaceFile(knightFile);
+  const arenaGraph = workspaceFile(arenaFile);
+  await write(knightFile, JSON.stringify(knight, null, 2));
+  await write(arenaFile, JSON.stringify(arena, null, 2));
+  // The code's classes load in the background: compile until Knight's parent and Arena's nodes are found.
+  for (const graph of [knightGraph, arenaGraph]) {
+    const deadline = Date.now() + 20000;
+    for (;;) {
+      await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+      const problems = vscode.languages.getDiagnostics(graph).filter((p) => p.severity === vscode.DiagnosticSeverity.Error);
+      if (!problems.length) break;
+      if (Date.now() > deadline) throw new Error(`${path.basename(graph.fsPath)} never compiled: ${problems.map((p) => p.message).join('; ')}`);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+  await openInGraphEditor(arenaFile);
+  const api = (vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi).testing;
+  await api.marks.breakpoints.set(knightGraph, [{ graphId: 'EventGraph', nodeId: 'p2', enabled: true }]);
+  const frames = () => api.provider.currentDebug()?.stack;
+  const top = () => frames()?.[0];
+  const until = (what: string, ready: (frame: NonNullable<ReturnType<typeof top>>) => boolean) => waitFor(() => !!top() && ready(top()!), what, 90000)
+    .catch((error: Error) => { throw new Error(`${error.message}; the stack: ${JSON.stringify(frames() ?? 'running')}`); });
+  const inKnight = (nodeId: string) => (f: NonNullable<ReturnType<typeof top>>) => !f.external && f.uri.toString() === knightGraph.toString() && f.nodeId === nodeId;
+  try {
+    await vscode.commands.executeCommand('blueprintVisualScripting.debug', arenaGraph);
+    // The code's turn calls hit: the debugger stops in Knight's Event hit, below the code's frame.
+    await until("the stop in Knight's Event hit", inKnight('p2'));
+    const below = frames()![1];
+    assert.ok(below.external && below.uri.fsPath.endsWith(path.normalize(actorPath)), `the code's turn called it: ${JSON.stringify(below)}`);
+    assert.ok(frames()!.some((f) => !f.external && f.uri.toString() === arenaGraph.toString() && f.nodeId === 'turn'), "Arena's Turn node called the code");
+    const debug = api.provider.currentDebug()!;
+
+    debug.act('stepOver');
+    await until('Step Over to the Parent call', inKnight('parent'));
+
+    // Step Into reaches the code's own hit, at its first line.
+    debug.act('stepInto');
+    await until("Step Into the code's hit", (f) => !!f.external);
+    const first = lines.findIndex((l) => l.trim() === (language === 'typescript' ? 'this.health -= damage;' : 'self.health -= damage')) + 1;
+    assert.ok(top()!.uri.fsPath.endsWith(path.normalize(actorPath)), JSON.stringify(top()));
+    assert.equal(top()!.nodeName, `${path.basename(actorPath)}:${first}`);
+    assert.ok(inKnight('parent')(frames()![1]), 'called from the Parent call');
+
+    // Step Out comes back to the graph.
+    debug.act('stepOut');
+    await until('Step Out to the graph', (f) => !f.external);
+    assert.ok(inKnight('parent')(top()!), JSON.stringify(top()));
+
+    debug.act('resume');
+    await waitFor(() => !api.provider.currentDebug(), 'the session to end', 60000);
+  } finally {
+    api.provider.currentDebug()?.act('stop');
+    await api.marks.breakpoints.set(knightGraph, []);
+  }
+}
+
+test('exit check: debugging a graph class extending a class from the code, in TypeScript', () => codeParentDebug('typescript'));
+
+test('exit check: debugging a graph class extending a class from the code, in Python', async () => {
+  if (!vscode.extensions.getExtension('ms-python.debugpy')) throw new Skip('the Python Debugger extension is not loaded');
+  await codeParentDebug('python');
 });
 
 test('exit check: debugging a function graph in generated C++', async () => {

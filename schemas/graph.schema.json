@@ -42,8 +42,8 @@
     },
     "parent": {
       "type": "string",
-      "pattern": "^object:",
-      "description": "A class's parent class, as object:<Name>."
+      "pattern": "^(object|code):",
+      "description": "A class's parent class: a graph class, as object:<Name>, or a class from the project's code, as code:<language>:<path>#<Class>."
     },
     "interfaces": {
       "type": "array",

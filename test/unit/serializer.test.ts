@@ -102,6 +102,15 @@ describe('migrating schema 1 to 2', () => {
 });
 
 describe('serializeDocument', () => {
+  // docs/code-classes-as-parents.md: a parent is a graph class or a class from the code; nothing else.
+  test("a class's parent: a graph class's or the code's round-trips; another isn't read", () => {
+    for (const parent of ['object:Knight', 'code:typescript:src/actor.ts#Actor']) {
+      const doc: GraphDocument = { ...createEmptyDocument('Squire'), parent };
+      assert.equal(parseDocument(serializeDocument(doc), 'Squire').document.parent, parent);
+    }
+    assert.throws(() => parseDocument(serializeDocument({ ...createEmptyDocument('Squire'), parent: 'struct:Stats' }), 'Squire'), /only a class has a parent class/);
+  });
+
   test('round-trips through parseDocument', () => {
     const original = createEmptyDocument('RoundTrip');
     assert.deepEqual(parseDocument(serializeDocument(original)).document, original);

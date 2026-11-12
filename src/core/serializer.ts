@@ -104,7 +104,8 @@ function normalizeDocument(raw: Record<string, unknown>, fallbackName: string): 
   if (doc.languages !== undefined && ((doc.kind !== 'structure' && doc.kind !== 'enumeration' && doc.kind !== 'functionLibrary') || !Array.isArray(doc.languages) || doc.languages.some((l) => typeof l !== 'string' || !l))) {
     throw new Error('Invalid .vgraph document: only a structure, enumeration or function library has other languages, as a list of language ids.');
   }
-  if (doc.parent !== undefined && (doc.kind !== 'class' || typeof doc.parent !== 'string' || !doc.parent.startsWith('object:'))) throw new Error('Invalid .vgraph document: only a class has a parent class, as "object:<Name>".');
+  // A graph class, or a class from the project's code (docs/code-classes-as-parents.md).
+  if (doc.parent !== undefined && (doc.kind !== 'class' || typeof doc.parent !== 'string' || !/^(object|code):/.test(doc.parent))) throw new Error('Invalid .vgraph document: only a class has a parent class, as "object:<Name>" or "code:<language>:<path>#<Class>".');
   const ids = new Set<string>();
   for (const graph of doc.graphs) {
     if (ids.has(graph.id)) throw new Error(`Invalid .vgraph document: duplicate graph id "${graph.id}".`);

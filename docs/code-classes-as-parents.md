@@ -281,6 +281,22 @@ The three choices this design needs. The user confirmed all three as recommended
 - **Simulate** says it can't run the code a class extends, when it starts and wherever it would construct one: "Simulate can't run your project's code: Knight extends Actor, a class in src/actor.ts. Use Run to run the generated code." It's the same for a class extending the code through a graph parent (it names the graph class that extends the code), and for a code class that's gone (its name and file from the parent's id). Before, it said it couldn't read the parent class, and gave the id.
 - **Tested:** Compile's errors for Rust and Go; Simulate's message for Knight, for Squire through Knight, and for a missing code class; the webview's Class Settings with a language that says why (no Parent Class, and the reason).
 8. Debugging across the boundary.
+
+### Built (step 8)
+
+- **The debugger needed nothing new.** Phase 5's debugging already shows a frame in the code as the code's file and line, below or above the graph's frames, and steps into it and out of it. A graph class extending the code is debugged with the same machinery:
+  - a breakpoint in an overriding event is hit when the code calls it, with the code's frame below it;
+  - Step Into on a Parent call stops at the first line of the code's method;
+  - Step Out comes back to the graph, at the Parent call node.
+- **A bug the test found:** a `.vgraph` file whose parent is a code class couldn't be read from disk. The file reader accepted only `object:` parents, so the editor and the generators (which build documents in memory) never saw the problem. The reader and the JSON schema now accept `code:<language>:<path>#<Class>` too.
+- **Tested** in the integration run, for TypeScript and Python. A code `Actor` has an overridable `hit` and a template method `turn` that calls it. A graph `Knight` overrides `hit` (it prints, then calls Parent: hit), and a graph `Arena` constructs a Knight and runs `turn`. The test:
+  - sets a breakpoint in Knight's Event hit, and debugs Arena;
+  - checks the stop is in Knight, with the code's `turn` below it and Arena's Turn node further down;
+  - steps over to the Parent call, steps into the code's `hit` (at its first line, `actor.ts:12`), and steps out to the Parent call;
+  - resumes to the end.
+
+  The Python one needs the Python Debugger extension, so it runs in the run with debuggers (and is skipped without it). A unit test checks that both kinds of parent are read back from a file, and that another kind isn't.
+
 9. The exit check, docs, the parity checklist and status.
 
 ## Not in this phase
