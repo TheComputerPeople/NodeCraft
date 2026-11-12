@@ -13,7 +13,7 @@ import { GraphDocument } from '../core/model';
 import { NodePackageManifest, compareVersions, manifestProblems } from '../core/node-packages';
 import { parseDocument, serializeDocument } from '../core/serializer';
 import { workspaceSnippetLanguages } from './node-libraries';
-import { downloadPackage, packageVersion, registryFor, searchPackages } from './npm-registry';
+import { blueprintFolder, downloadPackage, packageVersion, registryFor, searchPackages } from './npm-registry';
 import { commandFolder } from './workspace-folders';
 
 export const PACKAGES_FOLDER = 'blueprint-packages';
@@ -53,23 +53,27 @@ export interface NpmSource {
 }
 
 // The workspace's .npmrc, which may name another registry and its token.
-async function workspaceNpmrc(workspaceFolder: vscode.Uri): Promise<string> {
-  return vscode.workspace.fs.readFile(vscode.Uri.joinPath(workspaceFolder, '.npmrc')).then((b) => new TextDecoder().decode(b), () => '');
+// The user's .npmrc, then the workspace's: only when the workspace is trusted, since a cloned
+// repository's could send a token from the environment to a server of its choosing.
+async function npmrcs(workspaceFolder: vscode.Uri): Promise<string[]> {
+  const read = (uri: vscode.Uri) => vscode.workspace.fs.readFile(uri).then((b) => new TextDecoder().decode(b), () => '');
+  const user = process.env.NPM_CONFIG_USERCONFIG || process.env.npm_config_userconfig || path.join(os.homedir(), '.npmrc');
+  return [await read(vscode.Uri.file(user)), vscode.workspace.isTrusted ? await read(vscode.Uri.joinPath(workspaceFolder, '.npmrc')) : ''];
 }
 
 // Downloads an npm package into `dir`; its Blueprint folder.
 async function fromNpm(workspaceFolder: vscode.Uri, source: NpmSource, dir: string): Promise<vscode.Uri> {
-  const registry = registryFor(source.npm, await workspaceNpmrc(workspaceFolder));
+  const registry = registryFor(source.npm, ...(await npmrcs(workspaceFolder)));
   const found = await packageVersion(registry, source.npm, source.version);
   await downloadPackage(registry, found.tarball, dir);
-  return vscode.Uri.file(path.resolve(dir, found.blueprint));
+  return vscode.Uri.file(blueprintFolder(dir, found.blueprint));
 }
 
 // Asks for a search on npm, and which package it found.
 async function pickFromNpm(workspaceFolder: vscode.Uri): Promise<NpmSource | undefined> {
   const text = await vscode.window.showInputBox({ prompt: 'Search npm for Blueprint packages', placeHolder: 'math' });
   if (text === undefined) return undefined;
-  const registry = registryFor('', await workspaceNpmrc(workspaceFolder));
+  const registry = registryFor('', ...(await npmrcs(workspaceFolder)));
   const found = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Searching npm' }, () => searchPackages(registry, text));
   if (!found.length) {
     void vscode.window.showInformationMessage(`No Blueprint packages on npm match "${text}".`);

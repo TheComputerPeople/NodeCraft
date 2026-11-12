@@ -4,6 +4,7 @@ import * as assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { LanguagePack } from '../../../src/core/language-pack';
@@ -796,6 +797,9 @@ test("Add Blueprint Package installs from the registry the workspace's .npmrc na
   const port = (server.address() as { port: number }).port;
   const npmrc = workspaceFile('.npmrc');
   await vscode.workspace.fs.writeFile(npmrc, new TextEncoder().encode(`@studio:registry=http://127.0.0.1:${port}/\n//127.0.0.1:${port}/:_authToken=team-token\n`));
+  // The user's own .npmrc is read too; none here, so the test doesn't depend on the machine's.
+  const userConfig = process.env.NPM_CONFIG_USERCONFIG;
+  process.env.NPM_CONFIG_USERCONFIG = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vg-npmrc-')), 'none');
   try {
     const target = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.addBlueprintPackage', { npm: '@studio/brawl' });
     assert.equal(target?.toString(), workspaceFile('blueprint-packages/studio-brawl').toString());
@@ -804,6 +808,8 @@ test("Add Blueprint Package installs from the registry the workspace's .npmrc na
     assert.ok(fs.existsSync(workspaceFile('blueprint-packages/studio-brawl/brawl.vgraph.ts').fsPath), 'TypeScript generated');
     assert.ok(authorizations.length >= 2 && authorizations.every((a) => a === 'Bearer team-token'), `the token was sent: ${JSON.stringify(authorizations)}`);
   } finally {
+    if (userConfig === undefined) delete process.env.NPM_CONFIG_USERCONFIG;
+    else process.env.NPM_CONFIG_USERCONFIG = userConfig;
     server.close();
     await vscode.workspace.fs.delete(npmrc);
   }

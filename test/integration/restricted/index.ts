@@ -2,6 +2,10 @@
 // files, so in a workspace that isn't trusted the map, its views, its hovers and its tree all work.
 // runTest.ts opens a copy of the sample workspace with workspace trust on and its prompt off.
 import * as assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as http from 'node:http';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 const EXTENSION_ID = 'local.blueprint-visual-scripting';
@@ -62,6 +66,43 @@ test('the Codebase Map draws the folder and its four views, with hovers and the 
     await api.codeMapPanels.modeIn(folder, 'architecture');
   } finally {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  }
+});
+
+// A cloned repository's .npmrc could name any server and send it a token from the environment, so
+// Add Blueprint Package reads only the user's until the workspace is trusted.
+test("Add Blueprint Package ignores the workspace's .npmrc", async () => {
+  const requests: { server: string; url?: string; authorization?: string }[] = [];
+  const listen = async (name: string) => {
+    const server = http.createServer((request, response) => {
+      requests.push({ server: name, url: request.url, authorization: request.headers.authorization });
+      response.statusCode = 404;
+      response.end('{}');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    return { server, url: `http://127.0.0.1:${(server.address() as { port: number }).port}/` };
+  };
+  const workspaceRegistry = await listen('workspace');
+  const userRegistry = await listen('user');
+  const folder = vscode.workspace.workspaceFolders![0].uri;
+  const npmrc = vscode.Uri.joinPath(folder, '.npmrc');
+  const host = workspaceRegistry.url.replace(/^http:/, '');
+  fs.writeFileSync(npmrc.fsPath, `registry=${workspaceRegistry.url}\n${host}:_authToken=\${PATH}\n`);
+  const user = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vg-npmrc-')), '.npmrc');
+  fs.writeFileSync(user, `registry=${userRegistry.url}\n`);
+  const userConfig = process.env.NPM_CONFIG_USERCONFIG;
+  process.env.NPM_CONFIG_USERCONFIG = user;
+  try {
+    // The package isn't in the user's registry, so nothing is added.
+    assert.equal(await vscode.commands.executeCommand('blueprintVisualScripting.addBlueprintPackage', { npm: 'combat-graphs' }), undefined);
+    assert.deepEqual(requests.map((r) => r.server), ['user'], JSON.stringify(requests));
+    assert.equal(requests[0].authorization, undefined);
+  } finally {
+    if (userConfig === undefined) delete process.env.NPM_CONFIG_USERCONFIG;
+    else process.env.NPM_CONFIG_USERCONFIG = userConfig;
+    workspaceRegistry.server.close();
+    userRegistry.server.close();
+    fs.rmSync(npmrc.fsPath, { force: true });
   }
 });
 
