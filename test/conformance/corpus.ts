@@ -26,6 +26,7 @@ import { GraphCompileHost, applyAcceptedPlan, compileGraphFile } from '../../src
 import { codeModuleFor, cppHeaderLinkage, graphFileNodes } from '../../src/extension/placement';
 import { repoRoot } from '../unit/helpers';
 import { CODE_CLASS_OUTPUT, codeClassGraph } from './code-classes';
+import { CODE_PARENTS_OUTPUT, actorCode, gameGraph, knightGraph } from './code-parents';
 import { GENERICS_OUTPUT, genericsGraph } from './generics';
 import { LATENT_CODE_OUTPUT, latentCodeGraph } from './latent-code';
 import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
@@ -184,7 +185,9 @@ async function generate(layout: Layout, root: string, result: LayoutResult, regi
   for (const file of layout.code) {
     const scan = scanCode(layout.language, fs.readFileSync(path.join(root, file), 'utf8'));
     const linkage = pack.id === 'cpp' ? cppHeaderLinkage(path.join(root, file)) : undefined;
-    code.push(...exposeFunctions(scan, { language: pack.id, path: file, module: codeModuleFor(pack.id, path.join(root, file), root), exposeAll: false, ...(linkage ? { linkage } : {}) }).definitions);
+    // Its functions and members, and its classes (which graph classes may extend).
+    const exposed = exposeFunctions(scan, { language: pack.id, path: file, module: codeModuleFor(pack.id, path.join(root, file), root), exposeAll: false, ...(linkage ? { linkage } : {}) });
+    code.push(...exposed.definitions, ...exposed.classes);
   }
   registry.registerMany(code);
   const byName = (name: string): NodeDefinition => {
@@ -463,20 +466,29 @@ export function greetingLibrary(title: NodeDefinition): GraphDocument {
 }
 
 // What the project's code offers beyond plain functions (docs/code-as-nodes.md), each with the
-// shared conformance builder's graph and what it prints. A language has those its pack supports.
-const FEATURES = {
+// shared conformance builder's graph and what it prints. A language has those its pack supports. A
+// feature's graph is the class the entry point starts; `before` are other graphs it uses.
+type FeatureBuild = (definitions: NodeDefinition[], language: string) => GraphDocument;
+const FEATURES: Record<string, { file: string; build: FeatureBuild; output: string[]; before?: { file: string; build: FeatureBuild }[] }> = {
   classes: { file: 'Counting', build: codeClassGraph, output: CODE_CLASS_OUTPUT },
   outputs: { file: 'Dividing', build: severalOutputsGraph, output: SEVERAL_OUTPUTS_OUTPUT },
   generics: { file: 'Firsts', build: genericsGraph, output: GENERICS_OUTPUT },
+  // A graph class extending the code's Actor (docs/code-classes-as-parents.md), named Paladin: the
+  // body's arena has a Knight, and C++'s classes share the global namespace.
+  parents: {
+    file: 'Questing', build: (definitions, language) => gameGraph(language, actorCode(definitions), 'Questing', 'Paladin'), output: CODE_PARENTS_OUTPUT,
+    before: [{ file: 'Paladin', build: (definitions, language) => knightGraph(language, actorCode(definitions), 'Paladin') }]
+  },
   latent: { file: 'Fetching', build: latentCodeGraph, output: LATENT_CODE_OUTPUT }
 };
-export type Feature = keyof typeof FEATURES;
-export const ALL_FEATURES: Feature[] = ['classes', 'outputs', 'generics', 'latent'];
+export type Feature = 'classes' | 'outputs' | 'generics' | 'parents' | 'latent';
+export const ALL_FEATURES: Feature[] = ['classes', 'outputs', 'generics', 'parents', 'latent'];
 
 // The graphs of the project's code's features, each in `dir`: a class and its subclass, several
-// outputs, a generic function and an async one.
+// outputs, a generic function, a graph class extending a class of the code, and an async function.
 export function featureGraphs(dir: string, language: string, features: Feature[] = ALL_FEATURES): CorpusGraph[] {
-  return features.map((f) => ({ path: `${dir}/${FEATURES[f].file}.vgraph`, build: ({ definitions }) => FEATURES[f].build(definitions, language) }));
+  return features.flatMap((f) => [...(FEATURES[f].before ?? []), FEATURES[f]]
+    .map((g) => ({ path: `${dir}/${g.file}.vgraph`, build: ({ definitions }: GraphContext) => g.build(definitions, language) })));
 }
 
 // What an entry point that starts each feature graph in turn prints: Fetching's Completed comes

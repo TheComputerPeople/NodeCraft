@@ -444,6 +444,13 @@ Before it: graph classes extend other graph classes (Parent Class, overrides, Pa
 
 Design and steps: [code-classes-as-parents.md](code-classes-as-parents.md) (2026-11-10). Its three decisions were confirmed as recommended on 2026-11-10: what a class allows (markers, as Unreal's `Blueprintable` and native events), a parent's constructor arguments (Construct passes them), and Rust and Go (not offered, said why).
 
+Status: complete (November 2026), with what's left for later in code-classes-as-parents.md (code classes extending graph classes, interfaces from code, generic parents, engine classes beyond Godot's, Godot's `@abstract`). The exit check is in the tests:
+- **Every language with inheritance** (TypeScript, JavaScript, Python, C#, Java, C++, PHP, Ruby, Lua, GDScript): a graph Knight extends the code's Actor. It overrides a method (calling Parent), implements an abstract one, and uses the Actor's members on Self. Constructing it and running the code's template method prints the same lines in every language, under each one's strictest checkers.
+- **The corpus:** one layout per language with inheritance has such a graph, extending the project's own Actor. It builds, passes the project's checkers and runs from the project's entry point.
+- **The editor:** Class Settings lists the code's classes, Override lists the methods that may be overridden, and Compile reports abstract methods left.
+- **Debugging:** in TypeScript and Python, a breakpoint in an overriding event is hit when the code calls it. Step Into reaches the parent's code, and Step Out comes back.
+- **Rust and Go** say why they can't, in Class Settings and in Compile, and Simulate says it can't run the code a class extends.
+
 ### Phase 14: Release
 
 Marketplace packaging waits until the platform is complete and robust (decided 2026-10-28).
@@ -522,7 +529,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | For Each Loop (with Break) | ✅ | — |
 | Structure | Structs, enums, Make/Break, Set Members, Switch on Enum, the structure and enumeration editors | ✅ (sets and map keys of structs or enums later) | — |
 | Structure | Object references: Construct, Self, Is Valid, Target pins on variables, functions, events and dispatchers | ✅ | — |
-| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (code classes as parents in Phase 13) | 13 |
+| Structure | Inheritance from class graphs: Parent Class, Override, Parent calls, virtual calls | ✅ (and from classes in the code, as a Blueprint extends a C++ class, in every language with inheritance) | 13 |
 | Structure | Blueprint Interfaces (implemented in Class Settings, interface calls), Cast To class or interface | ✅ (pure Cast later) | — |
 | Structure | Access (Public, Protected, Private) for variables and functions | ✅ | — |
 | Structure | Entry points: Main with command-line arguments; framework packs' events; Test Case events with Assert nodes and Run Tests | ✅ (C# tests run through Run's project, not xUnit) | — |
@@ -530,7 +537,8 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Structure | Latent actions: Delay, Retriggerable Delay | ✅ (more latent nodes with demand) | — |
 | Interop | Project functions appear as nodes (`BlueprintCallable`, `BlueprintPure`, Category, DisplayName, Keywords) | ✅ (TypeScript, JavaScript, Python, C#, C++ headers, Rust, Java, Lua, GDScript, Ruby, PHP; Go and other languages through their language server) | — |
 | Interop | Nodes keep their pins when code changes; Refresh Node, Refresh All Nodes | ✅ (plus Replace with … for renamed or moved functions) | — |
-| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages; code classes as parents of graph classes in Phase 13) | 13 |
+| Interop | Member functions with a Target pin, constructors, and BlueprintReadWrite / BlueprintReadOnly properties from code | ✅ (all twelve languages) | — |
+| Interop | Blueprintable classes from code: a graph class extends one, uses its members on Self, overrides its overridable methods (`BlueprintNativeEvent`) and abstract ones (`BlueprintImplementableEvent`) as events or functions, with Parent calls; Construct passes its constructor's arguments; debugging steps between the graph and the code | ✅ (every language with inheritance; Rust and Go say why not; Simulate doesn't run the code) | 13 |
 | Interop | Out parameters and several return values from code; latent (async) functions | ✅ (several outputs in every language but GDScript, which has none; async functions in all twelve: futures, promises and tasks; Go's channels, Lua's coroutines, PHP's Fibers, GDScript's await and Ruby's threads) | — |
 | Interop | Function metadata: Compact Node Title, Deprecated, Advanced Display, pin display names, ExpandBoolAsExecs / ExpandEnumAsExecs | ✅ (graph functions and macros in Details; code through tags and each language's deprecation marker) | — |
 | Interop | Double-click a node to open its definition (library graph, or code in the editor); Find References | ✅ (also F12 and Shift+F12; node files open at their type) | — |

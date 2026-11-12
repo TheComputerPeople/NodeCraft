@@ -5,6 +5,7 @@ from corpus_game.graphs.dividing_vgraph import Dividing
 from corpus_game.graphs.fetching_vgraph import Fetching, run_latent_actions
 from corpus_game.graphs.firsts_vgraph import Firsts
 from corpus_game.graphs.greeting_vgraph import greet
+from corpus_game.graphs.questing_vgraph import Questing
 
 
 def main() -> None:
@@ -12,6 +13,7 @@ def main() -> None:
     Counting().start()
     Dividing().start()
     Firsts().start()
+    Questing().start()
     Fetching().start()
     # Fetching waits for fetch_double: its Completed runs with the graphs' other latent actions.
     run_latent_actions()

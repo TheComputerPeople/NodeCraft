@@ -368,9 +368,15 @@ export function scanCSharp(source: string): CSharpScan {
       if (cls && at(k, '(') && k === i + 1 && tokens[i].text === className.split('.').pop() && !modifiers.includes('static')) {
         const close = skipGroup(k);
         const params = parseParams(k + 1, close - 1);
-        if (!access) instanceSkip(tokens[i].text, 'it isn\'t public or internal, so generated code can\'t call it');
+        // A protected one is for subclasses alone: theirs calls it (docs/code-classes-as-parents.md). A
+        // public one comes first.
+        const forSubclasses = !access && modifiers.includes('protected') && !modifiers.includes('private');
+        if (!access && !forSubclasses) {
+          cls.constructorHidden = true;
+          instanceSkip(tokens[i].text, 'it isn\'t public or internal, so generated code can\'t call it');
+        }
         else if ('reason' in params) instanceSkip(tokens[i].text, params.reason);
-        else cls.init = { name: tokens[i].text, line: tokens[first].line, params, returns: null, doc: memberDoc };
+        else if (!forSubclasses || !cls.init || cls.init.protected) cls.init = { name: tokens[i].text, line: tokens[first].line, params, returns: null, doc: memberDoc, ...(forSubclasses ? { protected: true } : {}) };
         i = skipMember(close);
         continue;
       }

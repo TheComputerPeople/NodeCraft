@@ -2,9 +2,11 @@
 
 require_relative 'corpus_game/text'
 require_relative 'corpus_game/features'
+require_relative 'corpus_game/actor'
 require_relative 'corpus_game/graphs/greeting_vgraph'
 require_relative 'corpus_game/graphs/counting_vgraph'
 require_relative 'corpus_game/graphs/dividing_vgraph'
+require_relative 'corpus_game/graphs/questing_vgraph'
 require_relative 'corpus_game/graphs/fetching_vgraph'
 
 # The corpus's gem: its graphs greet and use its features.
@@ -18,6 +20,7 @@ module CorpusGame
   def self.run_features
     Counting.new.start
     Dividing.new.start
+    Questing.new.start
     Fetching.new.start
     Vg.run_latent_actions
   end

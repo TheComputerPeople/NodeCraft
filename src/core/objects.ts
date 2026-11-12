@@ -414,6 +414,9 @@ export interface CodeClassInfo {
   initName?: string;
   // Their types as the code writes them (C++, Java: CodeSpelling).
   initSpelling?: string[];
+  // The constructor is protected, for subclasses alone: a subclass declares a public one of its own
+  // that calls it, since one it inherits would stay protected (TypeScript, C++).
+  initProtected?: boolean;
   // The methods a graph class may override: marked `@blueprint overridable`, or abstract; never one
   // the language seals. Their data pins.
   overridable: CodeOverridable[];

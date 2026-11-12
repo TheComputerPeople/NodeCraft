@@ -63,7 +63,11 @@ export function scanPhp(source: string): ModuleScan {
       const isProtected = /\bprotected\b/.test(modifiers);
       const inheritance = { ...(/\babstract\b/.test(modifiers) ? { abstract: true } : {}), ...(/\bfinal\b/.test(modifiers) ? { sealed: true } : {}), ...(isProtected ? { protected: true } : {}) };
       const overridable = !inheritance.sealed && (!!inheritance.abstract || /^overridable\b/i.test(doc.tags.find((t) => t.name === 'blueprint')?.text.trim() ?? ''));
-      if (member && !isPublic && !(isProtected && name !== '__construct')) skip("it isn't public");
+      // A protected constructor is for subclasses alone: theirs calls it.
+      if (member && !isPublic && !isProtected) {
+        if (name === '__construct') member.constructorHidden = true;
+        skip("it isn't public");
+      }
       else if (inClass && !member && !(isStatic && isPublic)) skip("It isn't public static: generated code calls static methods and functions, without an object.");
       else if (name.startsWith('__') && !(member && name === '__construct')) skip('Its name starts with __ (a magic method).');
       else {
@@ -92,7 +96,7 @@ export function scanPhp(source: string): ModuleScan {
           const fiberValue = fiberTypes?.length === 4 ? fiberTypes[2] : fiberTypes?.[0];
           const returns = fiber ? (fiberValue ? mapPhpType(fiberValue) : undefined) : returnText ? mapPhpType(returnText) : undefined;
           const several = fiber ? { latent: true } : severalOutputs(doc, returns, references);
-          if (member && name === '__construct') member.init = { name, line: where, params: scanned, returns: null, doc };
+          if (member && name === '__construct') member.init = { name, line: where, params: scanned, returns: null, doc, ...(isProtected ? { protected: true } : {}) };
           else if (member) {
             member.methods.push({ name, line: where, params: scanned, returns, doc, ...several, ...inheritance });
             if (isProtected && !overridable) skip("it isn't public");

@@ -369,7 +369,13 @@ class DeclarationParser {
         if (parsed.overload && !abstract) continue;
         const signature = parsed.signature;
         const overridable = abstract || /^overridable\b/i.test(jsdoc.tags.find((t) => t.name === 'blueprint')?.text.trim() ?? '');
-        if (inherited && !modifiers.has('static') && !('reason' in signature) && !modifiers.has('get') && !modifiers.has('set') && name !== 'constructor') {
+        // A protected constructor is for subclasses alone: theirs calls it (docs/code-classes-as-parents.md).
+        if (name === 'constructor' && inherited && !('reason' in signature)) cls.scan.init = { name, line, params: signature.params, returns: null, doc: jsdoc, protected: true };
+        else if (name === 'constructor' && hidden) {
+          cls.scan.constructorHidden = true;
+          skip("it isn't public");
+        }
+        else if (inherited && !modifiers.has('static') && !('reason' in signature) && !modifiers.has('get') && !modifiers.has('set') && name !== 'constructor') {
           cls.scan.methods.push({ name, line, params: signature.params, returns: signature.returns, doc: jsdoc, protected: true, ...(abstract ? { abstract: true } : {}), ...(signature.latent ? { latent: true } : {}) });
           if (!overridable) skip("it isn't public");
         } else if (hidden) skip("it isn't public");

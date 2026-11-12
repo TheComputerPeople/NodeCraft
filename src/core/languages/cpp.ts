@@ -467,7 +467,14 @@ class CppEmitter {
     const sections: Record<'public' | 'protected' | 'private', string[]> = { public: [], protected: [], private: [] };
     // The code parent's constructor, inherited (through the graph parents too): Construct passes
     // its arguments (docs/code-classes-as-parents.md).
-    if (parent && codeParentInfo(this.program)?.init?.length) sections.public.push(`using ${this.userTypeName(parent)}::${this.userTypeName(parent).split('::').pop()};`);
+    const code = codeParentInfo(this.program);
+    // A protected one would be protected inherited too, so straight under the
+    // code a public one passes its arguments on, in the types the code writes. Its parameters are
+    // named apart from the code's members, even private ones, which -Wshadow counts.
+    if (parent && isCodeClassId(parent) && code?.initProtected) {
+      const params = (code.init ?? []).map((p, i) => ({ name: /^[A-Za-z_]\w*$/.test(p.id) ? `vg_${p.id}` : `vg_arg${i}`, text: code.initSpelling?.[i] ?? this.typeName(p.type) }));
+      sections.public.push(`${params.length === 1 ? 'explicit ' : ''}${this.className}(${params.map((p) => `${p.text} ${p.name}`).join(', ')}) : ${this.userTypeName(parent)}(${params.map((p) => p.name).join(', ')}) {}`);
+    } else if (parent && code?.init?.length) sections.public.push(`using ${this.userTypeName(parent)}::${this.userTypeName(parent).split('::').pop()};`);
     for (const m of this.program.members.filter((x) => !x.function)) sections[m.access ?? 'public'].push(`${this.typeName(m.type)} ${this.memberNames.get(m.id)} = ${this.coerce(m.initial, m.type)};`);
     for (const d of this.program.dispatchers ?? []) sections.public.push(`vgraph::Dispatcher<${d.params.map((p) => this.typeName(p.type)).join(', ')}> ${this.dispatcherNames.get(d.id)};`);
     sections.public.push(`virtual ~${this.className}() = default;`);

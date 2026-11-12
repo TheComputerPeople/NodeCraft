@@ -81,6 +81,9 @@ export interface ScannedClass {
   init?: ScannedFunction;
   // An abstract class can't be constructed.
   abstract?: boolean;
+  // Its only constructor is private: generated code can't call it, so it gets no Construct node.
+  // (A protected one is `init`, marked protected: a subclass calls it.)
+  constructorHidden?: boolean;
   methods: ScannedFunction[];
   properties: ScannedProperty[];
 }
@@ -304,7 +307,7 @@ function classDefinitions(cls: ScannedClass, options: ExposeOptions, lines: Map<
   const type = (suffix: string) => functionNodeType(options.language, options.path, `${cls.name}:${suffix}`);
   const definitions: NodeDefinition[] = [];
   const init = cls.init;
-  if (!cls.abstract && (init ? isMarked(init.doc) : isMarked(cls.doc))) {
+  if (!cls.abstract && !init?.protected && !(cls.constructorHidden && !init) && (init ? isMarked(init.doc) : isMarked(cls.doc))) {
     const base = definitionFor({ ...(init ?? { line: cls.line, params: [], doc: cls.doc }), name: simple, returns: cls.type }, options, `Project / ${simple}`);
     definitions.push({
       ...base, type: type('new'), displayName: `Construct ${simple}`,
@@ -370,7 +373,7 @@ function codeClassDefinition(cls: ScannedClass, options: ExposeOptions): NodeDef
     name: cls.name, title: simple, language: options.language, path: options.path, ...(options.module ? { module: options.module } : {}),
     ...(cls.abstract ? { abstract: true } : {}),
     // (None, when the class declares no constructor: PHP calls parent::__construct only when there's one.)
-    ...(cls.init ? { init: dataPins(definitionFor(cls.init, options).inputs), initName: cls.init.name, ...(cls.init.spelling ? { initSpelling: cls.init.spelling.params } : {}) } : {}),
+    ...(cls.init ? { init: dataPins(definitionFor(cls.init, options).inputs), initName: cls.init.name, ...(cls.init.spelling ? { initSpelling: cls.init.spelling.params } : {}), ...(cls.init.protected ? { initProtected: true } : {}) } : {}),
     overridable,
     members: [...new Set([...cls.methods.map((m) => m.name), ...cls.properties.map((p) => p.name)])]
   };

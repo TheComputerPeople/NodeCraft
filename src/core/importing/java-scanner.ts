@@ -242,10 +242,18 @@ export function scanJava(source: string): ModuleScan {
         if (at(k, '(') && k - typeStart === 1 && tokens[typeStart].text === container.split('.').pop()) {
           const close = skipGroup(k);
           const params = parseParams(k + 1, close - 1);
-          if (!modifiers.has('public')) memberSkip(tokens[typeStart].text, "it isn't public, so generated code can't call it");
+          // A protected one is for subclasses alone: theirs calls it (docs/code-classes-as-parents.md). A
+          // public one comes first.
+          const forSubclasses = modifiers.has('protected');
+          if (!modifiers.has('public') && !forSubclasses) {
+            cls.constructorHidden = true;
+            memberSkip(tokens[typeStart].text, "it isn't public, so generated code can't call it");
+          }
           else if (at(close, 'throws')) memberSkip(tokens[typeStart].text, "constructors that declare checked exceptions can't be nodes yet");
           else if ('reason' in params) memberSkip(tokens[typeStart].text, params.reason);
-          else if (!cls.init || isMarked(memberDoc)) cls.init = { name: tokens[typeStart].text, line: tokens[first].line, params, returns: null, doc: memberDoc, spelling: { params: paramTexts(k + 1, close - 1) } };
+          else if (!cls.init || (cls.init.protected && !forSubclasses) || (isMarked(memberDoc) && (!forSubclasses || cls.init.protected))) {
+            cls.init = { name: tokens[typeStart].text, line: tokens[first].line, params, returns: null, doc: memberDoc, spelling: { params: paramTexts(k + 1, close - 1) }, ...(forSubclasses ? { protected: true } : {}) };
+          }
           j = skipMember(close);
           continue;
         }

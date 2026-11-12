@@ -12,6 +12,8 @@ This phase brings that to the 12 languages, as far as each language's inheritanc
 
 A "Built" section after each step says what it built.
 
+Status: complete (November 2026). The exit check is met (step 9), with what's left for later there and in "Not in this phase".
+
 ## Today
 
 - **Graph classes extend graph classes** ([program-structure.md](program-structure.md), "Inheritance"):
@@ -298,6 +300,35 @@ The three choices this design needs. The user confirmed all three as recommended
   The Python one needs the Python Debugger extension, so it runs in the run with debuggers (and is skipped without it). A unit test checks that both kinds of parent are read back from a file, and that another kind isn't.
 
 9. The exit check, docs, the parity checklist and status.
+
+### Built (step 9)
+
+The exit check is met, each part a test:
+
+- **Every language with inheritance** (test/conformance/code-parents.test.ts): the Actor, Knight and Game print the same five lines in TypeScript, JavaScript (ES modules and CommonJS), Python, C#, Java, C++, PHP, Ruby, Lua and GDScript. The strictest checkers pass on the generated code: `tsc` strict, mypy and Pyright, the C# compiler, `javac -Xlint:all -Werror`, g++ with `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror`, PHPStan level 9, `ruby -w` and Godot's warnings. The graphs moved to code-parents.ts, which the corpus uses too.
+- **The corpus** (test/conformance/corpus.test.ts): a new feature, `parents`, in the one layout per language that has the features: ts-vite-app, js-esm, py-src-layout, cs-console, java-maven, cpp-cmake, php-composer-lib, ruby-gem, lua-rock and gd-addon.
+  - **The code:** each project has its own `Actor`, written in its own style (the C# one with a primary constructor, as its analyzers require).
+  - **The graphs:** `Paladin` extends it and `Questing` constructs a Paladin and runs its turn. They aren't Knight and Game because the body's arena has a Knight, and C++ classes share the global namespace.
+  - **The checks:** each project builds, passes its checkers (ESLint, Ruff, RuboCop, PHP_CodeSniffer and the rest) and prints the five lines from its own entry point. go-module and rust-bin don't have the feature.
+- **The editor:** Class Settings lists the code class (test/webview/objects.test.ts), and its members are offered on Self. Override lists the code's methods, and Compile reports abstract methods left (test/unit/code-parents.test.ts).
+- **Debugging:** in TypeScript and Python (step 8).
+- **Rust and Go** say why they can't (step 7).
+
+Found by the check:
+
+- **A protected constructor** is how an abstract class (and any class made to be extended) is usually written. .NET's analyzers want one (CA1012). The scanners skipped it, so a graph class couldn't pass the code's constructor its arguments. Now, in TypeScript, C#, Java, C++ and PHP:
+  - it's the one a subclass calls (`initProtected`), and a public one still comes first;
+  - the class gets no Construct node of its own;
+  - TypeScript and C++ declare a public constructor that passes the arguments on, since one they inherit would stay protected: `constructor(name: string) { super(name); }` and `explicit Paladin(std::string vg_name) : ::game::Actor(vg_name) {}`.
+
+  C++'s parameters are named apart from the code's members, since `-Wshadow` counts the parent's private members too. The corpus's TypeScript, Java, C++ and PHP Actors have protected constructors, and the conformance test's have public ones, so both run.
+- **A private constructor**, a class's only one, left a Construct node that couldn't compile. Such a class now gets none.
+
+Left for later:
+
+- **Godot's `@abstract`** (Godot 4.5) isn't read. Lua, Ruby and GDScript Actors give `describe` a body that the graph replaces.
+- **luacheck** isn't installed here, so the Lua layout's lint step is skipped, as it was before this phase.
+- The rest is in "Not in this phase" below.
 
 ## Not in this phase
 

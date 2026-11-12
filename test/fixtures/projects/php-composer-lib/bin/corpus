@@ -9,16 +9,19 @@ require __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/Graphs/Greeting.vgraph.php';
 require_once __DIR__ . '/../src/Graphs/Counting.vgraph.php';
 require_once __DIR__ . '/../src/Graphs/Dividing.vgraph.php';
+require_once __DIR__ . '/../src/Graphs/Questing.vgraph.php';
 require_once __DIR__ . '/../src/Graphs/Fetching.vgraph.php';
 
 use Corpus\Graphs\Counting;
 use Corpus\Graphs\Dividing;
 use Corpus\Graphs\Fetching;
 use Corpus\Graphs\Greeting;
+use Corpus\Graphs\Questing;
 
 echo Greeting::greet('ada'), "\n";
 (new Counting())->start();
 (new Dividing())->start();
+(new Questing())->start();
 (new Fetching())->start();
 // Delays and fibers the graphs wait on.
 \Vgraph\Vg::runLatentActions();

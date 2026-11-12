@@ -282,6 +282,9 @@ export function scanCpp(source: string): ModuleScan {
     let access = initialAccess;
     let attributeDoc: string[] | undefined;
     let deprecation: { message?: string } | undefined;
+    // A protected constructor, for subclasses alone: theirs calls it (docs/code-classes-as-parents.md),
+    // unless the class has a public one.
+    let protectedInit: { init: ScannedFunction; skip: () => void } | undefined;
     while (i < end) {
       if (at(i, ';')) {
         i++;
@@ -334,8 +337,13 @@ export function scanCpp(source: string): ModuleScan {
         }
         const declEnd = at(k, '{') ? skipGroup(k) : skipDeclaration(k);
         const params = parseParams(i + 2, close - 1);
-        if (access !== 'public') skip(className, "it isn't public");
-        else if ('reason' in params) skip(className, params.reason);
+        if (access === 'protected' && !('reason' in params) && (!protectedInit || isMarked(docComment))) {
+          const skipIt = () => skip(className, "it isn't public");
+          protectedInit = { init: { name: className, line: tokens[first].line, params, returns: null, doc: docComment, protected: true, spelling: { params: paramTexts(i + 2, close - 1) } }, skip: skipIt };
+        } else if (access !== 'public') {
+          cls.constructorHidden = true;
+          skip(className, "it isn't public");
+        } else if ('reason' in params) skip(className, params.reason);
         else if (!cls.init || isMarked(docComment)) cls.init = { name: className, line: tokens[first].line, params, returns: null, doc: docComment };
         i = declEnd;
         continue;
@@ -393,6 +401,8 @@ export function scanCpp(source: string): ModuleScan {
       }
       i = declEnd;
     }
+    if (protectedInit && !cls.init) cls.init = protectedInit.init;
+    else protectedInit?.skip();
   };
 
   // Several outputs: out parameters (after the returned value, if any), or a std::tuple's or

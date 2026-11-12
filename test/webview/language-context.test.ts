@@ -132,10 +132,11 @@ describe('language terms in the editor', () => {
     type Request = { type: string; requestId?: number; nodeType?: string; document?: GraphDocument };
     const requests = async () => ((await e.posted()) as Request[]).filter((m) => m.type === 'previewNode');
     let answered = 0;
-    // Answers the next request, once the webview has sent it.
+    // Answers the next request for `nodeType`, once the webview has sent it. (Changing the language
+    // asks again for the node still highlighted, which may come first.)
     const answer = async (nodeType: string, code: string) => {
-      await e.page.waitForFunction((after) => (window as unknown as { __posted: Request[] }).__posted.some((m) => m.type === 'previewNode' && (m.requestId ?? 0) > after), answered);
-      const request = (await requests()).filter((m) => (m.requestId ?? 0) > answered).pop()!;
+      await e.page.waitForFunction(([after, type]) => (window as unknown as { __posted: Request[] }).__posted.some((m) => m.type === 'previewNode' && (m.requestId ?? 0) > after && m.nodeType === type), [answered, nodeType] as const);
+      const request = (await requests()).filter((m) => (m.requestId ?? 0) > answered && m.nodeType === nodeType).pop()!;
       assert.equal(request.nodeType, nodeType);
       answered = request.requestId ?? 0;
       await e.send({ type: 'nodePreview', requestId: request.requestId, preview: { code, kind: 'snippet' } });

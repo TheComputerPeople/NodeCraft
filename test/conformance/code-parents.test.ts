@@ -1,9 +1,6 @@
 // Code classes as parents (docs/code-classes-as-parents.md), in every language with inheritance
-// (TypeScript, JavaScript, Python, C#, Java, C++, PHP, Ruby, Lua and GDScript): an Actor from the project's code, with a constructor taking a name, a health property, a
-// method (greet), an overridable method (hit), an abstract one (describe) and a template method
-// (turn) calling both. A Knight graph extends it: its Start sets health and greets on Self, Event
-// hit says so and calls Parent: hit, and describe is a function. A Game graph constructs a Knight
-// and runs turn.
+// (TypeScript, JavaScript, Python, C#, Java, C++, PHP, Ruby, Lua and GDScript): the Actor below, in
+// each language, and the Knight and Game graphs of code-parents.ts.
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -14,18 +11,17 @@ import { compileDocument } from '../../src/core/compiler';
 import { exposeFunctions } from '../../src/core/importing/symbols';
 import { GenerateOptions } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
-import { GraphDocument, NodeDefinition } from '../../src/core/model';
-import { CodeClassInfo, OVERRIDE_EVENT, PARENT_CALL, classDefinitions, declaredClass } from '../../src/core/objects';
+import { GraphDocument } from '../../src/core/model';
+import { OVERRIDE_EVENT, PARENT_CALL, classDefinitions, declaredClass } from '../../src/core/objects';
 import { NodeRegistry } from '../../src/core/registry';
 import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
+import { CODE_PARENTS_OUTPUT, Code, gameGraph, knightGraph, method } from './code-parents';
 import { PYTHON, corpusToolsFolder } from './corpus';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 const languages = builtinLanguagePacks();
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-code-parents-'));
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
-
-const EXPECTED = ['Bors has 50', 'Bors is a knight', 'Knight blocks', 'Bors takes 3', 'Bors has 47'];
 
 // The Actor in TypeScript, or in JavaScript (JSDoc types; with no abstract methods, describe has a
 // body the Knight replaces).
@@ -428,65 +424,6 @@ const MODULES: Record<string, { path: string; text: string; module?: string }> =
 const n = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
 const w = (fromNode: string, fromPin: string, toNode: string, toPin: string) => ({ id: `${fromNode}.${fromPin}->${toNode}.${toPin}`, fromNode, fromPin, toNode, toPin });
 
-interface Code {
-  info: CodeClassInfo;
-  definitions: NodeDefinition[];
-}
-
-// An Actor member node's type, by its name in any case ("greet", "set:health"). (A Lua module that
-// returns the class names no class: "#:greet".)
-function member(code: Code, name: string): string {
-  const found = code.definitions.find((d) => d.type.toLowerCase().endsWith(`actor:${name}`) || d.type.endsWith(`#:${name}`));
-  assert.ok(found, `no Actor:${name} in ${code.definitions.map((d) => d.type).join(', ')}`);
-  return found.type;
-}
-
-function method(code: Code, name: string) {
-  const found = code.info.overridable.find((m) => m.name.toLowerCase() === name);
-  assert.ok(found, `${name} isn't overridable`);
-  return found;
-}
-
-function knight(language: string, code: Code): GraphDocument {
-  const hit = method(code, 'hit');
-  const describe = method(code, 'describe').name;
-  return {
-    schemaVersion: 3, name: 'Knight', kind: 'class', language, parent: code.info.id, variables: [],
-    graphs: [
-      {
-        id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
-        nodes: [
-          // Start: health = 50 and greet, both on Self (their Target unwired).
-          n('s', 'core:event.start'), n('set', member(code, 'set:health'), { 'pin:value': 50 }), n('greet', member(code, 'greet')), n('p1', 'core:console.print'),
-          // Event hit: says so, then runs the code's hit.
-          n('hit', OVERRIDE_EVENT, { method: hit.name }), n('p2', 'core:console.print', { 'pin:value': 'Knight blocks' }), n('parent', PARENT_CALL, { function: hit.name })
-        ],
-        connections: [
-          w('s', 'execOut', 'set', 'execIn'), w('set', 'execOut', 'greet', 'execIn'), w('greet', 'execOut', 'p1', 'execIn'), w('greet', 'returnValue', 'p1', 'value'),
-          w('hit', 'execOut', 'p2', 'execIn'), w('p2', 'execOut', 'parent', 'execIn'), w('hit', hit.inputs[0].id, 'parent', hit.inputs[0].id)
-        ]
-      },
-      {
-        id: 'Describe', name: describe, kind: 'function', comments: [],
-        signature: { inputs: [], outputs: [{ id: 'returnValue', name: 'Return Value', kind: 'data', type: { id: 'string' } }] },
-        nodes: [n('entry', 'core:function.entry', { graph: 'Describe' }), n('return', 'core:function.return', { graph: 'Describe', 'pin:returnValue': 'a knight' })],
-        connections: [w('entry', 'execOut', 'return', 'execIn')]
-      }
-    ]
-  };
-}
-
-function game(language: string, code: Code): GraphDocument {
-  return {
-    schemaVersion: 3, name: 'Game', kind: 'class', language, variables: [],
-    graphs: [{
-      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
-      nodes: [n('s', 'core:event.start'), n('make', 'object:Knight.construct', { 'pin:name': 'Bors' }), n('turn', member(code, 'turn'))],
-      connections: [w('s', 'execOut', 'make', 'execIn'), w('make', 'execOut', 'turn', 'execIn'), w('make', 'object', 'turn', 'target')]
-    }]
-  };
-}
-
 function scan(language: string, key: string): Code {
   const module = MODULES[key];
   const exposed = exposeFunctions(languages.get(language)!.importer!.scan!(module.text), { language, path: module.path, module: module.module, exposeAll: false });
@@ -501,7 +438,7 @@ function registryFor(language: string, code: Code): NodeRegistry {
   const generator = languages.get(language)!.generator!;
   const file = generator.outputFileName('Knight.vgraph');
   const module = language === 'python' ? file.replace(/\.py$/, '') : ['csharp', 'java', 'php'].includes(language) ? 'Arena' : undefined;
-  r.registerMany(classDefinitions(declaredClass(knight(language, code), { document: 'graphs/Knight.vgraph', generatedPath: `graphs/${file}`, ...(module ? { module } : {}) })!));
+  r.registerMany(classDefinitions(declaredClass(knightGraph(language, code), { document: 'graphs/Knight.vgraph', generatedPath: `graphs/${file}`, ...(module ? { module } : {}) })!));
   return r;
 }
 
@@ -527,7 +464,7 @@ function build(name: string, key: string, language: string, generate: Partial<Ge
   const texts: Record<string, string> = {};
   const files: string[] = [];
   let last: { file: string; className: string; importRoots?: string[] } | undefined;
-  for (const doc of [knight(language, code), game(language, code)]) {
+  for (const doc of [knightGraph(language, code), gameGraph(language, code)]) {
     const result = compileDocument(doc, { registry: r, languages, generate: { sourceFileName: `${doc.name}.vgraph`, outputDir: 'graphs', namespace: 'Arena', ...generate } });
     assert.deepEqual(result.diagnostics, [], doc.name);
     const file = path.join(dir, 'graphs', result.output!.fileName);
@@ -692,7 +629,7 @@ describe('code classes as parents', () => {
       ['php', 'php', /^abstract class Knight extends \\Game\\Actor$/m]
     ] as const) {
       const code = scan(language, key);
-      const doc = knight(language, code);
+      const doc = knightGraph(language, code);
       doc.graphs = doc.graphs.filter((g) => g.kind === 'event');
       const result = compileDocument(doc, { registry: registryFor(language, code), languages, generate: { sourceFileName: 'Knight.vgraph', namespace: 'Arena' } });
       assert.deepEqual(result.diagnostics.map((d) => d.code), ['abstract-left']);
@@ -702,7 +639,7 @@ describe('code classes as parents', () => {
 
   test("the graph's own members can't take the code's names", () => {
     const code = scan('typescript', 'typescript');
-    const doc = { ...knight('typescript', code), variables: [{ id: 'h', name: 'Health', type: { id: 'int' } }] };
+    const doc = { ...knightGraph('typescript', code), variables: [{ id: 'h', name: 'Health', type: { id: 'int' } }] };
     const result = compileDocument(doc, { registry: registryFor('typescript', code), languages, generate: { sourceFileName: 'Knight.vgraph' } });
     assert.deepEqual(result.diagnostics.map((d) => d.message), ['Actor already has a member named "health", so "Health" needs another name.']);
   });
@@ -720,7 +657,7 @@ describe('code classes as parents', () => {
         if (error instanceof ToolNotFoundError) return t.skip(error.message);
         throw error;
       }
-      assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').split('\n').filter(Boolean), EXPECTED, `stderr:\n${outcome.stderr}`);
+      assert.deepEqual(outcome.stdout.replace(/\r\n/g, '\n').split('\n').filter(Boolean), CODE_PARENTS_OUTPUT, `stderr:\n${outcome.stderr}`);
       // Godot reports a script's errors and warnings as it loads it (the override's signature among them).
       if (target.language === 'gdscript') assert.doesNotMatch(outcome.stderr, /SCRIPT ERROR|WARNING/, outcome.stderr);
     });
@@ -779,7 +716,7 @@ describe('code classes as parents', () => {
     const result = spawnSync('ruby', ['-w', '-e', `require './graphs/${path.basename(built.file)}'; ${built.className}.new.start`], { cwd: built.dir, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, '');
-    assert.deepEqual(result.stdout.replace(/\r\n/g, '\n').split('\n').filter(Boolean), EXPECTED);
+    assert.deepEqual(result.stdout.replace(/\r\n/g, '\n').split('\n').filter(Boolean), CODE_PARENTS_OUTPUT);
   });
 
   for (const checker of [{ name: 'mypy --strict', args: ['mypy', '--strict'] }, { name: 'Pyright (strict)', args: ['pyright'] }]) {

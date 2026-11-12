@@ -217,6 +217,17 @@ class TypeScriptEmitter {
     for (const x of slots) this.field(this.slotNames.get(x.id)!, x.type, this.defaultFor(x.type), true);
     if (members.length || slots.length || dispatchers.length) out.line();
 
+    // The code's constructor is protected: one inherited would be too, so
+    // Construct couldn't call it. A public one passes its arguments on.
+    const code = parent && isCodeClassId(parent) ? codeParentInfo(this.program) : undefined;
+    if (flavor.typed && code?.initProtected) {
+      const params = (code.init ?? []).map((p, i) => ({ name: /^[A-Za-z_$][\w$]*$/.test(p.id) && !RESERVED.has(p.id) ? p.id : `arg${i}`, type: p.type }));
+      out.line(`constructor(${params.map((p) => `${p.name}: ${this.typeName(p.type)}`).join(', ')}) {`);
+      out.line(`  super(${params.map((p) => p.name).join(', ')});`);
+      out.line('}');
+      out.line();
+    }
+
     // A subclass without Start nodes keeps its parent's start, as Unreal keeps BeginPlay.
     if (!graphParent || this.program.hasStart) this.method('start', [], undefined, false, () => this.statements(this.program.start), graphParent);
     for (const fn of this.program.functions) this.functionMethod(fn);

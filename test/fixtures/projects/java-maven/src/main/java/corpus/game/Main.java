@@ -5,6 +5,7 @@ import corpus.game.graphs.Dividing;
 import corpus.game.graphs.Fetching;
 import corpus.game.graphs.Firsts;
 import corpus.game.graphs.Greeting;
+import corpus.game.graphs.Questing;
 
 public final class Main {
     private Main() {
@@ -15,6 +16,7 @@ public final class Main {
         new Counting().start();
         new Dividing().start();
         new Firsts().start();
+        new Questing().start();
         new Fetching().start();
         // Fetching waits for fetchDouble: its Completed runs with the graphs' other latent actions.
         Fetching.runLatentActions();

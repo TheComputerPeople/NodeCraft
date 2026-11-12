@@ -51,7 +51,7 @@ function printCall(name: string, type: string, pins: Record<string, unknown>): G
   };
 }
 // C++ has no generics in its pack yet.
-const CPP_FEATURES: Feature[] = ['classes', 'outputs', 'latent'];
+const CPP_FEATURES: Feature[] = ['classes', 'outputs', 'parents', 'latent'];
 // PHP without Xdebug's messages; its tools from the corpus's tools (npm run corpus:tools). Composer
 // only writes the autoloader, which the project's own entry point then loads.
 const PHP_ENV = { XDEBUG_MODE: 'off' };
@@ -65,17 +65,18 @@ const luacheck: CorpusStep = { name: 'luacheck', command: ['luacheck', '.'], pro
 const LUA_PROBE = ['lua', '-v'];
 // Godot: the GDScript tests' GODOT, else on the PATH. Its pack has classes and async functions.
 const GODOT = process.env.GODOT ?? 'godot';
-const GDSCRIPT_FEATURES: Feature[] = ['classes', 'latent'];
+const GDSCRIPT_FEATURES: Feature[] = ['classes', 'parents', 'latent'];
 // Ruby, Lua and PHP have no generics to speak of.
-const DYNAMIC_FEATURES: Feature[] = ['classes', 'outputs', 'latent'];
-// Go has no generics in its pack yet.
+const DYNAMIC_FEATURES: Feature[] = ['classes', 'outputs', 'parents', 'latent'];
+// Go has no generics in its pack yet, and neither it nor Rust has inheritance.
 const GO_FEATURES: Feature[] = ['classes', 'outputs', 'latent'];
+const RUST_FEATURES: Feature[] = ['classes', 'outputs', 'generics', 'latent'];
 
 export const LAYOUTS: Layout[] = [
   // ---- TypeScript ----
   {
     // A browser app: no Node.js types, so the generated test file must type-check without them.
-    name: 'ts-vite-app', language: 'typescript', code: ['src/text/format.ts', 'src/game/features.ts'], body: 'src/blueprint',
+    name: 'ts-vite-app', language: 'typescript', code: ['src/text/format.ts', 'src/game/features.ts', 'src/game/actor.ts'], body: 'src/blueprint',
     graphs: [greeting('src/graphs/Greeting.vgraph', 'title'), greetingTests('src/graphs/Greeting.vgraph'), ...featureGraphs('src/graphs', 'typescript')],
     steps: [tsc(), eslint, nodeTest('src/graphs/GreetingTests.vgraph.test.ts'), { name: 'run', command: ['node', 'src/main.ts'], stdout: [...HELLO, ...featuresOutput()] }]
   },
@@ -100,7 +101,7 @@ export const LAYOUTS: Layout[] = [
     steps: [tsc('jsconfig.json'), eslint, { name: 'run', command: ['node', 'src/index.js'], stdout: HELLO }]
   },
   {
-    name: 'js-esm', language: 'javascript', code: ['lib/format.js', 'lib/features.js'], body: 'src/blueprint',
+    name: 'js-esm', language: 'javascript', code: ['lib/format.js', 'lib/features.js', 'lib/actor.js'], body: 'src/blueprint',
     graphs: [greeting('src/graphs/Greeting.vgraph', 'title'), greetingTests('src/graphs/Greeting.vgraph'), ...featureGraphs('src/graphs', 'javascript')],
     steps: [tsc('jsconfig.json'), eslint, nodeTest('src/graphs/GreetingTests.vgraph.test.js'), { name: 'run', command: ['node', 'src/index.js'], stdout: [...HELLO, ...featuresOutput()] }]
   },
@@ -118,7 +119,7 @@ export const LAYOUTS: Layout[] = [
   },
   // ---- Python ----
   {
-    name: 'py-src-layout', language: 'python', code: ['src/corpus_game/text.py', 'src/corpus_game/features.py'], body: 'src/corpus_game/blueprint',
+    name: 'py-src-layout', language: 'python', code: ['src/corpus_game/text.py', 'src/corpus_game/features.py', 'src/corpus_game/actor.py'], body: 'src/corpus_game/blueprint',
     graphs: [greeting('src/corpus_game/graphs/Greeting.vgraph', 'title'), greetingTests('src/corpus_game/graphs/Greeting.vgraph'), ...featureGraphs('src/corpus_game/graphs', 'python')],
     steps: [
       python('mypy --strict', 'mypy'), python('Pyright (strict)', 'pyright'), python('Ruff', 'ruff', 'check', '.'),
@@ -141,7 +142,7 @@ export const LAYOUTS: Layout[] = [
   },
   // ---- C# ----
   {
-    name: 'cs-console', language: 'csharp', code: ['Names.cs', 'Features.cs'], body: 'Blueprint',
+    name: 'cs-console', language: 'csharp', code: ['Names.cs', 'Features.cs', 'Actor.cs'], body: 'Blueprint',
     graphs: [greeting('Graphs/Greeting.vgraph', 'Title'), ...featureGraphs('Graphs', 'csharp')],
     steps: [
       { name: 'dotnet build', command: dotnet('build'), probe: ['dotnet', '--version'] },
@@ -159,7 +160,7 @@ export const LAYOUTS: Layout[] = [
   // ---- Java ----
   {
     name: 'java-maven', language: 'java', body: 'src/main/java/corpus/game/blueprint',
-    code: ['src/main/java/corpus/game/Text.java', 'src/main/java/corpus/game/Calculations.java', 'src/main/java/corpus/game/count/Counter.java', 'src/main/java/corpus/game/count/BigCounter.java'],
+    code: ['src/main/java/corpus/game/Text.java', 'src/main/java/corpus/game/Calculations.java', 'src/main/java/corpus/game/count/Counter.java', 'src/main/java/corpus/game/count/BigCounter.java', 'src/main/java/corpus/game/Actor.java'],
     graphs: [greeting('src/main/java/corpus/game/graphs/Greeting.vgraph', 'title'), ...featureGraphs('src/main/java/corpus/game/graphs', 'java')],
     steps: [
       { name: 'mvn compile', command: ['mvn', '-q', '-o', '-B', 'compile'], probe: ['mvn', '-v'] },
@@ -196,12 +197,12 @@ export const LAYOUTS: Layout[] = [
   {
     name: 'rust-bin', language: 'rust', body: 'src/blueprint',
     code: ['src/text.rs', 'src/features/count.rs', 'src/features/divide.rs', 'src/features/lists.rs', 'src/features/fetch.rs'],
-    graphs: [greeting('src/graphs/Greeting.vgraph', 'title'), ...featureGraphs('src/graphs', 'rust')],
+    graphs: [greeting('src/graphs/Greeting.vgraph', 'title'), ...featureGraphs('src/graphs', 'rust', RUST_FEATURES)],
     steps: [
       cargo('build'), cargo('clippy', '--all-targets', '--', '-D', 'warnings'),
       // rustfmt leaves @generated files alone.
       { ...cargo('fmt', '--check'), probe: ['cargo', 'fmt', '--version'] },
-      { ...cargo('run', '--quiet'), name: 'run', stdout: [...HELLO, ...featuresOutput()] }
+      { ...cargo('run', '--quiet'), name: 'run', stdout: [...HELLO, ...featuresOutput(RUST_FEATURES)] }
     ]
   },
   {
@@ -218,7 +219,7 @@ export const LAYOUTS: Layout[] = [
   {
     // A library subproject the graphs call, and warnings as errors.
     name: 'cpp-cmake', language: 'cpp', body: 'src/blueprint', programs: ['arena'],
-    code: ['lib/include/corpus/text.h', 'src/features/count.h', 'src/features/divide.h', 'src/features/fetch.h'],
+    code: ['lib/include/corpus/text.h', 'src/features/count.h', 'src/features/divide.h', 'src/features/fetch.h', 'src/features/actor.h'],
     graphs: [greeting('src/graphs/Greeting.vgraph', 'title'), ...featureGraphs('src/graphs', 'cpp', CPP_FEATURES)],
     steps: [
       { name: 'cmake', command: ['cmake', '-S', '.', '-B', 'build', ...CMAKE_GENERATOR, '-DCMAKE_CXX_COMPILER=g++'], probe: ['cmake', '--version'] },
@@ -257,7 +258,7 @@ export const LAYOUTS: Layout[] = [
   // ---- Ruby ----
   {
     name: 'ruby-gem', language: 'ruby', body: 'lib/corpus_game/blueprint',
-    code: ['lib/corpus_game/text.rb', 'lib/corpus_game/features.rb'],
+    code: ['lib/corpus_game/text.rb', 'lib/corpus_game/features.rb', 'lib/corpus_game/actor.rb'],
     graphs: [greeting('lib/corpus_game/graphs/Greeting.vgraph', 'title'), ...featureGraphs('lib/corpus_game/graphs', 'ruby', DYNAMIC_FEATURES)],
     steps: [
       { name: 'RuboCop', command: ['rubocop', '--format', 'quiet'], probe: ['rubocop', '--version'], check: true },
@@ -279,7 +280,7 @@ export const LAYOUTS: Layout[] = [
   {
     // PSR-4 autoloading from Composer; PHPStan at level 9 and PSR-12.
     name: 'php-composer-lib', language: 'php', body: 'src/Blueprint',
-    code: ['src/Text/Names.php', 'src/Features/Counter.php', 'src/Features/BigCounter.php', 'src/Features/Arithmetic.php', 'src/Features/Remote.php'],
+    code: ['src/Text/Names.php', 'src/Features/Counter.php', 'src/Features/BigCounter.php', 'src/Features/Arithmetic.php', 'src/Features/Remote.php', 'src/Features/Actor.php'],
     graphs: [greeting('src/Graphs/Greeting.vgraph', 'title'), ...featureGraphs('src/Graphs', 'php', DYNAMIC_FEATURES)],
     steps: [...composer, phpstan, phpcs, { ...php('bin/corpus'), stdout: [...HELLO, ...featuresOutput(DYNAMIC_FEATURES)] }]
   },
@@ -293,7 +294,7 @@ export const LAYOUTS: Layout[] = [
   {
     // A rock whose modules are required from src/ (.luarc.json's runtime.path).
     name: 'lua-rock', language: 'lua', body: 'src/corpus_game/blueprint',
-    code: ['src/corpus_game/text.lua', 'src/corpus_game/features.lua'],
+    code: ['src/corpus_game/text.lua', 'src/corpus_game/features.lua', 'src/corpus_game/actor.lua'],
     graphs: [greeting('src/corpus_game/graphs/Greeting.vgraph', 'title'), ...featureGraphs('src/corpus_game/graphs', 'lua', DYNAMIC_FEATURES)],
     steps: [luacheck, { name: 'run', command: ['lua', 'bin/corpus_game.lua'], probe: LUA_PROBE, quiet: true, stdout: [...HELLO, ...featuresOutput(DYNAMIC_FEATURES)] }]
   },
@@ -307,7 +308,7 @@ export const LAYOUTS: Layout[] = [
   {
     // A Godot project whose addon has the code the graphs call, with its warnings as errors.
     name: 'gd-addon', language: 'gdscript', body: 'scenes/blueprint',
-    code: ['addons/corpus_tools/text.gd', 'addons/corpus_tools/counter.gd', 'addons/corpus_tools/big_counter.gd', 'addons/corpus_tools/remote.gd'],
+    code: ['addons/corpus_tools/text.gd', 'addons/corpus_tools/counter.gd', 'addons/corpus_tools/big_counter.gd', 'addons/corpus_tools/remote.gd', 'addons/corpus_tools/actor.gd'],
     graphs: [greeting('scenes/graphs/Greeting.vgraph', 'title'), ...featureGraphs('scenes/graphs', 'gdscript', GDSCRIPT_FEATURES)],
     steps: [
       // As a CI job does first: the import registers the class_name scripts.

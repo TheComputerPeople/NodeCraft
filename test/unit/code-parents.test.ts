@@ -169,6 +169,53 @@ describe('code classes graph classes may extend', () => {
     ].join('\n')), { language: 'php', path: 'src/Actor.php' });
     assert.deepEqual(overridable(actor), ['hit(damage:int)', 'describe() -> string abstract protected']);
   });
+
+  // .NET's analyzers want an abstract class's constructor protected (CA1012), and it's the usual way
+  // in the others for a class made to be extended: only a subclass calls it.
+  test("a protected constructor is the one a subclass calls, with no Construct of the class's own", () => {
+    const sources: [string, (text: string) => ModuleScan, string, (isAbstract: boolean) => string[]][] = [
+      ['typescript', scanTypeScript, 'src/actor.ts', (isAbstract) => [
+        '/** @blueprint */', `export ${isAbstract ? 'abstract ' : ''}class Actor {`, '  /** @blueprint */', '  protected constructor(name: string) {}',
+        '  /** @blueprint overridable */', '  hit(damage: number): void {}', '}'
+      ]],
+      ['csharp', scanCSharp, 'Actor.cs', (isAbstract) => [
+        '/// @blueprint', `public ${isAbstract ? 'abstract ' : ''}class Actor`, '{', '    /// @blueprint', '    protected Actor(string name) { }',
+        '    /// @blueprint overridable', '    public virtual void Hit(int damage) { }', '}'
+      ]],
+      ['java', scanJava, 'game/Actor.java', (isAbstract) => [
+        'package game;', '/** @blueprint */', `public ${isAbstract ? 'abstract ' : ''}class Actor {`, '    /** @blueprint */', '    protected Actor(String name) {}',
+        '    /** @blueprint overridable */', '    public void hit(int damage) {}', '}'
+      ]],
+      ['php', scanPhp, 'src/Actor.php', (isAbstract) => [
+        '<?php', '/** @blueprint */', `${isAbstract ? 'abstract ' : ''}class Actor`, '{', '    /** @blueprint */', '    protected function __construct(string $name)', '    {', '    }',
+        '    /** @blueprint overridable */', '    public function hit(int $damage): void', '    {', '    }', '}'
+      ]],
+      // Abstract through a pure virtual member function, declared after the constructor.
+      ['cpp', scanCpp, 'actor.h', (isAbstract) => [
+        '/// @blueprint', 'class Actor {', 'public:', '    /// @blueprint overridable', '    virtual void hit(int damage) {}',
+        ...(isAbstract ? ['    virtual void describe() = 0;'] : []), 'protected:', '    /// @blueprint', '    explicit Actor(const std::string& name) {}', '};'
+      ]]
+    ];
+    for (const [language, scan, file, lines] of sources) {
+      for (const isAbstract of [true, false]) {
+        const exposed = exposeFunctions(scan(lines(isAbstract).join('\n')), { language, path: file, exposeAll: false });
+        const [actor] = classesOf(scan(lines(isAbstract).join('\n')), { language, path: file });
+        const label = `${language}, ${isAbstract ? 'abstract' : 'concrete'}`;
+        assert.deepEqual(actor.init?.map((p) => p.id), ['name'], label);
+        assert.equal(actor.initProtected, true, label);
+        assert.ok(!exposed.definitions.some((d) => /:new$/.test(d.type)), `${label}: no Construct`);
+      }
+    }
+    // A public constructor comes first; a private one leaves no Construct.
+    const both = scanJava(['package game;', '/** @blueprint */', 'public class Actor {', '    /** @blueprint */', '    protected Actor(String name) {}', '    /** @blueprint */', '    public Actor() {}', '}'].join('\n'));
+    assert.equal(classesOf(both, { language: 'java', path: 'game/Actor.java' })[0].initProtected, undefined);
+    assert.ok(exposeFunctions(both, { language: 'java', path: 'game/Actor.java', exposeAll: false }).definitions.some((d) => /Actor:new$/.test(d.type)));
+    const hidden = scanCSharp(['/// @blueprint', 'public class Actor', '{', '    private Actor() { }', '    /// @blueprint', '    public void Hit() { }', '}'].join('\n'));
+    assert.ok(!exposeFunctions(hidden, { language: 'csharp', path: 'Actor.cs', exposeAll: false }).definitions.some((d) => /:new$/.test(d.type)), 'a private constructor: no Construct');
+    // C++ repeats the constructor's parameters as written.
+    const [cpp] = classesOf(scanCpp(sources[4][3](true).join('\n')), { language: 'cpp', path: 'actor.h' });
+    assert.deepEqual(cpp.initSpelling, ['const std::string&']);
+  });
 });
 
 // A code class Actor (Pawn extends it), and a graph class Knight extending Actor.
@@ -276,6 +323,16 @@ describe('generated code for a class extending the code', () => {
     const actor = actorOf(registry, knight.parent!);
     registry.register({ ...registry.get(actor.id)!, implementation: { kind: 'code-class', type: { ...actor, members: ['start', 'hit'] } } });
     assert.match(errors({ ...knight, graphs: [knight.graphs[0], describe] }, registry).join('\n'), /^inherited-name: Actor has a member named "start"/);
+  });
+
+  test("a protected constructor: TypeScript's subclass declares a public one passing it on; a graph subclass of that inherits it", () => {
+    const { registry, knight } = workspace();
+    const generate = (doc: GraphDocument) => compileDocument(doc, { registry, languages: builtinLanguagePacks(), generate: { sourceFileName: `${doc.name}.vgraph` } }).output!.text;
+    assert.doesNotMatch(generate(knight), /constructor\(/, 'a public one is inherited as it is');
+    actorOf(registry, knight.parent!).initProtected = true;
+    assert.match(generate(knight), /^ {2}constructor\(name: string\) \{\n {4}super\(name\);\n {2}\}$/m);
+    for (const d of classDefinitions(declaredClass(knight, { document: 'Knight.vgraph', generatedPath: 'Knight.vgraph.ts' })!)) registry.register(d);
+    assert.doesNotMatch(generate({ ...knight, name: 'Squire', parent: 'object:Knight' }), /constructor\(/, "Knight's is public");
   });
 
   test('the program names the code classes its chains end in, and imports its own', () => {
