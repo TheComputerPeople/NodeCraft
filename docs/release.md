@@ -116,3 +116,24 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
      value, compiles, and finds every step announced.
    - The Tour runs in all twelve languages.
    - The README and the walkthrough are read through as a new user would read them.
+
+## Built (step 2)
+
+- **Settings** (package.json): each description says what the setting does now.
+  - `runCommands` lists the default command of each of the twelve languages, and says Run Tests and
+    Debug use it too.
+  - `defaultLanguage` lists all twelve language ids.
+  - `runArguments` says Debug passes the arguments too, as they are.
+  - `scanLimit` says the Codebase Map uses it.
+  - `compileOnSave` says what compiles when it's off.
+  - Restricted Mode's description says what works there.
+- **README:**
+  - The opening says what the extension is, and a "Where to start" list follows it.
+  - A new "Run, Simulate and Debug" section has, for each language, what Run and Debug need.
+  - A new Settings section lists every setting with its default.
+  - Run and Run Tests are no longer described as Node.js and Python only, node files' snippets as
+    three languages, or the project as an MVP.
+- **Tests** (unit, settings-docs.test.ts):
+  - every setting is in the README's table with its default, and the table lists no others;
+  - every setting has a description;
+  - `defaultLanguage` names every built-in language.

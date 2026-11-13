@@ -1,6 +1,15 @@
 # Blueprint Visual Scripting for VS Code
 
-A language-neutral, Blueprint-style visual scripting editor for Visual Studio Code. This repository is a runnable MVP project intended to be opened directly in VS Code and launched with the Extension Development Host.
+A language-neutral, Blueprint-style visual scripting editor for Visual Studio Code. Graphs compile to readable code in TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby or PHP, committed next to them and run through the project's own toolchain.
+
+## Where to start
+
+- **A new project:** run **Blueprint Visual Scripting: New Project...** from the Command Palette and pick a language ([Graphs in your project](#graphs-in-your-project)).
+- **A codebase you have:** **Blueprint Visual Scripting: Set Up in This Project** says what graphs there need, and changes nothing until you apply it.
+- **Coming from Unreal:** the editor's gestures and shortcuts are Unreal's ([Editor interaction reference](#editor-interaction-reference), [docs/unreal-conventions.md](docs/unreal-conventions.md)).
+- **Running graphs:** [Run, Simulate and Debug](#run-simulate-and-debug) lists what each language needs.
+- **Settings:** [Settings](#settings).
+- **Working on the extension itself:** [Development](#development).
 
 ## What is included
 
@@ -13,8 +22,8 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 - Workspace `*.node.json` user node libraries, with a code snippet per language (example: `Double`), checked as you write them, with **New Node** to start one and **Test Node Library** to run their examples. **Packages**: a `*.vgraph-package.json` manifest gives node files and library graphs a name, a version and dependencies, and **Add Blueprint Package…** adds one from a folder, an extension or npm (an npm package with a `blueprint` field; see docs/node-authoring.md, gap 9). Graphs remember the version of each package they use, and a new major version marks its nodes for Refresh Node.
 - **Code generation**: each graph compiles to readable source code in its target language, written next to the graph and meant to be committed. TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript (Godot 4), Ruby and PHP are supported (Rust without inheritance or interfaces, Go without inheritance). Other languages can be added as **language packs** from other extensions, or as declarative packs: a workspace `*.vgraph-language.json` file of templates, types and how to run the code (see [the pack SDK](packages/pack-sdk/README.md)). [examples/c-language-pack](examples/c-language-pack/README.md) adds C this way, as its own extension.
 - Unreal-style **Compile** (F7) and **Compiler Results**, with error and warning badges on nodes and entries in the Problems panel.
-- **Run** (the generated code, through the project's own Node.js or Python) and **Simulate** (the editor's built-in interpreter). With breakpoints set (F9), Simulate pauses at them: step node by node, see the call stack in graph terms, hover a pin to see its value, or **Watch this value** from the pin's menu.
-- **Tests**: Test Case events with Assert True and Assert Equal nodes. **Run Tests** runs them with the language's test tool (from a generated test file: `node --test`, `unittest`), **Simulate Tests** in the editor.
+- **Run** (the generated code, through the language's own toolchain) and **Simulate** (the editor's built-in interpreter). With breakpoints set (F9), Simulate pauses at them: step node by node, see the call stack in graph terms, hover a pin to see its value, or **Watch this value** from the pin's menu.
+- **Tests**: Test Case events with Assert True and Assert Equal nodes. **Run Tests** runs them in the graph's language (with its own test tool where it has one: `node --test`, `unittest`), **Simulate Tests** in the editor.
 - **Debug** (F5): runs the generated code under the language's own debugger (VS Code's built-in one for TypeScript and JavaScript, the Python Debugger extension for Python, the C# extension for C#, the C/C++ extension for C++, for Rust the C/C++ extension on Windows or CodeLLDB elsewhere, the Debugger for Java for Java, the Go extension (Delve) for Go, Lua Debug for Lua, godot-tools for GDScript in a Godot project, the VSCode rdbg Ruby Debugger for Ruby, and PHP Debug with Xdebug for PHP), stopping at the same node breakpoints, stepping node by node and showing pins' values, without opening the generated file.
 - The **Codebase Map**: your whole workspace, code and graphs, drawn top to bottom in four views to drill through (architecture, structure, call flow, a function's control flow), with Expose as Node and Open Graph on its boxes (see below).
 - Saving goes through VS Code's text document, so undo, redo, dirty state and source control work as usual.
@@ -26,7 +35,27 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 3. Open `sample/demo.vgraph`.
 4. Click **Compile**. The graph's target language is JavaScript, so `demo.vgraph.js` appears next to it. Pick another language in the toolbar to generate TypeScript (`demo.vgraph.ts`) or Python (`demo_vgraph.py`) instead. Saving the graph also compiles it (setting: `blueprintVisualScripting.compileOnSave`).
    **New Graph** (Command Palette) starts a graph in the language of the project files nearest to where it's saved, so a repository with a TypeScript `web/` and a Python `api/` gets the right one in each; the `blueprintVisualScripting.defaultLanguage` setting overrides that per folder. Structs and enums can be shared between those languages, and [examples/multi-language](examples/multi-language/README.md) shows a graph calling code in another language ([docs/multi-language.md](docs/multi-language.md)).
-5. Click **▶ Run** to run the generated code with Node.js (22.18 or later, which runs TypeScript directly), Python 3 or the .NET SDK (8 or later; C# graphs are built in a small project the extension keeps in the temporary folder), or **Simulate** to run the graph inside the editor. Output appears in the `Blueprint Visual Scripting` Output channel.
+5. Click **▶ Run** to run the generated code with the language's toolchain (below), or **Simulate** to run the graph inside the editor. Output appears in the `Blueprint Visual Scripting` Output channel.
+
+## Run, Simulate and Debug
+
+**Simulate** runs a graph's built-in nodes inside the editor, in any language and in no toolchain; it can't run your own code. **Run**, **Run Tests** and **Debug** run the generated code with the language's toolchain, found on the PATH (the `blueprintVisualScripting.runCommands` setting names another), and Debug with the language's VS Code debugger:
+
+| Language | Run needs | Debug needs |
+|---|---|---|
+| TypeScript, JavaScript | Node.js 22.18 or later (it runs TypeScript directly) | VS Code's own JavaScript debugger |
+| Python | Python 3.8 or later | the Python Debugger extension |
+| C# | the .NET SDK, 8 or later | the C# extension |
+| C++ | g++ or clang++, with C++20 | the C/C++ extension |
+| Rust | Cargo | the C/C++ extension on Windows, CodeLLDB elsewhere |
+| Java | a JDK, 17 or later | the Debugger for Java |
+| Go | Go | the Go extension (Delve) |
+| Lua | Lua 5.4 | Lua Debug |
+| GDScript | Godot 4: its console executable as `godot`, or in the `GODOT` environment variable | godot-tools, with the graph in a Godot project |
+| Ruby | Ruby 3.3 or later | the VSCode rdbg Ruby Debugger (the debug gem) |
+| PHP | PHP 8.3 or later, with mbstring | PHP Debug, with Xdebug loaded in php.ini |
+
+Languages that build first (C#, C++, Rust, Java, Go) build in a small project the extension keeps in the temporary folder, with your project's sources the graph uses. Run, Run Tests, Simulate and Debug need a trusted workspace; in Restricted Mode graphs can be edited and compiled, and the Codebase Map drawn.
 
 How graphs behave when they run is specified in [docs/semantics.md](docs/semantics.md); every language's generated code is tested against it.
 
@@ -193,7 +222,7 @@ Example:
 }
 ```
 
-The `languages` map holds one snippet per target language (`typescript`, `javascript`, `python`). A snippet is a function body: its data inputs are parameters (`${pinId}` always works, and ids that are valid identifiers can be used directly) and its return value is the node's first data output. Compiling a graph to a language whose snippet is missing is a compile error. Simulate can run JavaScript snippets only; other languages run through generated code.
+The `languages` map holds one snippet per target language, by language id (`typescript`, `javascript`, `python`, `csharp`, ...). A snippet is a function body: its data inputs are parameters (`${pinId}` always works, and ids that are valid identifiers can be used directly) and its return value is the node's first data output. Compiling a graph to a language whose snippet is missing is a compile error. Simulate can run JavaScript snippets only; other languages run through generated code.
 
 Node files are checked against the node schema as you write them. Their problems show in the editor: a `${pin}` with no such input, a type another file defines too, a language the workspace uses with no snippet. **New Node** writes one to start from. A node may list `examples` (inputs and the outputs they give), and **Test Node Library** runs them in Simulate and in each language the workspace's graphs use; `blueprint-conformance <pack> --nodes <folder>` does the same from the command line ([docs/node-authoring.md](docs/node-authoring.md)).
 
@@ -203,6 +232,20 @@ A node library can also add events that a framework runs, such as a command-line
 
 A graph's **Main** event is the program's entry point: Run calls it after Start, with the `blueprintVisualScripting.runArguments` setting as its Args.
 
+
+## Settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| `blueprintVisualScripting.compileOnSave` | `true` | Compile a graph whenever it's saved. When off, graphs compile on Compile (F7), Run, Run Tests and Debug. |
+| `blueprintVisualScripting.defaultLanguage` | empty | The language of new graphs in a folder, by language id (`typescript`, `python`, `gdscript`, ...). Set it per folder; when empty, New Graph uses the nearest project files. |
+| `blueprintVisualScripting.runCommands` | `{}` | The command Run, Run Tests and Debug start for a language, by language id, in place of the one on the PATH: `{ "python": ["C:/Python313/python.exe"] }`. |
+| `blueprintVisualScripting.runArguments` | `[]` | The arguments a graph's **Main** event gets (its Args) under Run, Simulate and Debug, passed as they are. |
+| `blueprintVisualScripting.exposeAllFunctions` | `false` | Show every public function as a node, by each language's rule, without `@blueprint`. Class members still need it. |
+| `blueprintVisualScripting.scanLimit` | `5000` | The most files of each kind the extension scans in a workspace (source files, graphs, node files, package manifests), and the Codebase Map in each folder. A scan that reaches it says so. |
+| `blueprintVisualScripting.autoSaveDelay` | `150` | Milliseconds the graph editor waits after a change before writing it to the file's text document (the file still saves as usual). |
+
+In Restricted Mode, `runCommands` and `runArguments` are read from your user settings only, never from the workspace's.
 
 ## Architecture
 
@@ -228,7 +271,7 @@ The extension uses VS Code's `CustomTextEditorProvider`, which is the intended A
 
 ## Roadmap
 
-The MVP deliberately focuses on the graph/editor contract. See [docs/roadmap.md](docs/roadmap.md) for the plan toward a language-universal, Blueprint-equivalent editor.
+[docs/roadmap.md](docs/roadmap.md) has the plan toward a language-universal, Blueprint-equivalent editor, phase by phase, and the decisions behind it.
 
 ## Editor interaction reference
 

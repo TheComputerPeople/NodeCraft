@@ -38,7 +38,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Graphs can be viewed and edited, but running them is disabled because code nodes from workspace node libraries execute inside the extension host.",
+      "description": "Graphs can be viewed, edited and compiled, and the Codebase Map drawn. Run, Simulate, Debug, Run Tests and Test Node Library are disabled, because they run the workspace's code and toolchains; the run settings are read from user settings only.",
       "restrictedConfigurations": [
         "blueprintVisualScripting.runCommands",
         "blueprintVisualScripting.runArguments"
@@ -242,18 +242,18 @@
           "type": "number",
           "default": 150,
           "minimum": 0,
-          "description": "Milliseconds to debounce graph writes to the .vgraph document."
+          "description": "Milliseconds the graph editor waits after a change before writing it to the .vgraph file's text document. The file shows as changed until it's saved, as a text file does; 0 writes each change at once."
         },
         "blueprintVisualScripting.compileOnSave": {
           "type": "boolean",
           "default": true,
-          "description": "Compile a graph to its target language whenever it is saved, keeping the generated file next to it up to date."
+          "description": "Compile a graph whenever it's saved, keeping the generated file next to it up to date. When off, graphs compile only on Compile (F7), Run, Run Tests and Debug."
         },
         "blueprintVisualScripting.scanLimit": {
           "type": "number",
           "default": 5000,
           "minimum": 1,
-          "markdownDescription": "The most files of each kind (source files, graphs, node files, package manifests) the extension scans in a workspace. A scan that reaches it says so once, rather than silently leaving files out."
+          "markdownDescription": "The most files of each kind (source files, graphs, node files, package manifests) the extension scans in a workspace, for your code as nodes, graph libraries, node libraries and the Codebase Map (per folder). A scan that reaches it says so once, rather than silently leaving files out."
         },
         "blueprintVisualScripting.exposeAllFunctions": {
           "type": "boolean",
@@ -269,7 +269,7 @@
               "type": "string"
             }
           },
-          "markdownDescription": "Command used to run generated code, per language id, overriding the default (`node` for TypeScript and JavaScript; `py -3` or `python3` for Python). Example: `{ \"python\": [\"C:/Python313/python.exe\"] }`."
+          "markdownDescription": "The command Run, Run Tests and Debug start for each language, by language id, in place of the one found on the PATH. The defaults are `node` (TypeScript and JavaScript), `py -3`, `python` or `python3` (Python), `dotnet` (C#), `g++` or `clang++` (C++), `cargo` (Rust), `javac` (Java), `go` (Go), `lua`, `lua5.4` or `lua54` (Lua), `godot`, `godot4` or the `GODOT` environment variable (GDScript), `ruby` (Ruby) and `php` (PHP). Example: `{ \"python\": [\"C:/Python313/python.exe\"], \"gdscript\": [\"C:/Godot/Godot_v4.7.2-stable_win64_console.exe\"] }`."
         },
         "blueprintVisualScripting.runArguments": {
           "type": "array",
@@ -277,13 +277,13 @@
           "items": {
             "type": "string"
           },
-          "markdownDescription": "Command-line arguments Run passes to a graph's **Main** event (its Args output). Simulate passes them too."
+          "markdownDescription": "Command-line arguments passed to a graph's **Main** event (its Args output) by Run, Simulate and Debug, as they are: nothing in them is substituted or split by a shell."
         },
         "blueprintVisualScripting.defaultLanguage": {
           "type": "string",
           "default": "",
           "scope": "resource",
-          "markdownDescription": "The language of new graphs in this folder, by language id (`typescript`, `javascript`, `python`, `csharp`, `cpp`, `rust`, `java`, `go`, or another installed pack's). Set it per folder in a multi-root workspace or a folder's `.vscode/settings.json`. When empty, **New Graph** uses the project files nearest to where the graph is saved (`tsconfig.json`, `pyproject.toml`, `go.mod`, ...)."
+          "markdownDescription": "The language of new graphs in this folder, by language id: `typescript`, `javascript`, `python`, `csharp`, `cpp`, `rust`, `java`, `go`, `lua`, `gdscript`, `ruby`, `php`, or another installed pack's. Set it per folder in a multi-root workspace or in a folder's `.vscode/settings.json`. When empty, **New Graph** uses the project files nearest to where the graph is saved (`tsconfig.json`, `pyproject.toml`, `go.mod`, `project.godot`, ...)."
         }
       }
     },
