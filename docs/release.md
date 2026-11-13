@@ -137,3 +137,33 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
   - every setting is in the README's table with its default, and the table lists no others;
   - every setting has a description;
   - `defaultLanguage` names every built-in language.
+
+## Built (step 3)
+
+- **Coming from Unreal** (docs/coming-from-unreal.md), linked from the README's "Where to start"
+  and from unreal-conventions.md. It covers:
+  - the big difference: generated code and the project's own toolchain, where Unreal has bytecode
+    and the VM;
+  - each asset New Graph offers;
+  - the editor's panels;
+  - events and entry points: BeginPlay and the Construction Script are Start, and Tick doesn't
+    apply;
+  - the nodes whose names or meanings differ;
+  - variables and types;
+  - functions, macros and classes;
+  - reflection: `UFUNCTION`, `UPROPERTY`, `Blueprintable`, native and implementable events, and
+    meta tags, each as its `@blueprint` tag;
+  - debugging;
+  - what doesn't apply, with what to use instead.
+- **Checked against the code while writing it:**
+  - arrays are references, as in Unreal; only the functions that rearrange one return a new array;
+  - an index out of range stops the run;
+  - `int`'s size is the language's;
+  - Instance Editable and Expose on Spawn aren't here yet, so the guide says so.
+- **Tests** (unit, coming-from-unreal.test.ts):
+  - every node the Nodes table names is a built-in node, or one made for each class, struct or enum
+    (Construct, Cast To, Switch on);
+  - the events and other nodes the guide names are nodes;
+  - every **Blueprint Visual Scripting:** command it names exists;
+  - the Assets table has each kind New Graph offers;
+  - every `@` tag it names is read by the scanners.

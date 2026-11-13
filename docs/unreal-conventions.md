@@ -1,6 +1,6 @@
 # Unreal Blueprint conventions
 
-The Unreal Engine 5 Blueprint editor behaviors this extension copies, so Blueprint users can work without relearning. Each entry notes its source. Where Epic documents a behavior, that is the reference; community-documented behaviors are implemented too but flagged, because users may have rebound them in their own editor.
+The Unreal Engine 5 Blueprint editor behaviors this extension copies, so Blueprint users can work without relearning. Unreal's concepts (assets, events, nodes, reflection) and what they are here are in [coming-from-unreal.md](coming-from-unreal.md). Each entry notes its source. Where Epic documents a behavior, that is the reference; community-documented behaviors are implemented too but flagged, because users may have rebound them in their own editor.
 
 Sources:
 - **Epic:** [Blueprint Editor Cheat Sheet](https://dev.epicgames.com/documentation/en-us/unreal-engine/blueprint-editor-cheat-sheet-in-unreal-engine) (Epic Games documentation).
