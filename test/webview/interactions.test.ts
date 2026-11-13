@@ -137,12 +137,13 @@ describe('Unreal gestures and shortcuts', () => {
     assert.ok((await e.posted()).some((m) => m.type === 'compile'));
   });
 
-  test('arrow keys move the selection and Ctrl+D duplicates it', async (t) => {
+  // The arrows alone move the keyboard's focus (docs/release.md, step 7).
+  test('Ctrl+arrow keys move the selection and Ctrl+D duplicates it', async (t) => {
     const e = await open(t);
     if (!e) return;
     await e.page.click(header('add_1'));
-    await e.page.keyboard.press('ArrowRight');
-    await e.page.keyboard.press('ArrowDown');
+    await e.page.keyboard.press('Control+ArrowRight');
+    await e.page.keyboard.press('Control+ArrowDown');
     const moved = (await e.lastSavedGraph()).nodes.find((n) => n.id === 'add_1')!;
     assert.deepEqual(moved.position, { x: 406, y: 161 });
 

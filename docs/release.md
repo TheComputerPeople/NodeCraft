@@ -271,3 +271,49 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
     Enter selects it, and it keeps focus through the redraw;
   - after a press on a node, Delete deletes the node, not the focused item;
   - a palette button adds its node with Enter.
+
+## Built (step 7)
+
+- **The canvas is one focusable element** (src/webview/keyboard.ts). It's an `application` with the
+  role description "graph". Its focus is a node, or a pin of one, named through
+  `aria-activedescendant`.
+  - Tab reaches it. The keyboard starts on the node it was last on, else the selected node, else
+    the top-left one.
+  - A press on the graph takes focus there too, onto the node or pin pressed, which replaces step 6's
+    blur.
+  - The ring shows only while the keyboard is in use: Tab or a key, not a click.
+- **The arrow keys** move to the nearest node in their direction. They measure between the nodes'
+  centers, counting distance across the direction twice, so a node straight ahead wins. Focus
+  selects the node, so Delete, F9, F12, Ctrl+D and Shift+F10 act on it, and the view pans just enough
+  to show it.
+- **Ctrl+arrows nudge the selection**, which the arrows alone used to do (Epic's convention).
+  unreal-conventions.md and the README say so.
+- **Pins:**
+  - Enter goes into a node's pins, and the arrow keys move between them. Up and Down move along a
+    side; Left and Right cross sides at the same row.
+  - Escape comes back to the node. Escape on a node leaves nothing focused or selected, so Shift+F10
+    opens Add Node.
+  - F2 on an input edits its value on the node, and Enter or Escape gives the keyboard back to the
+    pin.
+- **A pin's menu** opens with Enter, Shift+F10 or a right-click. Above the pin's own actions it has
+  two that stand in for dragging a wire:
+  - **Connect to…** lists, nearest node first, the pins Unreal's rules let it wire to (a number to
+    text through a To String), as "Node: Pin", and wires the one chosen;
+  - **Add Node from Here…** opens Add Node with the nodes that fit the pin, as dropping a wire on the
+    graph does.
+
+  `connectPins` (actions.ts) is the one way both drags and the keyboard wire two pins.
+- **Found by the tests:** the Add Node menu focused its search field only on the next frame, so keys
+  typed at once after opening it from the keyboard were lost. It focuses the field at once, and
+  again after the frame.
+- **Tests** (webview, keyboard-graph.test.ts):
+  - Tab starts on the top-left node, and the arrows move and select without changing the graph;
+  - Enter, the arrows and Escape move through Branch's pins;
+  - Add Node from Here on Print's exec output adds Flip Flop wired to it;
+  - Connect to on Print's Value lists Add's Result and wires it;
+  - F2 edits Add's B and gives the keyboard back;
+  - Escape on a node lets Shift+F10 open Add Node;
+  - a click puts the keyboard on the node, without the ring.
+
+  editing.test.ts's pin menus now start with Connect to, and interactions.test.ts nudges with
+  Ctrl+arrows.

@@ -1,14 +1,16 @@
 // The canvas's context menus: the node-search "action menu", and the menus for a node, a pin
 // (its pin actions above the node's) and a comment.
+import * as editing from '../core/editing';
 import { PinAddress, definitionFor } from '../core/editing';
 import { PinKind } from '../core/model';
-import { addNode, collapseToFunction, collapseToLibrary, collapseToMacro, connectNewNode, deleteSelected, disconnectSelected, duplicateSelected, refreshFunctionNodes, replaceFunctionNode } from './actions';
+import { addNode, collapseToFunction, collapseToLibrary, collapseToMacro, connectNewNode, connectPins, deleteSelected, disconnectSelected, duplicateSelected, pinMenuItems, refreshFunctionNodes, replaceFunctionNode } from './actions';
 import { findReferences, goToDefinition, siteOf } from './navigation';
 import { showPreview } from './preview';
 import { alignSelection, distributeSelection, straightenConnections } from './align';
 import { addBreakpoints, breakpointOn, enableBreakpoints, removeBreakpoints } from './breakpoints';
 import { PaletteEntry, functionProblem, libraryProblem, lookupDefinition, paletteEntries, searchText } from './document';
-import { dom, escapeHtml } from './dom';
+import { dom, escapeHtml, setStatus } from './dom';
+import { nodeTitle, pinName } from './keyboard';
 import { headerColor } from './style';
 import { deleteSelectedComments, selectedCommentIds, startCommentRename } from './comments';
 import { MenuItem } from './floating-menu';
@@ -66,7 +68,9 @@ export function showAddNodeMenu(
     }
   });
   renderContextNodeResults('');
-  // Deferred so the opening click does not steal focus back; skipped if the menu closed meanwhile.
+  // At once, so keys typed straight after opening it from the keyboard land in it; and again after
+  // the opening click, which would otherwise take focus back (skipped if the menu closed meanwhile).
+  input.focus();
   requestAnimationFrame(() => {
     if (!dom.contextMenu.hidden) input.focus();
   });
@@ -182,6 +186,75 @@ export function showMenuAtSelection(): void {
   const x = rect.left + rect.width / 2;
   const y = rect.top + rect.height / 3;
   showAddNodeMenu(screenToWorld(x, y), x, y, paletteEntries(), 'Add Node');
+}
+
+// A pin's actions with the two that stand in for dragging a wire (docs/release.md, step 7): Connect
+// to, which lists the pins it can be wired to, and Add Node from Here, as dropping a wire on the
+// graph does. Then the pin's own actions.
+export function wiringMenuItems(nodeId: string, pinId: string): MenuItem[] {
+  const items: MenuItem[] = [];
+  const pinEl = () => dom.canvasWrap.querySelector<HTMLElement>(`.pin[data-node="${CSS.escape(nodeId)}"][data-pin="${CSS.escape(pinId)}"]`);
+  const at = () => {
+    const box = pinEl()?.getBoundingClientRect() ?? dom.canvasWrap.getBoundingClientRect();
+    return { x: box.right + 4, y: box.top };
+  };
+  if (connectCandidates(nodeId, pinId).length) items.push({ label: 'Connect to…', action: () => showConnectMenu(nodeId, pinId, at().x, at().y) });
+  const source = state.graph && editing.pinDefinition(state.graph, lookupDefinition, nodeId, pinId);
+  const fits = source ? paletteEntries().filter((entry) => editing.matchingPin(entry.definition, source)) : [];
+  if (source && fits.length) {
+    items.push({
+      label: 'Add Node from Here…',
+      action: () => {
+        const { x, y } = at();
+        const world = screenToWorld(x + 60, y);
+        showAddNodeMenu(world, x, y, fits, `Add Node from ${pinName(source)}`, { node: nodeId, pin: pinId, kind: source.kind });
+      }
+    });
+  }
+  return [...items, ...pinMenuItems(nodeId, pinId)];
+}
+
+// The pins of the graph a pin can be wired to (with a To String between, where Unreal adds one),
+// nearest node first.
+function connectCandidates(nodeId: string, pinId: string): { node: string; pin: string; label: string }[] {
+  const graph = state.graph;
+  const from = graph?.nodes.find((n) => n.id === nodeId);
+  if (!graph || !from) return [];
+  const linked = (other: string, pin: string) => graph.connections.some((c) =>
+    (c.fromNode === nodeId && c.fromPin === pinId && c.toNode === other && c.toPin === pin) || (c.toNode === nodeId && c.toPin === pinId && c.fromNode === other && c.fromPin === pin));
+  const found: { node: string; pin: string; label: string; distance: number }[] = [];
+  for (const node of graph.nodes) {
+    if (node.id === nodeId) continue;
+    const def = definitionFor(node, lookupDefinition);
+    for (const pin of [...def.inputs, ...def.outputs]) {
+      if (linked(node.id, pin.id) || !editing.planConnection(graph, lookupDefinition, { node: nodeId, pin: pinId }, { node: node.id, pin: pin.id })) continue;
+      const distance = Math.hypot(node.position.x - from.position.x, node.position.y - from.position.y);
+      found.push({ node: node.id, pin: pin.id, label: `${nodeTitle(node.id)}: ${pinName(pin)}`, distance });
+    }
+  }
+  return found.sort((a, b) => a.distance - b.distance).slice(0, 40);
+}
+
+function showConnectMenu(nodeId: string, pinId: string, clientX: number, clientY: number): void {
+  const source = state.graph && editing.pinDefinition(state.graph, lookupDefinition, nodeId, pinId);
+  const candidates = connectCandidates(nodeId, pinId);
+  if (!source || !candidates.length) return;
+  dom.contextMenu.innerHTML = `
+      <div class="context-title">Connect ${escapeHtml(nodeTitle(nodeId))}: ${escapeHtml(pinName(source))} to</div>
+      ${candidates.map((c, i) => `<button data-action="${i}">${escapeHtml(c.label)}</button>`).join('')}`;
+  state.context = { kind: 'node', nodeId };
+  dom.contextMenu.hidden = false;
+  positionContextMenu(clientX, clientY);
+  readyMenu();
+  dom.contextMenu.querySelectorAll<HTMLButtonElement>('button[data-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = candidates[Number(button.dataset.action)];
+      hideContextMenu();
+      if (target && connectPins({ node: nodeId, pin: pinId }, { node: target.node, pin: target.pin })) {
+        setStatus(`Connected ${nodeTitle(nodeId)}: ${pinName(source)} to ${target.label}.`);
+      }
+    });
+  });
 }
 
 // A node's menu. Right-clicking a pin opens the same menu with that pin's actions on top, as in

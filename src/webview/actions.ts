@@ -195,9 +195,15 @@ export function compatibleEntriesForDraft(): PaletteEntry[] {
 
 export function completeConnection(targetNodeId: string, targetPinId: string): void {
   const draft = state.draftConnection;
-  if (!draft || !state.graph) return;
-  const plan = editing.planConnection(state.graph, lookupDefinition, { node: draft.node, pin: draft.pin }, { node: targetNodeId, pin: targetPinId });
-  if (!plan) return;
+  if (!draft) return;
+  connectPins({ node: draft.node, pin: draft.pin }, { node: targetNodeId, pin: targetPinId });
+}
+
+// Wires two pins, either way round, as Unreal's rules allow; true when it did.
+export function connectPins(a: editing.PinAddress, b: editing.PinAddress): boolean {
+  if (!state.graph) return false;
+  const plan = editing.planConnection(state.graph, lookupDefinition, a, b);
+  if (!plan) return false;
   if (plan.convert) {
     // Unreal inserts a conversion node rather than refusing a bool or number → string wire.
     editing.connectThroughToString(state.graph, lookupDefinition, plan.endpoints, { node: editing.nodeIdFor(editing.TO_STRING), connections: [newConnectionId(), newConnectionId()] });
@@ -207,6 +213,7 @@ export function completeConnection(targetNodeId: string, targetPinId: string): v
   markDirty();
   render();
   if (plan.convert) setStatus('Added a To String conversion.');
+  return true;
 }
 
 // Unreal's "Promote to Variable": a new variable of the pin's type, with a Get wired into an input

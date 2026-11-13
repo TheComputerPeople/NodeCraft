@@ -112,6 +112,11 @@ button, input { font: inherit; color: inherit; }
 /* Nodes: a dark body with a title bar tinted by node kind, as in Unreal. */
 .node { position: absolute; min-width: 140px; max-width: 320px; background: var(--node-bg); border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.35); user-select: none; pointer-events: auto; }
 .node.selected { outline: 2px solid #f5a623; outline-offset: 1px; }
+/* The keyboard's focus (docs/release.md, step 7): a ring around the node or pin, shown while the keyboard is in use. */
+#canvas-wrap:focus { outline: none; }
+#canvas-wrap.keyboard { box-shadow: inset 0 0 0 1px var(--vscode-focusBorder, #007fd4); }
+#canvas-wrap.keyboard .node.kb-focus { box-shadow: 0 0 0 4px var(--vscode-focusBorder, #007fd4), 0 6px 18px rgba(0,0,0,.35); }
+#canvas-wrap.keyboard .pin.kb-focus { box-shadow: 0 0 0 3px var(--vscode-focusBorder, #007fd4); }
 .node.executing { box-shadow: 0 0 0 2px var(--node-color), 0 0 18px color-mix(in srgb, var(--node-color) 60%, transparent); }
 .node-header { padding: 5px 10px; border-radius: 7px 7px 0 0; cursor: grab; color: #fff; background: linear-gradient(90deg, color-mix(in srgb, var(--node-color) 90%, black), color-mix(in srgb, var(--node-color) 35%, transparent)); }
 .node-header:active { cursor: grabbing; }

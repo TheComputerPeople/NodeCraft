@@ -53,7 +53,7 @@ Differences from Unreal:
 | Node context menu | Right-click a node | Epic |
 | Pin context menu: the pin's actions (Break Link(s), Promote to Variable, Remove Execution Pin) above the node's actions | Right-click a pin | Epic |
 | Comment context menu: Rename, Delete (color is set in Details) | Right-click a comment's title bar; its body lets clicks through to the graph | Engine behavior |
-| Move | Drag; arrow keys move the selection | Epic |
+| Move | Drag; Ctrl+arrow keys move the selection (Epic's arrow keys alone; here they move the keyboard's focus between nodes, so the graph can be built without a mouse: docs/release.md, step 7) | Epic, changed |
 | Delete | Delete | Epic |
 | Cut / copy / paste / duplicate | Ctrl + X / C / V / D | Epic |
 | Rename a node or edit a comment | F2, or click the title | Epic |

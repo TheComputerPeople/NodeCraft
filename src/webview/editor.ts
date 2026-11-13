@@ -1,6 +1,6 @@
 // Webview entry point: wires DOM and host events to the editor modules.
 import { HostMessage, RuntimeLogEvent } from '../core/model';
-import { addNode, compatibleEntriesForDraft, completeConnection, copySelection, deleteSelected, duplicateSelected, finishCollapseToLibrary, finishRewire, moveSelection, pasteText, pinMenuItems, refreshFunctionNodes } from './actions';
+import { addNode, compatibleEntriesForDraft, completeConnection, copySelection, deleteSelected, duplicateSelected, finishCollapseToLibrary, finishRewire, moveSelection, pasteText, refreshFunctionNodes } from './actions';
 import { deleteSelectedComments, finishCommentDrag, isDraggingComment, placeComment, selectedCommentIds, startCommentRename, updateCommentDrag, wrapSelectionInComment } from './comments';
 import { hideResults, markCompiling, renderCompileButton, renderLanguagePicker, setLanguage, showCompileResult } from './compile-results';
 import { applySettings, applyTerms, flushSave, loadDocument, markDirty, paletteEntries, setDefinitions } from './document';
@@ -16,7 +16,8 @@ import { clearBreakpoints, pruneBreakpoints, setBreakpoints, toggleSelectedBreak
 import { finishVariableDrag, removeVariable, renderMyBlueprint, startRename, updateVariableDrag } from './my-blueprint';
 import { receivePreview } from './preview';
 import { findReferences, goToDefinition } from './navigation';
-import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showMenuAtSelection, showNodeContextMenu } from './menus';
+import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showMenuAtSelection, showNodeContextMenu, wiringMenuItems } from './menus';
+import { handleGraphKey, initKeyboard, showPinMenuAtFocus } from './keyboard';
 import { renderPalette } from './panels';
 import { render, renderDrafts, renderEdges, scheduleRuntimePaint, updateEdgesFor } from './render';
 import { beginGroupSelection, finishGroupSelection, hideSelectionBox, selectAllNodes, selectNode, setPrimarySelection, updateGroupSelection } from './selection';
@@ -179,12 +180,17 @@ document.addEventListener('keydown', (e) => {
   const onGraph = !target || target === document.body || target === document.documentElement || dom.canvasWrap.contains(target);
   if (((e.key === 'F10' && e.shiftKey && !mod && !e.altKey) || e.key === 'ContextMenu') && onGraph && !dom.contextMenu.contains(target)) {
     menuKeyAt = performance.now();
-    showMenuAtSelection();
+    if (!showPinMenuAtFocus()) showMenuAtSelection();
     e.preventDefault();
     return;
   }
   // An open menu has its own keys.
   if (target && dom.contextMenu.contains(target)) return;
+  // The arrow keys, Enter, Escape and F2 move through nodes and pins (docs/release.md, step 7).
+  if (onGraph && handleGraphKey(e)) {
+    e.preventDefault();
+    return;
+  }
   if ((e.key === 'Delete' || e.key === 'Backspace') && (state.selectedNodeIds.size || selectedCommentIds.size)) {
     if (state.selectedNodeIds.size) deleteSelected();
     deleteSelectedComments();
@@ -228,7 +234,8 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'Home') {
     fitGraph(true);
     e.preventDefault();
-  } else if (e.key.startsWith('Arrow') && state.selectedNodeIds.size && !mod) {
+  } else if (e.key.startsWith('Arrow') && state.selectedNodeIds.size && mod) {
+    // Ctrl+arrows nudge the selection; the arrows alone move the keyboard's focus.
     const [dx, dy] = { ArrowLeft: [-NUDGE, 0], ArrowRight: [NUDGE, 0], ArrowUp: [0, -NUDGE], ArrowDown: [0, NUDGE] }[e.key] ?? [0, 0];
     moveSelection(dx, dy);
     e.preventDefault();
@@ -309,7 +316,7 @@ function openContextMenu(panning: Panning, clientX: number, clientY: number): vo
   if (nodeId) {
     if (!state.selectedNodeIds.has(nodeId)) selectNode(nodeId, false, true);
     else setPrimarySelection(nodeId);
-    showNodeContextMenu(nodeId, clientX, clientY, panning.pin ? pinMenuItems(panning.pin.node, panning.pin.pin) : null);
+    showNodeContextMenu(nodeId, clientX, clientY, panning.pin ? wiringMenuItems(panning.pin.node, panning.pin.pin) : null);
   } else if (panning.commentId) {
     showCommentContextMenu(panning.commentId, clientX, clientY);
   } else {
@@ -317,13 +324,10 @@ function openContextMenu(panning: Panning, clientX: number, clientY: number): vo
   }
 }
 
-// A press anywhere on the graph (nodes and pins included, before they stop it) takes the keyboard
-// from the panels: the canvas's gestures cancel the press's default, so focus would otherwise stay on
-// a My Blueprint item and Delete would delete it, not the nodes just selected.
-dom.canvasWrap.addEventListener('mousedown', (e) => {
-  const active = document.activeElement;
-  if (active instanceof HTMLElement && active !== document.body && !dom.canvasWrap.contains(active) && !eventElement(e)?.closest('#context-menu')) active.blur();
-}, true);
+// A press anywhere on the graph takes the keyboard from the panels (initKeyboard, keyboard.ts): the
+// canvas's gestures cancel the press's default, so focus would otherwise stay on a My Blueprint item
+// and Delete would delete it, not the nodes just selected.
+initKeyboard();
 
 // Pins and nodes stop propagation of left presses, so a left press here is on the background.
 dom.canvasWrap.addEventListener('mousedown', (e) => {

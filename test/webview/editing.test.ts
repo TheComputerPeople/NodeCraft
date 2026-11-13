@@ -331,14 +331,15 @@ describe('editing tools', () => {
     assert.equal(await menuTitle(e), 'Start');
     assert.deepEqual(await menuHeadings(e), ['Pin Actions', 'Node Actions', 'Breakpoints', 'Alignment']);
     const buttons = await menuButtons(e);
-    assert.equal(buttons[0], 'Break Link(s)');
+    // Connect to and Add Node from Here stand in for dragging the pin's wire (docs/release.md, step 7).
+    assert.deepEqual(buttons.slice(0, 3), ['Connect to…', 'Add Node from Here…', 'Break Link(s)']);
     assert.ok(buttons.includes('Duplicate') && buttons.includes('Delete Node'));
     await e.page.locator('#context-menu button', { hasText: 'Break Link(s)' }).click();
     await savedGraph(e, (g) => !g.connections.some((c) => c.fromNode === 'start_1'));
     assert.equal(await e.page.isVisible('#context-menu'), false);
   });
 
-  test('a pin with no actions of its own still opens its node menu', async (t) => {
+  test('a pin with no actions of its own still opens its node menu, with only the wiring actions above', async (t) => {
     if (!browser) return t.skip(skipReason);
     const document = sampleDocument();
     document.graphs[0].nodes.push({ id: 'lonely', type: 'core:flow.end', position: { x: 400, y: 380 }, properties: {} });
@@ -348,9 +349,13 @@ describe('editing tools', () => {
     const pin = await e.pinCenter('lonely', 'execIn');
     await e.page.mouse.click(pin.x, pin.y, { button: 'right' });
     assert.equal(await menuTitle(e), 'End');
-    assert.deepEqual(await menuHeadings(e), ['Breakpoints', 'Alignment'], 'no empty Pin Actions section');
-    // The node's own actions, starting with Find References (End is built in: no Go to Definition).
-    assert.deepEqual((await menuButtons(e)).slice(0, 2), ['Find References', 'Duplicate']);
+    assert.deepEqual(await menuHeadings(e), ['Pin Actions', 'Node Actions', 'Breakpoints', 'Alignment']);
+    // Connect to, then the node's own actions, starting with Find References (End is built in: no Go
+    // to Definition).
+    const buttons = await menuButtons(e);
+    const own = buttons.indexOf('Find References');
+    assert.deepEqual(buttons.slice(own, own + 2), ['Find References', 'Duplicate']);
+    assert.ok(buttons.slice(0, own).every((b) => b === 'Connect to…' || b === 'Add Node from Here…'), buttons.slice(0, own).join(', '));
   });
 
   test('right-clicking a comment title opens the comment menu: Rename and Delete', async (t) => {

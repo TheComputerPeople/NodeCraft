@@ -1,3 +1,4 @@
+import { syncKeyboardFocus } from './keyboard';
 import { canAddPin, definitionFor } from '../core/editing';
 import { deprecationMessage } from '../core/metadata';
 import { GraphConnection, GraphNode, NodeDefinition, PinDefinition } from '../core/model';
@@ -28,6 +29,7 @@ export function render(): void {
   renderEdges();
   renderInspector();
   syncSelectionClasses();
+  syncKeyboardFocus();
 }
 
 function renderNode(node: GraphNode): HTMLElement {

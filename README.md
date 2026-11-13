@@ -300,7 +300,7 @@ The editor follows Unreal Engine 5's Blueprint editor. [docs/unreal-conventions.
 | Rename or delete a comment | Right-click its title bar |
 | Place Branch, Sequence, Start or Delay | Hold B, S, P or D and click (also G, M, N, O, F for Gate, MultiGate, Do N, Do Once, For Each Loop) |
 | Comment around the selection | C (hold C and click to place an empty comment) |
-| Move | Drag a node; arrow keys move the selection |
+| Move | Drag a node; Ctrl + arrow keys move the selection (the arrows alone move the keyboard's focus, below) |
 | Delete | Delete |
 | Cut / copy / paste / duplicate | Ctrl + X / C / V / D |
 | Align top / left / bottom / right | Shift + W / A / S / D |
@@ -351,7 +351,13 @@ The editor follows Unreal Engine 5's Blueprint editor. [docs/unreal-conventions.
 
 | Action | Keys |
 |---|---|
-| Open the menu a right-click would: the selected node's, the selected comment's, or Add Node with nothing selected | Shift + F10 or the Menu key |
+| Reach the graph | Tab: the keyboard starts on the node last focused, the selected one, or the top-left one |
+| Move to the nearest node in a direction (it's selected) | Arrow keys |
+| Go into a node's pins / move between them / come back out | Enter / arrow keys (Left and Right cross sides) / Escape |
+| Wire a pin, or add a node from it, without dragging | Enter on the pin (or Shift + F10): **Connect to…** lists the pins it fits; **Add Node from Here…** opens Add Node as dropping a wire does |
+| Edit an input's value on the node | F2 on the pin; Enter or Escape gives the keyboard back |
+| Leave the node: nothing focused or selected | Escape |
+| Open the menu a right-click would: the focused pin's, the selected node's, the selected comment's, or Add Node with nothing selected | Shift + F10 or the Menu key |
 | Move through a menu / use an item / close it | Arrow keys, Home, End / Enter or Space / Escape |
 | Add Node: choose a result / add it | Type to search, Up and Down / Enter (the first result until you move) |
 | My Blueprint's graphs, variables and dispatchers | Tab to them; Enter opens or selects, F2 renames, Delete deletes, Shift + F10 opens the item's menu |

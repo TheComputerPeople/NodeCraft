@@ -388,7 +388,7 @@ Status: complete (October 2026), with the deferrals below. The exit check is in 
   - To JSON: the languages' serializers disagree on numbers and can't write the generated code's own containers. One that's the same everywhere would be a universal node, built on the runtimes' Print JSON.
   - Regex Split: each language's split treats groups and empty ends differently.
   - Terms for packs from other extensions and declarative packs (`terms` in a declarative definition); they keep Unreal's words.
-  - Keyboard navigation of the Add Node menu, so its preview can follow the arrow keys as well as the mouse.
+  - Keyboard navigation of the Add Node menu, so its preview can follow the arrow keys as well as the mouse. (Done in Phase 14, step 6.)
 
 Design and steps: [language-context.md](language-context.md), with what each step built.
 
@@ -501,7 +501,7 @@ Use this as the tracking list. Status: ✅ done, 🟡 partial, ⬜ not started. 
 | Nodes | Hold-key + click placement: F | ✅ | — |
 | Nodes | Hold-key + click placement: D (Delay) | ✅ | — |
 | Nodes | Cut/copy/paste (also between graphs and files, as text), Ctrl+D duplicate | ✅ | — |
-| Nodes | Arrow keys move the selection; F2 renames comments, variables and graphs | ✅ | — |
+| Nodes | Arrow keys move the selection; F2 renames comments, variables and graphs | ✅ (Ctrl+arrows: the arrows alone move the keyboard's focus, Phase 14) | — |
 | Nodes | C wraps the selection in a comment; comments move their nodes, resize, rename | ✅ | — |
 | Nodes | Collapse to Function | ✅ (one exec way in and out, as in Unreal) | — |
 | Nodes | Collapse to Macro | ✅ (several exec ways in and out) | — |

@@ -127,6 +127,10 @@ export interface EditorState {
   // Watched pins (kept by the host, per workspace), and their values at the latest pause.
   watches: PinRef[];
   watchValues: Map<string, DebugValue>;
+  // The node, or a node's pin, the keyboard is on (src/webview/keyboard.ts), and whether the keyboard
+  // was used last (the focus ring shows only then).
+  focus: { node: string; pin?: string } | null;
+  keyboard: boolean;
 }
 
 export const state: EditorState = {
@@ -167,5 +171,7 @@ export const state: EditorState = {
   debug: null,
   pulses: new Map(),
   watches: [],
-  watchValues: new Map()
+  watchValues: new Map(),
+  focus: null,
+  keyboard: false
 };
