@@ -173,4 +173,14 @@ describe('My Blueprint panel', () => {
     assert.match(await e.page.textContent('#status') ?? '', /already a graph named "EventGraph"/);
     assert.deepEqual(await sectionItems(e, 'Graphs'), ['EventGraph', 'NewEventGraph']);
   });
+
+  // docs/audit.md, second pass: the name is text, not HTML.
+  test("a function's name in the Local Variables heading is shown as text", async (t) => {
+    const name = '<img src=x onerror=1><b>Bold</b>';
+    const e = await open(t, (d) => d.graphs.push({ id: 'f_html', name, kind: 'function', signature: { inputs: [], outputs: [] }, nodes: [], connections: [], comments: [] }));
+    if (!e) return;
+    await e.page.locator('.mb-item[data-kind="graph"] .mb-name').filter({ hasText: 'Bold' }).first().click();
+    assert.deepEqual(await e.page.$$eval('.mb-header span', (spans) => spans.map((s) => s.textContent)).then((all) => all.filter((t) => t?.startsWith('Local Variables'))), [`Local Variables (${name})`]);
+    assert.equal(await e.count('.mb-header img, .mb-header b'), 0);
+  });
 });

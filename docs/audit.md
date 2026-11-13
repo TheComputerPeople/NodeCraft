@@ -346,6 +346,30 @@ messages, and ending processes on macOS and Linux.
 - **Tests:** unit (codegen.test.ts) for the C#, C++, GDScript and shadowing fixes, for where a
   language's toolchain isn't installed and its conformance run is skipped.
 
+### Built (step 3)
+
+- **My Blueprint** (`sectionElement`, my-blueprint.ts) puts a section's title in as text, so a
+  function's name in "Local Variables (…)" can't add markup.
+- **Plans stay inside the workspace folder** (`confinePlan`, core/output-plan.ts): an owned file or
+  hook whose path is absolute, on another drive, or goes above the folder with `..` is left out of
+  the plan, with a warning that names it. The extension's plans and the corpus's
+  (`applyAcceptedPlan`) both go through it. A Cargo workspace's member crate outside the folder now
+  keeps its files.
+- **Settings:** `runCommands` and `runArguments` are `restrictedConfigurations`, so VS Code doesn't
+  use a folder's own values for them until it's trusted. They were only read to run, which needs
+  trust, so this is a second guard.
+- **The Set Up view** may load no local files (`localResourceRoots: []`), as its policy loads none.
+- **Docs:** output-placement.md has the principle (7).
+- **Tests:**
+  - unit (output-plan.test.ts): which paths are inside the folder, and the plan without the others;
+    (graph-compile.test.ts) a Cargo workspace naming `../outside` leaves that crate's runtime and
+    `lib.rs` alone and warns of both;
+  - webview (my-blueprint.test.ts): a function named with HTML shows its name in the heading as text,
+    and adds no elements;
+  - Restricted Mode integration: a folder's `runCommands` and `runArguments` are ignored, while its
+    `defaultLanguage` is used.
+
 ### Status
 
-Steps 1 and 2 of 3 are done.
+All three steps of the second pass are done. Still not covered: the debugger integrations beyond
+their trust checks, the Codebase Map beyond its messages, and ending processes on macOS and Linux.

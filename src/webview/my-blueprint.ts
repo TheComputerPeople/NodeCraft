@@ -220,7 +220,10 @@ function sectionElement(title: string, addLabel: string, onAdd: (() => void) | u
   section.className = 'mb-section';
   const header = document.createElement('div');
   header.className = 'mb-header';
-  header.innerHTML = `<span>${title}</span>`;
+  // As text: a function's name is in it (docs/audit.md, second pass).
+  const label = document.createElement('span');
+  label.textContent = title;
+  header.appendChild(label);
   const add = document.createElement('button');
   add.textContent = '+';
   add.title = addLabel;

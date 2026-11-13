@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { builtinLanguagePacks } from '../../src/core/languages';
 import { GraphDocument } from '../../src/core/model';
 import { NodeRegistry } from '../../src/core/registry';
-import { GraphCompileHost, compileGraphFile } from '../../src/extension/graph-compile';
+import { GraphCompileHost, applyAcceptedPlan, compileGraphFile } from '../../src/extension/graph-compile';
 import { isUsersFile } from '../../src/extension/placement';
 import { doc, node, wire } from './helpers';
 
@@ -79,5 +79,24 @@ describe('generated files and the user\'s', () => {
     assert.ok(compiled.outputPath);
     assert.deepEqual(compiler.removed, []);
     assert.ok(fs.existsSync(path.join(dir, 'hello.vgraph.ts')));
+  });
+});
+
+describe('build files outside the workspace folder', () => {
+  // A Cargo workspace naming a member crate outside the folder: its runtime and crate root were
+  // rewritten, in Restricted Mode too (docs/audit.md, second pass).
+  test("a plan doesn't write a member crate's files outside the folder, and says so", () => {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-outside-'));
+    const root = path.join(parent, 'workspace');
+    const other = path.join(parent, 'outside', 'src');
+    fs.mkdirSync(root);
+    fs.mkdirSync(other, { recursive: true });
+    fs.writeFileSync(path.join(root, 'Cargo.toml'), ['[workspace]', 'members = ["../outside"]', ''].join(String.fromCharCode(10)));
+    fs.writeFileSync(path.join(other, 'vgraph_runtime.rs'), 'old');
+    fs.writeFileSync(path.join(other, 'lib.rs'), 'pub fn mine() {}');
+    const warnings = applyAcceptedPlan(builtinLanguagePacks().get('rust')!, root, []);
+    assert.equal(fs.readFileSync(path.join(other, 'vgraph_runtime.rs'), 'utf8'), 'old');
+    assert.equal(fs.readFileSync(path.join(other, 'lib.rs'), 'utf8'), 'pub fn mine() {}');
+    assert.deepEqual(warnings.map((w) => w.message.split(' is outside')[0]), ['../outside/src/vgraph_runtime.rs', '../outside/src/lib.rs']);
   });
 });

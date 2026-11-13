@@ -7,7 +7,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { CompileDiagnostic } from '../core/compiler/diagnostics';
 import { LanguagePack, LanguagePackRegistry } from '../core/language-pack';
-import { OutputHook, OutputPlan, findBlock, hasBlock, withBlock } from '../core/output-plan';
+import { OutputHook, OutputPlan, confinePlan, findBlock, hasBlock, withBlock } from '../core/output-plan';
 
 export type HookAnswer = 'accept' | 'decline' | 'later';
 
@@ -47,7 +47,7 @@ export class OutputPlans implements vscode.Disposable {
   private async applyNow(pack: LanguagePack, root: string, outputFile?: string): Promise<CompileDiagnostic[]> {
     const placement = pack.generator?.placement;
     if (!placement) return [];
-    const plan: OutputPlan = placement({
+    const plan: OutputPlan = confinePlan(placement({
       outputFile: outputFile && relative(root, outputFile),
       generatedFiles: await this.generatedFiles(pack, root),
       readFile: (file) => {
@@ -65,7 +65,7 @@ export class OutputPlans implements vscode.Disposable {
           return [];
         }
       }
-    });
+    }));
     for (const owned of plan.ownedFiles ?? []) await writeOwned(path.join(root, owned.path), owned.text);
     const diagnostics = [...(plan.diagnostics ?? [])];
     for (const hook of plan.hooks ?? []) {

@@ -38,7 +38,11 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Graphs can be viewed and edited, but running them is disabled because code nodes from workspace node libraries execute inside the extension host."
+      "description": "Graphs can be viewed and edited, but running them is disabled because code nodes from workspace node libraries execute inside the extension host.",
+      "restrictedConfigurations": [
+        "blueprintVisualScripting.runCommands",
+        "blueprintVisualScripting.runArguments"
+      ]
     }
   },
   "contributes": {

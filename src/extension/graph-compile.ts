@@ -10,7 +10,7 @@ import { CompileDiagnostic, CompileResult, compileDocument } from '../core/compi
 import { LanguagePack, LanguagePackRegistry } from '../core/language-pack';
 import { generatedFrom } from '../core/codemap/generated';
 import { GraphDocument } from '../core/model';
-import { OutputPlan, hasBlock, withBlock } from '../core/output-plan';
+import { OutputPlan, confinePlan, hasBlock, withBlock } from '../core/output-plan';
 import { NodeRegistry } from '../core/registry';
 import { generatedLanguages } from '../core/user-types';
 import { generateOptionsFor, isGeneratedFrom, isUsersFile, verifyPlacement } from './placement';
@@ -134,7 +134,7 @@ export function applyAcceptedPlan(pack: LanguagePack, root: string, generatedFil
       return undefined;
     }
   };
-  const plan: OutputPlan = placement({ outputFile: outputFile && posix(path.relative(root, outputFile)), generatedFiles: generatedFiles.map((f) => posix(path.relative(root, f))).sort(), readFile: read, exists: (file) => fs.existsSync(path.join(root, file)), list: (dir) => listDir(path.join(root, dir)) });
+  const plan: OutputPlan = confinePlan(placement({ outputFile: outputFile && posix(path.relative(root, outputFile)), generatedFiles: generatedFiles.map((f) => posix(path.relative(root, f))).sort(), readFile: read, exists: (file) => fs.existsSync(path.join(root, file)), list: (dir) => listDir(path.join(root, dir)) }));
   for (const owned of plan.ownedFiles ?? []) {
     const file = path.join(root, owned.path);
     if (owned.text === '') fs.rmSync(file, { force: true });

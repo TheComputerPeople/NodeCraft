@@ -50,6 +50,33 @@ export interface PlacementContext {
 }
 
 // The block's place in the text, if the text has it.
+// Whether a path a plan names, relative to the workspace folder, stays inside it: no absolute path
+// or drive, and no ".." above the folder.
+export function isInsideFolder(file: string): boolean {
+  if (/^([A-Za-z]:|[/\\])/.test(file)) return false;
+  let depth = 0;
+  for (const part of file.split(/[/\\]+/)) {
+    if (part === '..') depth--;
+    else if (part && part !== '.') depth++;
+    if (depth < 0) return false;
+  }
+  return depth > 0;
+}
+
+// The plan without the files and hooks it names outside the workspace folder, which a compile never
+// writes (a Rust workspace's member crate outside it, say), each with a warning (docs/audit.md,
+// second pass).
+export function confinePlan(plan: OutputPlan): OutputPlan {
+  const outside = [...(plan.ownedFiles ?? []).map((f) => f.path), ...(plan.hooks ?? []).map((h) => h.file)].filter((f) => !isInsideFolder(f));
+  if (!outside.length) return plan;
+  return {
+    ...plan,
+    ownedFiles: plan.ownedFiles?.filter((f) => isInsideFolder(f.path)),
+    hooks: plan.hooks?.filter((h) => isInsideFolder(h.file)),
+    diagnostics: [...(plan.diagnostics ?? []), ...[...new Set(outside)].map((file): CompileDiagnostic => ({ severity: 'warning', code: 'build-registration', message: `${file} is outside the workspace folder, so compiling doesn't write it. Open the folder that holds it to register the generated code there.` }))]
+  };
+}
+
 export function findBlock(text: string, block: Pick<FencedBlock, 'begin' | 'end'>): { start: number; end: number; inner: string } | undefined {
   const start = text.indexOf(block.begin);
   if (start < 0) return undefined;

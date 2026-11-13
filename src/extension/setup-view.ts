@@ -25,7 +25,7 @@ export class SetupView implements vscode.Disposable {
   show(folder: string): ProjectSetup[] {
     this.root = folder;
     if (!this.panel) {
-      this.panel = vscode.window.createWebviewPanel('blueprintVisualScripting.setUp', 'Set Up in This Project', vscode.ViewColumn.Active, { enableScripts: true });
+      this.panel = vscode.window.createWebviewPanel('blueprintVisualScripting.setUp', 'Set Up in This Project', vscode.ViewColumn.Active, { enableScripts: true, localResourceRoots: [] });
       this.panel.onDidDispose(() => (this.panel = undefined), undefined, this.disposables);
       this.panel.webview.onDidReceiveMessage((message: { type: 'show' | 'apply' | 'refresh'; id?: string }) => void this.receive(message), undefined, this.disposables);
     } else this.panel.reveal();

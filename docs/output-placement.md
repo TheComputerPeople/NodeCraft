@@ -12,6 +12,7 @@ Status: design. The contract and the TypeScript/Python strategies are built in P
 4. **Consent for user-owned files.** The one-time hook is proposed as a diff preview and applied only when accepted, as an undoable edit. After that the extension edits only inside its own fenced block.
 5. **Verify, then tell.** After generating, each strategy checks that the build will see the file. If it won't, Compiler Results shows a warning with a quick fix that re-offers the hook and a snippet the user can apply by hand. Declining never blocks generation.
 6. **Follow the graph's lifecycle.** Renaming, moving or deleting a graph renames, moves or deletes its output and updates registrations. Every generated file starts with a header naming its source graph, so stale outputs can be found without a separate manifest.
+7. **Inside the folder, and never over the user's files.** A compile writes nothing outside its workspace folder: a file or hook a plan names outside it is left out, with a warning. It doesn't write over a file without the header, and a rename doesn't move an output onto one (docs/audit.md, second pass).
 
 ## Per-language strategies
 

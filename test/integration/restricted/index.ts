@@ -106,6 +106,30 @@ test("Add Blueprint Package ignores the workspace's .npmrc", async () => {
   }
 });
 
+// docs/audit.md, second pass: the settings that say what Run starts are restricted, so a folder's
+// own values for them aren't used until it's trusted.
+test("the folder's runCommands and runArguments are ignored, and its other settings used", async () => {
+  const folder = vscode.workspace.workspaceFolders![0].uri;
+  const settings = vscode.Uri.joinPath(folder, '.vscode', 'settings.json');
+  await vscode.workspace.fs.writeFile(settings, new TextEncoder().encode(JSON.stringify({
+    'blueprintVisualScripting.defaultLanguage': 'python',
+    'blueprintVisualScripting.runCommands': { javascript: ['not-a-real-command'] },
+    'blueprintVisualScripting.runArguments': ['--from-the-folder']
+  })));
+  try {
+    const config = () => vscode.workspace.getConfiguration('blueprintVisualScripting', folder);
+    const deadline = Date.now() + 10000;
+    while (config().get('defaultLanguage') !== 'python') {
+      if (Date.now() > deadline) throw new Error("The folder's settings were never read");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.deepEqual(config().get('runCommands'), {});
+    assert.deepEqual(config().get('runArguments'), []);
+  } finally {
+    await vscode.workspace.fs.delete(vscode.Uri.joinPath(folder, '.vscode'), { recursive: true });
+  }
+});
+
 export async function run(): Promise<void> {
   const failures: string[] = [];
   for (const { name, run: body } of tests) {
