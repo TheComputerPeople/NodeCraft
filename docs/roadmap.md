@@ -455,6 +455,8 @@ Status: complete (November 2026), with what's left for later in code-classes-as-
 
 Marketplace packaging waits until the platform is complete and robust (decided 2026-10-28).
 
+The plan, its decisions and its steps are in [release.md](release.md) (branch `phase-14`).
+
 - A "Coming from Unreal" guide that maps every Unreal concept to its equivalent here, and lists what doesn't apply.
 - An onboarding sample per Tier 1 language.
 - Marketplace packaging, accessibility pass (keyboard-only graph editing, screen-reader labels), settings documentation.
