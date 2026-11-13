@@ -353,3 +353,44 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
     "Compile failed: 1 error", and the node's label carries the error.
   - In emulated forced colors, nodes have a solid border, exec pins a fill, wires a stroke, and the
     focused pin's row and the selected node a solid outline.
+
+## Built (step 9): the exit check
+
+- **A graph built from the keyboard alone** (webview, keyboard-only.test.ts). The test starts from a
+  class with only Start and uses no mouse:
+  - Tab reaches the graph, which says "Start, event";
+  - Add Node from Here adds a Print wired to Start;
+  - Escape, then Shift+F10, adds a Branch on its own;
+  - Connect to wires Branch's Exec from Print's Then;
+  - the arrows go back to Print, and F2 sets its text;
+  - F7 compiles.
+
+  Every step is announced on the status line ("Added Print, connected to ...", "Added Branch.",
+  "Connected Print: Then to Branch: Exec.", "Compiled to Greeter.vgraph.js"), and the graph saved
+  prints the text in Simulate.
+- **Found by it:**
+  - The graph was hundreds of Tab presses away, because each of the palette's nodes was a stop. The
+    palette is now one stop (`role=group`, "Palette"), moved through with the arrow keys, Home, End,
+    Page Up and Page Down. The graph is now the 17th stop.
+  - A pin's label kept its old value after F2 changed it, since inline edits don't redraw. The label
+    now follows the field as it's typed in.
+- **The Tour** builds, passes its checkers, runs and passes its test in all twelve languages
+  (new-project.test.ts, in the full run).
+- **Read through as a new user:**
+  - The README didn't say how to get the extension. "Where to start" now says it isn't on the
+    Marketplace yet, and "Open and run" is now "Try it from source".
+  - The walkthrough's pages and the guide were read through with it.
+- **The full suites:**
+  - `npm test`: 1,757 tests, 1,754 passing, none failing. That is unit, webview, conformance and the
+    corpus. One test is skipped, Linux's and macOS's scratch folder, and two are todo, the corpus's
+    luacheck, which isn't installed here.
+  - `npm run test:integration:debuggers`: 80/80, 6/6 multi-root, 4/4 Restricted Mode.
+
+## Status
+
+All nine steps are done. Marketplace packaging stays deferred, as decided on 2026-10-28.
+
+Left for later:
+- the Codebase Map's own forced-colors pass, beyond its existing keyboard and ARIA support;
+- a Favorites list in the palette;
+- Instance Editable and Expose on Spawn, which Coming from Unreal lists as not here yet.

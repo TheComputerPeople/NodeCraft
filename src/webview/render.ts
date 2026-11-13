@@ -283,7 +283,13 @@ function renderPin(node: GraphNode, pin: PinDefinition, showLabel: boolean): HTM
   if (pin.direction === 'input') {
     row.append(handle, label);
     const editor = !connected && pin.kind === 'data' ? defaultEditor(node, pin) : undefined;
-    if (editor) row.appendChild(editor);
+    if (editor) {
+      row.appendChild(editor);
+      // The value is in the pin's label: kept up to date as it's typed, with no redraw.
+      const relabel = () => handle.setAttribute('aria-label', pinLabel(node, pin));
+      editor.addEventListener('input', relabel);
+      editor.addEventListener('change', relabel);
+    }
   } else {
     row.append(label, handle);
   }

@@ -27,7 +27,34 @@ import { TEST_CASE } from '../core/tests';
 import { ClassInfo, CodeClassInfo, ancestors, classTypeId } from '../core/objects';
 import { renderDispatcherDetails, renderEventDetails, renderTestDetails } from './event-details';
 
+// The palette is one stop for Tab, whose arrow keys move through its nodes (docs/release.md, step 9):
+// with a button per node, the graph was hundreds of Tab presses away.
+let paletteKeysReady = false;
+
+function readyPaletteKeys(): void {
+  if (paletteKeysReady) return;
+  paletteKeysReady = true;
+  dom.categories.setAttribute('role', 'group');
+  dom.categories.setAttribute('aria-label', 'Palette');
+  dom.categories.addEventListener('keydown', (e) => {
+    const buttons = [...dom.categories.querySelectorAll<HTMLButtonElement>('.palette-node')];
+    const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (at < 0) return;
+    const next = e.key === 'ArrowDown' ? Math.min(at + 1, buttons.length - 1)
+      : e.key === 'ArrowUp' ? Math.max(at - 1, 0)
+      : e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1
+      : e.key === 'PageDown' ? Math.min(at + 10, buttons.length - 1) : e.key === 'PageUp' ? Math.max(at - 10, 0) : undefined;
+    if (next === undefined) return;
+    buttons[at].tabIndex = -1;
+    buttons[next].tabIndex = 0;
+    buttons[next].focus();
+    e.preventDefault();
+    e.stopPropagation();
+  });
+}
+
 export function renderPalette(): void {
+  readyPaletteKeys();
   dom.categories.innerHTML = '';
   const q = dom.search.value.trim().toLowerCase();
   const grouped = new Map<string, PaletteEntry[]>();
@@ -47,6 +74,7 @@ export function renderPalette(): void {
       const def = entry.definition;
       const button = document.createElement('button');
       button.className = 'palette-node';
+      button.tabIndex = -1;
       button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(headerColor(def))}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.description || '')}</small></span>`;
       button.addEventListener('mouseenter', () => showPreview(dom.palettePreview, entry));
       button.addEventListener('focus', () => showPreview(dom.palettePreview, entry));
@@ -66,6 +94,8 @@ export function renderPalette(): void {
     }
     dom.categories.appendChild(section);
   });
+  const first = dom.categories.querySelector<HTMLButtonElement>('.palette-node');
+  if (first) first.tabIndex = 0;
 }
 
 // The Details panel: what the selected node is. Pin values are edited on the node itself, as in

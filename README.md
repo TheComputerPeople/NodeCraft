@@ -6,6 +6,7 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 
 VS Code's **Welcome** page has a walkthrough, **Get Started with Blueprint Visual Scripting** (Command Palette: **Welcome: Open Walkthrough...**), that goes through the steps below one at a time.
 
+- **Getting it:** it isn't on the Marketplace yet; [try it from source](#try-it-from-source).
 - **A new project:** run **Blueprint Visual Scripting: New Project...** from the Command Palette, pick a language and start from the Tour ([Graphs in your project](#graphs-in-your-project)).
 - **A codebase you have:** **Blueprint Visual Scripting: Set Up in This Project** says what graphs there need, and changes nothing until you apply it.
 - **Coming from Unreal:** [docs/coming-from-unreal.md](docs/coming-from-unreal.md) (**Blueprint Visual Scripting: Coming from Unreal** opens it) maps each of Unreal's Blueprint concepts to its equivalent here, and says which don't apply. The gestures and shortcuts are Unreal's ([Editor interaction reference](#editor-interaction-reference)).
@@ -30,7 +31,9 @@ VS Code's **Welcome** page has a walkthrough, **Get Started with Blueprint Visua
 - The **Codebase Map**: your whole workspace, code and graphs, drawn top to bottom in four views to drill through (architecture, structure, call flow, a function's control flow), with Expose as Node and Open Graph on its boxes (see below).
 - Saving goes through VS Code's text document, so undo, redo, dirty state and source control work as usual.
 
-## Open and run
+## Try it from source
+
+The extension isn't published yet, so it runs from this repository:
 
 1. Open this folder in VS Code and run `npm install`.
 2. Press `F5` (or choose **Run Blueprint Visual Scripting Extension** in Run and Debug). An Extension Development Host opens the `sample` workspace.

@@ -31,7 +31,8 @@ button, input { font: inherit; color: inherit; }
 .search { margin: 0 10px 10px; width: calc(100% - 20px); padding: 7px 9px; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); border-radius: 4px; outline: none; }
 .category-title { padding: 9px 12px 5px; color: var(--muted); font-weight: 700; }
 .palette-node { width: calc(100% - 10px); margin: 2px 5px; padding: 7px; display: flex; gap: 8px; align-items: flex-start; text-align: left; border: 1px solid transparent; background: transparent; cursor: pointer; border-radius: 4px; }
-.palette-node:hover { background: var(--vscode-list-hoverBackground); border-color: var(--panel-border); }
+.palette-node:hover, .palette-node:focus { background: var(--vscode-list-hoverBackground); border-color: var(--panel-border); }
+.palette-node:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
 .palette-node strong { display: block; }
 .palette-node small { display: block; color: var(--muted); margin-top: 2px; line-height: 1.25; }
 .palette-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--node-color); margin-top: 4px; flex: 0 0 auto; }
