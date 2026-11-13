@@ -9,7 +9,7 @@ export const RUST_RUNTIME_MODULE = 'vgraph_runtime';
 // clippy's command line, but not a forbid): its own naming and leftovers, and the lint groups a
 // strict crate turns on (clippy's pedantic, nursery and restriction; rustc's missing_docs).
 export const RUST_ALLOWED_LINTS = [
-  'non_snake_case', 'non_camel_case_types', 'unused_variables', 'unused_mut', 'unused_parens', 'unused_imports', 'unused_braces', 'dead_code', 'unreachable_code',
+  'non_snake_case', 'non_camel_case_types', 'unused_variables', 'unused_assignments', 'unused_mut', 'unused_parens', 'unused_imports', 'unused_braces', 'dead_code', 'unreachable_code',
   'missing_docs', 'clippy::all', 'clippy::pedantic', 'clippy::nursery', 'clippy::restriction'
 ].join(', ');
 

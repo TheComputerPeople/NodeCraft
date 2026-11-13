@@ -156,7 +156,7 @@ The emitter decides names, which conversions are needed and where each node's co
 | `return` | `value`, `values`, `count`, `multiple` |
 | `callResults`, `callOutput` | A call of something with several outputs: `call`, and each `results` item's `target` and `index`, or one `index` |
 | `literal.int`, `literal.float`, `literal.bool` | `value`, `text` (a float that is a whole number has `.0`) |
-| `literal.string`, `literal.null` | `value`, `quoted` (a JSON string), `escaped` (without the quotes) |
+| `literal.string`, `literal.null` | `value`, `quoted` (a JSON string), `escaped` (without the quotes), `cQuoted` (as C and C++ write it: control characters as octal escapes, not `\u`) |
 | `field` | `name`: a variable or stored output of the class (locals are written by name) |
 | `add`, `binary`, `binary.<op>`, `binary.<op>.<type>`, `not` | `left`, `right`, `op`; or `value`. Operands that are themselves operations come in parentheses |
 | `toText`, `toNumber`, `toBoolean` (each also `.<type>`) | `value`. Text needs no conversion, a float no `toNumber`, a bool no `toBoolean`; an int needs `toNumber.int` only if the pack has it |

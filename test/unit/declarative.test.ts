@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { compileDocument } from '../../src/core/compiler';
 import { checkDefinition, declarativePack, loadDeclarativePack, parseTemplate, renderTemplate, TemplateError } from '../../src/core/declarative';
+import { cQuoted } from '../../src/core/declarative/generator';
 import { LanguagePackRegistry } from '../../src/core/language-pack';
 import { NodeRegistry } from '../../src/core/registry';
 import { doc, node, readRepoFile, repoRoot, wire } from './helpers';
@@ -104,5 +105,17 @@ describe('generating through templates', () => {
     assert.ok(text.indexOf('function first') < text.indexOf('function second'), 'in the definition\'s order');
     assert.ok(!text.includes('function unused'));
     assert.ok(path.isAbsolute(repoRoot));
+  });
+});
+
+// docs/audit.md, second pass: C takes \u only from U+00A0, so the C example pack writes strings this way.
+describe('cQuoted', () => {
+  test('writes control characters as octal escapes, and leaves the rest as JSON writes them', () => {
+    const B = String.fromCharCode(92);
+    assert.equal(cQuoted('ctrl' + String.fromCharCode(1, 8, 12, 27) + 'end'), `"ctrl${B}001${B}b${B}f${B}033end"`);
+    assert.equal(cQuoted('a "q" tab' + String.fromCharCode(9)), `"a ${B}"q${B}" tab${B}t"`);
+    // A backslash written before "u0001" is the text, not an escape.
+    assert.equal(cQuoted(B + 'u0001'), `"${B}${B}u0001"`);
+    assert.equal(cQuoted('emoji ' + String.fromCodePoint(0x1f600)), `"emoji ${String.fromCodePoint(0x1f600)}"`);
   });
 });

@@ -14,7 +14,9 @@ const RESERVED = new Set([
   'switch', 'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield', 'let', 'static', 'implements',
   'interface', 'package', 'private', 'protected', 'public', 'await', 'async', 'as', 'any', 'boolean', 'constructor',
   'declare', 'get', 'module', 'require', 'number', 'set', 'string', 'symbol', 'type', 'from', 'of', 'unknown', 'never',
-  'object', 'undefined', 'arguments', 'eval'
+  'object', 'undefined', 'arguments', 'eval',
+  // Valid as a member's name, but the Codebase Map's TypeScript grammar takes it for the modifier.
+  'abstract'
 ]);
 
 // Formats a value the way docs/semantics.md says Print shows it. Only emitted when a value's type

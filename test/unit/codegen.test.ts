@@ -212,3 +212,52 @@ describe('identifier helpers', () => {
     assert.deepEqual(dedent('\n    if (x) {\n      y();\n    }\n'), ['if (x) {', '  y();', '}']);
   });
 });
+
+// docs/audit.md, second pass. The conformance fixtures string-literals.vgraph and names.vgraph run
+// these in every language; here they're checked where no toolchain is installed.
+describe("what a language can't take as it is", () => {
+  const printing = (value: string) => doc([node('s', 'core:event.start'), node('p', 'core:console.print', { 'pin:value': value })], [wire('s', 'execOut', 'p', 'execIn')]);
+  const named = (name: string) => doc([node('s', 'core:event.start'), node('g', 'core:variable.get', { variable: 'v' }), node('p', 'core:console.print')],
+    [wire('s', 'execOut', 'p', 'execIn'), wire('g', 'value', 'p', 'value')], [{ id: 'v', name, type: { id: 'string' }, defaultValue: 'x' }]);
+
+  test('C#: U+0085, U+2028 and U+2029 in a string are escaped, as C# ends a line at them', () => {
+    const text = compileAs(printing('a' + String.fromCharCode(0x85) + 'b' + String.fromCharCode(0x2028) + 'c' + String.fromCharCode(0x2029) + 'd'), 'csharp').output!.text;
+    assert.ok(!new RegExp(`[${String.fromCharCode(0x85, 0x2028, 0x2029)}]`).test(text));
+    const u = (code: string) => String.fromCharCode(92) + 'u' + code;
+    assert.ok(text.includes(`"a${u('0085')}b${u('2028')}c${u('2029')}d"`));
+  });
+
+  test('C++: a name a standard header defines as a macro is renamed', () => {
+    for (const name of ['NULL', 'EOF', 'errno', 'stdout', 'assert', 'INT_MAX', 'M_PI', 'SIZE_MAX', 'linux']) {
+      // Declared in the header, used in the .cpp file.
+      const output = compileAs(named(name), 'cpp').output!;
+      const text = [output.text, ...(output.companionFiles ?? []).map((f) => f.text)].join('\n');
+      assert.ok(text.includes(`std::string ${name}_ = `), `${name} is declared as ${name}_`);
+      assert.ok(!text.includes(`std::string ${name} = `) && !text.includes(`<< ${name} <<`), `${name} isn't used as it is`);
+    }
+  });
+
+  test('GDScript: namespace and trait, reserved for later versions, are renamed', () => {
+    for (const name of ['namespace', 'trait']) {
+      const text = compileAs(named(name), 'gdscript').output!.text;
+      assert.ok(!new RegExp(`^var ${name}(?![A-Za-z0-9_])`, 'm').test(text), text);
+    }
+  });
+
+  // member-names.vgraph runs this: languages that read a member by its bare name.
+  test("C++, C#, Java and GDScript: a function's input named like a class variable doesn't hide it", () => {
+    const graph = doc([node('s', 'core:event.start'), node('c', 'core:function.call', { graph: 'f', 'pin:in': 'new' })], [wire('s', 'execOut', 'c', 'execIn')],
+      [{ id: 'v', name: 'value', type: { id: 'string' }, defaultValue: 'old' }]);
+    graph.graphs.push({
+      id: 'f', name: 'Store', kind: 'function',
+      signature: { inputs: [{ id: 'in', name: 'value', kind: 'data', type: { id: 'string' } }], outputs: [] },
+      nodes: [node('e', 'core:function.entry', { graph: 'f' }), node('set', 'core:variable.set', { variable: 'v' }), node('r', 'core:function.return', { graph: 'f' })],
+      connections: [wire('e', 'execOut', 'set', 'execIn'), wire('e', 'in', 'set', 'value'), wire('set', 'execOut', 'r', 'execIn')], comments: []
+    });
+    for (const language of ['cpp', 'csharp', 'java', 'gdscript']) {
+      const text = compileAs(graph, language).output!.text;
+      assert.ok(!/\bvalue = value\b/.test(text), `${language}: ${text}`);
+      assert.match(text, /\bvalue = value_2\b/, language);
+    }
+  });
+});

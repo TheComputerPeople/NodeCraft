@@ -1,0 +1,504 @@
+{
+  "schemaVersion": 3,
+  "name": "MemberNames",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [
+    {
+      "id": "v_value",
+      "name": "value",
+      "type": {
+        "id": "string"
+      },
+      "defaultValue": "old"
+    },
+    {
+      "id": "v_count",
+      "name": "count",
+      "type": {
+        "id": "string"
+      },
+      "defaultValue": "0"
+    }
+  ],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "g0",
+          "type": "core:variable.get",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "variable": "v_value"
+          }
+        },
+        {
+          "id": "p0",
+          "type": "core:console.print",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "c_store",
+          "type": "core:function.call",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "store",
+            "pin:in": "stored"
+          }
+        },
+        {
+          "id": "g1",
+          "type": "core:variable.get",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "variable": "v_value"
+          }
+        },
+        {
+          "id": "p1",
+          "type": "core:console.print",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "c_relay",
+          "type": "core:function.call",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "relay",
+            "pin:in": "relayed"
+          }
+        },
+        {
+          "id": "g2",
+          "type": "core:variable.get",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "variable": "v_value"
+          }
+        },
+        {
+          "id": "p2",
+          "type": "core:console.print",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "c_local",
+          "type": "core:function.call",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "local"
+          }
+        },
+        {
+          "id": "p_local",
+          "type": "core:console.print",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "g3",
+          "type": "core:variable.get",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "variable": "v_count"
+          }
+        },
+        {
+          "id": "p3",
+          "type": "core:console.print",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        }
+      ],
+      "connections": [
+        {
+          "id": "g0.value->p0.value",
+          "fromNode": "g0",
+          "fromPin": "value",
+          "toNode": "p0",
+          "toPin": "value"
+        },
+        {
+          "id": "g1.value->p1.value",
+          "fromNode": "g1",
+          "fromPin": "value",
+          "toNode": "p1",
+          "toPin": "value"
+        },
+        {
+          "id": "g2.value->p2.value",
+          "fromNode": "g2",
+          "fromPin": "value",
+          "toNode": "p2",
+          "toPin": "value"
+        },
+        {
+          "id": "c_local.result->p_local.value",
+          "fromNode": "c_local",
+          "fromPin": "result",
+          "toNode": "p_local",
+          "toPin": "value"
+        },
+        {
+          "id": "g3.value->p3.value",
+          "fromNode": "g3",
+          "fromPin": "value",
+          "toNode": "p3",
+          "toPin": "value"
+        },
+        {
+          "id": "start.execOut->p0.execIn",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "p0",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p0.execOut->c_store.execIn",
+          "fromNode": "p0",
+          "fromPin": "execOut",
+          "toNode": "c_store",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c_store.execOut->p1.execIn",
+          "fromNode": "c_store",
+          "fromPin": "execOut",
+          "toNode": "p1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p1.execOut->c_relay.execIn",
+          "fromNode": "p1",
+          "fromPin": "execOut",
+          "toNode": "c_relay",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c_relay.execOut->p2.execIn",
+          "fromNode": "c_relay",
+          "fromPin": "execOut",
+          "toNode": "p2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p2.execOut->c_local.execIn",
+          "fromNode": "p2",
+          "fromPin": "execOut",
+          "toNode": "c_local",
+          "toPin": "execIn"
+        },
+        {
+          "id": "c_local.execOut->p_local.execIn",
+          "fromNode": "c_local",
+          "fromPin": "execOut",
+          "toNode": "p_local",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p_local.execOut->p3.execIn",
+          "fromNode": "p_local",
+          "fromPin": "execOut",
+          "toNode": "p3",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "store",
+      "name": "Store",
+      "kind": "function",
+      "signature": {
+        "inputs": [
+          {
+            "id": "in",
+            "name": "value",
+            "kind": "data",
+            "type": {
+              "id": "string"
+            }
+          }
+        ],
+        "outputs": []
+      },
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "store"
+          }
+        },
+        {
+          "id": "set",
+          "type": "core:variable.set",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {
+            "variable": "v_value"
+          }
+        },
+        {
+          "id": "ret",
+          "type": "core:function.return",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {
+            "graph": "store"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "entry.execOut->set.execIn",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "set",
+          "toPin": "execIn"
+        },
+        {
+          "id": "entry.in->set.value",
+          "fromNode": "entry",
+          "fromPin": "in",
+          "toNode": "set",
+          "toPin": "value"
+        },
+        {
+          "id": "set.execOut->ret.execIn",
+          "fromNode": "set",
+          "fromPin": "execOut",
+          "toNode": "ret",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "relay",
+      "name": "Relay",
+      "kind": "function",
+      "signature": {
+        "inputs": [
+          {
+            "id": "in",
+            "name": "store",
+            "kind": "data",
+            "type": {
+              "id": "string"
+            }
+          }
+        ],
+        "outputs": []
+      },
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "relay"
+          }
+        },
+        {
+          "id": "call",
+          "type": "core:function.call",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {
+            "graph": "store"
+          }
+        },
+        {
+          "id": "ret",
+          "type": "core:function.return",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {
+            "graph": "relay"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "entry.execOut->call.execIn",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "call",
+          "toPin": "execIn"
+        },
+        {
+          "id": "entry.in->call.in",
+          "fromNode": "entry",
+          "fromPin": "in",
+          "toNode": "call",
+          "toPin": "in"
+        },
+        {
+          "id": "call.execOut->ret.execIn",
+          "fromNode": "call",
+          "fromPin": "execOut",
+          "toNode": "ret",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "local",
+      "name": "Local",
+      "kind": "function",
+      "signature": {
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "kind": "data",
+            "type": {
+              "id": "string"
+            }
+          }
+        ]
+      },
+      "localVariables": [
+        {
+          "id": "l_count",
+          "name": "count",
+          "type": {
+            "id": "string"
+          },
+          "defaultValue": "local"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "local"
+          }
+        },
+        {
+          "id": "get",
+          "type": "core:variable.get",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {
+            "variable": "l_count"
+          }
+        },
+        {
+          "id": "ret",
+          "type": "core:function.return",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {
+            "graph": "local"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "entry.execOut->ret.execIn",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "ret",
+          "toPin": "execIn"
+        },
+        {
+          "id": "get.value->ret.result",
+          "fromNode": "get",
+          "fromPin": "value",
+          "toNode": "ret",
+          "toPin": "result"
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: a function's input named like the class variable it sets, an input named like the method it calls, and a local named like a class variable don't hide them (docs/audit.md, second pass). C++, C#, Java and GDScript read members by their bare names.",
+    "expectedOutput": [
+      "old",
+      "stored",
+      "relayed",
+      "local",
+      "0"
+    ]
+  }
+}

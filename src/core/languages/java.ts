@@ -548,7 +548,7 @@ class JavaEmitter {
     // The interface functions the class gives no body: they do nothing and return defaults.
     for (const { type, stubs } of this.program.interfaces ?? []) {
       for (const fn of stubs) {
-        const scope = new NameScope(RESERVED);
+        const scope = this.names.inner();
         const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => ({ name: scope.claim(p.name, 'camel'), type: p.type }));
         const outputs = fn.outputs.filter((p) => p.kind === 'data');
         this.method('public', this.interfaceNames(type).functions.get(fn.id)!, params, outputs.length > 1 ? 'Object[]' : outputs[0]?.type, () => {
@@ -701,7 +701,8 @@ class JavaEmitter {
   }
 
   private functionMethod(fn: IrFunction): void {
-    const scope = new NameScope(RESERVED);
+    // Not the class's names: a parameter or local named like a member would hide it.
+    const scope = this.names.inner();
     // A method of the code's keeps its parameters' names and the code's types for them: Java
     // overrides only a method of the same parameter types.
     const spelling = fn.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === fn.code)?.spelling : undefined;

@@ -23,7 +23,24 @@ const RESERVED = new Set([
   'static_assert', 'static_cast', 'struct', 'switch', 'template', 'this', 'thread_local', 'throw', 'true', 'try', 'typedef', 'typeid',
   'typename', 'union', 'unsigned', 'using', 'virtual', 'void', 'volatile', 'wchar_t', 'while', 'xor', 'xor_eq', 'override', 'final',
   // Not keywords, but names generated code relies on.
-  'std', 'vgraph', 'main', 'NAN'
+  'std', 'vgraph', 'main', 'NAN',
+  // Macros the standard headers generated code includes define, or may: a name the preprocessor
+  // replaces doesn't build (docs/audit.md, second pass). Function-like ones are replaced only
+  // before "(", as a call is.
+  'NULL', 'EOF', 'BUFSIZ', 'FILENAME_MAX', 'FOPEN_MAX', 'L_tmpnam', 'TMP_MAX', 'SEEK_SET', 'SEEK_CUR', 'SEEK_END', 'stdin', 'stdout', 'stderr',
+  '_IOFBF', '_IOLBF', '_IONBF', 'EXIT_SUCCESS', 'EXIT_FAILURE', 'RAND_MAX', 'MB_CUR_MAX', 'MB_LEN_MAX', 'offsetof', 'errno', 'EDOM', 'ERANGE',
+  'EILSEQ', 'assert', 'CHAR_BIT', 'SCHAR_MIN', 'SCHAR_MAX', 'UCHAR_MAX', 'CHAR_MIN', 'CHAR_MAX', 'SHRT_MIN', 'SHRT_MAX', 'USHRT_MAX', 'INT_MIN',
+  'INT_MAX', 'UINT_MAX', 'LONG_MIN', 'LONG_MAX', 'ULONG_MAX', 'LLONG_MIN', 'LLONG_MAX', 'ULLONG_MAX', 'INT8_MIN', 'INT8_MAX', 'UINT8_MAX',
+  'INT16_MIN', 'INT16_MAX', 'UINT16_MAX', 'INT32_MIN', 'INT32_MAX', 'UINT32_MAX', 'INT64_MIN', 'INT64_MAX', 'UINT64_MAX', 'INTMAX_MIN',
+  'INTMAX_MAX', 'UINTMAX_MAX', 'INTPTR_MIN', 'INTPTR_MAX', 'UINTPTR_MAX', 'PTRDIFF_MIN', 'PTRDIFF_MAX', 'SIZE_MAX', 'SIG_ATOMIC_MIN',
+  'SIG_ATOMIC_MAX', 'WCHAR_MIN', 'WCHAR_MAX', 'WINT_MIN', 'WINT_MAX', 'WEOF', 'INT8_C', 'INT16_C', 'INT32_C', 'INT64_C', 'UINT8_C', 'UINT16_C',
+  'UINT32_C', 'UINT64_C', 'INTMAX_C', 'UINTMAX_C', 'FLT_MIN', 'FLT_MAX', 'FLT_EPSILON', 'FLT_DIG', 'FLT_RADIX', 'DBL_MIN', 'DBL_MAX',
+  'DBL_EPSILON', 'DBL_DIG', 'LDBL_MIN', 'LDBL_MAX', 'LDBL_EPSILON', 'HUGE_VAL', 'HUGE_VALF', 'HUGE_VALL', 'INFINITY', 'FP_NAN', 'FP_INFINITE',
+  'FP_ZERO', 'FP_SUBNORMAL', 'FP_NORMAL', 'FP_ILOGB0', 'FP_ILOGBNAN', 'MATH_ERRNO', 'MATH_ERREXCEPT', 'math_errhandling', 'M_E', 'M_LOG2E',
+  'M_LOG10E', 'M_LN2', 'M_LN10', 'M_PI', 'M_PI_2', 'M_PI_4', 'M_1_PI', 'M_2_PI', 'M_2_SQRTPI', 'M_SQRT2', 'M_SQRT1_2', 'DOMAIN', 'SING',
+  'OVERFLOW', 'UNDERFLOW', 'TLOSS', 'PLOSS', 'CLOCKS_PER_SEC', 'TIME_UTC', 'SIGABRT', 'SIGFPE', 'SIGILL', 'SIGINT', 'SIGSEGV', 'SIGTERM',
+  'SIG_DFL', 'SIG_ERR', 'SIG_IGN', 'LC_ALL', 'LC_COLLATE', 'LC_CTYPE', 'LC_MONETARY', 'LC_NUMERIC', 'LC_TIME', 'va_start', 'va_arg', 'va_end',
+  'va_copy', 'setjmp', 'unix', 'linux', 'i386', 'WIN32'
 ]);
 
 const PRIMITIVES: Record<string, string> = { bool: 'bool', int: 'long long', float: 'double', string: 'std::string', any: 'std::any', wildcard: 'std::any' };
@@ -394,7 +411,7 @@ class CppEmitter {
     // The interface functions the class gives no body: they do nothing and return defaults.
     for (const { type, stubs } of this.program.interfaces ?? []) {
       for (const fn of stubs) {
-        const scope = new NameScope(RESERVED);
+        const scope = this.names.inner();
         const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => ({ name: scope.claim(p.name, 'camel'), type: p.type }));
         const outputs = fn.outputs.filter((p) => p.kind === 'data');
         const returns = this.resultType(outputs.map((o) => o.type));
@@ -592,7 +609,8 @@ class CppEmitter {
   // A function graph as a member function (a free function in a library): its locals and its
   // nodes' outputs are variables of each call.
   private functionMethod(fn: IrFunction): void {
-    const scope = new NameScope(RESERVED);
+    // Not the class's names: a parameter or local named like a member would hide it.
+    const scope = this.names.inner();
     // A method of the code's keeps its parameters' names and the code's types for them: C++
     // overrides only a member function of the same parameter types and qualifiers.
     const spelling = fn.code ? codeParentInfo(this.program)?.overridable.find((m) => m.name === fn.code)?.spelling : undefined;

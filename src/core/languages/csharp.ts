@@ -525,7 +525,7 @@ class CSharpEmitter {
     // The interface functions the class gives no body: they do nothing and return defaults.
     for (const { type, stubs } of this.program.interfaces ?? []) {
       for (const fn of stubs) {
-        const scope = new NameScope(RESERVED);
+        const scope = this.names.inner();
         const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => ({ name: scope.claim(p.name, 'camel'), type: p.type }));
         const outputs = fn.outputs.filter((p) => p.kind === 'data');
         const fields = resultFields(outputs);
@@ -696,7 +696,8 @@ class CSharpEmitter {
 
   // A function graph as a method: its locals and its nodes' outputs are variables of each call.
   private functionMethod(fn: IrFunction): void {
-    const scope = new NameScope(RESERVED);
+    // Not the class's names: a parameter or local named like a member would hide it.
+    const scope = this.names.inner();
     // A method of the code's keeps its parameters' names and the code's types for them.
     const params = fn.params.map((p) => {
       const name = scope.claim(p.name, fn.code ? 'keep' : 'camel');
@@ -1323,7 +1324,9 @@ function literal(value: unknown): string {
     if (!Number.isFinite(value)) return value > 0 ? 'double.PositiveInfinity' : 'double.NegativeInfinity';
     return String(value);
   }
-  if (typeof value === 'string') return JSON.stringify(value);
+  // JSON's escapes are C#'s, but C# also ends a line at U+0085, U+2028 and U+2029, which JSON
+  // leaves as they are (docs/audit.md, second pass).
+  if (typeof value === 'string') return JSON.stringify(value).replace(/[\u0085\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
   return 'null';
 }
 

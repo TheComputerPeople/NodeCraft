@@ -361,7 +361,7 @@ class GoEmitter {
       out.line('switch value {');
       for (const e of declaration.type.enumerators) {
         out.line(`case ${members.get(e.id)}:`);
-        out.line(`\treturn ${JSON.stringify(e.name)}`);
+        out.line(`\treturn ${goString(e.name)}`);
       }
       out.line('}');
       out.line('return ""');
@@ -383,7 +383,7 @@ class GoEmitter {
       out.line();
       out.line('// As Print shows it: each field by name, in order.');
       out.line(`func (value ${this.className}) VgFields() []VgField {`);
-      out.line(`\treturn []VgField{${type.fields.map((f) => `{${JSON.stringify(f.name)}, value.${fields.get(f.id)}}`).join(', ')}}`);
+      out.line(`\treturn []VgField{${type.fields.map((f) => `{${goString(f.name)}, value.${fields.get(f.id)}}`).join(', ')}}`);
       out.line('}');
     }
     return this.finish();
@@ -1060,8 +1060,17 @@ function literal(value: unknown): string {
     if (!Number.isFinite(value)) return `math.Inf(${value > 0 ? 1 : -1})`;
     return String(value);
   }
-  if (typeof value === 'string') return JSON.stringify(value);
+  if (typeof value === 'string') return goString(value);
   return 'nil';
+}
+
+// JSON's escapes are Go's. Control and format characters JSON leaves as they are (U+007F to
+// U+009F, U+200B, U+2028, U+2029, ...) are escaped too, as staticcheck asks (ST1018).
+function goString(text: string): string {
+  return JSON.stringify(text).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (c) => {
+    const code = c.codePointAt(0)!;
+    return code > 0xffff ? `\\U${code.toString(16).padStart(8, '0')}` : `\\u${code.toString(16).padStart(4, '0')}`;
+  });
 }
 
 const INT: TypeRef = { id: 'int' };

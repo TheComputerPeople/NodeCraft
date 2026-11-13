@@ -252,13 +252,32 @@ code again.
      run, which needs trust);
    - the Set Up view's webview doesn't limit the local files it may load (its policy loads none).
 
+Found in step 2, when the fixtures were compiled into the corpus of project layouts:
+
+8. **A function's input or local named like a class variable hides it in C++, C#, Java and GDScript**
+   (bug, medium). These languages read a member by its bare name, and a parameter or local of the
+   same name hides it. A function Store with an input `value` that sets the variable `value`
+   wrote `value = value;`, so the variable never changed. Java and GDScript printed the old
+   value; C++ didn't build with `-Wshadow -Werror`, and C# warned (CS1717). The same went for an
+   input named like a method the function calls.
+9. **The linters of the corpus's projects** (low):
+   - Go's staticcheck asks for control and format characters in a string to be escaped (ST1018);
+   - Rust warns of a local whose first value is never read, which a graph that sets a local before
+     getting it gives (`unused_assignments`).
+10. **The C example pack** (examples/c-language-pack) didn't rename C23's keywords (`typeof`, …),
+    its headers' macros, or `init`, which its constructor's name (`Class_init`) took (bug, low).
+11. **The Codebase Map's TypeScript grammar** reads a member named `abstract` as the modifier, a
+    known bug of tree-sitter-typescript 0.23.2, so the map's summary of such generated code had an
+    error (low).
+
 Not covered: the debugger integrations beyond their trust checks, the Codebase Map beyond its
 messages, and ending processes on macOS and Linux.
 
 ### Steps
 
 1. Generated files and overlapping compiles: findings 1 and 5.
-2. Generated code: findings 2–4, and the two graphs as conformance fixtures.
+2. Generated code: findings 2–4, and the two graphs as conformance fixtures; then 8–11, which
+   the fixtures found.
 3. Hardening: findings 6 and 7.
 
 ### Built (step 1)
@@ -289,6 +308,44 @@ messages, and ending processes on macOS and Linux.
   - step 3's test of a compile that fails made it fail with a folder where the output goes;
     that's now the user's, so it uses a read-only generated file.
 
+### Built (step 2)
+
+- **C# strings** (`literal`, csharp.ts): U+0085, U+2028 and U+2029 are written as `\u` escapes.
+  The rest of JSON's escapes are C#'s already.
+- **C++ names** (`RESERVED`, cpp.ts): 154 macros that the standard headers generated code includes
+  define, or may, are renamed like keywords: `NULL`, `EOF`, `errno`, `stdin`, `stdout`, `stderr`,
+  `assert`, the limits (`INT_MAX`, `SIZE_MAX`, `DBL_EPSILON`, …), `<cmath>`'s (`INFINITY`,
+  `HUGE_VAL`, `M_PI` and the rest of `M_*`, and MinGW's `DOMAIN`, `OVERFLOW`, …), the signal,
+  locale and `va_*` names, and `unix`, `linux`, `i386` and `WIN32`. `min` and `max` aren't: they're
+  macros only after `<windows.h>`, which generated code doesn't include.
+- **GDScript names** (`RESERVED`, gdscript.ts): `namespace` and `trait`, which Godot 4 reserves.
+- **Conformance fixtures** (test/fixtures/graphs), so every language keeps passing them:
+  - `string-literals.vgraph` prints the 16 strings;
+  - `names.vgraph` has 194 variables, and seven functions (`delete`, `init`, `main`, `NULL`,
+    `namespace`, `new`, `String`) whose inputs, outputs and a local variable are named the same way.
+  - Both pass in all 12 languages. Without the fixes, C# fails the first, and C++ and GDScript the
+    second.
+- **A method's names don't hide the class's** (`NameScope.inner`, compiler/names.ts): in C++,
+  C#, Java and GDScript, a function's parameters and locals, and an interface function's stub's
+  parameters, are named in a scope that holds the class's names (its variables, methods and what
+  it inherits). One named like a member becomes `value_2`, as a keyword does. The other eight
+  languages read members through `this`, `self`, `@` or `$this`.
+- **Go strings** (`goString`, go.ts): control and format characters are written as `\u` or `\U`
+  escapes, in literals and in an enum's or struct's names.
+- **Rust:** `unused_assignments` joins the lints generated code allows, with `unused_variables`
+  and `unused_mut`.
+- **The C example pack** renames C23's keywords, the macros of the headers it includes, and `init`.
+  The 16 strings showed one more: C takes `\u` only from U+00A0, so a control character in a
+  string didn't build. Templates get a string's `cQuoted` form too (declarative/generator.ts),
+  with control characters as octal escapes, and the pack's `literal.string` uses it.
+- **TypeScript and JavaScript** rename `abstract`, as they do `static`.
+- **A third fixture,** `member-names.vgraph`: Store sets the variable `value` from its input
+  `value`, Relay calls Store with its input `store`, and Local returns its local `count` while the
+  class's `count` stays. It passes in all 12 languages; without the fix, Java and GDScript print
+  the old value three times, C++ doesn't build and C# fails too.
+- **Tests:** unit (codegen.test.ts) for the C#, C++, GDScript and shadowing fixes, for where a
+  language's toolchain isn't installed and its conformance run is skipped.
+
 ### Status
 
-Step 1 of 3 is done.
+Steps 1 and 2 of 3 are done.

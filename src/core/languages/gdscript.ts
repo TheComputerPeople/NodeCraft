@@ -26,6 +26,8 @@ const RESERVED = new Set([
   'clamp', 'clampf', 'sign', 'get', 'set', 'call', 'callv', 'connect', 'disconnect', 'emit_signal', 'free', 'notification', 'to_string',
   'get_class', 'is_class', 'has_method', 'get_script', 'set_script', 'get_meta', 'set_meta', 'new', 'start', '_init', 'vg_interfaces',
   'vg_fields', 'vg_kind', 'is_instance_of',
+  // Reserved for later versions of GDScript.
+  'namespace', 'trait',
   // @GlobalScope's and GDScript's functions, which a method of the same name can't be called past.
   'acos', 'acosh', 'angle_difference', 'asin', 'asinh', 'atan', 'atan2', 'atanh', 'bezier_derivative', 'bezier_interpolate', 'bytes_to_var',
   'ceilf', 'clampi', 'cos', 'cosh', 'cubic_interpolate', 'db_to_linear', 'deg_to_rad', 'ease', 'error_string', 'exp', 'floorf', 'fposmod',
@@ -284,7 +286,7 @@ class GdscriptEmitter {
     for (const fn of this.program.functions) this.functionMethod(fn);
     for (const { type, stubs } of this.program.interfaces ?? []) {
       for (const fn of stubs) {
-        const scope = new NameScope(RESERVED);
+        const scope = this.names.inner();
         const params = fn.inputs.filter((p) => p.kind === 'data').map((p) => `${scope.claim(p.name, 'snake')}${annotation(p.type)}`);
         const outputs = fn.outputs.filter((p) => p.kind === 'data');
         this.method(this.interfaceNames(type).functions.get(fn.id)!, params, '', () => {
@@ -446,7 +448,8 @@ class GdscriptEmitter {
   }
 
   private functionMethod(fn: IrFunction): void {
-    const scope = new NameScope(RESERVED);
+    // Not the class's names: a parameter or local named like a member would hide it.
+    const scope = this.names.inner();
     // A method of the code's keeps its parameters' names.
     const params = fn.params.map((p) => {
       const name = scope.claim(p.name, fn.code ? 'keep' : 'snake');

@@ -39,6 +39,13 @@ const DEFAULTS: Record<string, string> = {
 };
 
 // The generated file's name for a graph file (the definition's `fileName`).
+// A string as C and C++ write it: JSON's escapes, but a control character JSON writes as `\u00XX`
+// as a three-digit octal escape, since C takes `\u` only from U+00A0 and a hex escape runs on into
+// the next character (docs/audit.md, second pass).
+export function cQuoted(text: string): string {
+  return JSON.stringify(text).replace(/\\(?:u00([01][0-9a-f])|[^u])/g, (escape: string, code: string | undefined) => (code ? `\\${parseInt(code, 16).toString(8).padStart(3, '0')}` : escape));
+}
+
 export function declarativeFileName(definition: CheckedDefinition['definition'], graphFileName: string): string {
   const name = graphFileName.replace(/\.vgraph$/i, '');
   return renderTemplate(parseTemplate(definition.fileName), { name, snake: toIdentifier(name, 'snake'), camel: toIdentifier(name, 'camel'), pascal: toIdentifier(name, 'pascal') });
@@ -541,7 +548,7 @@ export class DeclarativeEmitter {
       const text = Number.isFinite(value) ? (float && Number.isInteger(value) ? `${value}.0` : String(value)) : String(value);
       return this.use([integral ? 'literal.int' : 'literal.float'], { value, text });
     }
-    if (typeof value === 'string') return this.use(['literal.string'], { value, quoted: JSON.stringify(value), escaped: JSON.stringify(value).slice(1, -1) });
+    if (typeof value === 'string') return this.use(['literal.string'], { value, quoted: JSON.stringify(value), escaped: JSON.stringify(value).slice(1, -1), cQuoted: cQuoted(value) });
     return this.use(['literal.null'], {});
   }
 

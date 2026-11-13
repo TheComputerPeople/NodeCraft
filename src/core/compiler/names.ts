@@ -17,6 +17,13 @@ export class NameScope {
     this.used.add(name);
   }
 
+  // A scope inside this one, as a method's is inside its class's: its names don't take this one's.
+  // Where the language reads a member by its bare name (C++, C#, Java, GDScript), a parameter or
+  // local named like it would hide it (docs/audit.md, second pass).
+  inner(): NameScope {
+    return new NameScope(this.reserved, this.used);
+  }
+
   claim(raw: string, style: NameStyle = 'keep', prefix = ''): string {
     let base = prefix + toIdentifier(raw, style);
     if (this.reserved.has(base)) base += '_';

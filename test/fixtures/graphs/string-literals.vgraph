@@ -1,0 +1,337 @@
+{
+  "schemaVersion": 3,
+  "name": "StringLiterals",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "p0",
+          "type": "core:console.print",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "a \"quoted\" 'single' back\\slash \\n \\u0041 \\\\ end"
+          }
+        },
+        {
+          "id": "p1",
+          "type": "core:console.print",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "${x} #{x} $x @x {0} {} %s %d %% %v {{x}} $(x) `x`"
+          }
+        },
+        {
+          "id": "p2",
+          "type": "core:console.print",
+          "position": {
+            "x": 600,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "*/ /* ?> <?php ]] ]=] --[[ <!-- --> \"\"\" ''' end"
+          }
+        },
+        {
+          "id": "p3",
+          "type": "core:console.print",
+          "position": {
+            "x": 800,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "tab\there"
+          }
+        },
+        {
+          "id": "p4",
+          "type": "core:console.print",
+          "position": {
+            "x": 1000,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "emoji \ud83d\ude00 accents \u00e9 cjk \u4e2d"
+          }
+        },
+        {
+          "id": "p5",
+          "type": "core:console.print",
+          "position": {
+            "x": 1200,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "nel\u0085ls\u2028ps\u2029end"
+          }
+        },
+        {
+          "id": "p6",
+          "type": "core:console.print",
+          "position": {
+            "x": 1400,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "trailing backslash \\"
+          }
+        },
+        {
+          "id": "p7",
+          "type": "core:console.print",
+          "position": {
+            "x": 1600,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "\\\"\\"
+          }
+        },
+        {
+          "id": "p8",
+          "type": "core:console.print",
+          "position": {
+            "x": 1800,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "   spaces   "
+          }
+        },
+        {
+          "id": "p9",
+          "type": "core:console.print",
+          "position": {
+            "x": 2000,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "null"
+          }
+        },
+        {
+          "id": "p10",
+          "type": "core:console.print",
+          "position": {
+            "x": 2200,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "None"
+          }
+        },
+        {
+          "id": "p11",
+          "type": "core:console.print",
+          "position": {
+            "x": 2400,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "true"
+          }
+        },
+        {
+          "id": "p12",
+          "type": "core:console.print",
+          "position": {
+            "x": 2600,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "0x10"
+          }
+        },
+        {
+          "id": "p13",
+          "type": "core:console.print",
+          "position": {
+            "x": 2800,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "1e3"
+          }
+        },
+        {
+          "id": "p14",
+          "type": "core:console.print",
+          "position": {
+            "x": 3000,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "-0"
+          }
+        },
+        {
+          "id": "p15",
+          "type": "core:console.print",
+          "position": {
+            "x": 3200,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "ctrl\u0001\b\f\u001b\u007f\u009fend"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "start.execOut->p0.execIn",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "p0",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p0.execOut->p1.execIn",
+          "fromNode": "p0",
+          "fromPin": "execOut",
+          "toNode": "p1",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p1.execOut->p2.execIn",
+          "fromNode": "p1",
+          "fromPin": "execOut",
+          "toNode": "p2",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p2.execOut->p3.execIn",
+          "fromNode": "p2",
+          "fromPin": "execOut",
+          "toNode": "p3",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p3.execOut->p4.execIn",
+          "fromNode": "p3",
+          "fromPin": "execOut",
+          "toNode": "p4",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p4.execOut->p5.execIn",
+          "fromNode": "p4",
+          "fromPin": "execOut",
+          "toNode": "p5",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p5.execOut->p6.execIn",
+          "fromNode": "p5",
+          "fromPin": "execOut",
+          "toNode": "p6",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p6.execOut->p7.execIn",
+          "fromNode": "p6",
+          "fromPin": "execOut",
+          "toNode": "p7",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p7.execOut->p8.execIn",
+          "fromNode": "p7",
+          "fromPin": "execOut",
+          "toNode": "p8",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p8.execOut->p9.execIn",
+          "fromNode": "p8",
+          "fromPin": "execOut",
+          "toNode": "p9",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p9.execOut->p10.execIn",
+          "fromNode": "p9",
+          "fromPin": "execOut",
+          "toNode": "p10",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p10.execOut->p11.execIn",
+          "fromNode": "p10",
+          "fromPin": "execOut",
+          "toNode": "p11",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p11.execOut->p12.execIn",
+          "fromNode": "p11",
+          "fromPin": "execOut",
+          "toNode": "p12",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p12.execOut->p13.execIn",
+          "fromNode": "p12",
+          "fromPin": "execOut",
+          "toNode": "p13",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p13.execOut->p14.execIn",
+          "fromNode": "p13",
+          "fromPin": "execOut",
+          "toNode": "p14",
+          "toPin": "execIn"
+        },
+        {
+          "id": "p14.execOut->p15.execIn",
+          "fromNode": "p14",
+          "fromPin": "execOut",
+          "toNode": "p15",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: string literals print as they are in every language (docs/audit.md, second pass): quotes, backslashes, other languages' interpolation and format syntax and delimiters, tabs, emoji, U+0085, U+2028 and U+2029, control characters, and text that looks like a value.",
+    "expectedOutput": [
+      "a \"quoted\" 'single' back\\slash \\n \\u0041 \\\\ end",
+      "${x} #{x} $x @x {0} {} %s %d %% %v {{x}} $(x) `x`",
+      "*/ /* ?> <?php ]] ]=] --[[ <!-- --> \"\"\" ''' end",
+      "tab\there",
+      "emoji \ud83d\ude00 accents \u00e9 cjk \u4e2d",
+      "nel\u0085ls\u2028ps\u2029end",
+      "trailing backslash \\",
+      "\\\"\\",
+      "   spaces   ",
+      "null",
+      "None",
+      "true",
+      "0x10",
+      "1e3",
+      "-0",
+      "ctrl\u0001\b\f\u001b\u007f\u009fend"
+    ]
+  }
+}
