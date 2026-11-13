@@ -1784,6 +1784,38 @@ test('Debug stops at a node breakpoint in generated JavaScript, steps by node an
 
 test('Debug does the same in generated TypeScript', () => debugSample('typescript', 'debug_typescript.vgraph.ts'));
 
+// docs/audit.md, third pass: VS Code substitutes ${...} in a launch configuration; Debug passes the
+// run arguments as Run does, as they are.
+test('Debug passes the run arguments as they are, ${...} included', async () => {
+  const graph = workspaceFile('debug_args.vgraph');
+  // Main gets the arguments (JavaScript's launch writes them into the code it runs).
+  const document = {
+    schemaVersion: 3, name: 'DebugArgs', kind: 'class', language: 'javascript', variables: [], metadata: {},
+    graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], connections: [], nodes: [{ id: 'main', type: 'core:event.main', position: { x: 0, y: 0 }, properties: {} }] }]
+  };
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify(document, null, 2)));
+  const settings = vscode.workspace.getConfiguration('blueprintVisualScripting', graph);
+  const args = ['${userHome}', '${env:PATH}', 'plain'];
+  await settings.update('runArguments', args, vscode.ConfigurationTarget.Workspace);
+  const launched: vscode.DebugConfiguration[] = [];
+  const listening = vscode.debug.onDidStartDebugSession((session) => {
+    if (session.configuration.__blueprintGraph) launched.push(session.configuration);
+  });
+  const api = (vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi).testing;
+  try {
+    await vscode.commands.executeCommand('blueprintVisualScripting.debug', graph);
+    await waitFor(() => launched.length > 0, 'the debug session to start', 60000);
+    await waitFor(() => !api.provider.currentDebug(), 'the session to end', 60000);
+    const code = (launched[0].runtimeArgs as string[]).at(-1)!;
+    assert.ok(code.includes(`.main(${JSON.stringify(args)})`), code);
+  } finally {
+    listening.dispose();
+    api.provider.currentDebug()?.act('stop');
+    await settings.update('runArguments', undefined, vscode.ConfigurationTarget.Workspace);
+    await vscode.workspace.fs.delete(graph);
+  }
+});
+
 // Tier 2 symbol import (docs/language-breadth.md): a declarative pack finds marked functions through
 // the language server, here VS Code's own TypeScript server for a JavaScript file.
 test('a declarative pack imports marked functions through the language server', async () => {

@@ -4,6 +4,7 @@
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import * as vscode from 'vscode';
+import { unsubstituted } from '../core/debug-configuration';
 import { breakpointLines, nodeAtLine } from '../core/debug-lines';
 import { definitionFor } from '../core/editing';
 import { LanguagePackRegistry, debuggerOn } from '../core/language-pack';
@@ -48,6 +49,9 @@ export class CodeDebugService implements vscode.Disposable {
   private mirroring: Promise<void> = Promise.resolve();
   private active: CodeDebug | undefined;
   private launches = 0;
+  // The configurations launched, by GRAPH_KEY, as written: VS Code substitutes ${...} in them, and
+  // their values are put back (docs/audit.md, third pass).
+  private readonly configurations = new Map<string, vscode.DebugConfiguration>();
 
   constructor(
     readonly host: DebugHost,
@@ -68,7 +72,14 @@ export class CodeDebugService implements vscode.Disposable {
       vscode.debug.onDidTerminateDebugSession((session) => {
         if (this.active && session.configuration[GRAPH_KEY] === this.active.id) this.end(this.active);
       }),
-      vscode.window.tabGroups.onDidChangeTabs((event) => this.closeGeneratedTabs([...event.opened, ...event.changed]))
+      vscode.window.tabGroups.onDidChangeTabs((event) => this.closeGeneratedTabs([...event.opened, ...event.changed])),
+      vscode.debug.registerDebugConfigurationProvider('*', {
+        resolveDebugConfigurationWithSubstitutedVariables: (_folder, configuration) => {
+          const written = this.configurations.get(configuration[GRAPH_KEY]);
+          this.configurations.delete(configuration[GRAPH_KEY]);
+          return written ? unsubstituted(configuration, written) as vscode.DebugConfiguration : configuration;
+        }
+      })
     );
   }
 
@@ -123,7 +134,7 @@ export class CodeDebugService implements vscode.Disposable {
         ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `Preparing ${language} for debugging…` }, () => prepareDebugging(runner, spec, outcome.outputPath!, outcome.className!, options))
         : { importRoots: options.importRoots, sources: options.sources, crate: options.crate, goModule: options.goModule, projectDir: options.projectDir, mainMethod: options.mainMethod, args: options.args };
     } catch (error) {
-      const message = error instanceof ToolNotFoundError ? error.message : error instanceof BuildError ? `The ${language} build failed; see the Output panel.` : String(error);
+      const message = error instanceof ToolNotFoundError ? error.message : error instanceof BuildError ? `The ${language} build failed; see the Output panel.` : error instanceof Error ? error.message : String(error);
       if (error instanceof BuildError) {
         this.output().appendLine(error.message);
         this.output().show(true);
@@ -132,18 +143,22 @@ export class CodeDebugService implements vscode.Disposable {
       return;
     }
     const id = `${uri.toString()}#${++this.launches}`;
-    const configuration: vscode.DebugConfiguration = {
-      name: `Debug ${path.basename(uri.fsPath)}`,
-      ...spec.configuration({ path: outcome.outputPath, url: pathToFileURL(outcome.outputPath).href }, outcome.className, { ...context, cwd, command }),
-      type,
-      request: 'launch',
-      [GRAPH_KEY]: id
-    };
+    let launch: Record<string, unknown>;
+    try {
+      launch = spec.configuration({ path: outcome.outputPath, url: pathToFileURL(outcome.outputPath).href }, outcome.className, { ...context, cwd, command, platform: process.platform });
+    } catch (error) {
+      // What the debugger can't be given as it is (GDScript's, through a shell).
+      void vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    const configuration: vscode.DebugConfiguration = { name: `Debug ${path.basename(uri.fsPath)}`, ...launch, type, request: 'launch', [GRAPH_KEY]: id };
     if (this.active) this.active.act('stop');
+    this.configurations.set(id, structuredClone(configuration));
     const debug = new CodeDebug(id, uri, this, this.openTextTabs(), spec.displayValue, spec.stepsLeaveFunctions === false);
     this.active = debug;
     this.host.debugStarted(debug);
     const started = await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), configuration);
+    this.configurations.delete(id);
     if (!started) this.end(debug);
   }
 

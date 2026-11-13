@@ -8,6 +8,7 @@ import { relativeSpecifier } from '../compiler/module-paths';
 import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, commentLine, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
+import { safeInDoubleQuotes, shellArgument } from '../shell';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import { scanGdscript } from '../importing/gdscript-scanner';
 import { OutputPlan, PlacementContext } from '../output-plan';
@@ -169,11 +170,22 @@ export function gdscriptPlacement(context: PlacementContext): OutputPlan {
 const gdscriptDebugger: CodeDebugger = {
   type: 'godot',
   extension: { id: 'geequlim.godot-tools', name: 'godot-tools' },
-  configuration: (_file, _className, context) => ({
-    type: 'godot', request: 'launch', name: 'Debug Graph', project: project(context),
-    editor_path: context.command?.[0] ?? godotFromEnvironment() ?? 'godot',
-    additional_options: ['--headless', '--no-header', '--script', JSON.stringify(`${context.scaffoldDir}/run.gd`), '--', ...(context.args ?? []).map((a) => JSON.stringify(a))].join(' ')
-  }),
+  // godot-tools starts Godot through a shell, with its path and project between double quotes and
+  // the options as they're given: each is quoted for that shell, and what can't be is refused.
+  configuration: (_file, _className, context) => {
+    const platform = context.platform ?? 'linux';
+    const editorPath = context.command?.[0] ?? godotFromEnvironment() ?? 'godot';
+    for (const [what, text] of [["Godot's path", editorPath], ["the Godot project's folder", project(context)]]) {
+      if (!safeInDoubleQuotes(text, platform)) throw new Error(`Debugging GDScript can't use ${what}, ${text}: godot-tools starts Godot through a shell, which would change it. Run can.`);
+    }
+    const quote = (text: string): string => {
+      const quoted = shellArgument(text, platform);
+      if (quoted === undefined) throw new Error(`Debugging GDScript can't pass the argument ${JSON.stringify(text)}: godot-tools starts Godot through a shell, which would change it. Run passes it as it is.`);
+      return quoted;
+    };
+    const options = ['--headless', '--no-header', '--script', quote(`${context.scaffoldDir}/run.gd`), '--', ...(context.args ?? []).map(quote)];
+    return { type: 'godot', request: 'launch', name: 'Debug Graph', project: project(context), editor_path: editorPath, additional_options: options.join(' ') };
+  },
   // Godot writes a whole float with a point (30.0); the graph shows 30.
   displayValue: (text) => (/^-?\d+\.0$/.test(text) ? text.slice(0, -2) : text)
 };

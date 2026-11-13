@@ -407,9 +407,10 @@ Codebase Map.
    `shell: true`; the arguments were quoted as JSON, which neither cmd nor sh reads that way: an
    argument with a quote, `%`, `$` or a backtick was changed, and could run a command. The arguments
    are the user's own setting, restricted until the workspace is trusted.
-3. **Debug substitutes `${…}`** (bug, low; to be confirmed by step 2's test). VS Code replaces
-   `${…}` in a launch configuration, so a run argument or folder name with `${userHome}` changes under
-   Debug and not under Run, and `${command:…}` runs a command.
+3. **Debug substitutes `${…}`** (bug, low). VS Code replaces `${…}` in a launch configuration, so a
+   run argument or folder name with `${userHome}` changes under Debug and not under Run, and
+   `${command:…}` runs a command. Step 2's test showed it: `${userHome}` and `${env:PATH}` in the run
+   arguments became the folder and the path, written into JavaScript's code unescaped.
 4. **Run's and Debug's scratch folder is shared on Linux** (vulnerability, low to medium). It's at a
    fixed path in the system temp folder: on Linux, where `/tmp` is shared, another user could make it
    first, and put files in it the build reads, or links the next run writes through. (On Windows and
@@ -453,6 +454,29 @@ Codebase Map.
   - integration: Simulate Tests of a graph that would take hours returns at once (the test runs in the
     extension host), shows as running, and Stop ends it.
 
+### Built (step 2)
+
+- **Debug's configurations as written** (`unsubstituted`, core/debug-configuration.ts): the
+  extension keeps each launch's configuration, and a debug configuration provider for every type
+  puts back, after VS Code's substitution, each string that was written with `${…}`. A debugger's own
+  placeholder (PHP Debug's `${port}`) stays for it.
+- **GDScript's options quoted for the shell** (core/shell.ts, the GDScript pack's debugger): single
+  quotes for sh; double quotes for cmd, with backslashes before the closing quote doubled. What cmd
+  can't be given as it is (a double quote, `%`, a line break) is refused with a message, and so are a
+  Godot path or project folder that godot-tools' own double quotes wouldn't keep as they are.
+- **The scratch folder is the user's own** (`scratchRoot`, runner.ts): on Linux and macOS it's named
+  for the user, made for them alone (0700), and checked before each use; when it's a link, someone
+  else's, or open to others, Run and Debug say so and don't build there. Windows keeps its folder in
+  the user's temp folder.
+- **Tests:**
+  - unit: shell.test.ts quotes for each shell, and runs a command line through this platform's
+    shell (cmd here) to show each argument (quotes, `$`, backquotes, `&`, `|`, `^`, `!`, backslashes,
+    tabs, an empty one) arrives as it is; debug-configurations.test.ts has GDScript's options and
+    refusals, and strings put back after substitution; runner.test.ts which folders are unsafe, and
+    (Linux and macOS) that the folder is made 0700;
+  - integration: Debug of a graph with Main passes `${userHome}` and `${env:PATH}` as they are; the
+    GDScript debugger tests (`npm run test:integration:debuggers`) still debug through godot-tools.
+
 ### Status
 
-Step 1 of 3 is done.
+Steps 1 and 2 of 3 are done.

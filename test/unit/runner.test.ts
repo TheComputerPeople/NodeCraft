@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { runCommand } from '../../src/extension/runner';
+import { runCommand, scratchRoot, unsafeFolder } from '../../src/extension/runner';
 
 // A launcher whose child (the "program") sleeps for 30 seconds; the child's pid goes to `pidFile`.
 function launcher(pidFile: string): string[] {
@@ -72,4 +72,23 @@ test('a run aborted before it starts starts nothing', async () => {
 
 test('a missing executable is undefined, so the next candidate is tried', async () => {
   assert.equal(await runCommand(['vg-no-such-tool-anywhere'], { cwd: os.tmpdir() }), undefined);
+});
+
+// docs/audit.md, third pass: Run's scratch folder is the user's own; on Linux the temp folder is shared.
+test('a scratch folder is unsafe when it is a link, or another user can own or open it', () => {
+  const stat = (over: Partial<{ link: boolean; dir: boolean; uid: number; mode: number }>) => {
+    const s = { link: false, dir: true, uid: 1000, mode: 0o40700, ...over };
+    return { isSymbolicLink: () => s.link, isDirectory: () => s.dir, uid: s.uid, mode: s.mode };
+  };
+  assert.equal(unsafeFolder(stat({}), 1000), undefined);
+  assert.equal(unsafeFolder(stat({ link: true, dir: false }), 1000), "isn't a folder");
+  assert.equal(unsafeFolder(stat({ uid: 1001 }), 1000), 'belongs to another user');
+  assert.equal(unsafeFolder(stat({ mode: 0o40777 }), 1000), 'other users can open it');
+  assert.equal(unsafeFolder(stat({ mode: 0o40750 }), 1000), 'other users can open it');
+});
+
+test("the scratch folder is the user's: named for them and made for them alone", { skip: process.platform === 'win32' && 'Windows keeps a temp folder per user' }, () => {
+  const root = scratchRoot();
+  assert.equal(path.basename(root), `blueprint-visual-scripting-${process.getuid!()}`);
+  assert.equal(fs.statSync(root).mode & 0o777, 0o700);
 });

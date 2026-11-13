@@ -114,7 +114,33 @@ export async function prepareDebugging(runner: CodeRunner, codeDebugger: CodeDeb
 // A scratch folder per generated file, kept between runs so builds stay incremental.
 function scaffoldDir(filePath: string): string {
   const hash = createHash('sha1').update(path.resolve(filePath).toLowerCase()).digest('hex').slice(0, 16);
-  return path.join(os.tmpdir(), 'blueprint-visual-scripting', 'run', hash);
+  return path.join(scratchRoot(), 'run', hash);
+}
+
+// The folder the scratch folders are in, the user's own (docs/audit.md, third pass). On Windows and
+// macOS the temp folder is the user's; on Linux it's usually /tmp, which every user can write to, so
+// the folder is named for the user, made for them alone, and checked each time: someone else's could
+// hold files a build reads, or links a run writes through.
+export function scratchRoot(): string {
+  if (process.platform === 'win32' || !process.getuid) return path.join(os.tmpdir(), 'blueprint-visual-scripting');
+  const uid = process.getuid();
+  const root = path.join(os.tmpdir(), `blueprint-visual-scripting-${uid}`);
+  try {
+    fs.mkdirSync(root, { mode: 0o700 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+  const problem = unsafeFolder(fs.lstatSync(root), uid);
+  if (problem) throw new Error(`${root} ${problem}, so Run doesn't build there. Remove it, then run again.`);
+  return root;
+}
+
+// Why a folder isn't safe to build in for the user `uid`, or undefined when it is.
+export function unsafeFolder(stat: Pick<fs.Stats, 'isDirectory' | 'isSymbolicLink' | 'uid' | 'mode'>, uid: number): string | undefined {
+  if (stat.isSymbolicLink() || !stat.isDirectory()) return "isn't a folder";
+  if (stat.uid !== uid) return 'belongs to another user';
+  if (stat.mode & 0o077) return 'other users can open it';
+  return undefined;
 }
 
 // Writes the files that changed, so an unchanged project isn't rebuilt.

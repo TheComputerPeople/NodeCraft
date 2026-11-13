@@ -5,6 +5,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { debuggerOn } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
+import { unsubstituted } from '../../src/core/debug-configuration';
 
 const file = { path: '/work/game/Game.vgraph.x', url: 'file:///work/game/Game.vgraph.x' };
 const context = { cwd: '/work/game', mainMethod: 'main', args: ['--fast'], importRoots: ['/work/lib'] };
@@ -109,5 +110,24 @@ describe('debug configurations', () => {
     const windows = d.configuration(file, 'Game', { ...scaffold, platform: 'win32' });
     assert.equal(windows.type, 'cppvsdbg');
     assert.equal(windows.program, '/tmp/run/target/debug/blueprint_run.exe');
+  });
+
+  // docs/audit.md, third pass: godot-tools starts Godot through a shell, with the options as given.
+  test('gdscript: the options are quoted for the shell, and what cmd can\'t take is refused', () => {
+    const { debugger: d } = debuggerFor('gdscript');
+    const godot = { ...context, scaffoldDir: '/tmp/run', projectDir: '/work/game', command: ['/opt/godot'] };
+    const posix = d.configuration(file, 'Game', { ...godot, args: ["it's", '$HOME'], platform: 'linux' });
+    assert.equal(posix.additional_options, "--headless --no-header --script '/tmp/run/run.gd' -- 'it'@''s' '$HOME'".replace('@', String.fromCharCode(92)));
+    const windows = d.configuration(file, 'Game', { ...godot, args: ['a & b'], platform: 'win32' });
+    assert.equal(windows.additional_options, '--headless --no-header --script "/tmp/run/run.gd" -- "a & b"');
+    assert.throws(() => d.configuration(file, 'Game', { ...godot, args: ['50%'], platform: 'win32' }), /can't pass the argument "50%"/);
+    assert.throws(() => d.configuration(file, 'Game', { ...godot, projectDir: '/work/$(id)', platform: 'linux' }), /can't use the Godot project's folder/);
+  });
+
+  // docs/audit.md, third pass: VS Code substitutes ${...}; Debug passes what Run does.
+  test('the strings written with ${...} are put back after VS Code resolves them', () => {
+    const written = { type: 'php', args: ['${userHome}', 'plain'], env: { XDEBUG_CONFIG: 'client_port=${port}', OTHER: 'x' }, cwd: '/work/${dir}' };
+    const resolved = { type: 'php', args: ['/home/me', 'plain'], env: { XDEBUG_CONFIG: 'client_port=${port}', OTHER: 'x' }, cwd: '/work/', added: 'by the debugger' };
+    assert.deepEqual(unsubstituted(resolved, written), { ...written, added: 'by the debugger' });
   });
 });
