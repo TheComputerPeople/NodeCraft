@@ -54,7 +54,8 @@ async function ended(how: 'abort' | 'timeout'): Promise<void> {
     await until(() => !alive(pid!), 'the program to end');
   } finally {
     if (pid !== undefined && alive(pid)) process.kill(pid);
-    fs.rmSync(dir, { recursive: true, force: true });
+    // Windows keeps the folder a moment after the program in it (its working folder) has ended.
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 }
 
