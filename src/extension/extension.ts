@@ -14,7 +14,7 @@ import { newNodeDefinition } from '../core/node-files';
 import { ConformanceReport, formatReport, runNodeExamples, simulateNodeExamples } from '../conformance/conformance';
 import { NodeDefinition } from '../core/model';
 import { parseNodeDefinition } from '../core/registry';
-import { isGeneratedFrom } from './placement';
+import { isGeneratedFrom, isUsersFile } from './placement';
 import { GraphLibraries } from './graph-libraries';
 import { DebugMarks } from './breakpoints';
 import { CodeDebugService } from './code-debug';
@@ -406,8 +406,13 @@ function followGraphFileChanges(compiler: CompileService, marks: DebugMarks, rec
           .map((from, i) => ({ from, to: compiler.outputPathsFor(newUri.fsPath)[i] }))
           .filter(({ from }) => isGeneratedFrom(from, oldName));
         if (!moves.length) continue;
+        // A generated file never replaces one of the user's there: it's removed instead (it's made
+        // again from the graph), and the compile below says in Problems why it can't be.
         const edit = new vscode.WorkspaceEdit();
-        for (const { from, to } of moves) edit.renameFile(vscode.Uri.file(from), vscode.Uri.file(to), { overwrite: true });
+        for (const { from, to } of moves) {
+          if (isUsersFile(to)) edit.deleteFile(vscode.Uri.file(from), { ignoreIfNotExists: true });
+          else edit.renameFile(vscode.Uri.file(from), vscode.Uri.file(to), { overwrite: true });
+        }
         await vscode.workspace.applyEdit(edit);
         // Refreshes the header (it names the graph file) and Python's module-derived names.
         await recompile(await vscode.workspace.openTextDocument(newUri));

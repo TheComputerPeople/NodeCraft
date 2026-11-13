@@ -60,6 +60,8 @@ export class CompileService implements vscode.Disposable {
   private readonly lastReports = new Map<string, CompileReport>();
   private readonly generated = new Map<string, GeneratedFile>();
   private readonly compiled = new vscode.EventEmitter<GeneratedFile>();
+  // Each graph's compile running now, and the one waiting for it (docs/audit.md, second pass).
+  private readonly compiling = new Map<string, { running: Promise<CompileOutcome>; waiting?: Promise<CompileOutcome> }>();
   // Fires after a graph compiles, with its generated file.
   readonly onDidGenerate = this.compiled.event;
 
@@ -88,7 +90,29 @@ export class CompileService implements vscode.Disposable {
     return [...this.generated.values()].find((g) => path.resolve(g.outputPath).toLowerCase() === wanted);
   }
 
-  async compile(document: vscode.TextDocument): Promise<CompileOutcome> {
+  // Compiles of a graph take turns, so an older one can't finish last and leave its files: a
+  // compile asked for while one runs waits for it, and the requests that come in meanwhile share
+  // that one compile, which reads the graph when it starts.
+  compile(document: vscode.TextDocument): Promise<CompileOutcome> {
+    const key = document.uri.toString();
+    const current = this.compiling.get(key);
+    if (current?.waiting) return current.waiting;
+    const start = (): Promise<CompileOutcome> => {
+      const entry: { running: Promise<CompileOutcome>; waiting?: Promise<CompileOutcome> } = { running: this.compileNow(document) };
+      this.compiling.set(key, entry);
+      const done = (): void => {
+        if (this.compiling.get(key) === entry && !entry.waiting) this.compiling.delete(key);
+      };
+      entry.running.then(done, done);
+      return entry.running;
+    };
+    if (!current) return start();
+    const after = (): Promise<CompileOutcome> => start();
+    current.waiting = current.running.then(after, after);
+    return current.waiting;
+  }
+
+  private async compileNow(document: vscode.TextDocument): Promise<CompileOutcome> {
     const report = (diagnostics: CompileDiagnostic[], language: string, outputFile?: string): CompileReport => ({
       status: diagnostics.some((d) => d.severity === 'error') ? 'errors' : diagnostics.length ? 'warnings' : 'ok',
       diagnostics,

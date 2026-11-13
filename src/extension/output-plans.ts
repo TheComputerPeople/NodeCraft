@@ -22,6 +22,9 @@ export class OutputPlans implements vscode.Disposable {
   private readonly asking = new Set<string>();
   private readonly proposals = new Map<string, string>();
   private readonly disposables: vscode.Disposable[] = [];
+  // Each folder's plan being applied, so compiles of different graphs take turns with its build
+  // files rather than one writing a block from a plan made before the other's (docs/audit.md).
+  private readonly applying = new Map<string, Promise<unknown>>();
 
   constructor(private readonly state: vscode.Memento, private readonly languages: LanguagePackRegistry) {
     this.disposables.push(vscode.workspace.registerTextDocumentContentProvider(PROPOSAL_SCHEME, { provideTextDocumentContent: (uri) => this.proposals.get(uri.path) ?? '' }));
@@ -29,7 +32,19 @@ export class OutputPlans implements vscode.Disposable {
 
   // After a graph of `pack`'s language compiled to `outputFile` (or, without it, after one was
   // deleted or renamed): applies the pack's plan, and returns the warnings for the graph.
-  async apply(pack: LanguagePack, root: string, outputFile?: string): Promise<CompileDiagnostic[]> {
+  apply(pack: LanguagePack, root: string, outputFile?: string): Promise<CompileDiagnostic[]> {
+    const key = path.resolve(root).toLowerCase();
+    const previous = this.applying.get(key) ?? Promise.resolve();
+    const next = previous.then(() => this.applyNow(pack, root, outputFile), () => this.applyNow(pack, root, outputFile));
+    const settled = next.then(() => undefined, () => undefined);
+    this.applying.set(key, settled);
+    void settled.then(() => {
+      if (this.applying.get(key) === settled) this.applying.delete(key);
+    });
+    return next;
+  }
+
+  private async applyNow(pack: LanguagePack, root: string, outputFile?: string): Promise<CompileDiagnostic[]> {
     const placement = pack.generator?.placement;
     if (!placement) return [];
     const plan: OutputPlan = placement({
