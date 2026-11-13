@@ -23,6 +23,7 @@
     "../src/extension/projects.ts",
     "../src/extension/simulate-session.ts",
     "../src/extension/simulate-worker.ts",
+    "../src/extension/examples-worker.ts",
     "../src/extension/code-parser.ts",
     "../src/extension/code-indexer.ts",
     "../src/extension/code-flow.ts",

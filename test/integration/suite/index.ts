@@ -1401,6 +1401,35 @@ test("Compile writes a graph's tests to their own file; Run Tests and Simulate T
   assert.equal(await exists(tests), false);
 });
 
+// docs/audit.md, third pass: Simulate runs in a worker, so a graph that would run for hours (a loop
+// in a loop, each inside the loop limit) leaves the extension host free (this test runs in it), shows
+// Running in the Blueprint Debugger, and Stop ends it.
+test('Simulate Tests of a graph that runs for hours returns at once, and Stop ends it', async () => {
+  const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
+  const graph = workspaceFile('long.vgraph');
+  const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
+  const wire = (from: string, fromPin: string, to: string) => ({ id: `${from}-${to}`, fromNode: from, fromPin, toNode: to, toPin: 'execIn' });
+  const document = {
+    schemaVersion: 3, name: 'Long', kind: 'class', language: 'javascript', variables: [], metadata: {},
+    graphs: [{
+      id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [],
+      nodes: [node('t', 'core:test.case', { name: 'Long' }), node('outer', 'core:flow.for-loop', { 'pin:lastIndex': 999999 }), node('inner', 'core:flow.for-loop', { 'pin:lastIndex': 999999 })],
+      connections: [wire('t', 'execOut', 'outer'), wire('outer', 'loopBody', 'inner')]
+    }]
+  };
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify(document, null, 2)));
+  try {
+    await vscode.commands.executeCommand('blueprintVisualScripting.simulateTests', graph);
+    await waitFor(() => !!api.provider.currentDebug(), 'Simulate to show as running', 5000);
+    assert.equal(api.provider.currentDebug()!.stack, undefined, 'running, not paused');
+    await vscode.commands.executeCommand('blueprintVisualScripting.debug.stop');
+    await waitFor(() => !api.provider.currentDebug(), 'Stop to end it', 5000);
+  } finally {
+    api.provider.currentDebug()?.act('stop');
+    await vscode.workspace.fs.delete(graph);
+  }
+});
+
 // Debugs the sample in `language`: stops at a breakpoint on Add, reads its result before and after
 // it runs, steps node by node to the Print, and runs to the end.
 async function debugSample(language: string, generatedFile: string, folder = ''): Promise<void> {

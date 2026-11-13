@@ -11,7 +11,8 @@ import { detectNewGraphLanguage } from './languages';
 import { NodeLibraries, workspaceSnippetLanguages } from './node-libraries';
 import { NpmSource, addBlueprintPackage } from './blueprint-packages';
 import { newNodeDefinition } from '../core/node-files';
-import { ConformanceReport, formatReport, runNodeExamples, simulateNodeExamples } from '../conformance/conformance';
+import { ConformanceReport, formatReport, runNodeExamples } from '../conformance/conformance';
+import { simulateExamples } from './simulate-session';
 import { NodeDefinition } from '../core/model';
 import { parseNodeDefinition } from '../core/registry';
 import { isGeneratedFrom, isUsersFile } from './placement';
@@ -350,9 +351,14 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     const used = only ? only.map((id) => ({ id })) : await workspaceSnippetLanguages(languages);
     const packs = (used.length ? used.map((l) => languages.get(l.id)!) : [languages.get('typescript')!]).filter((p) => p?.generator?.runner);
     const commands = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {});
-    const reports = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Testing the node library', cancellable: false }, async (progress) => {
-      const done: ConformanceReport[] = [simulateNodeExamples(nodes, packs[0]?.id)];
+    const reports = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Testing the node library', cancellable: true }, async (progress, token) => {
+      // Simulate runs the examples in a worker, so one that never ends can't hold up VS Code.
+      const stop = new AbortController();
+      token.onCancellationRequested(() => stop.abort());
+      progress.report({ message: 'Simulate' });
+      const done: ConformanceReport[] = [await simulateExamples(nodes, packs[0]?.id, { timeoutMs: EXAMPLES_TIMEOUT_MS, signal: stop.signal })];
       for (const pack of packs) {
+        if (token.isCancellationRequested) break;
         progress.report({ message: pack.displayName });
         done.push(await runNodeExamples(pack, nodes, { command: commands[pack.id], ...(pack.id === 'javascript' ? { generate: { moduleFormat: 'esm' } } : {}) }));
       }
@@ -375,6 +381,9 @@ export function deactivate(): void {}
 function isGraph(uri: vscode.Uri): boolean {
   return uri.scheme === 'file' && uri.path.toLowerCase().endsWith('.vgraph');
 }
+
+// Test Node Library gives Simulate this long for a node library's examples.
+const EXAMPLES_TIMEOUT_MS = 60000;
 
 // The graph a command applies to: the argument (from Explorer), else the active graph editor.
 async function graphDocumentFor(uri?: vscode.Uri): Promise<vscode.TextDocument | undefined> {

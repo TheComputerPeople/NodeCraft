@@ -311,6 +311,14 @@ export function simulateNodeExamples(nodes: NodeDefinition[], language = DEFAULT
   return report('simulate', results);
 }
 
+// Simulate's report on examples that didn't finish (stopped, or out of time): each node with
+// examples failed, with `message`.
+export function unfinishedExamplesReport(nodes: NodeDefinition[], message: string): ConformanceReport {
+  return report('simulate', nodes.map((def): FixtureResult => def.examples?.length
+    ? { fixture: def.type, status: 'failed', message }
+    : { fixture: def.type, status: 'not-applicable', message: 'It has no examples.' }));
+}
+
 function report(pack: string, results: FixtureResult[]): ConformanceReport {
   const count = (status: ResultStatus) => results.filter((r) => r.status === status).length;
   return { pack, results, passed: count('passed'), failed: count('failed'), notApplicable: count('not-applicable'), skipped: count('skipped') };

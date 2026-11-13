@@ -11,13 +11,13 @@ import { previewNode } from '../core/preview';
 import { DEFAULT_LANGUAGE } from '../core/languages';
 import { SearchHit, searchDocument } from '../core/search';
 import { NodeRegistry } from '../core/registry';
-import { GraphRuntime } from '../core/runtime';
+import { TestResult } from '../core/runtime';
+import { builtinLanguagePacks } from '../core/languages';
 import { parseDocument, serializeDocument } from '../core/serializer';
 import { CompileService } from './compile-service';
-import { loadGraphDocument } from './graph-libraries';
 import { DebugMarks } from './breakpoints';
 import { GraphDebug, SimulateDebug } from './graph-debug';
-import { SimulateSession } from './simulate-session';
+import { SimulateListener, SimulateSession } from './simulate-session';
 import { createNonce, renderEditorHtml } from './webview-html';
 
 const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
@@ -39,6 +39,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly pickedLibraries = new Map<string, string>();
   // The debugging session the editors show (docs/debugging.md): Simulate's, or generated code's.
   private debug: GraphDebug | undefined;
+  // The latest Simulate run, shown in the Blueprint Debugger or not yet.
+  private simulation: SimulateDebug | undefined;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -57,7 +59,12 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       this.broadcast(uri.toString(), { type: 'breakpoints', breakpoints: marks.breakpoints.get(uri) });
       this.debug?.breakpointsChanged();
     }));
-    context.subscriptions.push({ dispose: () => this.debug?.act('stop') });
+    context.subscriptions.push({
+      dispose: () => {
+        this.debug?.act('stop');
+        this.simulation?.act('stop');
+      }
+    });
     // Language packs from other extensions come and go: editors update their language lists.
     context.subscriptions.push(languages.onDidChange(() => {
       const message: HostMessage = { type: 'languages', languages: this.languageOptions() };
@@ -451,8 +458,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     await vscode.workspace.applyEdit(edit);
   }
 
-  // Runs the graph in the editor's reference interpreter: under the debugger, in a worker, when
-  // breakpoints are set anywhere in the workspace.
+  // Runs the graph in the editor's reference interpreter, in a worker (docs/audit.md, third pass):
+  // under the debugger when breakpoints are set anywhere in the workspace.
   private simulate(document: vscode.TextDocument): void {
     let graphDocument: GraphDocument;
     try {
@@ -462,6 +469,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       return;
     }
 
+    // The run before is stopped first, so what it writes as it ends isn't in this one's output.
+    this.simulation?.act('stop');
     const output = this.output();
     output.clear();
     output.show(true);
@@ -472,15 +481,9 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       if (event.kind === 'log') output.appendLine(event.message ?? '');
       else if (event.kind === 'error') output.appendLine(`[error] ${event.document ? `${event.document}: ` : ''}${event.message ?? ''}`);
     };
-    if (this.debug instanceof SimulateDebug) this.debug.act('stop');
     const breakpoints = this.simulateBreakpoints(document.uri);
-    if (breakpoints.length) {
-      output.appendLine('Simulating in the editor, with breakpoints');
-      this.debugSimulate(document.uri, graphDocument, args, breakpoints, emit);
-      return;
-    }
-    output.appendLine('Simulating in the editor');
-    new GraphRuntime(this.registry, emit, this.languages, (file) => loadGraphDocument(document.uri, file)).run(graphDocument, args);
+    output.appendLine(breakpoints.length ? 'Simulating in the editor, with breakpoints' : 'Simulating in the editor');
+    this.startSimulate(document.uri, graphDocument, { args, breakpoints }, { event: emit });
   }
 
   // Runs the graph's Test Case events in the editor's interpreter (docs/debugging.md, "Test Case").
@@ -492,46 +495,77 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       vscode.window.showErrorMessage(describeError(error));
       return;
     }
+    // The run before is stopped first, so what it writes as it ends isn't in this one's output.
+    this.simulation?.act('stop');
     const output = this.output();
     output.clear();
     output.show(true);
     output.appendLine(`Simulating the tests of ${path.basename(document.uri.fsPath)}`);
-    const results = new GraphRuntime(this.registry, (event) => {
-      this.broadcast(this.fileUri(document.uri, event.document).toString(), { type: 'runtimeEvent', event });
-      if (event.kind === 'log') output.appendLine(`  ${event.message ?? ''}`);
-      else if (event.kind === 'test.pass') output.appendLine(`\u2714 ${event.test}`);
-      else if (event.kind === 'test.fail') output.appendLine(`\u2716 ${event.test}: ${event.message ?? ''}`);
-    }, this.languages, (file) => loadGraphDocument(document.uri, file)).runTests(graphDocument);
-    const failed = results.filter((r) => !r.passed).length;
-    const summary = !results.length ? 'This graph has no Test Case events.' : failed ? `${failed} of ${results.length} tests failed.` : `All ${results.length} tests passed.`;
-    output.appendLine(summary);
-    this.broadcast(document.uri.toString(), { type: 'runStatus', run: { state: failed || !results.length ? 'failed' : 'finished', message: summary } });
+    let results: TestResult[] | undefined;
+    this.startSimulate(document.uri, graphDocument, { args: [], breakpoints: [], tests: true }, {
+      event: (event) => {
+        this.broadcast(this.fileUri(document.uri, event.document).toString(), { type: 'runtimeEvent', event });
+        if (event.kind === 'log') output.appendLine(`  ${event.message ?? ''}`);
+        else if (event.kind === 'test.pass') output.appendLine(`\u2714 ${event.test}`);
+        else if (event.kind === 'test.fail') output.appendLine(`\u2716 ${event.test}: ${event.message ?? ''}`);
+        else if (event.kind === 'error') output.appendLine(`[error] ${event.message ?? ''}`);
+      },
+      tests: (done) => (results = done),
+      ended: () => {
+        const failed = results?.filter((r) => !r.passed).length ?? 0;
+        const summary = !results ? 'Simulate stopped before the tests finished.' : !results.length ? 'This graph has no Test Case events.' : failed ? `${failed} of ${results.length} tests failed.` : `All ${results.length} tests passed.`;
+        output.appendLine(summary);
+        this.broadcast(document.uri.toString(), { type: 'runStatus', run: { state: !results || failed || !results.length ? 'failed' : 'finished', message: summary } });
+      }
+    });
   }
 
-  private debugSimulate(uri: vscode.Uri, graphDocument: GraphDocument, args: string[], breakpoints: SimulateBreakpoint[], emit: (event: RuntimeLogEvent) => void): void {
+  // Starts Simulate in its worker. The Blueprint Debugger shows it (Stop, and the breakpoints'
+  // pauses) at once when it has breakpoints, or once it has run SHOW_RUNNING_MS, so a quick run
+  // doesn't flash it. A Simulate already running is stopped.
+  private startSimulate(uri: vscode.Uri, graphDocument: GraphDocument, run: { args: string[]; breakpoints: SimulateBreakpoint[]; tests?: boolean }, listener: Partial<SimulateListener> & Pick<SimulateListener, 'event'>): SimulateDebug {
+    this.simulation?.act('stop');
     const root = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
     // Open graph files' unsaved text wins over the file on disk, as in loadGraphDocument.
     const openDocuments: Record<string, string> = {};
     for (const d of vscode.workspace.textDocuments) {
       if (root && d.uri.scheme === 'file' && d.uri.fsPath.toLowerCase().endsWith('.vgraph')) openDocuments[relativePath(root, d.uri.fsPath)] = d.getText();
     }
+    const builtin = builtinLanguagePacks();
+    const otherLanguages = this.languages.all().filter((p) => !builtin.get(p.id)).map((p) => ({ id: p.id, displayName: p.displayName }));
     let debug: SimulateDebug | undefined = undefined;
-    const session = new SimulateSession({ definitions: this.registry.all(), document: graphDocument, root, openDocuments, args, breakpoints }, {
-      event: emit,
-      paused: (stack) => {
+    let shown = false;
+    const show = (): void => {
+      if (shown || !debug || !session.running) return;
+      shown = true;
+      this.debugStarted(debug);
+    };
+    const session = new SimulateSession({ definitions: this.registry.all(), document: graphDocument, root, openDocuments, otherLanguages, ...run }, {
+      event: listener.event,
+      paused: (stack, reason) => {
         debug?.paused(stack);
+        show();
         if (debug) this.debugChanged(debug);
+        listener.paused?.(stack, reason);
       },
       resumed: () => {
         debug?.resumed();
         if (debug) this.debugChanged(debug);
+        listener.resumed?.();
       },
+      tests: listener.tests,
       ended: () => {
+        clearTimeout(timer);
+        if (debug && this.simulation === debug) this.simulation = undefined;
         if (debug) this.debugEnded(debug);
+        listener.ended?.();
       }
     });
     debug = new SimulateDebug(session, (document) => this.fileUri(uri, document), () => this.simulateBreakpoints(uri));
-    this.debugStarted(debug);
+    this.simulation = debug;
+    const timer = run.breakpoints.length ? undefined : setTimeout(show, SHOW_RUNNING_MS);
+    if (run.breakpoints.length) show();
+    return debug;
   }
 
   // The debugging session the editors show, if any.
@@ -635,6 +669,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
 }
 
 const MAX_FIND_RESULTS = 500;
+// A Simulate without breakpoints shows Running and Stop once it has run this long.
+const SHOW_RUNNING_MS = 500;
 const RESTRICTED_MODE_MESSAGE = 'Running graphs is disabled in Restricted Mode. Trust this workspace to run graphs.';
 const SAVE_DELAY_SETTING = 'blueprintVisualScripting.autoSaveDelay';
 const DEFAULT_SAVE_DELAY_MS = 150;

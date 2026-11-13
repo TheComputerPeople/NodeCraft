@@ -373,3 +373,86 @@ messages, and ending processes on macOS and Linux.
 
 All three steps of the second pass are done. Still not covered: the debugger integrations beyond
 their trust checks, the Codebase Map beyond its messages, and ending processes on macOS and Linux.
+
+## Third pass
+
+November 2026, after the second pass. The two parts it left out: the debugger integrations and the
+Codebase Map.
+
+### How it was checked
+
+- **Debugging:** the generated-code debugger (code-debug.ts), Simulate's session and worker, each
+  language's launch configuration, and how the debugger extensions use it (godot-tools' own code).
+- **The Codebase Map:** its panel's messages, the index (files listed, read and parsed), its rebuilds
+  on change, the parsing worker, and the hover. tree-sitter was timed on files made to be hard to
+  parse: deep nesting, closed and unclosed, in each grammar.
+
+### What held up
+
+- The debugger tracking follows only the graph's own sessions; pin values are read with the
+  generator's expressions.
+- Simulate with breakpoints runs in a worker that Stop always ends.
+- The map's webview sends ids, never paths, and shows names as text; its paths come from the index.
+- The index doesn't follow links out of the folder, or read anything but files; in Restricted Mode
+  the map only parses.
+- The hover's patterns can't be made to take long.
+
+### Findings
+
+1. **Simulate can freeze VS Code** (bug, medium). Simulate without breakpoints, Simulate Tests and
+   Test Node Library's Simulate ran on the extension host. Each loop stops after a million passes,
+   but a loop in a loop multiplies them, and a code node can loop forever: every extension stopped
+   until the window was reloaded, and Stop couldn't end it.
+2. **GDScript debugging passes arguments through a shell** (bug, low). godot-tools starts Godot with
+   `shell: true`; the arguments were quoted as JSON, which neither cmd nor sh reads that way: an
+   argument with a quote, `%`, `$` or a backtick was changed, and could run a command. The arguments
+   are the user's own setting, restricted until the workspace is trusted.
+3. **Debug substitutes `${…}`** (bug, low; to be confirmed by step 2's test). VS Code replaces
+   `${…}` in a launch configuration, so a run argument or folder name with `${userHome}` changes under
+   Debug and not under Run, and `${command:…}` runs a command.
+4. **Run's and Debug's scratch folder is shared on Linux** (vulnerability, low to medium). It's at a
+   fixed path in the system temp folder: on Linux, where `/tmp` is shared, another user could make it
+   first, and put files in it the build reads, or links the next run writes through. (On Windows and
+   macOS the temp folder is the user's own.)
+5. **One file can stall the map for a minute** (bug, medium). A 200 KB file of unclosed brackets
+   parses in 40 ms, but the map's query takes 40 to 70 s on it (JavaScript, Python, Ruby, PHP, Rust),
+   and the whole map waits.
+6. **One file the parser fails on fails the whole map** (bug, low to medium), and the map fails
+   again each time it's asked for.
+7. **Indexing reads every file at once on the extension host** (bug, low), files over the 1 MB
+   limit included, and keeps them all until they're parsed.
+8. **Rebuilds that overlap can leave the map behind** (bug, low): an older one finishing last
+   replaces the newer index, and a removed folder's rebuild puts it back.
+9. **The control flow of deeply nested code** says "Maximum call stack size exceeded" (low).
+
+### Steps
+
+1. **Simulate off the extension host** (finding 1).
+2. **Debug launches** (2 to 4): GDScript's arguments quoted for the shell, Debug's paths and arguments
+   as Run passes them, the scratch folder the user's own.
+3. **The Codebase Map** (5 to 9): time limits per file, a failed file listed by name, reading a few
+   files at a time, only the newest rebuild kept, a plain message for deep nesting.
+
+### Built (step 1)
+
+- **Every Simulate runs in the worker** (editor-provider.ts `startSimulate`, simulate-worker.ts).
+  With breakpoints, the Blueprint Debugger shows it at once, as before; without, once it has run half
+  a second, as Running with Stop, so a quick run doesn't flash it. A new Simulate stops the one
+  before, and closing VS Code stops it.
+- **Simulate Tests** runs the tests in the worker too (`tests` in its data; the results come as a
+  message), and says when it's stopped before they finish.
+- **Test Node Library** runs Simulate's part in a worker of its own (examples-worker.ts,
+  `simulateExamples`): at most a minute, and its progress can be cancelled; examples that don't
+  finish fail and say why.
+- The worker knows the names of languages that aren't built in; their code nodes couldn't run in
+  Simulate before either.
+- **Tests:**
+  - unit (simulate-session.test.ts): Stop ends a run without breakpoints that would take hours (a
+    loop in a loop); a tests run gives its results; examples run in their worker, fail when they don't
+    finish in time, and stop when asked;
+  - integration: Simulate Tests of a graph that would take hours returns at once (the test runs in the
+    extension host), shows as running, and Stop ends it.
+
+### Status
+
+Step 1 of 3 is done.

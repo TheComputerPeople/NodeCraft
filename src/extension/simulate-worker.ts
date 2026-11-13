@@ -1,12 +1,14 @@
-// Simulate under the debugger (docs/debugging.md, "Debugging in Simulate"). The interpreter is
-// synchronous, so it runs in this worker thread, which can block while paused: it waits on a
-// shared counter that the extension host bumps after posting a command to the command port.
+// Simulate (docs/debugging.md, "Debugging in Simulate"), off the extension host, so a run that
+// never ends can be stopped and doesn't hold up VS Code. The interpreter is synchronous, so it runs
+// in this worker thread, which can block while paused: it waits on a shared counter that the
+// extension host bumps after posting a command to the command port.
 import * as fs from 'fs';
 import * as path from 'path';
 import { MessagePort, parentPort, receiveMessageOnPort, workerData } from 'worker_threads';
 import { DebugCommand, SimulateBreakpoint, SimulateDebugger } from '../core/debugger';
 import type { DebugStop } from '../core/runtime';
 import { builtinLanguagePacks } from '../core/languages';
+import { LanguagePack } from '../core/language-pack';
 import { GraphDocument, NodeDefinition } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { GraphRuntime } from '../core/runtime';
@@ -22,6 +24,12 @@ export interface SimulateWorkerData {
   openDocuments: Record<string, string>;
   args: string[];
   breakpoints: SimulateBreakpoint[];
+  // Runs the graph's Test Case events instead, without the debugger; their results come as a
+  // 'tests' message.
+  tests?: boolean;
+  // The graph languages that aren't built in (a workspace's or another extension's), by name: their
+  // code can't run here, and the interpreter needs only their names.
+  otherLanguages?: { id: string; displayName: string }[];
   // An Int32Array's buffer: the host adds 1 to element 0 after each command it posts.
   signal: SharedArrayBuffer;
   commands: MessagePort;
@@ -81,10 +89,15 @@ const debug = new SimulateDebugger(data.breakpoints, (stop, reason) => {
 
 const registry = new NodeRegistry();
 registry.registerMany(data.definitions);
-const runtime = new GraphRuntime(registry, (event) => post({ kind: 'event', event }), builtinLanguagePacks(), loadDocument);
-runtime.debug = debug;
+const languages = builtinLanguagePacks();
+for (const other of data.otherLanguages ?? []) if (!languages.get(other.id)) languages.register({ id: other.id, displayName: other.displayName } as LanguagePack);
+const runtime = new GraphRuntime(registry, (event) => post({ kind: 'event', event }), languages, loadDocument);
 try {
-  runtime.run(data.document, data.args);
+  if (data.tests) post({ kind: 'tests', results: runtime.runTests(data.document) });
+  else {
+    runtime.debug = debug;
+    runtime.run(data.document, data.args);
+  }
 } catch (error) {
   post({ kind: 'event', event: { kind: 'error', message: error instanceof Error ? error.message : String(error) } });
 }

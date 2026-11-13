@@ -1,16 +1,22 @@
-// A debug Simulate run in a worker thread (docs/debugging.md, "Debugging in Simulate"). Commands
-// go through a message port; bumping the shared counter wakes the worker if it is paused.
+// A Simulate run in a worker thread (docs/debugging.md, "Debugging in Simulate"): under the
+// debugger, or a graph's tests. Commands go through a message port; bumping the shared counter
+// wakes the worker if it is paused.
 import * as path from 'path';
 import { MessageChannel, Worker } from 'worker_threads';
+import { ConformanceReport, unfinishedExamplesReport } from '../conformance/conformance';
 import { DebugCommand, SimulateBreakpoint } from '../core/debugger';
-import { DebugFrame, DebugValue, RuntimeLogEvent } from '../core/model';
+import { DebugFrame, DebugValue, NodeDefinition, RuntimeLogEvent } from '../core/model';
+import type { TestResult } from '../core/runtime';
 import { SimulateCommand, ValueRead, WorkerMessage } from './simulate-protocol';
+import type { ExamplesWorkerData } from './examples-worker';
 import type { SimulateWorkerData } from './simulate-worker';
 
 export interface SimulateListener {
   event(event: RuntimeLogEvent): void;
   paused(stack: DebugFrame[], reason: 'breakpoint' | 'step'): void;
   resumed(): void;
+  // A tests run's results (SimulateOptions.tests), before it ends.
+  tests?(results: TestResult[]): void;
   // The run finished, failed or was stopped.
   ended(): void;
 }
@@ -43,6 +49,9 @@ export class SimulateSession {
         case 'resumed':
           this.stack = undefined;
           listener.resumed();
+          break;
+        case 'tests':
+          listener.tests?.(message.results);
           break;
         case 'values':
           this.reads.get(message.id)?.(message.values);
@@ -106,4 +115,30 @@ export class SimulateSession {
     void this.worker.terminate();
     this.listener.ended();
   }
+}
+
+// Test Node Library's examples in Simulate, in a worker: stopped by `signal`, or when they take
+// longer than `timeoutMs` (an example that never ends), with each node's examples failed.
+export function simulateExamples(nodes: NodeDefinition[], language: string | undefined, options: { timeoutMs: number; signal?: AbortSignal }): Promise<ConformanceReport> {
+  const data: ExamplesWorkerData = { nodes, ...(language ? { language } : {}) };
+  const worker = new Worker(path.join(__dirname, 'examples-worker.js'), { workerData: data });
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (report: ConformanceReport): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', stop);
+      void worker.terminate();
+      resolve(report);
+    };
+    const seconds = Math.max(1, Math.round(options.timeoutMs / 1000));
+    const timer = setTimeout(() => settle(unfinishedExamplesReport(nodes, `Simulate didn't finish the examples in ${seconds} second${seconds === 1 ? '' : 's'}: an example may never end.`)), options.timeoutMs);
+    const stop = (): void => settle(unfinishedExamplesReport(nodes, 'Stopped before Simulate finished the examples.'));
+    if (options.signal?.aborted) stop();
+    options.signal?.addEventListener('abort', stop);
+    worker.on('message', (report: ConformanceReport) => settle(report));
+    worker.on('error', (error) => settle(unfinishedExamplesReport(nodes, `Simulate stopped: ${error.message}`)));
+    worker.on('exit', () => settle(unfinishedExamplesReport(nodes, 'Simulate stopped before it finished the examples.')));
+  });
 }
