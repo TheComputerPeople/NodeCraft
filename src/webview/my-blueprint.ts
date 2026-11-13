@@ -52,6 +52,14 @@ function overrideCodeMethod(method: CodeOverridable): void {
 
 export function renderMyBlueprint(): void {
   const root = dom.myBlueprint;
+  // The item the keyboard is on, focused again after the redraw.
+  const focused = root.contains(document.activeElement) ? (document.activeElement as HTMLElement).closest<HTMLElement>('.mb-item') : null;
+  const refocus = focused ? { kind: focused.dataset.kind, id: focused.dataset.id } : undefined;
+  renderItems(root);
+  if (refocus) root.querySelector<HTMLElement>(`.mb-item[data-kind="${CSS.escape(refocus.kind ?? '')}"][data-id="${CSS.escape(refocus.id ?? '')}"]`)?.focus();
+}
+
+function renderItems(root: HTMLElement): void {
   root.innerHTML = '';
   // The tabs list the same graphs, by the same names.
   renderGraphTabs();
@@ -204,6 +212,10 @@ function variableItem(variable: GraphVariable): HTMLElement {
     state.variableDrag = { variableId: variable.id, startX: e.clientX, startY: e.clientY, moved: false };
     e.preventDefault();
   });
+  // Enter and Space (a click with no pointer): the mouse selects on the press, above.
+  item.addEventListener('click', (e) => {
+    if (e.detail === 0) selectVariable(variable.id);
+  });
   item.addEventListener('dblclick', () => startRename('variable', variable.id));
   item.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -240,6 +252,29 @@ function itemElement(name: string, kind: 'graph' | 'variable' | 'dispatcher', id
   item.className = 'mb-item';
   item.dataset.kind = kind;
   item.dataset.id = id;
+  // From the keyboard (docs/release.md, step 6): Tab reaches it, Enter or Space does what a click
+  // does, F2 renames it, and Shift+F10 or the Menu key opens its menu (the browser's context menu
+  // event, as a right-click's).
+  item.tabIndex = 0;
+  item.setAttribute('role', 'button');
+  item.addEventListener('keydown', (e) => {
+    if (eventElement(e) !== item) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      item.click();
+      e.preventDefault();
+    } else if (e.key === 'F2') {
+      startRename(kind, id);
+      e.preventDefault();
+      e.stopPropagation();
+    } else if (e.key === 'Delete') {
+      // This item, as its menu's Delete, not the nodes selected in the graph.
+      if (kind === 'graph') removeGraph(id);
+      else if (kind === 'dispatcher') removeDispatcher(id);
+      else removeVariable(id);
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
   const label = document.createElement('span');
   label.className = 'mb-name';
   label.textContent = name;

@@ -346,3 +346,13 @@ The editor follows Unreal Engine 5's Blueprint editor. [docs/unreal-conventions.
 | Debug (run the generated code under the debugger) | F5, or **Debug** in the toolbar |
 | While paused at a breakpoint: Resume, Step Over, Step Into, Step Out, Stop | F5, F10, F11, Shift + F11, Shift + F5 (also the Blueprint Debugger panel's buttons) |
 | Cancel the current gesture or close a menu | Escape |
+
+### From the keyboard
+
+| Action | Keys |
+|---|---|
+| Open the menu a right-click would: the selected node's, the selected comment's, or Add Node with nothing selected | Shift + F10 or the Menu key |
+| Move through a menu / use an item / close it | Arrow keys, Home, End / Enter or Space / Escape |
+| Add Node: choose a result / add it | Type to search, Up and Down / Enter (the first result until you move) |
+| My Blueprint's graphs, variables and dispatchers | Tab to them; Enter opens or selects, F2 renames, Delete deletes, Shift + F10 opens the item's menu |
+| The palette | Tab to a node; Enter adds it to the graph |

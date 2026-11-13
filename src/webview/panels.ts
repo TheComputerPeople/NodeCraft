@@ -50,10 +50,17 @@ export function renderPalette(): void {
       button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(headerColor(def))}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.description || '')}</small></span>`;
       button.addEventListener('mouseenter', () => showPreview(dom.palettePreview, entry));
       button.addEventListener('focus', () => showPreview(dom.palettePreview, entry));
-      button.addEventListener('mousedown', (e) => {
-        e.preventDefault();
+      const add = () => {
         const rect = dom.canvasWrap.getBoundingClientRect();
         addNode(entry.type, screenToWorld(rect.left + dom.canvasWrap.clientWidth / 2, rect.top + 120), entry.properties);
+      };
+      button.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        add();
+      });
+      // Enter and Space (a click with no pointer: docs/release.md, step 6).
+      button.addEventListener('click', (e) => {
+        if (e.detail === 0) add();
       });
       section.appendChild(button);
     }

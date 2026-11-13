@@ -16,7 +16,7 @@ import { clearBreakpoints, pruneBreakpoints, setBreakpoints, toggleSelectedBreak
 import { finishVariableDrag, removeVariable, renderMyBlueprint, startRename, updateVariableDrag } from './my-blueprint';
 import { receivePreview } from './preview';
 import { findReferences, goToDefinition } from './navigation';
-import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showNodeContextMenu } from './menus';
+import { clampContextMenuToCanvas, hideContextMenu, showAddNodeMenu, showCommentContextMenu, showMenuAtSelection, showNodeContextMenu } from './menus';
 import { renderPalette } from './panels';
 import { render, renderDrafts, renderEdges, scheduleRuntimePaint, updateEdgesFor } from './render';
 import { beginGroupSelection, finishGroupSelection, hideSelectionBox, selectAllNodes, selectNode, setPrimarySelection, updateGroupSelection } from './selection';
@@ -161,11 +161,30 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
   }
 });
 
+// When Shift+F10 or the Menu key last opened a menu: the browser's own context menu event that
+// follows it is cancelled, so VS Code's doesn't open too.
+let menuKeyAt = -Infinity;
+document.addEventListener('contextmenu', (e) => {
+  if (performance.now() - menuKeyAt < 1000) e.preventDefault();
+});
+
 // Keyboard shortcuts follow Unreal's Blueprint editor (docs/unreal-conventions.md).
 document.addEventListener('keydown', (e) => {
-  if (eventElement(e)?.matches('input, textarea, select')) return;
+  const target = eventElement(e);
+  if (target?.matches('input, textarea, select')) return;
   const mod = e.ctrlKey || e.metaKey;
   const key = e.key.toLowerCase();
+  // Shift+F10 or the Menu key on the graph opens the menu a right-click would (docs/release.md,
+  // step 6). Elsewhere (My Blueprint's items, the tabs) the browser's context menu event opens theirs.
+  const onGraph = !target || target === document.body || target === document.documentElement || dom.canvasWrap.contains(target);
+  if (((e.key === 'F10' && e.shiftKey && !mod && !e.altKey) || e.key === 'ContextMenu') && onGraph && !dom.contextMenu.contains(target)) {
+    menuKeyAt = performance.now();
+    showMenuAtSelection();
+    e.preventDefault();
+    return;
+  }
+  // An open menu has its own keys.
+  if (target && dom.contextMenu.contains(target)) return;
   if ((e.key === 'Delete' || e.key === 'Backspace') && (state.selectedNodeIds.size || selectedCommentIds.size)) {
     if (state.selectedNodeIds.size) deleteSelected();
     deleteSelectedComments();
@@ -297,6 +316,14 @@ function openContextMenu(panning: Panning, clientX: number, clientY: number): vo
     showAddNodeMenu(screenToWorld(clientX, clientY), clientX, clientY, paletteEntries(), 'Add Node');
   }
 }
+
+// A press anywhere on the graph (nodes and pins included, before they stop it) takes the keyboard
+// from the panels: the canvas's gestures cancel the press's default, so focus would otherwise stay on
+// a My Blueprint item and Delete would delete it, not the nodes just selected.
+dom.canvasWrap.addEventListener('mousedown', (e) => {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active !== document.body && !dom.canvasWrap.contains(active) && !eventElement(e)?.closest('#context-menu')) active.blur();
+}, true);
 
 // Pins and nodes stop propagation of left presses, so a left press here is on the background.
 dom.canvasWrap.addEventListener('mousedown', (e) => {

@@ -21,8 +21,9 @@ release. Marketplace packaging stays deferred until the platform is complete and
   functions, Simulate with breakpoints, tests and Debug from the README. VS Code's Getting Started
   page has no walkthrough for the extension.
 - **Keyboard and screen readers.**
-  - Most of the panels work from the keyboard and have labels: My Blueprint, Details, the graph tabs,
-    and the Codebase Map, which has arrow-key navigation, menus and announcements.
+  - Most of the panels work from the keyboard and have labels: Details, the graph tabs, and the
+    Codebase Map, which has arrow-key navigation, menus and announcements. (My Blueprint and the
+    palette were thought to be among them; step 6 found they weren't, and fixed them.)
   - The graph itself doesn't. Nodes and pins can't be focused, so a graph can't be built without a
     mouse:
     - the Add Node menu's results are chosen with the mouse only;
@@ -228,3 +229,45 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
   - every step's media file exists;
   - the walkthrough opens;
   - Coming from Unreal opens the guide in the Markdown preview.
+
+## Built (step 6)
+
+- **Shift+F10 and the Menu key** on the graph open the menu a right-click would, for what's selected
+  (`showMenuAtSelection`, menus.ts):
+  - the selected node's menu, beside it;
+  - the selected comment's, at its title;
+  - with nothing selected, Add Node at the view's center.
+
+  The browser's own context menu event that follows is cancelled, so VS Code's doesn't open too.
+  Elsewhere, such as My Blueprint's items, that event opens the item's own menu, as a right-click
+  does.
+- **The Add Node menu** is a combobox over a listbox of results.
+  - The arrow keys and Page Up and Page Down move the active result
+    (`aria-activedescendant`, `aria-selected`), and show its code.
+  - Enter adds it: the first result, until the keys move.
+  - Escape closes the menu. The search field used to keep Escape from the graph.
+  - This closes Phase 10's deferral (keyboard navigation in the Add Node menu).
+- **The node and comment menus, and the floating menus** (My Blueprint's items, the graph tabs,
+  Override) are ARIA menus:
+  - focus starts on the first item, and the arrow keys, Home and End move;
+  - Enter and Space act;
+  - Escape and Tab close, and focus goes back where it was.
+
+  The floating menus used to act only on a mouse press.
+- **My Blueprint's items** weren't focusable; they are now.
+  - Tab reaches them; Enter or Space opens a graph or selects a variable or dispatcher.
+  - F2 renames, and Delete deletes the item.
+  - The item keeps focus when the panel redraws.
+- **The palette's buttons** add their node with Enter. They used to act only on a mouse press.
+- **Found by the suite:** a press on the graph didn't take focus from a panel, because the canvas's
+  gestures cancel the press's default. With focus left on a My Blueprint item, Delete would have
+  deleted the item rather than the nodes just selected. A press anywhere on the graph now takes the
+  keyboard from the panels.
+- **Tests** (webview, keyboard.test.ts):
+  - Shift+F10 opens Add Node; typing, the arrow keys and Enter add Branch; Escape closes;
+  - the Menu key on a selected node opens its menu; Down, End and Home move, and Enter on Duplicate
+    duplicates; Escape closes it without a change;
+  - a My Blueprint item takes focus, and its menu works from the keyboard and gives focus back;
+    Enter selects it, and it keeps focus through the redraw;
+  - after a press on a node, Delete deletes the node, not the focused item;
+  - a palette button adds its node with Enter.

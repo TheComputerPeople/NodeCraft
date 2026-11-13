@@ -15,9 +15,11 @@ import { MenuItem } from './floating-menu';
 import { render } from './render';
 import { selectConnected } from './selection';
 import { Point, state } from './state';
-import { centerOnNode } from './view';
+import { centerOnNode, screenToWorld } from './view';
 
 const MAX_RESULTS = 18;
+// The Add Node menu's result the arrow keys are on, which Enter adds (docs/release.md, step 6).
+let activeResult = 0;
 
 export function showAddNodeMenu(
   position: Point,
@@ -34,8 +36,8 @@ export function showAddNodeMenu(
   // Unreal's "Context Sensitive" checkbox: when dragging from a pin, unchecking it shows every node.
   dom.contextMenu.innerHTML = `
       <div class="context-title"><span>${escapeHtml(title)}</span>${source ? `<label class="context-sensitive"><input type="checkbox" id="context-sensitive"${state.contextSensitive ? ' checked' : ''}> Context Sensitive</label>` : ''}</div>
-      <input id="context-search" class="context-search" placeholder="Search nodes…" aria-label="Search nodes">
-      <div id="context-results"></div>
+      <input id="context-search" class="context-search" placeholder="Search nodes…" aria-label="Search nodes" role="combobox" aria-expanded="true" aria-controls="context-results" aria-autocomplete="list">
+      <div id="context-results" role="listbox" aria-label="Nodes"></div>
       <div id="context-preview" class="node-preview" aria-live="polite" hidden></div>`;
   const toggle = dom.contextMenu.querySelector<HTMLInputElement>('#context-sensitive');
   toggle?.addEventListener('change', () => {
@@ -46,6 +48,23 @@ export function showAddNodeMenu(
   positionContextMenu(clientX, clientY);
   const input = dom.contextMenu.querySelector<HTMLInputElement>('#context-search')!;
   input.addEventListener('input', () => renderContextNodeResults(input.value));
+  // The arrow keys move through the results, Enter adds the one they're on (the first, until they
+  // move), and Escape closes the menu.
+  input.addEventListener('keydown', (e) => {
+    const options = [...dom.contextMenu.querySelectorAll<HTMLElement>('[role="option"]')];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'PageDown' || e.key === 'PageUp') {
+      if (!options.length) return;
+      const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : e.key === 'PageDown' ? 5 : -5;
+      setActiveResult(Math.max(0, Math.min(options.length - 1, activeResult + step)));
+      e.preventDefault();
+    } else if (e.key === 'Enter') {
+      options[activeResult]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      hideContextMenu();
+      e.preventDefault();
+    }
+  });
   renderContextNodeResults('');
   // Deferred so the opening click does not steal focus back; skipped if the menu closed meanwhile.
   requestAnimationFrame(() => {
@@ -62,17 +81,21 @@ function renderContextNodeResults(query: string): void {
   const pool = context.source && !state.contextSensitive ? context.allEntries : context.entries;
   const entries = pool.filter((entry) => searchText(entry.definition).includes(q)).slice(0, MAX_RESULTS);
   result.innerHTML = '';
+  activeResult = 0;
   if (!entries.length) {
-    result.innerHTML = '<div class="context-empty">No matching nodes</div>';
+    result.innerHTML = '<div class="context-empty" role="presentation">No matching nodes</div>';
+    dom.contextMenu.querySelector('#context-search')?.removeAttribute('aria-activedescendant');
     return;
   }
-  for (const entry of entries) {
+  entries.forEach((entry, i) => {
     const def = entry.definition;
     const button = document.createElement('button');
     button.className = 'context-node';
+    button.id = `context-option-${i}`;
+    button.setAttribute('role', 'option');
+    button.tabIndex = -1;
     button.innerHTML = `<span class="palette-dot" style="--node-color:${escapeHtml(headerColor(def))}"></span><span><strong>${escapeHtml(def.displayName)}</strong><small>${escapeHtml(def.category)}</small></span>`;
-    const preview = dom.contextMenu.querySelector<HTMLElement>('#context-preview');
-    if (preview) button.addEventListener('mouseenter', () => showPreview(preview, entry));
+    button.addEventListener('mouseenter', () => setActiveResult(i, false));
     button.addEventListener('mousedown', (e) => {
       e.preventDefault();
       const id = addNode(entry.type, context.position, entry.properties);
@@ -80,7 +103,85 @@ function renderContextNodeResults(query: string): void {
       hideContextMenu();
     });
     result.appendChild(button);
+  });
+  setActiveResult(0, false);
+}
+
+// Marks a result as the one Enter adds, shows its code, and (from the keyboard) scrolls to it.
+function setActiveResult(index: number, scroll = true): void {
+  const context = state.context;
+  const options = [...dom.contextMenu.querySelectorAll<HTMLElement>('[role="option"]')];
+  if (context?.kind !== 'add-node' || !options[index]) return;
+  activeResult = index;
+  options.forEach((option, i) => option.setAttribute('aria-selected', String(i === index)));
+  dom.contextMenu.querySelector('#context-search')?.setAttribute('aria-activedescendant', options[index].id);
+  if (scroll) options[index].scrollIntoView({ block: 'nearest' });
+  const preview = dom.contextMenu.querySelector<HTMLElement>('#context-preview');
+  const q = (dom.contextMenu.querySelector<HTMLInputElement>('#context-search')?.value ?? '').trim().toLowerCase();
+  const pool = context.source && !state.contextSensitive ? context.allEntries : context.entries;
+  const entry = pool.filter((e) => searchText(e.definition).includes(q))[index];
+  if (preview && entry) showPreview(preview, entry);
+}
+
+// A node's or comment's menu is a menu of items: focus starts on the first, and the arrow keys,
+// Home and End move through them (docs/release.md, step 6). Enter and Space are the buttons' own.
+function readyMenu(): void {
+  dom.contextMenu.setAttribute('role', 'menu');
+  const items = menuItems();
+  for (const item of items) {
+    item.setAttribute('role', 'menuitem');
+    item.tabIndex = -1;
   }
+  dom.contextMenu.querySelectorAll('.context-separator').forEach((s) => s.setAttribute('role', 'separator'));
+  dom.contextMenu.querySelectorAll('.context-title, .context-heading').forEach((h) => h.setAttribute('role', 'presentation'));
+  items[0]?.focus();
+}
+
+function menuItems(): HTMLButtonElement[] {
+  return [...dom.contextMenu.querySelectorAll<HTMLButtonElement>('button[data-action], button[data-pin-action], button[data-function-action]')];
+}
+
+dom.contextMenu.addEventListener('keydown', (e) => {
+  if (state.context?.kind === 'add-node') return;
+  const items = menuItems();
+  const at = items.indexOf(document.activeElement as HTMLButtonElement);
+  const next = e.key === 'ArrowDown' ? (at + 1) % items.length
+    : e.key === 'ArrowUp' ? (at - 1 + items.length) % items.length
+    : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : undefined;
+  if (next !== undefined && items.length) {
+    items[next].focus();
+    e.preventDefault();
+    e.stopPropagation();
+  } else if (e.key === 'Escape' || e.key === 'Tab') {
+    hideContextMenu();
+    e.preventDefault();
+    e.stopPropagation();
+  }
+});
+
+// Shift+F10 or the Menu key (docs/release.md, step 6): the menu a right-click would open, for what's
+// selected: the selected node's menu beside it, the selected comment's at its title, or with nothing
+// selected the Add Node menu at the view's center.
+export function showMenuAtSelection(): void {
+  if (!state.graph) return;
+  const rect = dom.canvasWrap.getBoundingClientRect();
+  const nodeId = state.selectedNodeId ?? (state.selectedNodeIds.size ? [...state.selectedNodeIds][0] : null);
+  const nodeEl = nodeId ? dom.canvasWrap.querySelector<HTMLElement>(`.node[data-node="${CSS.escape(nodeId)}"]`) : null;
+  if (nodeId && nodeEl) {
+    const box = nodeEl.getBoundingClientRect();
+    showNodeContextMenu(nodeId, Math.min(box.right + 4, rect.right - 8), Math.max(box.top, rect.top + 4));
+    return;
+  }
+  const commentId = selectedCommentIds.size === 1 ? [...selectedCommentIds][0] : null;
+  const title = commentId ? dom.canvasWrap.querySelector<HTMLElement>(`.comment[data-comment="${CSS.escape(commentId)}"] .comment-title`) : null;
+  if (commentId && title) {
+    const box = title.getBoundingClientRect();
+    showCommentContextMenu(commentId, box.left + 8, box.bottom);
+    return;
+  }
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 3;
+  showAddNodeMenu(screenToWorld(x, y), x, y, paletteEntries(), 'Add Node');
 }
 
 // A node's menu. Right-clicking a pin opens the same menu with that pin's actions on top, as in
@@ -140,6 +241,7 @@ export function showNodeContextMenu(nodeId: string, clientX: number, clientY: nu
   state.context = { kind: 'node', nodeId };
   dom.contextMenu.hidden = false;
   positionContextMenu(clientX, clientY);
+  readyMenu();
   const actions: Record<string, () => void> = {
     'go-to-definition': () => goToDefinition(nodeId),
     'find-references': () => findReferences(nodeId),
@@ -203,6 +305,7 @@ export function showCommentContextMenu(commentId: string, clientX: number, clien
   state.context = { kind: 'comment', commentId };
   dom.contextMenu.hidden = false;
   positionContextMenu(clientX, clientY);
+  readyMenu();
   const actions: Record<string, () => void> = {
     rename: () => startCommentRename(commentId),
     delete: () => deleteSelectedComments()
@@ -236,5 +339,6 @@ export function hideContextMenu(): void {
   // reaches the graph's shortcuts.
   if (dom.contextMenu.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   dom.contextMenu.hidden = true;
+  dom.contextMenu.removeAttribute('role');
   state.context = null;
 }
