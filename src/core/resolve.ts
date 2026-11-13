@@ -2,7 +2,7 @@
 // some take their pins from context, as in Unreal: a variable Get/Set node shows the variable's
 // name and type. Everything that needs a node's pins (editor, compiler, Simulate) goes through
 // this, so they always agree.
-import { MAKE_ARRAY, MAKE_MAP, MAKE_SET, makeDefinition, resolveWildcards } from './containers';
+import { MAKE_ARRAY, MAKE_MAP, MAKE_SET, addedPinCount, makeDefinition, resolveWildcards } from './containers';
 import { MULTIGATE, SWITCH_INT, SWITCH_STRING, flowControlDefinition } from './flow-control';
 import { isFunctionType, signatureChanges } from './imported-functions';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables, functionNodeDefinition } from './functions';
@@ -12,6 +12,7 @@ import { TEST_CASE, testCaseDefinition } from './tests';
 import { constructWithParentInputs, declaredClass, isObjectNode, objectNodeDefinition } from './objects';
 import { Graph, GraphDocument, GraphNode, GraphVariable, NodeDefinition, PinDefinition } from './model';
 import { applySplits, setMembersDefinition, splitPinIds } from './user-types';
+import { isTypeRef } from './types';
 
 export type NodeResolver = (node: GraphNode) => NodeDefinition | undefined;
 
@@ -28,8 +29,7 @@ export const REROUTE = 'core:reroute';
 export const DEFAULT_SEQUENCE_PINS = 3;
 
 export function sequencePinCount(node: GraphNode): number {
-  const pins = Number(node.properties.pins);
-  return Number.isInteger(pins) && pins >= 1 ? pins : DEFAULT_SEQUENCE_PINS;
+  return addedPinCount(node, 1, DEFAULT_SEQUENCE_PINS);
 }
 
 // The variable a Get/Set node is bound to (by id, so renaming the variable keeps the node bound).
@@ -101,8 +101,8 @@ function execPin(id: string, name: string, direction: PinDefinition['direction']
 
 function rerouteDefinition(base: NodeDefinition, node: GraphNode): NodeDefinition {
   if (node.properties.kind === 'exec') return { ...base, inputs: [execPin('in', '', 'input')], outputs: [execPin('out', '', 'output')] };
-  const type = node.properties.type as PinDefinition['type'] | undefined;
-  if (!type) return base;
+  const type = node.properties.type;
+  if (!isTypeRef(type)) return base;
   return { ...base, inputs: base.inputs.map((p) => ({ ...p, type })), outputs: base.outputs.map((p) => ({ ...p, type })) };
 }
 

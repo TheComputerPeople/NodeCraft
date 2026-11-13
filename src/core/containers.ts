@@ -472,8 +472,17 @@ export function containerDefinitions(): NodeDefinition[] {
 // ---- Make nodes' inputs, added on the node ------------------------------------------------------
 
 export function makeItemCount(node: GraphNode): number {
+  return addedPinCount(node, 0, 1);
+}
+
+// The most pins "Add pin +" gives a node; a file asking for more gets this many, rather than a
+// node too big to draw or compile (docs/audit.md, step 3).
+export const MAX_ADDED_PINS = 1000;
+
+// How many pins a node has added (its `pins` property): a whole number from `min`, else `fallback`.
+export function addedPinCount(node: GraphNode, min: number, fallback: number): number {
   const pins = Number(node.properties.pins);
-  return Number.isInteger(pins) && pins >= 0 ? pins : 1;
+  return Number.isInteger(pins) && pins >= min ? Math.min(pins, MAX_ADDED_PINS) : fallback;
 }
 
 // Make Array/Set/Map with as many inputs as the node has items ("Add pin +").
@@ -500,7 +509,8 @@ export function hasWildcard(type: TypeRef | undefined): boolean {
 // wire is connected).
 export function adoptedTypes(node: GraphNode): Record<string, string> {
   const adopted = node.properties.wildcards;
-  return adopted && typeof adopted === 'object' ? (adopted as Record<string, string>) : {};
+  if (!adopted || typeof adopted !== 'object' || Array.isArray(adopted)) return {};
+  return Object.fromEntries(Object.entries(adopted).filter(([, type]) => typeof type === 'string' && type)) as Record<string, string>;
 }
 
 // A pin type with the node's adopted element types in place of its wildcards.

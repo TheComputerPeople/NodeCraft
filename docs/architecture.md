@@ -29,6 +29,8 @@ Nodes store unconnected input values as `pin:<pinId>` properties. Variable Get/S
 
 Migration: `parseDocument` upgrades older schemas in memory (`src/core/migrations.ts`), one version at a time (1 → 2 makes the single graph an event graph; 2 → 3 binds variable nodes to declared variables, declaring missing ones as `any`), keeping unknown fields. The file is rewritten in the new schema only when the document is next edited, so opening a file never marks it modified. Files from a newer schema are refused with a message asking for an extension update.
 
+Checking: `parseDocument` checks the file's outline (kinds, which graphs a kind may hold), then what's in it (`src/core/document-check.ts`): each node, connection, comment, pin, signature, variable, enumerator, dispatcher and stored function signature must have the fields it needs, of the right kind. A file broken by hand or by a bad merge is refused with an error that says where (`connection 1 in graph "EventGraph" is not an object`), shown in Problems and in the read-only editor. A node left without `position` or `properties` gets them. What a node's properties mean is up to the node, and their readers ignore values that aren't what they expect.
+
 ## Function Library model
 
 A user-authored library node can be backed by:

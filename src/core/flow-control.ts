@@ -1,5 +1,6 @@
 // Unreal's standard flow-control macros as built-in nodes (docs/program-structure.md, "Flow
 // control"): loops, Do Once, Do N, Gate, MultiGate, Flip Flop and Switch. Their pins follow Unreal.
+import { addedPinCount } from './containers';
 import { GraphNode, NodeDefinition, PinDefinition } from './model';
 
 const exec = (id: string, name: string, direction: PinDefinition['direction']): PinDefinition => ({ id, name, kind: 'exec', direction });
@@ -79,8 +80,7 @@ export const DEFAULT_MULTIGATE_PINS = 2;
 export const DEFAULT_SWITCH_INT_PINS = 2;
 
 export function pinCount(node: GraphNode, fallback: number): number {
-  const pins = Number(node.properties.pins);
-  return Number.isInteger(pins) && pins >= 1 ? pins : fallback;
+  return addedPinCount(node, 1, fallback);
 }
 
 // Switch on Int's cases: Start Index, Start Index + 1, … (Unreal's "Start Index" and "Add pin").

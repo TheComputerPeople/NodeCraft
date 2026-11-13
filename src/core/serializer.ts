@@ -1,3 +1,4 @@
+import { checkDocumentContents } from './document-check';
 import { DEFAULT_LANGUAGE } from './languages';
 import { DEFAULT_EVENT_GRAPH_ID, isV1Document, migrateV1ToV2, migrateV2ToV3 } from './migrations';
 import { DocumentKind, Graph, GraphDocument, GraphKind } from './model';
@@ -48,6 +49,7 @@ export function parseDocument(text: string, fallbackName = 'NewGraph'): ParsedDo
   let raw: Record<string, unknown> = parsed;
   if (version === 1) {
     if (!isV1Document(parsed)) throw new Error('Invalid .vgraph document: expected nodes and connections arrays.');
+    if (parsed.variables !== undefined && (!Array.isArray(parsed.variables) || !parsed.variables.every(isObject))) throw new Error('Invalid .vgraph document: variables must be a list of objects.');
     raw = migrateV1ToV2(parsed, fallbackName);
   }
   const document = normalizeDocument(raw, fallbackName);
@@ -112,6 +114,7 @@ function normalizeDocument(raw: Record<string, unknown>, fallbackName: string): 
     ids.add(graph.id);
     if (!ALLOWED_GRAPHS[doc.kind].includes(graph.kind)) throw new Error(`Invalid .vgraph document: a ${doc.kind} cannot contain ${graph.kind} graph "${graph.name}".`);
   }
+  checkDocumentContents(doc);
   return doc;
 }
 

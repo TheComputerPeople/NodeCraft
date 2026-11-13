@@ -168,9 +168,16 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     vscode.window.registerCustomEditorProvider(GRAPH_VIEW_TYPE, provider, { supportsMultipleEditorsPerDocument: true })
   );
 
+  // Compile on save doesn't wait for it, so a failure is said here rather than lost.
   const compileAndReport = async (document: vscode.TextDocument): Promise<void> => {
-    const { report } = await compiler.compile(document);
-    provider.notifyCompiled(document.uri, report);
+    try {
+      const { report } = await compiler.compile(document);
+      provider.notifyCompiled(document.uri, report);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      output().appendLine(`Compiling ${vscode.workspace.asRelativePath(document.uri)} failed: ${error instanceof Error && error.stack ? error.stack : message}`);
+      void vscode.window.showErrorMessage(`Compiling ${path.basename(document.uri.fsPath)} failed: ${message}`);
+    }
   };
 
   // Keep generated code in step with the graph, as Unreal compiles a Blueprint before saving it.

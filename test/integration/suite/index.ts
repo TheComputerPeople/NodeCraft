@@ -480,6 +480,51 @@ test('compile errors appear in the Problems panel', async () => {
   assert.match(problems[0].message, /can't be read/);
 });
 
+// docs/audit.md, step 3: a file broken inside (a bad merge) says where, rather than crashing the
+// compiler on save with nothing said.
+test('a graph broken inside says where in Problems when it is saved', async () => {
+  const graph = workspaceFile('merged.vgraph');
+  const node = (id: string, type: string) => ({ id, type, position: { x: 0, y: 0 }, properties: {} });
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({
+    schemaVersion: 3, name: 'Merged', kind: 'class', language: 'javascript', variables: [],
+    graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [node('s', 'core:event.start'), node('p', 'core:console.print')], connections: [] }]
+  }, null, 2)));
+  try {
+    const document = await editGraph(graph, (g) => {
+      (g.graphs as { connections: unknown[] }[])[0].connections = [null];
+    });
+    await document.save();
+    await waitFor(() => vscode.languages.getDiagnostics(graph).length > 0, 'the problem to be reported');
+    const [problem] = vscode.languages.getDiagnostics(graph);
+    assert.equal(problem.severity, vscode.DiagnosticSeverity.Error);
+    assert.match(problem.message, /connection 1 in graph "EventGraph" is not an object/);
+  } finally {
+    await vscode.workspace.fs.delete(graph);
+  }
+});
+
+// A compile that throws (here: its generated file can't be written, as a folder has its name) is
+// reported in Problems, with the details in the output.
+test('a compile that fails is reported in Problems', async () => {
+  const graph = workspaceFile('stuck.vgraph');
+  const output = workspaceFile('stuck.vgraph.js');
+  await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({
+    schemaVersion: 3, name: 'Stuck', kind: 'class', language: 'javascript', variables: [],
+    graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [{ id: 's', type: 'core:event.start', position: { x: 0, y: 0 }, properties: {} }], connections: [] }]
+  })));
+  await vscode.workspace.fs.createDirectory(output);
+  try {
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    const problems = vscode.languages.getDiagnostics(graph);
+    assert.equal(problems.length, 1, JSON.stringify(problems));
+    assert.equal(problems[0].severity, vscode.DiagnosticSeverity.Error);
+    assert.match(problems[0].message, /^Compiling stopped: .+ The Blueprint Visual Scripting output has the details\.$/s);
+  } finally {
+    await vscode.workspace.fs.delete(output, { recursive: true });
+    await vscode.workspace.fs.delete(graph);
+  }
+});
+
 // A graph calling one project function: Start → Double(4) → Print.
 function projectGraph(name: string, language: string, type: string): string {
   const node = (id: string, nodeType: string, properties: Record<string, unknown> = {}) => ({ id, type: nodeType, position: { x: 0, y: 0 }, properties });

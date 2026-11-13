@@ -3,7 +3,7 @@
 import { testCases } from './tests';
 import { FUNCTION_CALL, FUNCTION_ENTRY, FUNCTION_RETURN, allLocalVariables } from './functions';
 import { MACRO_INPUTS, MACRO_INSTANCE, MACRO_OUTPUTS } from './macros';
-import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, CUSTOM_EVENT, DELEGATE_PIN, Dispatcher, UNBIND_EVENT, customEvents, documentDispatchers, eventName, isDispatcherNode, isEventNode } from './events';
+import { BIND_EVENT, CALL_DISPATCHER, CALL_EVENT, CUSTOM_EVENT, DELEGATE_PIN, Dispatcher, UNBIND_EVENT, customEvents, documentDispatchers, eventInputs, eventName, isDispatcherNode, isEventNode } from './events';
 import { libraryNodeType } from './libraries';
 import { CodeOverridable, OVERRIDE_EVENT, PARENT_CALL, SELF, isObjectNode } from './objects';
 import { DocumentKind, Graph, GraphConnection, GraphDocument, GraphKind, GraphNode, GraphPin, GraphVariable, NodeDefinition } from './model';
@@ -613,7 +613,8 @@ export function renameCustomEvent(doc: GraphDocument, node: GraphNode, name: str
 export type EventOwner = { event: GraphNode } | { dispatcher: string };
 
 function ownerInputs(doc: GraphDocument, owner: EventOwner): GraphPin[] | undefined {
-  if ('event' in owner) return (owner.event.properties.inputs ??= []) as GraphPin[];
+  // The event's parameters, kept on its node as a list (any broken in the file left out).
+  if ('event' in owner) return (owner.event.properties.inputs = eventInputs(owner.event));
   return documentDispatchers(doc).find((d) => d.id === owner.dispatcher)?.inputs;
 }
 

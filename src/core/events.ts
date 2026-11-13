@@ -4,7 +4,7 @@
 // Blueprint with parameters; its Call node runs every event bound to it, in the order they were
 // bound. A Custom Event's red delegate pin is wired into Bind (and Unbind) to say which event.
 import { Graph, GraphDocument, GraphNode, GraphPin, NodeDefinition, PinDefinition } from './model';
-import { TypeRef, formatType } from './types';
+import { TypeRef, formatType, isTypeRef } from './types';
 
 export const CUSTOM_EVENT = 'core:event.custom';
 export const CALL_EVENT = 'core:call.event';
@@ -73,7 +73,16 @@ export function eventName(node: GraphNode): string {
 }
 
 export function eventInputs(node: GraphNode): GraphPin[] {
-  return Array.isArray(node.properties.inputs) ? (node.properties.inputs as GraphPin[]) : [];
+  const inputs: unknown = node.properties.inputs;
+  if (!Array.isArray(inputs)) return [];
+  // A parameter broken in the file is left out, rather than breaking the editor and the compiler.
+  return inputs.every(isPin) ? inputs : inputs.filter(isPin);
+}
+
+function isPin(value: unknown): value is GraphPin {
+  if (typeof value !== 'object' || value === null) return false;
+  const pin = value as Record<string, unknown>;
+  return typeof pin.id === 'string' && !!pin.id && typeof pin.name === 'string' && (pin.kind === 'data' || pin.kind === 'exec') && (pin.type === undefined || isTypeRef(pin.type));
 }
 
 // Every Custom Event node of the document, with its graph.

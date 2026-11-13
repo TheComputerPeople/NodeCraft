@@ -47,6 +47,15 @@ export function parseTypeId(id: string): { category: TypeCategory; name: string 
   return { category: 'unknown', name: id };
 }
 
+// Whether a value read from a file (a node's properties) is a type: an id, and a known container.
+export function isTypeRef(value: unknown): value is TypeRef {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const type = value as Record<string, unknown>;
+  return typeof type.id === 'string' && !!type.id
+    && (type.container === undefined || ['array', 'set', 'map'].includes(type.container as string))
+    && (type.valueType === undefined || isTypeRef(type.valueType));
+}
+
 // Rewrites legacy ids (recursively, through map value types) to their canonical form.
 export function normalizeTypeRef(type: TypeRef): TypeRef {
   const id = LEGACY_TYPE_IDS[type.id] ?? type.id;

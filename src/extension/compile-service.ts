@@ -116,20 +116,16 @@ export class CompileService implements vscode.Disposable {
     const graphPath = document.uri.fsPath;
     const graphDir = path.dirname(graphPath);
     const root = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ?? graphDir;
-    const compiled = await compileGraphFile(graph, graphPath, root, {
-      registry: this.registry,
-      languages: this.languages,
-      write: (file, text) => writeIfChanged(vscode.Uri.file(file), text),
-      remove: async (file) => {
-        try {
-          await vscode.workspace.fs.delete(vscode.Uri.file(file), { useTrash: false });
-        } catch (error) {
-          // Another compile of the graph (Compile while compile-on-save runs) removed it first.
-          if (!(error instanceof vscode.FileSystemError && error.code === 'FileNotFound')) throw error;
-        }
-      },
-      ...(this.outputPlans ? { register: (pack, folder, outputFile) => this.outputPlans!.apply(pack, folder, outputFile) } : {})
-    });
+    let compiled: Awaited<ReturnType<typeof compileGraphFile>>;
+    try {
+      compiled = await this.compileFile(graph, graphPath, root);
+    } catch (error) {
+      // A bug in the compiler, or a generated file that can't be written: said in Compiler Results
+      // and Problems, with the details in the output, rather than lost (docs/audit.md, step 3).
+      const message = error instanceof Error ? error.message : String(error);
+      this.output().appendLine(`Compiling ${vscode.workspace.asRelativePath(graphPath)} failed: ${error instanceof Error && error.stack ? error.stack : message}`);
+      return finish({ report: report([{ severity: 'error', code: 'compile-failed', message: `Compiling stopped: ${message}. The Blueprint Visual Scripting output has the details.` }], graph.language ?? '') }, graph);
+    }
     const { result, language, diagnostics } = compiled;
     this.reportProject(compiled.versionCheck);
     if (!result.output || !compiled.outputPath) return finish({ report: report(diagnostics, language) }, graph);
@@ -153,6 +149,23 @@ export class CompileService implements vscode.Disposable {
       report: report(diagnostics, language, vscode.workspace.asRelativePath(outputPath)), outputPath, className: result.output.className, importRoots, sources, ...(crate ? { crate } : {}), ...(goModule ? { goModule } : {}), ...(projectDir ? { projectDir } : {}), mainMethod: result.output.mainMethod,
       ...(result.output.tests?.length ? { tests: result.output.tests, ...(testPath ? { testPath } : {}) } : {})
     }, graph);
+  }
+
+  private compileFile(graph: GraphDocument, graphPath: string, root: string): ReturnType<typeof compileGraphFile> {
+    return compileGraphFile(graph, graphPath, root, {
+      registry: this.registry,
+      languages: this.languages,
+      write: (file, text) => writeIfChanged(vscode.Uri.file(file), text),
+      remove: async (file) => {
+        try {
+          await vscode.workspace.fs.delete(vscode.Uri.file(file), { useTrash: false });
+        } catch (error) {
+          // Another compile of the graph (Compile while compile-on-save runs) removed it first.
+          if (!(error instanceof vscode.FileSystemError && error.code === 'FileNotFound')) throw error;
+        }
+      },
+      ...(this.outputPlans ? { register: (pack, folder, outputFile) => this.outputPlans!.apply(pack, folder, outputFile) } : {})
+    });
   }
 
   // Compiles, then runs the generated code with the project's toolchain: Start and Main, or with

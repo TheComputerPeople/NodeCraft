@@ -121,3 +121,36 @@ Not covered by this pass, and left for another:
   `cargo run`, `py -3`, Godot's console executable and `cmd /c`, each starting a program that sleeps
   30 seconds. Killing only the launcher left the program running under `cmd /c` alone; `killTree`
   ended the program under every launcher.
+
+### Built (step 3)
+
+- **What's in a graph file** (`checkDocumentContents`, src/core/document-check.ts, called by
+  `parseDocument` before migrating): nodes, connections, comments, signatures and their pins,
+  variables and local variables, enumerators, dispatchers, and stored function signatures.
+  - Each must be an object with the fields it needs, of the right kind; a type must have an id and
+    a known container; node ids must be unique in their graph.
+  - The error says where: `node "p" in graph "EventGraph" has no type`.
+  - A node without `position` or `properties` gets them, as in a hand-written file.
+  - Version 1 files: their variables are checked before the migration reads them.
+  - Every graph file in the repository passes.
+- **Node properties** the compiler and the editor read without checking:
+  - a node's added pins (`pins`, on Make Array, Sequence, Switch and the rest) are at most 1,000;
+  - adopted element types (`wildcards`) that aren't type ids are left out;
+  - a Custom Event's parameters that aren't pins are left out, and editing them writes a clean list;
+  - a Reroute's type that isn't a type is ignored.
+- **A compile that throws** (a compiler bug, or a generated file that can't be written) is an error
+  in Compiler Results and Problems, `Compiling stopped: …`, with the stack in the output. Compile
+  on save, which nobody waits for, also says it in a message.
+- **Fuzzing, before and after:** the compiler, 3,000 mutations: 123 distinct crashes, then none in
+  24,000 across four seeds. The editor, opening mutated files `parseDocument` accepts: one page
+  error (a Custom Event parameter without a type id) in 300, then none in 1,200.
+- **Tests:**
+  - unit (document-check.test.ts): an error that says where for 17 kinds of breakage, filled
+    defaults, every graph file in the repository, the property readers, and the fuzzer (two seeds,
+    1,500 mutations each, in each file's language and another);
+  - webview (malformed-files.test.ts): 120 mutated files open without a page error; it fails
+    without the Custom Event fix;
+  - integration: a file broken inside, saved, says where in Problems; a compile whose generated
+    file is a folder says `Compiling stopped` in Problems.
+- The editor fuzzer opens each file's first graph only; other graphs and editing actions on broken
+  files weren't fuzzed.
