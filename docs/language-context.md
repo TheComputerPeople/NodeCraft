@@ -48,7 +48,7 @@ The webview tests cover each (test/webview/editor.test.ts, capabilities.test.ts)
 - **Kept.**
   - test/conformance/audit.test.ts runs it in all 12 languages (each built and run once; C++ takes the longest, about 10 s). It checks there are no findings and that more than 300 cases ran.
   - Its self-check gives Python a wrong String Reverse and expects that finding, and no other.
-  - The SDK exports `auditPack`, and `blueprint-conformance <pack> --audit` runs it for any pack.
+  - The SDK exports `auditPack`, and `nodecraft-conformance <pack> --audit` runs it for any pack.
 - **What it found** (the first full run, 2026-10-29), and the fixes:
   - **Maps printed with integer keys sorted, in Simulate, TypeScript and JavaScript.** Print wrote a map through a plain object, which lists integer-like keys first and in ascending order. The semantics say insertion order, which the other ten languages kept: Pick and Make Map From Arrays with int keys printed differently. Simulate's `formatValue` and the generated TypeScript/JavaScript print helper now write maps themselves, in order.
   - **Lua: big graphs didn't load.** Each code node's snippet is a module-level local function, and Lua allows 200 locals in a chunk. A graph using about 200 kinds of code node failed with "too many local variables". Past 150 helpers and imports, the helpers are fields of one local table (`vg_helpers`); smaller graphs are generated as before.

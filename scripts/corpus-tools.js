@@ -8,7 +8,7 @@
 //
 //   npm run corpus:tools
 //
-// BLUEPRINT_CORPUS_TOOLS names another folder.
+// NODECRAFT_CORPUS_TOOLS names another folder.
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -17,11 +17,11 @@ const PACKAGES = ['typescript@5', 'eslint@10', '@eslint/js@10', 'typescript-esli
 
 // As test/conformance/corpus.ts finds it.
 const os = require('node:os');
-const folder = process.env.BLUEPRINT_CORPUS_TOOLS
-  || (process.platform === 'win32' ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'blueprint-corpus', 'node') : path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'blueprint-corpus', 'node'));
+const folder = process.env.NODECRAFT_CORPUS_TOOLS
+  || (process.platform === 'win32' ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'nodecraft-corpus', 'node') : path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'nodecraft-corpus', 'node'));
 fs.mkdirSync(folder, { recursive: true });
 const manifest = path.join(folder, 'package.json');
-if (!fs.existsSync(manifest)) fs.writeFileSync(manifest, JSON.stringify({ name: 'blueprint-corpus-tools', private: true }, null, 2) + '\n');
+if (!fs.existsSync(manifest)) fs.writeFileSync(manifest, JSON.stringify({ name: 'nodecraft-corpus-tools', private: true }, null, 2) + '\n');
 console.log(`Installing ${PACKAGES.join(', ')} into ${folder}`);
 execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--save-dev', '--no-audit', '--no-fund', ...PACKAGES], { cwd: folder, stdio: 'inherit', shell: process.platform === 'win32' });
 

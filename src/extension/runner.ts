@@ -122,9 +122,9 @@ function scaffoldDir(filePath: string): string {
 // the folder is named for the user, made for them alone, and checked each time: someone else's could
 // hold files a build reads, or links a run writes through.
 export function scratchRoot(): string {
-  if (process.platform === 'win32' || !process.getuid) return path.join(os.tmpdir(), 'blueprint-visual-scripting');
+  if (process.platform === 'win32' || !process.getuid) return path.join(os.tmpdir(), 'nodecraft');
   const uid = process.getuid();
-  const root = path.join(os.tmpdir(), `blueprint-visual-scripting-${uid}`);
+  const root = path.join(os.tmpdir(), `nodecraft-${uid}`);
   try {
     fs.mkdirSync(root, { mode: 0o700 });
   } catch (error) {

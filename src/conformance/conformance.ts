@@ -1,6 +1,6 @@
 // The published conformance suite (docs/language-breadth.md): runs fixture graphs in Simulate and
 // as a language pack's generated code, with the pack's own runner, and compares what they print.
-// Any pack can run it, through the SDK's runConformance or the blueprint-conformance command.
+// Any pack can run it, through the SDK's runConformance or the nodecraft-conformance command.
 // Needs Node.js, not VS Code.
 import * as fs from 'node:fs';
 import * as os from 'node:os';

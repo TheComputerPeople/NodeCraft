@@ -1,13 +1,17 @@
 {
-  "name": "blueprint-visual-scripting",
-  "displayName": "Blueprint Visual Scripting",
-  "description": "Language-neutral Blueprint-style visual scripting for VS Code.",
+  "name": "nodecraft",
+  "displayName": "NodeCraft",
+  "description": "NodeCraft brings Unreal Blueprint-style visual scripting to VS Code. Build node graphs that compile to readable code in 12 languages (TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP), then run, test and debug them node by node with each language's own tools. Your own functions become nodes.",
   "version": "0.1.0",
   "publisher": "local",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://example.invalid/blueprint-visual-scripting"
+    "url": "https://github.com/TheComputerPeople/NodeCraft.git"
+  },
+  "homepage": "https://github.com/TheComputerPeople/NodeCraft#readme",
+  "bugs": {
+    "url": "https://github.com/TheComputerPeople/NodeCraft/issues"
   },
   "engines": {
     "vscode": ">=1.140.0"
@@ -25,14 +29,14 @@
     "visual programming"
   ],
   "activationEvents": [
-    "onCustomEditor:blueprintVisualScripting.graphEditor",
-    "onCommand:blueprintVisualScripting.createGraph",
-    "onCommand:blueprintVisualScripting.newProject",
-    "onCommand:blueprintVisualScripting.setUpProject",
-    "onCommand:blueprintVisualScripting.exposeFunctions",
-    "onCommand:blueprintVisualScripting.newNode",
-    "onCommand:blueprintVisualScripting.testNodeLibrary",
-    "onCommand:blueprintVisualScripting.addBlueprintPackage"
+    "onCustomEditor:nodecraft.graphEditor",
+    "onCommand:nodecraft.createGraph",
+    "onCommand:nodecraft.newProject",
+    "onCommand:nodecraft.setUpProject",
+    "onCommand:nodecraft.exposeFunctions",
+    "onCommand:nodecraft.newNode",
+    "onCommand:nodecraft.testNodeLibrary",
+    "onCommand:nodecraft.addBlueprintPackage"
   ],
   "main": "./dist/extension/extension.js",
   "capabilities": {
@@ -40,8 +44,8 @@
       "supported": "limited",
       "description": "Graphs can be viewed, edited and compiled, and the Codebase Map drawn. Run, Simulate, Debug, Run Tests and Test Node Library are disabled, because they run the workspace's code and toolchains; the run settings are read from user settings only.",
       "restrictedConfigurations": [
-        "blueprintVisualScripting.runCommands",
-        "blueprintVisualScripting.runArguments"
+        "nodecraft.runCommands",
+        "nodecraft.runArguments"
       ]
     }
   },
@@ -62,165 +66,165 @@
     ],
     "commands": [
       {
-        "command": "blueprintVisualScripting.createGraph",
+        "command": "nodecraft.createGraph",
         "title": "New Graph",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.newProject",
+        "command": "nodecraft.newProject",
         "title": "New Project...",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.setUpProject",
+        "command": "nodecraft.setUpProject",
         "title": "Set Up in This Project",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.exposeFunctions",
+        "command": "nodecraft.exposeFunctions",
         "title": "Expose Functions as Nodes...",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.newNode",
+        "command": "nodecraft.newNode",
         "title": "New Node",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.testNodeLibrary",
+        "command": "nodecraft.testNodeLibrary",
         "title": "Test Node Library",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.addBlueprintPackage",
+        "command": "nodecraft.addBlueprintPackage",
         "title": "Add Blueprint Package...",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.compile",
+        "command": "nodecraft.compile",
         "title": "Compile Graph",
-        "category": "Blueprint Visual Scripting",
+        "category": "NodeCraft",
         "icon": "$(check)"
       },
       {
-        "command": "blueprintVisualScripting.run",
+        "command": "nodecraft.run",
         "title": "Run Graph",
-        "category": "Blueprint Visual Scripting",
+        "category": "NodeCraft",
         "icon": "$(play)"
       },
       {
-        "command": "blueprintVisualScripting.registerGeneratedFiles",
+        "command": "nodecraft.registerGeneratedFiles",
         "title": "Register Generated Files with the Build",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.runTests",
+        "command": "nodecraft.runTests",
         "title": "Run Tests",
-        "category": "Blueprint Visual Scripting",
+        "category": "NodeCraft",
         "icon": "$(beaker)"
       },
       {
-        "command": "blueprintVisualScripting.simulateTests",
+        "command": "nodecraft.simulateTests",
         "title": "Simulate Tests",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.debug",
+        "command": "nodecraft.debug",
         "title": "Debug Graph",
-        "category": "Blueprint Visual Scripting",
+        "category": "NodeCraft",
         "icon": "$(debug-alt)"
       },
       {
-        "command": "blueprintVisualScripting.findInAll",
+        "command": "nodecraft.findInAll",
         "title": "Find in All Blueprints",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.showCodebaseMap",
+        "command": "nodecraft.showCodebaseMap",
         "title": "Show Codebase Map",
-        "category": "Blueprint Visual Scripting",
+        "category": "NodeCraft",
         "icon": "$(type-hierarchy)"
       },
       {
-        "command": "blueprintVisualScripting.showInCodebaseMap",
+        "command": "nodecraft.showInCodebaseMap",
         "title": "Show in Codebase Map",
-        "category": "Blueprint Visual Scripting",
+        "category": "NodeCraft",
         "icon": "$(type-hierarchy)"
       },
       {
-        "command": "blueprintVisualScripting.showCallFlow",
+        "command": "nodecraft.showCallFlow",
         "title": "Show Call Flow",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.showControlFlow",
+        "command": "nodecraft.showControlFlow",
         "title": "Show Control Flow",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.exposeAsNode",
+        "command": "nodecraft.exposeAsNode",
         "title": "Expose as Node",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.openMapEntity",
+        "command": "nodecraft.openMapEntity",
         "title": "Open",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.graphBack",
+        "command": "nodecraft.graphBack",
         "title": "Back to the Previous Graph",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.graphForward",
+        "command": "nodecraft.graphForward",
         "title": "Forward to the Next Graph",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.refreshAllNodes",
+        "command": "nodecraft.refreshAllNodes",
         "title": "Refresh All Nodes",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       },
       {
-        "command": "blueprintVisualScripting.debug.resume",
+        "command": "nodecraft.debug.resume",
         "title": "Resume",
-        "category": "Blueprint Visual Scripting",
-        "enablement": "blueprintVisualScripting.debugPaused"
+        "category": "NodeCraft",
+        "enablement": "nodecraft.debugPaused"
       },
       {
-        "command": "blueprintVisualScripting.debug.stepOver",
+        "command": "nodecraft.debug.stepOver",
         "title": "Step Over",
-        "category": "Blueprint Visual Scripting",
-        "enablement": "blueprintVisualScripting.debugPaused"
+        "category": "NodeCraft",
+        "enablement": "nodecraft.debugPaused"
       },
       {
-        "command": "blueprintVisualScripting.debug.stepInto",
+        "command": "nodecraft.debug.stepInto",
         "title": "Step Into",
-        "category": "Blueprint Visual Scripting",
-        "enablement": "blueprintVisualScripting.debugPaused"
+        "category": "NodeCraft",
+        "enablement": "nodecraft.debugPaused"
       },
       {
-        "command": "blueprintVisualScripting.debug.stepOut",
+        "command": "nodecraft.debug.stepOut",
         "title": "Step Out",
-        "category": "Blueprint Visual Scripting",
-        "enablement": "blueprintVisualScripting.debugPaused"
+        "category": "NodeCraft",
+        "enablement": "nodecraft.debugPaused"
       },
       {
-        "command": "blueprintVisualScripting.debug.stop",
+        "command": "nodecraft.debug.stop",
         "title": "Stop Debugging",
-        "category": "Blueprint Visual Scripting",
-        "enablement": "blueprintVisualScripting.debugging"
+        "category": "NodeCraft",
+        "enablement": "nodecraft.debugging"
       },
       {
-        "command": "blueprintVisualScripting.comingFromUnreal",
+        "command": "nodecraft.comingFromUnreal",
         "title": "Coming from Unreal",
-        "category": "Blueprint Visual Scripting"
+        "category": "NodeCraft"
       }
     ],
     "customEditors": [
       {
-        "viewType": "blueprintVisualScripting.graphEditor",
+        "viewType": "nodecraft.graphEditor",
         "displayName": "Blueprint Visual Graph",
         "selector": [
           {
@@ -233,7 +237,7 @@
     "views": {
       "explorer": [
         {
-          "id": "blueprintVisualScripting.codebaseStructure",
+          "id": "nodecraft.codebaseStructure",
           "name": "Codebase Map",
           "icon": "$(type-hierarchy)",
           "visibility": "collapsed"
@@ -241,31 +245,31 @@
       ]
     },
     "configuration": {
-      "title": "Blueprint Visual Scripting",
+      "title": "NodeCraft",
       "properties": {
-        "blueprintVisualScripting.autoSaveDelay": {
+        "nodecraft.autoSaveDelay": {
           "type": "number",
           "default": 150,
           "minimum": 0,
           "description": "Milliseconds the graph editor waits after a change before writing it to the .vgraph file's text document. The file shows as changed until it's saved, as a text file does; 0 writes each change at once."
         },
-        "blueprintVisualScripting.compileOnSave": {
+        "nodecraft.compileOnSave": {
           "type": "boolean",
           "default": true,
           "description": "Compile a graph whenever it's saved, keeping the generated file next to it up to date. When off, graphs compile only on Compile (F7), Run, Run Tests and Debug."
         },
-        "blueprintVisualScripting.scanLimit": {
+        "nodecraft.scanLimit": {
           "type": "number",
           "default": 5000,
           "minimum": 1,
           "markdownDescription": "The most files of each kind (source files, graphs, node files, package manifests) the extension scans in a workspace, for your code as nodes, graph libraries, node libraries and the Codebase Map (per folder). A scan that reaches it says so once, rather than silently leaving files out."
         },
-        "blueprintVisualScripting.exposeAllFunctions": {
+        "nodecraft.exposeAllFunctions": {
           "type": "boolean",
           "default": false,
           "markdownDescription": "Show every public function as a node, by each language's rule: exported (TypeScript, JavaScript), not `_`-prefixed (Python, GDScript, Ruby), `public static` (C#, Java, PHP), `pub` (Rust), capitalized (Go), in a header (C++), in the module's table (Lua). Class members still need `@blueprint`. When off, only declarations whose documentation comment contains `@blueprint` become nodes, as Unreal requires `BlueprintCallable`."
         },
-        "blueprintVisualScripting.runCommands": {
+        "nodecraft.runCommands": {
           "type": "object",
           "default": {},
           "additionalProperties": {
@@ -276,7 +280,7 @@
           },
           "markdownDescription": "The command Run, Run Tests and Debug start for each language, by language id, in place of the one found on the PATH. The defaults are `node` (TypeScript and JavaScript), `py -3`, `python` or `python3` (Python), `dotnet` (C#), `g++` or `clang++` (C++), `cargo` (Rust), `javac` (Java), `go` (Go), `lua`, `lua5.4` or `lua54` (Lua), `godot`, `godot4` or the `GODOT` environment variable (GDScript), `ruby` (Ruby) and `php` (PHP). Example: `{ \"python\": [\"C:/Python313/python.exe\"], \"gdscript\": [\"C:/Godot/Godot_v4.7.2-stable_win64_console.exe\"] }`."
         },
-        "blueprintVisualScripting.runArguments": {
+        "nodecraft.runArguments": {
           "type": "array",
           "default": [],
           "items": {
@@ -284,7 +288,7 @@
           },
           "markdownDescription": "Command-line arguments passed to a graph's **Main** event (its Args output) by Run, Simulate and Debug, as they are: nothing in them is substituted or split by a shell."
         },
-        "blueprintVisualScripting.defaultLanguage": {
+        "nodecraft.defaultLanguage": {
           "type": "string",
           "default": "",
           "scope": "resource",
@@ -295,228 +299,228 @@
     "menus": {
       "editor/title": [
         {
-          "command": "blueprintVisualScripting.compile",
-          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor",
+          "command": "nodecraft.compile",
+          "when": "activeCustomEditorId == nodecraft.graphEditor",
           "group": "navigation@1"
         },
         {
-          "command": "blueprintVisualScripting.run",
-          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor",
+          "command": "nodecraft.run",
+          "when": "activeCustomEditorId == nodecraft.graphEditor",
           "group": "navigation@2"
         },
         {
-          "command": "blueprintVisualScripting.runTests",
-          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor",
+          "command": "nodecraft.runTests",
+          "when": "activeCustomEditorId == nodecraft.graphEditor",
           "group": "navigation@3"
         },
         {
-          "command": "blueprintVisualScripting.showInCodebaseMap",
-          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor",
+          "command": "nodecraft.showInCodebaseMap",
+          "when": "activeCustomEditorId == nodecraft.graphEditor",
           "group": "navigation@4"
         }
       ],
       "explorer/context": [
         {
-          "command": "blueprintVisualScripting.setUpProject",
+          "command": "nodecraft.setUpProject",
           "when": "explorerResourceIsFolder",
           "group": "blueprint@0"
         },
         {
-          "command": "blueprintVisualScripting.showCodebaseMap",
+          "command": "nodecraft.showCodebaseMap",
           "when": "explorerResourceIsFolder",
           "group": "blueprint@1"
         },
         {
-          "command": "blueprintVisualScripting.showInCodebaseMap",
+          "command": "nodecraft.showInCodebaseMap",
           "when": "!explorerResourceIsFolder && resourceExtname =~ /^\\.(ts|mts|cts|tsx|js|mjs|cjs|jsx|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php|vgraph)$/",
           "group": "blueprint@4"
         },
         {
-          "command": "blueprintVisualScripting.exposeFunctions",
+          "command": "nodecraft.exposeFunctions",
           "when": "!explorerResourceIsFolder && resourceExtname =~ /^\\.(ts|mts|cts|js|mjs|cjs|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
           "group": "blueprint@0"
         },
         {
-          "command": "blueprintVisualScripting.newNode",
+          "command": "nodecraft.newNode",
           "when": "explorerResourceIsFolder",
           "group": "blueprint@0"
         },
         {
-          "command": "blueprintVisualScripting.testNodeLibrary",
+          "command": "nodecraft.testNodeLibrary",
           "when": "explorerResourceIsFolder || resourceFilename =~ /\\.node\\.json$/",
           "group": "blueprint@0"
         },
         {
-          "command": "blueprintVisualScripting.compile",
+          "command": "nodecraft.compile",
           "when": "resourceExtname == .vgraph",
           "group": "blueprint@1"
         },
         {
-          "command": "blueprintVisualScripting.run",
+          "command": "nodecraft.run",
           "when": "resourceExtname == .vgraph",
           "group": "blueprint@2"
         },
         {
-          "command": "blueprintVisualScripting.runTests",
+          "command": "nodecraft.runTests",
           "when": "resourceExtname == .vgraph",
           "group": "blueprint@3"
         }
       ],
       "editor/context": [
         {
-          "command": "blueprintVisualScripting.exposeFunctions",
+          "command": "nodecraft.exposeFunctions",
           "when": "resourceExtname =~ /^\\.(ts|mts|cts|js|mjs|cjs|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
           "group": "blueprint@0"
         },
         {
-          "command": "blueprintVisualScripting.showInCodebaseMap",
+          "command": "nodecraft.showInCodebaseMap",
           "when": "resourceExtname =~ /^\\.(ts|mts|cts|tsx|js|mjs|cjs|jsx|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
           "group": "blueprint@1"
         },
         {
-          "command": "blueprintVisualScripting.showCallFlow",
+          "command": "nodecraft.showCallFlow",
           "when": "resourceExtname =~ /^\\.(ts|mts|cts|tsx|js|mjs|cjs|jsx|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
           "group": "blueprint@2"
         },
         {
-          "command": "blueprintVisualScripting.showControlFlow",
+          "command": "nodecraft.showControlFlow",
           "when": "resourceExtname =~ /^\\.(ts|mts|cts|tsx|js|mjs|cjs|jsx|py|cs|h|hpp|hh|hxx|c|cpp|cc|cxx|rs|java|go|lua|gd|rb|php)$/",
           "group": "blueprint@3"
         }
       ],
       "commandPalette": [
         {
-          "command": "blueprintVisualScripting.compile",
-          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor || resourceExtname == .vgraph"
+          "command": "nodecraft.compile",
+          "when": "activeCustomEditorId == nodecraft.graphEditor || resourceExtname == .vgraph"
         },
         {
-          "command": "blueprintVisualScripting.run",
-          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor || resourceExtname == .vgraph"
+          "command": "nodecraft.run",
+          "when": "activeCustomEditorId == nodecraft.graphEditor || resourceExtname == .vgraph"
         },
         {
-          "command": "blueprintVisualScripting.findInAll",
-          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
+          "command": "nodecraft.findInAll",
+          "when": "activeCustomEditorId == nodecraft.graphEditor"
         },
         {
-          "command": "blueprintVisualScripting.graphBack",
-          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
+          "command": "nodecraft.graphBack",
+          "when": "activeCustomEditorId == nodecraft.graphEditor"
         },
         {
-          "command": "blueprintVisualScripting.graphForward",
-          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
+          "command": "nodecraft.graphForward",
+          "when": "activeCustomEditorId == nodecraft.graphEditor"
         },
         {
-          "command": "blueprintVisualScripting.refreshAllNodes",
-          "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
+          "command": "nodecraft.refreshAllNodes",
+          "when": "activeCustomEditorId == nodecraft.graphEditor"
         },
         {
-          "command": "blueprintVisualScripting.exposeAsNode",
+          "command": "nodecraft.exposeAsNode",
           "when": "false"
         },
         {
-          "command": "blueprintVisualScripting.openMapEntity",
+          "command": "nodecraft.openMapEntity",
           "when": "false"
         }
       ],
       "view/title": [
         {
-          "command": "blueprintVisualScripting.showCodebaseMap",
-          "when": "view == blueprintVisualScripting.codebaseStructure",
+          "command": "nodecraft.showCodebaseMap",
+          "when": "view == nodecraft.codebaseStructure",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "blueprintVisualScripting.showInCodebaseMap",
-          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem =~ /^codemap-(project|module|file|graph-file|graph|type|function|external)/",
+          "command": "nodecraft.showInCodebaseMap",
+          "when": "view == nodecraft.codebaseStructure && viewItem =~ /^codemap-(project|module|file|graph-file|graph|type|function|external)/",
           "group": "inline"
         },
         {
-          "command": "blueprintVisualScripting.showCodebaseMap",
-          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem == codemap-folder",
+          "command": "nodecraft.showCodebaseMap",
+          "when": "view == nodecraft.codebaseStructure && viewItem == codemap-folder",
           "group": "inline"
         },
         {
-          "command": "blueprintVisualScripting.showInCodebaseMap",
-          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem =~ /^codemap-(project|module|file|graph-file|graph|type|function|external)/",
+          "command": "nodecraft.showInCodebaseMap",
+          "when": "view == nodecraft.codebaseStructure && viewItem =~ /^codemap-(project|module|file|graph-file|graph|type|function|external)/",
           "group": "blueprint@1"
         },
         {
-          "command": "blueprintVisualScripting.showCallFlow",
-          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem =~ /^codemap-(file|graph-file|graph|type|function)/",
+          "command": "nodecraft.showCallFlow",
+          "when": "view == nodecraft.codebaseStructure && viewItem =~ /^codemap-(file|graph-file|graph|type|function)/",
           "group": "blueprint@2"
         },
         {
-          "command": "blueprintVisualScripting.showControlFlow",
-          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem =~ /^codemap-(type|function)/",
+          "command": "nodecraft.showControlFlow",
+          "when": "view == nodecraft.codebaseStructure && viewItem =~ /^codemap-(type|function)/",
           "group": "blueprint@3"
         },
         {
-          "command": "blueprintVisualScripting.exposeAsNode",
-          "when": "view == blueprintVisualScripting.codebaseStructure && viewItem =~ /-exposable$/",
+          "command": "nodecraft.exposeAsNode",
+          "when": "view == nodecraft.codebaseStructure && viewItem =~ /-exposable$/",
           "group": "blueprint@4"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "blueprintVisualScripting.graphBack",
+        "command": "nodecraft.graphBack",
         "key": "alt+left",
         "mac": "ctrl+-",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.graphCanGoBack"
+        "when": "activeCustomEditorId == nodecraft.graphEditor && nodecraft.graphCanGoBack"
       },
       {
-        "command": "blueprintVisualScripting.graphForward",
+        "command": "nodecraft.graphForward",
         "key": "alt+right",
         "mac": "ctrl+shift+-",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.graphCanGoForward"
+        "when": "activeCustomEditorId == nodecraft.graphEditor && nodecraft.graphCanGoForward"
       },
       {
-        "command": "blueprintVisualScripting.findInAll",
+        "command": "nodecraft.findInAll",
         "key": "ctrl+shift+f",
         "mac": "cmd+shift+f",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor"
+        "when": "activeCustomEditorId == nodecraft.graphEditor"
       },
       {
-        "command": "blueprintVisualScripting.debug",
+        "command": "nodecraft.debug",
         "key": "f5",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && !inDebugMode && !blueprintVisualScripting.debugging"
+        "when": "activeCustomEditorId == nodecraft.graphEditor && !inDebugMode && !nodecraft.debugging"
       },
       {
-        "command": "blueprintVisualScripting.debug.resume",
+        "command": "nodecraft.debug.resume",
         "key": "f5",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugPaused"
+        "when": "activeCustomEditorId == nodecraft.graphEditor && nodecraft.debugPaused"
       },
       {
-        "command": "blueprintVisualScripting.debug.stepOver",
+        "command": "nodecraft.debug.stepOver",
         "key": "f10",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugPaused"
+        "when": "activeCustomEditorId == nodecraft.graphEditor && nodecraft.debugPaused"
       },
       {
-        "command": "blueprintVisualScripting.debug.stepInto",
+        "command": "nodecraft.debug.stepInto",
         "key": "f11",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugPaused"
+        "when": "activeCustomEditorId == nodecraft.graphEditor && nodecraft.debugPaused"
       },
       {
-        "command": "blueprintVisualScripting.debug.stepOut",
+        "command": "nodecraft.debug.stepOut",
         "key": "shift+f11",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugPaused"
+        "when": "activeCustomEditorId == nodecraft.graphEditor && nodecraft.debugPaused"
       },
       {
-        "command": "blueprintVisualScripting.debug.stepOut",
+        "command": "nodecraft.debug.stepOut",
         "key": "alt+shift+f11",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugPaused"
+        "when": "activeCustomEditorId == nodecraft.graphEditor && nodecraft.debugPaused"
       },
       {
-        "command": "blueprintVisualScripting.debug.stop",
+        "command": "nodecraft.debug.stop",
         "key": "shift+f5",
-        "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugging"
+        "when": "activeCustomEditorId == nodecraft.graphEditor && nodecraft.debugging"
       }
     ],
     "walkthroughs": [
       {
         "id": "gettingStarted",
-        "title": "Get Started with Blueprint Visual Scripting",
+        "title": "Get Started with NodeCraft",
         "description": "Make a graph, run it in your language, debug it node by node, and use your own code as nodes.",
         "featuredFor": [
           "**/*.vgraph"
@@ -525,13 +529,13 @@
           {
             "id": "newProject",
             "title": "Make a project",
-            "description": "Start a project in any of twelve languages, from the Tour: a graph whose comments say what to try.\n[New Project](command:blueprintVisualScripting.newProject)\nHave code already? [Set Up in This Project](command:blueprintVisualScripting.setUpProject) says what graphs need there.",
+            "description": "Start a project in any of twelve languages, from the Tour: a graph whose comments say what to try.\n[New Project](command:nodecraft.newProject)\nHave code already? [Set Up in This Project](command:nodecraft.setUpProject) says what graphs need there.",
             "media": {
               "markdown": "walkthrough/new-project.md"
             },
             "completionEvents": [
-              "onCommand:blueprintVisualScripting.newProject",
-              "onCommand:blueprintVisualScripting.createGraph"
+              "onCommand:nodecraft.newProject",
+              "onCommand:nodecraft.createGraph"
             ]
           },
           {
@@ -542,7 +546,7 @@
               "markdown": "walkthrough/compile-run.md"
             },
             "completionEvents": [
-              "onContext:blueprintVisualScripting.hasRun"
+              "onContext:nodecraft.hasRun"
             ]
           },
           {
@@ -553,7 +557,7 @@
               "markdown": "walkthrough/simulate.md"
             },
             "completionEvents": [
-              "onContext:blueprintVisualScripting.debugPaused"
+              "onContext:nodecraft.debugPaused"
             ]
           },
           {
@@ -564,40 +568,40 @@
               "markdown": "walkthrough/debug.md"
             },
             "completionEvents": [
-              "onContext:blueprintVisualScripting.hasDebugged"
+              "onContext:nodecraft.hasDebugged"
             ]
           },
           {
             "id": "codeAsNodes",
             "title": "Your code as nodes",
-            "description": "Mark a function `@blueprint` and it's a node. On a source file, Expose Functions as Nodes marks the ones you pick.\n[Expose Functions as Nodes](command:blueprintVisualScripting.exposeFunctions)",
+            "description": "Mark a function `@blueprint` and it's a node. On a source file, Expose Functions as Nodes marks the ones you pick.\n[Expose Functions as Nodes](command:nodecraft.exposeFunctions)",
             "media": {
               "markdown": "walkthrough/code-as-nodes.md"
             },
             "completionEvents": [
-              "onCommand:blueprintVisualScripting.exposeFunctions"
+              "onCommand:nodecraft.exposeFunctions"
             ]
           },
           {
             "id": "codebaseMap",
             "title": "See the whole codebase",
-            "description": "The Codebase Map draws your code and graphs top to bottom: architecture, structure, call flow and control flow.\n[Show Codebase Map](command:blueprintVisualScripting.showCodebaseMap)",
+            "description": "The Codebase Map draws your code and graphs top to bottom: architecture, structure, call flow and control flow.\n[Show Codebase Map](command:nodecraft.showCodebaseMap)",
             "media": {
               "markdown": "walkthrough/codebase-map.md"
             },
             "completionEvents": [
-              "onCommand:blueprintVisualScripting.showCodebaseMap"
+              "onCommand:nodecraft.showCodebaseMap"
             ]
           },
           {
             "id": "comingFromUnreal",
             "title": "Coming from Unreal",
-            "description": "Unreal's Blueprint concepts and what they are here: assets, events, nodes, reflection, and what doesn't apply.\n[Open the Guide](command:blueprintVisualScripting.comingFromUnreal)",
+            "description": "Unreal's Blueprint concepts and what they are here: assets, events, nodes, reflection, and what doesn't apply.\n[Open the Guide](command:nodecraft.comingFromUnreal)",
             "media": {
               "markdown": "walkthrough/unreal.md"
             },
             "completionEvents": [
-              "onCommand:blueprintVisualScripting.comingFromUnreal"
+              "onCommand:nodecraft.comingFromUnreal"
             ]
           }
         ]

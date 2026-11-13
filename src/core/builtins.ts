@@ -51,7 +51,7 @@ export function builtinNodeDefinitions(): NodeDefinition[] {
     {
       type: 'core:console.print', version: 1, displayName: 'Print', category: 'Debug', keywords: ['print string', 'log', 'output', 'debug'],
       description: 'Write a value to the VS Code Output panel.', color: '#bb86fc',
-      inputs: [execInput(), dataInput('value', 'Value', 'any', 'Hello from Visual Scripting')],
+      inputs: [execInput(), dataInput('value', 'Value', 'any', 'Hello from NodeCraft')],
       outputs: [execOutput()], implementation: { kind: 'native', operation: 'print' }
     },
     {

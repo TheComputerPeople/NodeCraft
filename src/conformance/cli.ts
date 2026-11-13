@@ -1,9 +1,9 @@
-// blueprint-conformance: runs the conformance suite for a language pack and prints the report.
+// nodecraft-conformance: runs the conformance suite for a language pack and prints the report.
 //
-//   blueprint-conformance <pack> [--filter <text>] [--fixtures <dir>] [--concurrency <n>]
+//   nodecraft-conformance <pack> [--filter <text>] [--fixtures <dir>] [--concurrency <n>]
 //                                [--timeout <ms>] [--commonjs]
-//   blueprint-conformance <pack> --nodes <file or folder> [--timeout <ms>] [--commonjs]
-//   blueprint-conformance <pack> --audit [--filter <text>] [--timeout <ms>] [--commonjs]
+//   nodecraft-conformance <pack> --nodes <file or folder> [--timeout <ms>] [--commonjs]
+//   nodecraft-conformance <pack> --audit [--filter <text>] [--timeout <ms>] [--commonjs]
 //
 // With --nodes, it tests a node library instead: each node's examples run in the pack's language
 // (docs/node-authoring.md, gap 8), and nodes without examples only have to compile. With --audit,
@@ -45,7 +45,7 @@ export async function main(argv: string[]): Promise<number> {
   const valued = ['--filter', '--fixtures', '--concurrency', '--timeout', '--nodes'];
   const spec = argv.find((arg, i) => !arg.startsWith('--') && !valued.includes(argv[i - 1]));
   if (!spec) {
-    console.error('Usage: blueprint-conformance <pack module, definition .json or built-in id> [--filter <text>] [--fixtures <dir>] [--concurrency <n>] [--timeout <ms>] [--commonjs] [--nodes <node file or folder>] [--audit]');
+    console.error('Usage: nodecraft-conformance <pack module, definition .json or built-in id> [--filter <text>] [--fixtures <dir>] [--concurrency <n>] [--timeout <ms>] [--commonjs] [--nodes <node file or folder>] [--audit]');
     return 2;
   }
   const pack = loadPack(spec);

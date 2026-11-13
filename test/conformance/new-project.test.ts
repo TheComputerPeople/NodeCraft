@@ -3,7 +3,7 @@
 // a warning, marks its generated files in .gitattributes, passes its checkers and runs from its own
 // entry point, printing "Hello from Blueprint". The Tour (docs/release.md, step 4) does the same,
 // printing its lines, and its Test Case passes as Run Tests runs it. A tool that isn't installed is
-// skipped, by name, as in the corpus; with BLUEPRINT_CORPUS_REQUIRE_TOOLS set it fails.
+// skipped, by name, as in the corpus; with NODECRAFT_CORPUS_REQUIRE_TOOLS set it fails.
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -23,7 +23,7 @@ import { CorpusStep, PYTHON, corpusWorkDir, runSteps } from './corpus';
 
 const workDir = corpusWorkDir();
 after(() => fs.rmSync(workDir, { recursive: true, force: true }));
-const requireTools = !!process.env.BLUEPRINT_CORPUS_REQUIRE_TOOLS;
+const requireTools = !!process.env.NODECRAFT_CORPUS_REQUIRE_TOOLS;
 
 const NAME = 'Hello Game';
 const names = projectNames(NAME);
@@ -136,7 +136,7 @@ describe('New Project', () => {
       const failed = results.filter((s) => s.status === 'failed');
       assert.deepEqual(failed.map((s) => s.step), [], failed.map((s) => s.message).join('\n\n'));
       const skipped = results.filter((s) => s.status === 'skipped');
-      if (requireTools) assert.deepEqual(skipped.map((s) => s.message), [], 'BLUEPRINT_CORPUS_REQUIRE_TOOLS: every tool is installed');
+      if (requireTools) assert.deepEqual(skipped.map((s) => s.message), [], 'NODECRAFT_CORPUS_REQUIRE_TOOLS: every tool is installed');
       if (skipped.length === results.length) t.skip(skipped.map((s) => s.message).join('; '));
       else if (skipped.length) t.todo(`partly checked: ${skipped.map((s) => s.message).join('; ')}`);
     });
@@ -154,7 +154,7 @@ describe('New Project', () => {
       const failed = results.filter((s) => s.status === 'failed');
       assert.deepEqual(failed.map((s) => s.step), [], failed.map((s) => s.message).join('\n\n'));
       const skipped = results.filter((s) => s.status === 'skipped');
-      if (requireTools) assert.deepEqual(skipped.map((s) => s.message), [], 'BLUEPRINT_CORPUS_REQUIRE_TOOLS: every tool is installed');
+      if (requireTools) assert.deepEqual(skipped.map((s) => s.message), [], 'NODECRAFT_CORPUS_REQUIRE_TOOLS: every tool is installed');
       if (skipped.length === results.length) return t.skip(skipped.map((s) => s.message).join('; '));
       let outcome;
       try {

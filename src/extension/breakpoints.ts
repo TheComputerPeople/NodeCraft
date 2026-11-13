@@ -48,8 +48,8 @@ export class DebugMarks implements vscode.Disposable {
   readonly watches: PerFileStore<PinRef>;
 
   constructor(state: vscode.Memento) {
-    this.breakpoints = new PerFileStore(state, 'blueprintVisualScripting.breakpoints');
-    this.watches = new PerFileStore(state, 'blueprintVisualScripting.watches');
+    this.breakpoints = new PerFileStore(state, 'nodecraft.breakpoints');
+    this.watches = new PerFileStore(state, 'nodecraft.watches');
   }
 
   async move(from: vscode.Uri, to: vscode.Uri): Promise<void> {

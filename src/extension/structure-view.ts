@@ -9,8 +9,8 @@ import { CodeIndex, Entity } from '../core/codemap/code-index';
 import { CodeMapService } from './code-map-service';
 import { canExpose, entityUri, summaryOf } from './map-bridges';
 
-export const STRUCTURE_VIEW = 'blueprintVisualScripting.codebaseStructure';
-export const OPEN_ENTITY = 'blueprintVisualScripting.openMapEntity';
+export const STRUCTURE_VIEW = 'nodecraft.codebaseStructure';
+export const OPEN_ENTITY = 'nodecraft.openMapEntity';
 
 // An item: an entity of a folder's index; the folder itself (when the workspace has several); or
 // the folder's external packages.

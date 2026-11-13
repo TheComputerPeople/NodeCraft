@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/blueprint-node.schema.json",
+  "$id": "https://raw.githubusercontent.com/TheComputerPeople/NodeCraft/main/schemas/node.schema.json",
   "title": "Visual Node Definition",
   "type": "object",
   "required": [

@@ -1,7 +1,7 @@
 {
-  "name": "blueprint-c-language-pack",
-  "displayName": "C for Blueprint Visual Scripting",
-  "description": "Compiles Blueprint Visual Scripting graphs to C: a declarative language pack, registered through the extension's public API.",
+  "name": "nodecraft-c-language-pack",
+  "displayName": "C for NodeCraft",
+  "description": "Compiles NodeCraft graphs to C: a declarative language pack, registered through the extension's public API.",
   "version": "1.0.0",
   "publisher": "local",
   "license": "MIT",
@@ -10,13 +10,13 @@
     "vscode": ">=1.140.0"
   },
   "categories": ["Programming Languages"],
-  "extensionDependencies": ["local.blueprint-visual-scripting"],
+  "extensionDependencies": ["local.nodecraft"],
   "activationEvents": ["onStartupFinished"],
   "main": "./extension.js",
   "scripts": {
-    "test": "blueprint-conformance c.vgraph-language.json"
+    "test": "nodecraft-conformance c.vgraph-language.json"
   },
   "devDependencies": {
-    "@blueprint-visual-scripting/pack-sdk": "file:../../packages/pack-sdk"
+    "@nodecraft/pack-sdk": "file:../../packages/pack-sdk"
   }
 }

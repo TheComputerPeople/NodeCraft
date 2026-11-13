@@ -120,11 +120,11 @@ export class CodeDebugService implements vscode.Disposable {
         `${silent.length === 1 ? 'A breakpoint' : `${silent.length} breakpoints`} won't stop when debugging the generated code (${names}): compiling left no code for ${silent.length === 1 ? 'its node' : 'their nodes'}, because ${silent.length === 1 ? "it's" : "they're"} on a branch that never runs or nothing reads ${silent.length === 1 ? 'its value' : 'their values'}. Simulate still stops there.`
       );
     }
-    const command = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {})[pack!.id];
+    const command = vscode.workspace.getConfiguration('nodecraft').get<Record<string, string[]>>('runCommands', {})[pack!.id];
     const cwd = path.dirname(outcome.outputPath);
     const options = {
       cwd, command, importRoots: outcome.importRoots, sources: outcome.sources, crate: outcome.crate, goModule: outcome.goModule, projectDir: outcome.projectDir, mainMethod: outcome.mainMethod,
-      args: vscode.workspace.getConfiguration('blueprintVisualScripting', uri).get<string[]>('runArguments', [])
+      args: vscode.workspace.getConfiguration('nodecraft', uri).get<string[]>('runArguments', [])
     };
     // C# builds Run's project first.
     const runner = pack!.generator!.runner;
@@ -161,7 +161,7 @@ export class CodeDebugService implements vscode.Disposable {
     this.configurations.delete(id);
     if (!started) this.end(debug);
     // The walkthrough's Debug step (package.json, docs/release.md step 5).
-    else void vscode.commands.executeCommand('setContext', 'blueprintVisualScripting.hasDebugged', true);
+    else void vscode.commands.executeCommand('setContext', 'nodecraft.hasDebugged', true);
   }
 
   // The session the editors show, if a generated-code session is running.

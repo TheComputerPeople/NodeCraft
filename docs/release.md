@@ -165,7 +165,7 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
   - every node the Nodes table names is a built-in node, or one made for each class, struct or enum
     (Construct, Cast To, Switch on);
   - the events and other nodes the guide names are nodes;
-  - every **Blueprint Visual Scripting:** command it names exists;
+  - every **NodeCraft:** command it names exists;
   - the Assets table has each kind New Graph offers;
   - every `@` tag it names is read by the scanners.
 
@@ -206,7 +206,7 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
 ## Built (step 5)
 
 - **The walkthrough** (package.json `walkthroughs`, media in walkthrough/): **Get Started with
-  Blueprint Visual Scripting**, featured for workspaces with `.vgraph` files. It has seven steps, each
+  NodeCraft**, featured for workspaces with `.vgraph` files. It has seven steps, each
   with a Markdown page beside it:
 
   | Step | Its button | Done when |
@@ -219,10 +219,10 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
   | See the whole codebase | Show Codebase Map | it runs |
   | Coming from Unreal | Open the Guide | it runs |
 
-- **Steps done by doing them:** Run sets `blueprintVisualScripting.hasRun`, a started Debug session
+- **Steps done by doing them:** Run sets `nodecraft.hasRun`, a started Debug session
   sets `hasDebugged`, and pausing at a breakpoint sets the existing `debugPaused`. The editor's own
   buttons don't run commands, so these context keys mark the steps done.
-- **Blueprint Visual Scripting: Coming from Unreal** opens docs/coming-from-unreal.md in the Markdown
+- **NodeCraft: Coming from Unreal** opens docs/coming-from-unreal.md in the Markdown
   preview.
 - **Tests** (integration):
   - every `command:` link in a step and every `onCommand` completion event is a registered command;
@@ -394,3 +394,32 @@ Left for later:
 - the Codebase Map's own forced-colors pass, beyond its existing keyboard and ARIA support;
 - a Favorites list in the palette;
 - Instance Editable and Expose on Spawn, which Coming from Unreal lists as not here yet.
+
+## The name: NodeCraft
+
+Renamed on 2026-11-13, before publishing, for GitHub and the Marketplace. "Blueprint Visual Scripting"
+is Epic's own name for Unreal's feature.
+
+- **Changed everywhere:**
+  - the product's name in every message, panel, command category, generated file header, build-file
+    marker, doc and sample;
+  - the extension's name (`nodecraft`, so the id is `<publisher>.nodecraft`);
+  - the prefix of every command, setting, view, context key and the walkthrough (`nodecraft.*`), so
+    the settings are now `nodecraft.compileOnSave` and the like;
+  - the pack SDK (`@nodecraft/pack-sdk`, `nodecraft-conformance`) and the C pack example
+    (`nodecraft-c-language-pack`);
+  - the scratch and test folders, and the corpus tools' cache (`nodecraft-corpus`);
+  - the test settings (`NODECRAFT_TEST_BROWSER`, `NODECRAFT_IT_FILTER`, `NODECRAFT_CORPUS_TOOLS`,
+    `NODECRAFT_CORPUS_REQUIRE_TOOLS`).
+- **The repository** is `github.com/<user>/NodeCraft`: `repository`, `homepage` and `bugs` in
+  package.json, and the schemas' `$id`s. That's what lets `vsce` rewrite the README's links.
+- **Kept:** Unreal's own terms for what the editor copies. These are Blueprint Class, Blueprint
+  Interface, Blueprint Function and Macro Library, My Blueprint, Blueprint packages, and the
+  `@blueprint` marker in code.
+- **What was written under the former name is still the extension's own** (former-name.test.ts):
+  - a generated file whose header says "Blueprint Visual Scripting" is recognized, so compiles write
+    over it and the map shows its graph;
+  - a build block whose marker names it is found and given the new marker, not added a second time;
+  - Lua's support file under the old name is the extension's.
+- The README opens with the project's description, and says NodeCraft isn't affiliated with Epic
+  Games.

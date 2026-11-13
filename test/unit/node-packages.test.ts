@@ -68,7 +68,7 @@ describe('resolving packages', () => {
     assert.deepEqual(problems.map((p) => p.message), [
       'combat needs math ^2.0.0, but version 1.5.0 is installed.',
       'combat needs sound ^1.0.0, which isn\'t installed.',
-      'combat is for Blueprint Visual Scripting API ^2, but this extension\'s API version is 1.'
+      'combat is for NodeCraft API ^2, but this extension\'s API version is 1.'
     ]);
     assert.equal(problems[0].origin, 'combat.vgraph-package.json');
   });

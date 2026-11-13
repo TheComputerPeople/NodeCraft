@@ -1,6 +1,6 @@
 // Testing node libraries (docs/node-authoring.md, gap 8): a node's examples run in Simulate and in
 // a language pack's generated code; nodes without examples only have to compile; the SDK's
-// blueprint-conformance --nodes does the same for any pack.
+// nodecraft-conformance --nodes does the same for any pack.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -54,7 +54,7 @@ describe('node examples', () => {
     });
   }
 
-  test('blueprint-conformance --nodes tests a node library and exits with 1 when an example fails', async () => {
+  test('nodecraft-conformance --nodes tests a node library and exits with 1 when an example fails', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vgraph-nodes-cli-'));
     const log = console.log;
     const printed: string[] = [];

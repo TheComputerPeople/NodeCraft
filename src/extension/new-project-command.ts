@@ -1,4 +1,4 @@
-// Blueprint: New Project… (docs/project-integration.md, part 4): asks for a language, the first graph
+// NodeCraft: New Project… (docs/project-integration.md, part 4): asks for a language, the first graph
 // (Hello, or the Tour: docs/release.md, step 4) and a folder (an empty one, or a new one in it),
 // writes the project (new-project.ts), opens its graph, compiles it and offers Run. Tests give the
 // answers instead of being asked.
@@ -67,11 +67,11 @@ export async function newProject(given?: NewProjectAnswers, known?: (graphs: vsc
   }
   await known?.(created.project.graphs.map((file) => vscode.Uri.file(path.join(folder, file))));
   await vscode.commands.executeCommand('vscode.openWith', graph, GRAPH_VIEW_TYPE);
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  await vscode.commands.executeCommand('nodecraft.compile', graph);
   if (!given) {
     const prints = start === 'tour' ? 'is the Tour: its comments say what to try' : 'prints "Hello from Blueprint"';
     const choice = await vscode.window.showInformationMessage(`Created ${name.trim()}: ${path.basename(created.graph)} ${prints}.`, 'Run');
-    if (choice === 'Run') await vscode.commands.executeCommand('blueprintVisualScripting.run', graph);
+    if (choice === 'Run') await vscode.commands.executeCommand('nodecraft.run', graph);
   }
   return graph;
 }

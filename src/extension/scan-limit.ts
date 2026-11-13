@@ -7,7 +7,7 @@ const DEFAULT_LIMIT = 5000;
 const warned = new Set<string>();
 
 export function scanLimit(): number {
-  const limit = vscode.workspace.getConfiguration('blueprintVisualScripting').get<number>('scanLimit', DEFAULT_LIMIT);
+  const limit = vscode.workspace.getConfiguration('nodecraft').get<number>('scanLimit', DEFAULT_LIMIT);
   return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : DEFAULT_LIMIT;
 }
 
@@ -19,8 +19,8 @@ export async function findFilesLimited(include: vscode.GlobPattern, exclude: str
   if (!warned.has(what)) {
     warned.add(what);
     const open = 'Open Settings';
-    void vscode.window.showWarningMessage(`Blueprint scanned the first ${limit} ${what} of this workspace and left out the rest. Raise blueprintVisualScripting.scanLimit to scan them all.`, open)
-      .then((choice) => choice === open && vscode.commands.executeCommand('workbench.action.openSettings', 'blueprintVisualScripting.scanLimit'));
+    void vscode.window.showWarningMessage(`Blueprint scanned the first ${limit} ${what} of this workspace and left out the rest. Raise nodecraft.scanLimit to scan them all.`, open)
+      .then((choice) => choice === open && vscode.commands.executeCommand('workbench.action.openSettings', 'nodecraft.scanLimit'));
   }
   return found.slice(0, limit);
 }

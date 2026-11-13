@@ -103,7 +103,7 @@ Unreal's standard macros, as built-in nodes with Unreal's pins:
 
 ## Entry points and framework packs
 
-- **Main** is the program's entry point: an event with the command-line arguments (Args, an array of strings). Run calls it after Start with the `blueprintVisualScripting.runArguments` setting; Simulate passes the same arguments. Generated code gives it a method (`main`, `main`, `Main`); a Python module's `__main__` block calls it with `sys.argv[1:]`, and other programs call it themselves. A class has one Main.
+- **Main** is the program's entry point: an event with the command-line arguments (Args, an array of strings). Run calls it after Start with the `nodecraft.runArguments` setting; Simulate passes the same arguments. Generated code gives it a method (`main`, `main`, `Main`); a Python module's `__main__` block calls it with `sys.argv[1:]`, and other programs call it themselves. A class has one Main.
 - **Framework packs** add events a framework runs, as node libraries (`*.node.json`): an event definition has the implementation `{ "kind": "event", "method": "<Name>" }`, its data outputs are the event's parameters, and generated code gives each class that uses it a public method named after `method` in the language's style (`onCommand`, `on_command`, `OnCommand`), which the framework's host code calls. Like Start and Main, these events belong in event graphs. Simulate can't run a framework's events (nothing calls them). The example pack in sample/visual-nodes/CLI has an On Command event.
 - **Test Case** events came with Phase 5: see [debugging.md](debugging.md), "Test Case".
 

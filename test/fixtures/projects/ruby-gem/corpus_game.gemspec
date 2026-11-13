@@ -3,7 +3,7 @@
 Gem::Specification.new do |spec|
   spec.name = 'corpus_game'
   spec.version = '0.1.0'
-  spec.authors = ['Blueprint Visual Scripting']
+  spec.authors = ['NodeCraft']
   spec.summary = 'The corpus gem: graphs that call its code and that its code calls.'
   spec.license = 'MIT'
   spec.required_ruby_version = '>= 3.3'

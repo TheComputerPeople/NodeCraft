@@ -46,7 +46,7 @@ function keepExtensionsAsInstalled(settingsFile: string): void {
 
 // Tests run in a scratch copy of the sample workspace so they can change files freely.
 function createWorkspace(): string {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'blueprint-vscode-it-'));
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'nodecraft-it-'));
   fs.cpSync(path.join(repoRoot, 'sample'), workspace, { recursive: true });
   fs.copyFileSync(path.join(repoRoot, 'test/fixtures/demo-v1.vgraph'), path.join(workspace, 'legacy.vgraph'));
   fs.writeFileSync(path.join(workspace, 'broken.vgraph'), '{ "schemaVersion": 2, "graphs": ');
@@ -74,8 +74,8 @@ async function main(): Promise<void> {
       // The C pack loads too: a separate extension using only the public API (docs/language-breadth.md, "Exit check").
       extensionDevelopmentPath: [repoRoot, path.join(repoRoot, 'examples/c-language-pack')],
       extensionTestsPath: path.join(__dirname, 'suite'),
-      // BLUEPRINT_IT_FILTER runs only the tests whose names contain it.
-      extensionTestsEnv: { BLUEPRINT_IT_FILTER: process.env.BLUEPRINT_IT_FILTER ?? '' },
+      // NODECRAFT_IT_FILTER runs only the tests whose names contain it.
+      extensionTestsEnv: { NODECRAFT_IT_FILTER: process.env.NODECRAFT_IT_FILTER ?? '' },
       // With --with-debuggers, the installed extensions load (Python's and C#'s debuggers), so their
       // debugging tests run instead of being skipped.
       launchArgs: [workspace, ...(withDebuggers ? [`--extensions-dir=${path.join(os.homedir(), '.vscode', 'extensions')}`] : ['--disable-extensions']), '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes']
@@ -104,8 +104,8 @@ async function main(): Promise<void> {
   // Restricted Mode (docs/codebase-map.md, "Exit check"): the sample workspace again, with workspace
   // trust on and its prompt off, so it opens untrusted. Its own user data, so no trust is remembered.
   const restricted = createWorkspace();
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'blueprint-vscode-untrusted-'));
-  const extensionsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'blueprint-vscode-untrusted-extensions-'));
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nodecraft-untrusted-'));
+  const extensionsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodecraft-untrusted-extensions-'));
   fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
   fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({ 'security.workspace.trust.enabled': true, 'security.workspace.trust.startupPrompt': 'never', 'security.workspace.trust.banner': 'never' }, null, 4));
   try {
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
 // A TypeScript web app and a Python API, each with a function marked @blueprint and a graph that
 // greets with it: Start prints "Hello, " + title("ada") + "!".
 function createMultiRootWorkspace(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'blueprint-vscode-multi-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nodecraft-multi-'));
   const greet = (language: string, title: string) => JSON.stringify({
     schemaVersion: 3, name: 'Greet', kind: 'class', language, variables: [],
     graphs: [{

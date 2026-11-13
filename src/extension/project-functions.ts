@@ -69,7 +69,7 @@ export class ProjectFunctions implements vscode.Disposable, vscode.CodeActionPro
       }),
       vscode.workspace.onDidChangeWorkspaceFolders(() => void this.rescan()),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('blueprintVisualScripting.exposeAllFunctions')) void this.rescan();
+        if (e.affectsConfiguration('nodecraft.exposeAllFunctions')) void this.rescan();
       })
     );
     void this.rescan().then(() => this.readyResolve());
@@ -158,7 +158,7 @@ export class ProjectFunctions implements vscode.Disposable, vscode.CodeActionPro
     } catch {
       return undefined;
     }
-    const exposeAll = vscode.workspace.getConfiguration('blueprintVisualScripting', uri).get<boolean>('exposeAllFunctions', false);
+    const exposeAll = vscode.workspace.getConfiguration('nodecraft', uri).get<boolean>('exposeAllFunctions', false);
     // Most files mark nothing; skip parsing them.
     if (!exposeAll && !text.includes('@blueprint')) return undefined;
     const relative = path.relative(folder.uri.fsPath, uri.fsPath).split(path.sep).join('/');

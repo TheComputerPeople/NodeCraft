@@ -66,7 +66,7 @@ The generated pair always goes next to the graph. Only registration differs.
 2. **Graph inside the crate's source tree:** the file goes next to the graph, and its parent module (`mod.rs`, `<folder>.rs` or the crate root) needs `pub mod inventory_vgraph;`. The extension keeps those declarations in a fenced block in the parent module:
 
    ```rust
-   // vgraph:begin (managed by Blueprint Visual Scripting)
+   // vgraph:begin (managed by NodeCraft)
    pub mod inventory_vgraph;
    // vgraph:end
    ```

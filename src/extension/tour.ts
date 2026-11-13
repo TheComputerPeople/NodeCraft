@@ -4,7 +4,7 @@
 // is the same graph in every language, with a Summary structure beside it. Free of the vscode API.
 import { GraphComment, GraphConnection, GraphDocument, GraphNode } from '../core/model';
 
-export const TOUR_WELCOME = 'Welcome to the Tour of Blueprint Visual Scripting.';
+export const TOUR_WELCOME = 'Welcome to the Tour of NodeCraft.';
 
 // What the Tour's Start prints, in order.
 export const TOUR_OUTPUT = [

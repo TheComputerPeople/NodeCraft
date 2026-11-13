@@ -16,7 +16,7 @@ import { renderMapHtml } from './map-html';
 import { MapLayout } from './map-layout';
 import { createNonce } from './webview-html';
 
-const VIEW_TYPE = 'blueprintVisualScripting.codebaseMap';
+const VIEW_TYPE = 'nodecraft.codebaseMap';
 // Back goes this many places back.
 const MAX_HISTORY = 50;
 

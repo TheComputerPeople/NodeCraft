@@ -50,7 +50,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   let outputChannel: vscode.OutputChannel | undefined;
   const output = (): vscode.OutputChannel => {
     if (!outputChannel) {
-      outputChannel = vscode.window.createOutputChannel('Blueprint Visual Scripting');
+      outputChannel = vscode.window.createOutputChannel('NodeCraft');
       context.subscriptions.push(outputChannel);
     }
     return outputChannel;
@@ -80,12 +80,12 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     if (entity) await openEntity(node.folder, entity, bridges, vscode.ViewColumn.Active);
   }));
   // Expose as Node, on a function in the tree (the map's box menu has its own).
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.exposeAsNode', async (node?: StructureNode, given?: ExposeAnswers) => {
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.exposeAsNode', async (node?: StructureNode, given?: ExposeAnswers) => {
     const entity = isStructureNode(node) ? await structureTree.entityOf(node) : undefined;
     return entity ? exposeEntity(node!.folder, entity, bridges, given) : undefined;
   }));
   // Show Codebase Map: the folder's map (of the folder chosen in the Explorer or the tree, or the active file's).
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showCodebaseMap', async (uri?: vscode.Uri | StructureNode) => {
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.showCodebaseMap', async (uri?: vscode.Uri | StructureNode) => {
     const folderUri = await commandFolder(isStructureNode(uri) ? uri.folder.uri : uri);
     const folder = folderUri && vscode.workspace.getWorkspaceFolder(folderUri);
     if (!folder) {
@@ -126,20 +126,20 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     return { folder, id };
   };
   // Show in Codebase Map: the file, graph, folder or (in a code editor) declaration at the cursor.
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showInCodebaseMap', async (uri?: vscode.Uri | StructureNode) => {
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.showInCodebaseMap', async (uri?: vscode.Uri | StructureNode) => {
     const target = await mapTarget(uri, true);
     if (!target) return undefined;
     void codeMapPanels.show(target.folder);
     return codeMapPanels.revealIn(target.folder, target.id);
   }));
   // Show Call Flow and Show Control Flow: of the function at the cursor (a file's: its top level).
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showCallFlow', async (uri?: vscode.Uri | StructureNode) => {
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.showCallFlow', async (uri?: vscode.Uri | StructureNode) => {
     const target = await mapTarget(uri, true);
     if (!target) return undefined;
     void codeMapPanels.show(target.folder);
     return codeMapPanels.callsIn(target.folder, target.id);
   }));
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.showControlFlow', async (uri?: vscode.Uri | StructureNode) => {
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.showControlFlow', async (uri?: vscode.Uri | StructureNode) => {
     const target = await mapTarget(uri, true);
     if (!target) return undefined;
     void codeMapPanels.show(target.folder);
@@ -184,24 +184,24 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   // Keep generated code in step with the graph, as Unreal compiles a Blueprint before saving it.
   context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
     if (!isGraph(document.uri)) return;
-    if (vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<boolean>('compileOnSave', true)) {
+    if (vscode.workspace.getConfiguration('nodecraft', document.uri).get<boolean>('compileOnSave', true)) {
       void compileAndReport(document);
     }
   }));
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('blueprintVisualScripting.compile', async (uri?: vscode.Uri) => {
+    vscode.commands.registerCommand('nodecraft.compile', async (uri?: vscode.Uri) => {
       const document = await graphDocumentFor(uri);
       if (document) await compileAndReport(document);
     }),
     // Bound to Ctrl+Shift+F in graph editors, so it opens Find in All Blueprints rather than
     // VS Code's workspace search (as in Unreal).
     // Unreal's File > Refresh All Nodes: updates every node whose project function changed.
-    vscode.commands.registerCommand('blueprintVisualScripting.refreshAllNodes', () => {
+    vscode.commands.registerCommand('nodecraft.refreshAllNodes', () => {
       if (!provider.postToActive({ type: 'refreshAll' })) void vscode.window.showInformationMessage('Open a graph to refresh its nodes.');
     }),
     // Test Case events (docs/debugging.md): with the language's test tool, or in Simulate.
-    vscode.commands.registerCommand('blueprintVisualScripting.runTests', async (uri?: vscode.Uri) => {
+    vscode.commands.registerCommand('nodecraft.runTests', async (uri?: vscode.Uri) => {
       const document = await graphDocumentFor(uri);
       if (!document) return;
       if (!vscode.workspace.isTrusted) {
@@ -214,7 +214,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
         else if (status.state === 'finished') void vscode.window.showInformationMessage(status.message);
       }, (report) => provider.notifyCompiled(document.uri, report), true);
     }),
-    vscode.commands.registerCommand('blueprintVisualScripting.simulateTests', async (uri?: vscode.Uri) => {
+    vscode.commands.registerCommand('nodecraft.simulateTests', async (uri?: vscode.Uri) => {
       const document = await graphDocumentFor(uri);
       if (!document) return;
       if (!vscode.workspace.isTrusted) {
@@ -223,24 +223,24 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       }
       provider.simulateTests(document);
     }),
-    vscode.commands.registerCommand('blueprintVisualScripting.debug', async (uri?: vscode.Uri) => {
+    vscode.commands.registerCommand('nodecraft.debug', async (uri?: vscode.Uri) => {
       const document = await graphDocumentFor(uri);
       if (document) await codeDebug.start(document.uri);
     }),
     // The debugger's buttons (docs/debugging.md); the keys apply while a graph editor has focus.
     ...(['resume', 'stepOver', 'stepInto', 'stepOut', 'stop'] as const).map((action) =>
-      vscode.commands.registerCommand(`blueprintVisualScripting.debug.${action}`, () => provider.debugAction(action))),
+      vscode.commands.registerCommand(`nodecraft.debug.${action}`, () => provider.debugAction(action))),
     // Offers the build registrations the user declined again (docs/output-placement.md).
-    vscode.commands.registerCommand('blueprintVisualScripting.registerGeneratedFiles', async () => {
+    vscode.commands.registerCommand('nodecraft.registerGeneratedFiles', async () => {
       for (const folder of vscode.workspace.workspaceFolders ?? []) await outputPlans.offerAgain(folder.uri.fsPath);
     }),
     // Back and Forward through the graphs shown in the focused graph editor's tabs.
-    vscode.commands.registerCommand('blueprintVisualScripting.graphBack', () => provider.postToActive({ type: 'navigateGraph', direction: 'back' })),
-    vscode.commands.registerCommand('blueprintVisualScripting.graphForward', () => provider.postToActive({ type: 'navigateGraph', direction: 'forward' })),
-    vscode.commands.registerCommand('blueprintVisualScripting.findInAll', () => {
+    vscode.commands.registerCommand('nodecraft.graphBack', () => provider.postToActive({ type: 'navigateGraph', direction: 'back' })),
+    vscode.commands.registerCommand('nodecraft.graphForward', () => provider.postToActive({ type: 'navigateGraph', direction: 'forward' })),
+    vscode.commands.registerCommand('nodecraft.findInAll', () => {
       if (!provider.postToActive({ type: 'openFind', findAll: true })) void vscode.commands.executeCommand('workbench.action.findInFiles');
     }),
-    vscode.commands.registerCommand('blueprintVisualScripting.run', async (uri?: vscode.Uri) => {
+    vscode.commands.registerCommand('nodecraft.run', async (uri?: vscode.Uri) => {
       const document = await graphDocumentFor(uri);
       if (!document) return;
       if (!vscode.workspace.isTrusted) {
@@ -256,7 +256,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   context.subscriptions.push(...followGraphFileChanges(compiler, marks, compileAndReport, outputPlans));
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('blueprintVisualScripting.createGraph', async () => {
+    vscode.commands.registerCommand('nodecraft.createGraph', async () => {
       // What to make, as Unreal's Content Browser offers it.
       const picked = await vscode.window.showQuickPick(
         (Object.entries(DOCUMENT_KIND_NAMES) as [DocumentKind, string][]).map(([documentKind, label]) => ({ label, documentKind })),
@@ -279,29 +279,29 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   );
   // Coming from Unreal (docs/coming-from-unreal.md), in the Markdown preview: the walkthrough's last
   // step, and the Command Palette.
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.comingFromUnreal', () =>
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.comingFromUnreal', () =>
     vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.joinPath(context.extensionUri, 'docs', 'coming-from-unreal.md'))));
   // New Project (docs/project-integration.md, part 4): a project in a language's usual layout, with a
   // first graph that runs.
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newProject', (given?: NewProjectAnswers) => newProject(given, (graphs) => graphLibraries.update(graphs))));
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.newProject', (given?: NewProjectAnswers) => newProject(given, (graphs) => graphLibraries.update(graphs))));
   // Set Up in This Project (docs/project-integration.md, part 5): a report on the folder picked in the
   // Explorer (else the workspace folder), with each change it offers to make.
   const setupView = new SetupView(languages);
   context.subscriptions.push(
     setupView,
-    vscode.commands.registerCommand('blueprintVisualScripting.setUpProject', async (folder?: vscode.Uri) => {
+    vscode.commands.registerCommand('nodecraft.setUpProject', async (folder?: vscode.Uri) => {
       const target = folder ?? await commandFolder();
       return target ? setupView.show(target.fsPath) : undefined;
     }),
     // The report's Apply, by the change's id (the tests apply through it).
-    vscode.commands.registerCommand('blueprintVisualScripting.applySetupChange', (id: string) => setupView.apply(id))
+    vscode.commands.registerCommand('nodecraft.applySetupChange', (id: string) => setupView.apply(id))
   );
   // Expose Functions as Nodes (docs/code-as-nodes.md): a file's functions, picked, marked @blueprint
   // (a C or C++ source's through its header).
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.exposeFunctions', (uri?: vscode.Uri, given?: ExposeAnswers) => exposeFunctions(projectFunctions, uri instanceof vscode.Uri ? uri : undefined, given)));
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.exposeFunctions', (uri?: vscode.Uri, given?: ExposeAnswers) => exposeFunctions(projectFunctions, uri instanceof vscode.Uri ? uri : undefined, given)));
   // New Node (docs/node-authoring.md, gap 8): a snippet node to start from, in the folder picked in
   // the Explorer (else the workspace's nodes folder), with a snippet for each language its graphs use.
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newNode', async (folder?: vscode.Uri, given?: { name: string; category: string }): Promise<vscode.Uri | undefined> => {
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.newNode', async (folder?: vscode.Uri, given?: { name: string; category: string }): Promise<vscode.Uri | undefined> => {
     const name = given?.name ?? await vscode.window.showInputBox({ prompt: "The node's name", placeHolder: 'Clamp Value', validateInput: (v) => (v.trim() ? undefined : 'Give the node a name.') });
     if (!name?.trim()) return undefined;
     const category = given?.category ?? await vscode.window.showInputBox({ prompt: 'Its category in the palette ("|" nests one in another)', value: 'My Nodes' });
@@ -325,11 +325,11 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     return target;
   }));
   // Add Blueprint Package… (docs/node-authoring.md, gap 9): from a folder or an installed extension.
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.addBlueprintPackage', (source?: vscode.Uri | NpmSource) => addBlueprintPackage(languages, source)));
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.addBlueprintPackage', (source?: vscode.Uri | NpmSource) => addBlueprintPackage(languages, source)));
   // Test Node Library (docs/node-authoring.md, gap 8): the examples of a node file's nodes, or a
   // folder's, run in Simulate and in each language the workspace's graphs use; nodes without
   // examples are compiled. The report goes to the output channel.
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.testNodeLibrary', async (target?: vscode.Uri, only?: string[]): Promise<ConformanceReport[] | undefined> => {
+  context.subscriptions.push(vscode.commands.registerCommand('nodecraft.testNodeLibrary', async (target?: vscode.Uri, only?: string[]): Promise<ConformanceReport[] | undefined> => {
     if (!vscode.workspace.isTrusted) {
       void vscode.window.showWarningMessage('Testing a node library runs its code; trust the workspace first.');
       return undefined;
@@ -354,7 +354,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     // `only`: the languages to test in, in place of the workspace's (for tests).
     const used = only ? only.map((id) => ({ id })) : await workspaceSnippetLanguages(languages);
     const packs = (used.length ? used.map((l) => languages.get(l.id)!) : [languages.get('typescript')!]).filter((p) => p?.generator?.runner);
-    const commands = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {});
+    const commands = vscode.workspace.getConfiguration('nodecraft').get<Record<string, string[]>>('runCommands', {});
     const reports = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Testing the node library', cancellable: true }, async (progress, token) => {
       // Simulate runs the examples in a worker, so one that never ends can't hold up VS Code.
       const stop = new AbortController();

@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
-const EXTENSION_ID = 'local.blueprint-visual-scripting';
+const EXTENSION_ID = 'local.nodecraft';
 
 interface StructureNode {
   folder: vscode.WorkspaceFolder;
@@ -49,7 +49,7 @@ test('the Codebase Map draws the folder and its four views, with hovers and the 
   const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
   const folder = vscode.workspace.workspaceFolders![0];
   try {
-    const scene = await vscode.commands.executeCommand<Scene>('blueprintVisualScripting.showCodebaseMap', folder.uri);
+    const scene = await vscode.commands.executeCommand<Scene>('nodecraft.showCodebaseMap', folder.uri);
     assert.ok(scene?.boxes.some((b) => b.id === 'm:countdown'), 'the architecture: the countdown folder is on the map');
     const opened = await api.codeMapPanels.toggleIn(folder, 'm:countdown');
     assert.ok(opened?.boxes.some((b) => b.id === 'g:countdown/Countdown.vgraph'), "opening it shows the folder's graphs");
@@ -94,7 +94,7 @@ test("Add Blueprint Package ignores the workspace's .npmrc", async () => {
   process.env.NPM_CONFIG_USERCONFIG = user;
   try {
     // The package isn't in the user's registry, so nothing is added.
-    assert.equal(await vscode.commands.executeCommand('blueprintVisualScripting.addBlueprintPackage', { npm: 'combat-graphs' }), undefined);
+    assert.equal(await vscode.commands.executeCommand('nodecraft.addBlueprintPackage', { npm: 'combat-graphs' }), undefined);
     assert.deepEqual(requests.map((r) => r.server), ['user'], JSON.stringify(requests));
     assert.equal(requests[0].authorization, undefined);
   } finally {
@@ -112,12 +112,12 @@ test("the folder's runCommands and runArguments are ignored, and its other setti
   const folder = vscode.workspace.workspaceFolders![0].uri;
   const settings = vscode.Uri.joinPath(folder, '.vscode', 'settings.json');
   await vscode.workspace.fs.writeFile(settings, new TextEncoder().encode(JSON.stringify({
-    'blueprintVisualScripting.defaultLanguage': 'python',
-    'blueprintVisualScripting.runCommands': { javascript: ['not-a-real-command'] },
-    'blueprintVisualScripting.runArguments': ['--from-the-folder']
+    'nodecraft.defaultLanguage': 'python',
+    'nodecraft.runCommands': { javascript: ['not-a-real-command'] },
+    'nodecraft.runArguments': ['--from-the-folder']
   })));
   try {
-    const config = () => vscode.workspace.getConfiguration('blueprintVisualScripting', folder);
+    const config = () => vscode.workspace.getConfiguration('nodecraft', folder);
     const deadline = Date.now() + 10000;
     while (config().get('defaultLanguage') !== 'python') {
       if (Date.now() > deadline) throw new Error("The folder's settings were never read");

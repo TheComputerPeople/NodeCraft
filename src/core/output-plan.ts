@@ -77,10 +77,21 @@ export function confinePlan(plan: OutputPlan): OutputPlan {
   };
 }
 
+// The name the extension had before NodeCraft, in the begin markers of blocks it added then.
+const FORMER_NAME = 'Blueprint Visual Scripting';
+
 export function findBlock(text: string, block: Pick<FencedBlock, 'begin' | 'end'>): { start: number; end: number; inner: string } | undefined {
-  const start = text.indexOf(block.begin);
+  // A block added under the former name is the same block: it's found, and rewritten with the new
+  // marker, rather than a second one added.
+  const former = block.begin.replace('NodeCraft', FORMER_NAME);
+  let begin = block.begin;
+  let start = text.indexOf(begin);
+  if (start < 0 && former !== begin) {
+    begin = former;
+    start = text.indexOf(begin);
+  }
   if (start < 0) return undefined;
-  const endMarker = text.indexOf(block.end, start + block.begin.length);
+  const endMarker = text.indexOf(block.end, start + begin.length);
   if (endMarker < 0) return undefined;
   const innerStart = text.indexOf('\n', start) + 1;
   const innerEnd = text.lastIndexOf('\n', endMarker) + 1;
@@ -94,9 +105,9 @@ export function withBlock(text: string, block: FencedBlock): string {
   const inner = block.text ? `${block.text.replace(/\r?\n$/, '').split(/\r?\n/).join(eol)}${eol}` : '';
   const found = findBlock(text, block);
   if (found) {
-    const innerStart = text.indexOf('\n', found.start) + 1;
+    // The begin line is written again, so a block found by the former name gets the new one.
     const innerEnd = text.lastIndexOf('\n', text.indexOf(block.end, found.start)) + 1;
-    return text.slice(0, innerStart) + inner + text.slice(innerEnd);
+    return text.slice(0, found.start) + block.begin + eol + inner + text.slice(innerEnd);
   }
   const whole = `${block.begin}${eol}${inner}${block.end}${eol}`;
   const anchor = block.anchor ?? 'end';

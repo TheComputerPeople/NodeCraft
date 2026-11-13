@@ -16,7 +16,7 @@ const bundleDir = path.join(repoRoot, 'dist/webview');
 // Returns a browser, or the reason none could be started (tests are then skipped).
 export async function launchBrowser(): Promise<Browser | string> {
   if (!fs.existsSync(path.join(bundleDir, 'editor.js'))) return 'dist/webview/editor.js is missing; run `npm run compile:webview`';
-  const executablePath = process.env.BLUEPRINT_TEST_BROWSER;
+  const executablePath = process.env.NODECRAFT_TEST_BROWSER;
   if (executablePath) return chromium.launch({ executablePath });
   for (const channel of ['msedge', 'chrome']) {
     try {
@@ -25,7 +25,7 @@ export async function launchBrowser(): Promise<Browser | string> {
       // Try the next installed browser.
     }
   }
-  return 'No Edge or Chrome found; install one or set BLUEPRINT_TEST_BROWSER to a Chromium executable';
+  return 'No Edge or Chrome found; install one or set NODECRAFT_TEST_BROWSER to a Chromium executable';
 }
 
 // The webview's markup, written again whenever it changes. Test files run in parallel and write the

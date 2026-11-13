@@ -26,7 +26,7 @@ no game loop. A graph is a class, a library or a type in an ordinary program.
 
 ## Assets
 
-**Blueprint Visual Scripting: New Graph** offers the same assets as Unreal's Content Browser. Each one
+**NodeCraft: New Graph** offers the same assets as Unreal's Content Browser. Each one
 is a `.vgraph` file.
 
 | Unreal asset | Here |
@@ -39,7 +39,7 @@ is a `.vgraph` file.
 | Enumeration | **Enumeration**: values edited in a list, with Switch on, == and != nodes |
 | Level Blueprint | Doesn't apply: there are no levels. A program starts from a graph's Main event, or from your own code. |
 | Data Asset, Data Table | Don't apply. Use a Structure for the shape, and your own code (or Load File to String) for the data. |
-| Plugins | **Blueprint packages**: node files and library graphs with a name, a version and dependencies, added with **Blueprint Visual Scripting: Add Blueprint Package...** from a folder, an extension or npm |
+| Plugins | **Blueprint packages**: node files and library graphs with a name, a version and dependencies, added with **NodeCraft: Add Blueprint Package...** from a folder, an extension or npm |
 
 ## The editor
 
@@ -51,8 +51,8 @@ is a `.vgraph` file.
 | Graph tabs, with Back and Forward | The same, above the graph |
 | The Palette | The palette on the left, and the Add Node menu on a right-click, with **Context Sensitive** |
 | Compile and Compiler Results | **Compile** (F7) and **Compiler Results**. Problems also appear in VS Code's Problems panel. |
-| Find in Blueprint / Find in All Blueprints | Ctrl+F / Ctrl+Shift+F (**Blueprint Visual Scripting: Find in All Blueprints**) |
-| Reference Viewer | **Blueprint Visual Scripting: Show Codebase Map**: the code and graphs of the whole workspace |
+| Find in Blueprint / Find in All Blueprints | Ctrl+F / Ctrl+Shift+F (**NodeCraft: Find in All Blueprints**) |
+| Reference Viewer | **NodeCraft: Show Codebase Map**: the code and graphs of the whole workspace |
 | Save, Undo and Redo | VS Code's: a `.vgraph` file is a text document, so source control and diffs work as usual |
 | Blueprint Diff | Your source control's diff, of the `.vgraph` file or of its generated code |
 
@@ -154,9 +154,9 @@ function, class or property says the same thing, in each of the twelve languages
 | `DeprecatedFunction` | `@deprecated`, or the language's own marker (`[Obsolete]`, `#[deprecated]`) |
 | Latent actions (`FLatentActionInfo`, async action nodes) | Async functions: a latent node whose Completed runs when the function finishes |
 | Out parameters | Out parameters, tuples and records: a node with several outputs |
-| Refresh Nodes after the C++ changes | **Refresh Node**, and **Blueprint Visual Scripting: Refresh All Nodes** |
+| Refresh Nodes after the C++ changes | **Refresh Node**, and **NodeCraft: Refresh All Nodes** |
 
-**Blueprint Visual Scripting: Expose Functions as Nodes...** marks the functions you pick in a file.
+**NodeCraft: Expose Functions as Nodes...** marks the functions you pick in a file.
 Generated code imports your code the way the project does, and your code uses a graph's class like
 any other.
 

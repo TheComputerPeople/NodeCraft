@@ -7,7 +7,7 @@ import { Graph, GraphConnection, GraphDocument, GraphNode, GraphVariable, NodeDe
 import { VARIABLE_GET, VARIABLE_SET } from './resolve';
 import { uniqueName } from './blueprint-edits';
 
-const FORMAT = 'blueprint-visual-scripting/nodes';
+const FORMAT = 'nodecraft/nodes';
 
 interface ClipboardData {
   format: typeof FORMAT;

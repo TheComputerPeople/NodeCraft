@@ -61,7 +61,7 @@ describe('editing tools', () => {
     await e.page.click(header('add_1'));
     await e.page.click(header('print_true'), { modifiers: ['Shift'] });
     const text = await clipboard(e, 'copy');
-    assert.match(text, /blueprint-visual-scripting\/nodes/);
+    assert.match(text, /nodecraft\/nodes/);
 
     await e.page.mouse.move(500, 700);
     await clipboard(e, 'paste', text);

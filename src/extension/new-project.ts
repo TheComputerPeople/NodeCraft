@@ -286,17 +286,17 @@ export function gitAttributes(language: string): string {
   const generator = builtinLanguagePacks().get(language)?.generator;
   const own = generator ? generator.outputFileName('Name.vgraph').replace(/name/i, '*') : undefined;
   const patterns = ['*.vgraph.*', ...(own && !own.startsWith('*.vgraph.') ? [own] : []), 'vgraph_runtime.*', ...(language === 'cpp' ? ['vgraph.cmake'] : [])];
-  return `# Files Blueprint Visual Scripting generates from graphs.\n${patterns.map((p) => `${p} linguist-generated`).join('\n')}\n`;
+  return `# Files NodeCraft generates from graphs.\n${patterns.map((p) => `${p} linguist-generated`).join('\n')}\n`;
 }
 
 function readme(name: string, language: string, graph: string, run: string, start: NewProjectOptions['start']): string {
   const tour = start === 'tour';
   return [
     `# ${name}`, '',
-    `A ${language} project with graphs made in Blueprint Visual Scripting.`, '',
+    `A ${language} project with graphs made in NodeCraft.`, '',
     ...(tour ? [`\`${graph}\` is the Tour: its comments say what to try in it, from Simulate with a breakpoint to Run Tests.`, ''] : []),
     '## Run it', '',
-    `- **In VS Code**, with the Blueprint Visual Scripting extension: open \`${graph}\` and press **Run** (or F5 to debug it).`,
+    `- **In VS Code**, with the NodeCraft extension: open \`${graph}\` and press **Run** (or F5 to debug it).`,
     `- **Without VS Code:** \`${run}\`. ${tour ? "It prints the Tour's lines, starting with a welcome." : `It prints "${HELLO}".`}`, '',
     'Graphs compile when they are saved. Their generated files sit next to them and are committed with the project, so it builds without the extension.', ''
   ].join('\n');

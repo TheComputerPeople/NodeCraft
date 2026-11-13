@@ -51,10 +51,10 @@ export interface GeneratedFile {
 }
 
 export class CompileService implements vscode.Disposable {
-  private readonly problems = vscode.languages.createDiagnosticCollection('blueprintVisualScripting');
+  private readonly problems = vscode.languages.createDiagnosticCollection('nodecraft');
   // Problems of a graph's project, shown once, on the project's file (the version it declares), by
   // project root.
-  private readonly projectProblems = vscode.languages.createDiagnosticCollection('blueprintVisualScripting.projects');
+  private readonly projectProblems = vscode.languages.createDiagnosticCollection('nodecraft.projects');
   private readonly projectProblemFiles = new Map<string, vscode.Uri>();
   private readonly runs = new Map<string, AbortController>();
   private readonly lastReports = new Map<string, CompileReport>();
@@ -148,7 +148,7 @@ export class CompileService implements vscode.Disposable {
       // and Problems, with the details in the output, rather than lost (docs/audit.md, step 3).
       const message = error instanceof Error ? error.message : String(error);
       this.output().appendLine(`Compiling ${vscode.workspace.asRelativePath(graphPath)} failed: ${error instanceof Error && error.stack ? error.stack : message}`);
-      return finish({ report: report([{ severity: 'error', code: 'compile-failed', message: `Compiling stopped: ${message}. The Blueprint Visual Scripting output has the details.` }], graph.language ?? '') }, graph);
+      return finish({ report: report([{ severity: 'error', code: 'compile-failed', message: `Compiling stopped: ${message}. The NodeCraft output has the details.` }], graph.language ?? '') }, graph);
     }
     const { result, language, diagnostics } = compiled;
     this.reportProject(compiled.versionCheck);
@@ -214,8 +214,8 @@ export class CompileService implements vscode.Disposable {
     out.appendLine(tests ? `Running the tests of ${outcome.report.outputFile} (${pack.displayName})` : `Running ${outcome.report.outputFile} (${pack.displayName})`);
     onStatus({ state: 'running', message: tests ? `Running ${pack.displayName} tests…` : `Running ${pack.displayName}…` });
     // The walkthrough's Compile and Run step (package.json, docs/release.md step 5).
-    if (!tests) void vscode.commands.executeCommand('setContext', 'blueprintVisualScripting.hasRun', true);
-    const configured = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {});
+    if (!tests) void vscode.commands.executeCommand('setContext', 'nodecraft.hasRun', true);
+    const configured = vscode.workspace.getConfiguration('nodecraft').get<Record<string, string[]>>('runCommands', {});
     try {
       const result = await runGeneratedCode(runner, outcome.outputPath, outcome.className, {
         cwd: path.dirname(outcome.outputPath),
@@ -225,7 +225,7 @@ export class CompileService implements vscode.Disposable {
         goModule: outcome.goModule,
         projectDir: outcome.projectDir,
         mainMethod: outcome.mainMethod,
-        args: vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<string[]>('runArguments', []),
+        args: vscode.workspace.getConfiguration('nodecraft', document.uri).get<string[]>('runArguments', []),
         command: configured[pack.id],
         signal: controller.signal,
         ...(tests ? { tests: { testFile: outcome.testPath, cases: outcome.tests! } } : {}),
@@ -274,7 +274,7 @@ export class CompileService implements vscode.Disposable {
     this.projectProblems.set(uri, check.diagnostics.map((d) => {
       const problem = new vscode.Diagnostic(range, d.message, vscode.DiagnosticSeverity.Warning);
       problem.code = d.code;
-      problem.source = 'Blueprint Visual Scripting';
+      problem.source = 'NodeCraft';
       return problem;
     }));
     this.projectProblemFiles.set(check.root, uri);

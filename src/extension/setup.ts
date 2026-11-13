@@ -207,7 +207,7 @@ function optionalItems(project: Project, root: string, graphs: GraphFile[], lang
   if (missing.length) {
     items.push({
       kind: 'optional', title: 'Mark generated files in .gitattributes', detail: 'Diffs and statistics then treat them as generated.',
-      change: { id: id('gitattributes'), files: [{ path: rel('.gitattributes'), text: `${attributes}${attributes && !attributes.endsWith('\n') ? '\n' : ''}# Files Blueprint Visual Scripting generates from graphs.\n${missing.join('\n')}\n` }] }
+      change: { id: id('gitattributes'), files: [{ path: rel('.gitattributes'), text: `${attributes}${attributes && !attributes.endsWith('\n') ? '\n' : ''}# Files NodeCraft generates from graphs.\n${missing.join('\n')}\n` }] }
     });
   }
   items.push({ kind: 'optional', title: "Expose the project's functions as nodes", detail: 'On a function, the quick fix (Ctrl+.) "Expose as Blueprint node" marks it @blueprint; graphs then call it.' });

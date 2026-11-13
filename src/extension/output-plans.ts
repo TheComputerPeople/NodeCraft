@@ -11,7 +11,7 @@ import { OutputHook, OutputPlan, confinePlan, findBlock, hasBlock, withBlock } f
 
 export type HookAnswer = 'accept' | 'decline' | 'later';
 
-const ANSWERS = 'blueprintVisualScripting.hookAnswers';
+const ANSWERS = 'nodecraft.hookAnswers';
 const PROPOSAL_SCHEME = 'vgraph-proposal';
 const EXCLUDE = '**/{node_modules,.git,.venv,venv,dist,out,build,bin,obj,target}/**';
 
@@ -156,7 +156,7 @@ export class OutputPlans implements vscode.Disposable {
 // Asks with a notification: Add, Show Change (then asks again) or Never; dismissing asks next time.
 async function askUser(hook: OutputHook, showChange: () => Promise<void>): Promise<HookAnswer> {
   for (;;) {
-    const choice = await vscode.window.showInformationMessage(`Blueprint Visual Scripting: ${hook.description}?`, 'Add', 'Show Change', 'Never');
+    const choice = await vscode.window.showInformationMessage(`NodeCraft: ${hook.description}?`, 'Add', 'Show Change', 'Never');
     if (choice === 'Show Change') {
       await showChange();
       continue;

@@ -1,13 +1,13 @@
-# Blueprint Visual Scripting pack SDK
+# NodeCraft pack SDK
 
-Write a language pack for [Blueprint Visual Scripting](../../README.md), and check it with the same conformance suite the built-in languages pass.
+Write a language pack for [NodeCraft](../../README.md), and check it with the same conformance suite the built-in languages pass.
 
 A language pack turns the Visual IR (the language-neutral program a graph compiles to) into source code, and says how to run that code. The extension does everything else: the editor, lowering graphs to IR, Simulate, placing generated files, and Run, Debug and Run Tests through your pack's runner and debugger descriptions.
 
 ## Install
 
 ```sh
-npm install --save-dev @blueprint-visual-scripting/pack-sdk
+npm install --save-dev @nodecraft/pack-sdk
 ```
 
 Build it from this repository with `npm run build:sdk` (the package is `packages/pack-sdk`).
@@ -34,7 +34,7 @@ The SDK's `API_VERSION` is the version of these types; a pack registered with an
 ## The conformance suite
 
 ```sh
-npx blueprint-conformance ./out/my-pack.js
+npx nodecraft-conformance ./out/my-pack.js
 ```
 
 The module exports the pack (as `pack`, as its default export, or as its only `LanguagePack` export). For each fixture graph, the suite runs it in Simulate, compiles it with your pack, runs it with your pack's runner, and compares what each prints. Programs of several files and Test Case events are checked the same way.
@@ -63,7 +63,7 @@ Options:
 ### The node audit
 
 ```sh
-npx blueprint-conformance my-pack.js --audit
+npx nodecraft-conformance my-pack.js --audit
 ```
 
 With `--audit`, every built-in node your pack's language is offered runs in it once, and what it prints is compared with Simulate's (the editor's own runtime, which defines the semantics):
@@ -78,7 +78,7 @@ It lists each finding: a compile error, a build error, a crash, or other output.
 ### Node libraries
 
 ```sh
-npx blueprint-conformance typescript --nodes ./nodes
+npx nodecraft-conformance typescript --nodes ./nodes
 ```
 
 With `--nodes`, the suite tests the `*.node.json` files of a file or folder in the pack's language, whether the pack is yours or a built-in one. A node may list `examples`, each with inputs and the outputs they give:
@@ -99,7 +99,7 @@ For each node, the suite builds a graph that calls it once per example and print
 From code:
 
 ```ts
-import { runConformance, formatReport } from '@blueprint-visual-scripting/pack-sdk';
+import { runConformance, formatReport } from '@nodecraft/pack-sdk';
 const report = await runConformance(myPack);
 console.log(formatReport(report));
 ```
@@ -113,7 +113,7 @@ A definition is used in any of these ways:
 - **From an extension:** `api.registerDeclarativePack(definition)`.
 - **From a workspace:** every `*.vgraph-language.json` file is loaded as a pack and reloaded when it changes. Its problems are shown on the file.
 - **From code:** `declarativePack(definition)` returns a `LanguagePack`.
-- **To check it:** `npx blueprint-conformance my-language.vgraph-language.json`.
+- **To check it:** `npx nodecraft-conformance my-language.vgraph-language.json`.
 
 Declarative packs can't yet express object references, inheritance, interfaces, event dispatchers or latent actions. Their capabilities must leave those out, and fixtures that need them are not applicable.
 

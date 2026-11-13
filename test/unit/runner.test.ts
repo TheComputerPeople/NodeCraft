@@ -89,6 +89,6 @@ test('a scratch folder is unsafe when it is a link, or another user can own or o
 
 test("the scratch folder is the user's: named for them and made for them alone", { skip: process.platform === 'win32' && 'Windows keeps a temp folder per user' }, () => {
   const root = scratchRoot();
-  assert.equal(path.basename(root), `blueprint-visual-scripting-${process.getuid!()}`);
+  assert.equal(path.basename(root), `nodecraft-${process.getuid!()}`);
   assert.equal(fs.statSync(root).mode & 0o777, 0o700);
 });

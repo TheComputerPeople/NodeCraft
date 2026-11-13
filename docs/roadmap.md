@@ -227,7 +227,7 @@ Status: complete (October 2026), with the deferrals below.
 
 - **The exit check:**
   - The C pack (`examples/c-language-pack`) is its own VS Code extension: a declarative definition that `extension.js` registers with `registerDeclarativePack`, and nothing else.
-  - With gcc, it passes the 15 fixtures it can express in the published suite, both from the SDK's `blueprint-conformance` and in the repository's tests. The other 5 are not applicable because of capabilities C lacks: containers, dispatchers, Delay, and the two object programs.
+  - With gcc, it passes the 15 fixtures it can express in the published suite, both from the SDK's `nodecraft-conformance` and in the repository's tests. The other 5 are not applicable because of capabilities C lacks: containers, dispatchers, Delay, and the two object programs.
   - The integration suite loads it as a second extension, compiles and runs a C graph, and with the C/C++ extension loaded it passes the Debug test and the Phase 5 debugging exit check.
 - **The rest of the phase:**
   - Capabilities are enforced by the compiler and the editor.
@@ -293,7 +293,7 @@ Decided (2026-10-27): all of its recommendations.
 Status: complete (October 2026).
 
 - **Built:**
-  - A new graph takes the language of the project files nearest to where it's saved, and the `blueprintVisualScripting.defaultLanguage` setting can set it per folder.
+  - A new graph takes the language of the project files nearest to where it's saved, and the `nodecraft.defaultLanguage` setting can set it per folder.
   - A graph that uses another language's struct, enum, class or interface gets a compile error, and Simulate stops with it (before, the value vanished from the generated code). A type name declared in two files is reported.
   - The palette hides code nodes with no implementation in the graph's language.
   - Structs and enums can be shared: one file, generated for each of its languages.

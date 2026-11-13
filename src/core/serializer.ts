@@ -20,7 +20,7 @@ export function createEmptyDocument(name = 'NewGraph', language = DEFAULT_LANGUA
     language,
     variables: [],
     graphs: [createGraph(DEFAULT_EVENT_GRAPH_ID, 'event')],
-    metadata: { createdBy: 'Blueprint Visual Scripting' }
+    metadata: { createdBy: 'NodeCraft' }
   };
 }
 

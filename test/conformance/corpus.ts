@@ -33,10 +33,10 @@ import { SEVERAL_OUTPUTS_OUTPUT, severalOutputsGraph } from './several-outputs';
 
 // The folder scripts/corpus-tools.js installs the Node.js tools into.
 export function corpusToolsFolder(): string {
-  if (process.env.BLUEPRINT_CORPUS_TOOLS) return process.env.BLUEPRINT_CORPUS_TOOLS;
+  if (process.env.NODECRAFT_CORPUS_TOOLS) return process.env.NODECRAFT_CORPUS_TOOLS;
   return process.platform === 'win32'
-    ? path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), 'blueprint-corpus', 'node')
-    : path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), '.cache'), 'blueprint-corpus', 'node');
+    ? path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), 'nodecraft-corpus', 'node')
+    : path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), '.cache'), 'nodecraft-corpus', 'node');
 }
 
 export interface CorpusStep {

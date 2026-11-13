@@ -59,7 +59,7 @@ What doesn't:
   - the checkers it configures (`tsconfig` strictness, `.eslintrc*` or `eslint.config.*`, `mypy.ini` or `[tool.mypy]`, `ruff.toml` or `[tool.ruff]`, `.editorconfig`, `Directory.Build.props` with `TreatWarningsAsErrors`, `clippy.toml`, `.luacheckrc`, `.rubocop.yml`, `phpstan.neon`).
 - **Placement** reads the model instead of looking up files itself, so every language's placement sees workspaces and nested projects the same way.
 - **Multi-root.** Every command works in the workspace folder of the file or folder it's run on, falling back to asking which folder when there is none.
-- **Large codebases.** Scanning has no silent limit. Past 5000 files, scanning warns once, names the setting `blueprintVisualScripting.scanLimit`, and keeps the files nearest to the graphs.
+- **Large codebases.** Scanning has no silent limit. Past 5000 files, scanning warns once, names the setting `nodecraft.scanLimit`, and keeps the files nearest to the graphs.
 
 ## Part 2: versions, reported
 
@@ -115,7 +115,7 @@ What doesn't:
   - A `.csproj` without `LangVersion` uses its target framework's default (`net6.0` is C# 10, `netstandard2.0` and `net48` are 7.3).
 - **The warning** (`projectVersionDiagnostics`, code `project-version`) goes with the graph's other placement warnings in Compiler Results. (Since the step 3 follow-up, Problems shows it once, on the project's file, rather than on each graph.) For example: "This project declares 11 in pom.xml, but generated Java needs Java 17 (switch rules, pattern matching in instanceof and HexFormat). Older versions may not build or run it." Generation goes on.
 - **Multi-root.** New Graph, New Node, Test Node Library and Add Blueprint Package work in the workspace folder of what they're run on, then of the active editor's file (a graph editor counts), then the only folder, then one the user picks (src/extension/workspace-folders.ts). Compiling already used the graph's own folder.
-- **Scanning.** Every workspace scan (source files, graphs, node files, package manifests and their entries) stops at the `blueprintVisualScripting.scanLimit` setting (5000). A scan that reaches it says so once, with Open Settings, instead of leaving files out silently. It doesn't choose which files to keep; VS Code's search order decides.
+- **Scanning.** Every workspace scan (source files, graphs, node files, package manifests and their entries) stops at the `nodecraft.scanLimit` setting (5000). A scan that reaches it says so once, with Open Settings, instead of leaving files out silently. It doesn't choose which files to keep; VS Code's search order decides.
 - **Tests.**
   - Unit (test/unit/projects.test.ts): every language's project and declared version, `tsconfig` extends and comments, workspaces in a tree with dependencies and build output left out, checkers, a graph's nearest project, `lowestVersion`, the warning's wording, and every pack declaring what it needs.
   - Integration: a Java graph in a Maven project declaring Java 11 compiles with the warning, and its file is generated all the same.
@@ -209,7 +209,7 @@ What doesn't:
     - A timeout ends the whole process tree.
     - Builds don't leave servers running: Gradle without its daemon, dotnet without node reuse or the shared compiler.
   - **Missing tools.** A step whose tool is missing is skipped and named in the test's output, and so is each step after it.
-  - **Node.js tools.** `npm run corpus:tools` installs them (TypeScript 5, ESLint, typescript-eslint, Node.js's types) into a folder outside the repository (`%LOCALAPPDATA%\blueprint-corpus\node`, `~/.cache/blueprint-corpus/node`, or `BLUEPRINT_CORPUS_TOOLS`). It's linked in above the layouts as their `node_modules`. TypeScript 5 is what most projects pin, and typescript-eslint doesn't support the TypeScript 7 the repository builds with.
+  - **Node.js tools.** `npm run corpus:tools` installs them (TypeScript 5, ESLint, typescript-eslint, Node.js's types) into a folder outside the repository (`%LOCALAPPDATA%\nodecraft-corpus\node`, `~/.cache/nodecraft-corpus/node`, or `NODECRAFT_CORPUS_TOOLS`). It's linked in above the layouts as their `node_modules`. TypeScript 5 is what most projects pin, and typescript-eslint doesn't support the TypeScript 7 the repository builds with.
 - **Known limit:** generated TypeScript imports another workspace package's code by a relative path. That works where the app type-checks without emitting (a bundler, as in the corpus), but not under a `rootDir` or project references, which want the package's name. Set Up reports it (step 6).
 - **Tests:** unit tests for the folding (test/unit/compiler.test.ts) and for each rule above (test/unit/checkers.test.ts); the corpus, 12 layouts.
 
@@ -238,7 +238,7 @@ What doesn't:
   - **Tests.** A graph of Test Case events runs with the project's test runner: `node --test` (ts-vite-app, js-esm) and `unittest` (py-src-layout). C# and Java write no test files.
   - **A browser app.** ts-vite-app has no Node.js types now, as Vite's template doesn't. The generated test file's `node:test` import carries `// @ts-ignore`, so `test` is untyped there and the file still type-checks.
   - **Two languages.** ts-py-shared is a TypeScript `web/` and a Python `api/` sharing a struct in `shared/`. Each side has a graph that makes one and prints it, and each passes its checker and runs.
-  - **Stricter results.** Compile's warnings fail a layout. A layout with skipped steps is reported as todo, not passed, and `BLUEPRINT_CORPUS_REQUIRE_TOOLS` makes a missing tool fail it. Elsewhere than Windows, each command leads its own process group, so a timeout ends everything it started.
+  - **Stricter results.** Compile's warnings fail a layout. A layout with skipped steps is reported as todo, not passed, and `NODECRAFT_CORPUS_REQUIRE_TOOLS` makes a missing tool fail it. Elsewhere than Windows, each command leads its own process group, so a timeout ends everything it started.
 - **Found by the new layouts, and fixed:**
   - **Python wrote `_delay`** when a graph only awaited project code, and Pyright strict reports an unused function. It's written only with a Delay now.
   - **Python's latent runner was private**, so a project's code couldn't run a graph's Delays and async calls without reaching into it. It's `run_latent_actions()` now, beside C#'s and Java's public `RunLatentActions()` / `runLatentActions()` (docs/code-as-nodes.md).
@@ -303,7 +303,7 @@ What doesn't:
 
 ## Part 4: New Project
 
-**Design.** **Blueprint: New Project…** asks for a language and a folder (an empty one, or a new one in it). It writes a minimal project in that language's usual layout, with a first class graph that prints "Hello from Blueprint" and runs:
+**Design.** **NodeCraft: New Project…** asks for a language and a folder (an empty one, or a new one in it). It writes a minimal project in that language's usual layout, with a first class graph that prints "Hello from Blueprint" and runs:
 
 | Language | Files |
 |---|---|
@@ -326,7 +326,7 @@ What doesn't:
 
 **Built (step 5).**
 
-- **Blueprint Visual Scripting: New Project...** (src/extension/new-project-command.ts) asks for the language, the folder (the project goes in it when it's empty, else in a new folder named after the project) and the name. It writes the project, opens its graph in the graph editor, compiles it and offers Run. A folder outside the workspace is offered to open or to add to it.
+- **NodeCraft: New Project...** (src/extension/new-project-command.ts) asks for the language, the folder (the project goes in it when it's empty, else in a new folder named after the project) and the name. It writes the project, opens its graph in the graph editor, compiles it and offers Run. A folder outside the workspace is offered to open or to add to it.
 - **The project** (src/extension/new-project.ts, free of the vscode API): the files of the table above, with an entry point in every language, so the project runs without VS Code too (`node src/main.ts`, `python -m name`, `dotnet run`, `cargo run`, `go run .`, `lua main.lua`, `php bin/main.php`, ...). Each one runs the graph's Start, then the language's latent runner where it has one.
   - The graph compiles when the project is written, and its generated files are registered with the build as if every hook were accepted: a CMake project gets the `vgraph.cmake` include, a Rust crate its module block.
   - `.gitattributes` marks `*.vgraph.*`, the language's own pattern (`*_vgraph.py`, from its pack's output file name) and the support files as `linguist-generated`.
@@ -337,7 +337,7 @@ What doesn't:
 
 ## Part 5: Set Up in This Project
 
-**Design.** **Blueprint: Set Up in This Project** runs on an existing codebase (the workspace folder, or a folder picked in the Explorer) and shows a report in a webview, one section per project found (Part 1):
+**Design.** **NodeCraft: Set Up in This Project** runs on an existing codebase (the workspace folder, or a folder picked in the Explorer) and shows a report in a webview, one section per project found (Part 1):
 
 - **Found:**
   - the language, the build system, and the declared version against what generated code needs;
@@ -351,7 +351,7 @@ Register Generated Files with the Build stays, and its hooks move into the repor
 
 **Built (step 6).**
 
-- **Blueprint Visual Scripting: Set Up in This Project** (the command palette, or a folder's menu in the Explorer) opens the report for the folder (src/extension/setup-view.ts). Each project found has its Needs, Can't, Found and Optional items. A change is a set of files' new text: **Show Change** opens a diff of each file, and **Apply** makes it as one undoable workspace edit, saving the files it changed unless they had unsaved changes of their own. **Refresh** reads the folder again.
+- **NodeCraft: Set Up in This Project** (the command palette, or a folder's menu in the Explorer) opens the report for the folder (src/extension/setup-view.ts). Each project found has its Needs, Can't, Found and Optional items. A change is a set of files' new text: **Show Change** opens a diff of each file, and **Apply** makes it as one undoable workspace edit, saving the files it changed unless they had unsaved changes of their own. **Refresh** reads the folder again.
 - **The report** (src/extension/setup.ts, free of the vscode API) uses the project model and the packs' placement, as compiling does:
   - **Found:** the build system and its files; each language's declared version against what generated code needs; where a graph generates in the folders the project's graphs are in (else where its first one would go), with the module other code imports it as; the checkers configured.
   - **Needs:** each hook of the project's graphs not yet in its build file (CMake's include, Rust's module block, ...), with the files the extension keeps beside it (vgraph.cmake, a crate's support module). A project without graphs needs nothing yet: a hook for a graph that doesn't exist would name a missing file.

@@ -1,4 +1,4 @@
-# C for Blueprint Visual Scripting
+# C for NodeCraft
 
 An example language pack shipped as its own VS Code extension. Graphs whose language is `c` compile to a `name_vgraph.c` file next to the graph. Run builds that file with gcc or clang, and Debug runs it under the C/C++ extension's debugger.
 
@@ -22,4 +22,4 @@ npm install
 npm test
 ```
 
-`npm test` runs the published conformance suite (`blueprint-conformance`) with the pack: every fixture it can express prints what Simulate prints.
+`npm test` runs the published conformance suite (`nodecraft-conformance`) with the pack: every fixture it can express prints what Simulate prints.

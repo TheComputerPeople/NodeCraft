@@ -48,13 +48,13 @@ test('the events it names are nodes', () => {
 
 test('every command it names exists', () => {
   const titles = new Set(manifest.contributes.commands.map((c) => c.title));
-  const named = [...guide.matchAll(/\*\*Blueprint Visual Scripting: ([^*]+)\*\*/g)].map((m) => m[1]);
+  const named = [...guide.matchAll(/\*\*NodeCraft: ([^*]+)\*\*/g)].map((m) => m[1]);
   assert.ok(named.length >= 5, `${named.length} commands`);
   for (const title of named) assert.ok(titles.has(title), `no command ${title}`);
 });
 
 test('the assets are what New Graph offers', () => {
-  const offered = table('Assets').flatMap(([, here]) => bold(here)).filter((name) => !name.startsWith('Blueprint Visual Scripting'));
+  const offered = table('Assets').flatMap(([, here]) => bold(here)).filter((name) => !name.startsWith('NodeCraft'));
   for (const kind of Object.values(DOCUMENT_KIND_NAMES)) assert.ok(offered.includes(kind), `${kind} is missing`);
 });
 

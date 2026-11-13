@@ -1,12 +1,12 @@
 {
-  "name": "@blueprint-visual-scripting/pack-sdk",
+  "name": "@nodecraft/pack-sdk",
   "version": "1.0.0",
-  "description": "Write language packs for Blueprint Visual Scripting, and check them with its conformance suite.",
+  "description": "Write language packs for NodeCraft, and check them with its conformance suite.",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/types/sdk/index.d.ts",
   "bin": {
-    "blueprint-conformance": "dist/cli.js"
+    "nodecraft-conformance": "dist/cli.js"
   },
   "files": [
     "dist",

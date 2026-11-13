@@ -113,7 +113,7 @@ export interface ExposeOptions {
   path: string;
   // Python: the module's import name.
   module?: string;
-  // Expose every function, not only those marked @blueprint (blueprintVisualScripting.exposeAllFunctions).
+  // Expose every function, not only those marked @blueprint (nodecraft.exposeAllFunctions).
   exposeAll: boolean;
   // C++: the header declares functions a C file implements, without extern "C" of its own
   // (cppHeaderLinkage), so generated C++ includes it in extern "C".

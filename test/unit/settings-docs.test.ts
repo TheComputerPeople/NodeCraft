@@ -27,7 +27,7 @@ test('every setting is in the README with its default', () => {
 });
 
 test('the README lists no setting that does not exist', () => {
-  const listed = [...readme.matchAll(/^\| `(blueprintVisualScripting\.[A-Za-z]+)` \|/gm)].map((m) => m[1]);
+  const listed = [...readme.matchAll(/^\| `(nodecraft\.[A-Za-z]+)` \|/gm)].map((m) => m[1]);
   for (const key of listed) assert.ok(key in settings, `${key} is in the README but not in package.json`);
 });
 
@@ -36,7 +36,7 @@ test('every setting has a description', () => {
 });
 
 test('defaultLanguage names every built-in language', () => {
-  const text = settings['blueprintVisualScripting.defaultLanguage'].markdownDescription ?? '';
+  const text = settings['nodecraft.defaultLanguage'].markdownDescription ?? '';
   for (const id of ['typescript', 'javascript', 'python', 'csharp', 'cpp', 'rust', 'java', 'go', 'lua', 'gdscript', 'ruby', 'php']) {
     assert.ok(text.includes(`\`${id}\``), id);
   }

@@ -166,7 +166,7 @@ async function install(languages: LanguagePackRegistry, workspaceFolder: vscode.
         doc.languages = all;
         await vscode.workspace.fs.writeFile(file, new TextEncoder().encode(serializeDocument(doc)));
       }
-      await vscode.commands.executeCommand('blueprintVisualScripting.compile', file);
+      await vscode.commands.executeCommand('nodecraft.compile', file);
     }
   }
   void vscode.window.showInformationMessage(`Added ${manifest.name} ${manifest.version} to ${vscode.workspace.asRelativePath(target)}.`);

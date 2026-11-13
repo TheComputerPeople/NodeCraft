@@ -190,7 +190,7 @@ describe('C++ placement in Visual Studio projects', () => {
     assert.match(plan.ownedFiles![0].text, /<ClInclude Include="\$\(MSBuildThisFileDirectory\)graphs\\Main\.vgraph\.h" \/>/);
     assert.deepEqual(plan.hooks?.map((h) => h.file), ['Game/Game.vcxproj', 'Tools/Tools.vcxproj']);
     const placed = withBlock(VCXPROJ, plan.hooks![0].block);
-    assert.match(placed, /<!-- vgraph:begin \(managed by Blueprint Visual Scripting\) -->\r\n {2}<Import Project="vgraph\.targets" \/>\r\n<!-- vgraph:end -->\r\n<\/Project>\r\n$/);
+    assert.match(placed, /<!-- vgraph:begin \(managed by NodeCraft\) -->\r\n {2}<Import Project="vgraph\.targets" \/>\r\n<!-- vgraph:end -->\r\n<\/Project>\r\n$/);
   });
 
   test('without a way to list folders, or a .vcxproj, it falls back to the other build systems', () => {

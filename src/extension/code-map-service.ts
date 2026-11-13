@@ -154,8 +154,8 @@ export class CodeMapService implements vscode.Disposable {
     if (result.skipped && !this.warned.has(folder.uri.toString())) {
       this.warned.add(folder.uri.toString());
       const open = 'Open Settings';
-      void vscode.window.showWarningMessage(`The Codebase Map read the first ${limit} source files of ${folder.name} and left out ${result.skipped}. Raise blueprintVisualScripting.scanLimit to map them all.`, open)
-        .then((choice) => choice && vscode.commands.executeCommand('workbench.action.openSettings', 'blueprintVisualScripting.scanLimit'));
+      void vscode.window.showWarningMessage(`The Codebase Map read the first ${limit} source files of ${folder.name} and left out ${result.skipped}. Raise nodecraft.scanLimit to map them all.`, open)
+        .then((choice) => choice && vscode.commands.executeCommand('workbench.action.openSettings', 'nodecraft.scanLimit'));
     }
     if (result.failed && !this.warned.has(`failed:${folder.uri.toString()}`)) {
       this.warned.add(`failed:${folder.uri.toString()}`);

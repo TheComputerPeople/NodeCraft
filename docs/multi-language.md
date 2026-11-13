@@ -19,11 +19,11 @@ Written 2026-10-27, after Phase 6 (nine languages: TypeScript, JavaScript, Pytho
 
 **Options.**
 - Detect from the graph's own folder: the nearest folder, walking up from where the graph is saved to the workspace folder, that has a marker. When one folder has markers of several packs, the existing order breaks the tie.
-- A setting, `blueprintVisualScripting.defaultLanguage`, that can be set per folder (in a multi-root workspace, or a folder's `.vscode/settings.json`) and overrides detection.
+- A setting, `nodecraft.defaultLanguage`, that can be set per folder (in a multi-root workspace, or a folder's `.vscode/settings.json`) and overrides detection.
 
 **Recommendation: build both.** Small: detection already exists; it needs the save location and a resource-scoped setting.
 
-**Built (step 3).** New Graph decides in this order: the `blueprintVisualScripting.defaultLanguage` setting for the folder the graph is saved in (a language id; ignored when no installed pack has it), then the nearest folder from there up to the workspace folder with a pack's marker file, then detection over the whole workspace as before. `LanguagePackRegistry.detectNewGraph` holds the rule; src/extension/languages.ts reads the folders and the setting.
+**Built (step 3).** New Graph decides in this order: the `nodecraft.defaultLanguage` setting for the folder the graph is saved in (a language id; ignored when no installed pack has it), then the nearest folder from there up to the workspace folder with a pack's marker file, then detection over the whole workspace as before. `LanguagePackRegistry.detectNewGraph` holds the rule; src/extension/languages.ts reads the folders and the setting.
 
 ## Gap 2: types used across languages
 

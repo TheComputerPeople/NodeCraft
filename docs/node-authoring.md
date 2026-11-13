@@ -331,12 +331,12 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - A `${pin}` with no such pin.
   - A language the workspace uses with no snippet (information).
   - A node type defined twice.
-- **Examples.** A node may list `examples`: inputs and the outputs they give. **Test Node Library** builds a graph from them, runs it in Simulate and in each language the library and workspace share (the conformance runner), and reports each example's result. Nodes without examples are compiled in each language, not run. The SDK's `blueprint-conformance` gains `--nodes <file>`, so extensions can test their node libraries too.
+- **Examples.** A node may list `examples`: inputs and the outputs they give. **Test Node Library** builds a graph from them, runs it in Simulate and in each language the library and workspace share (the conformance runner), and reports each example's result. Nodes without examples are compiled in each language, not run. The SDK's `nodecraft-conformance` gains `--nodes <file>`, so extensions can test their node libraries too.
 
 **Built (step 13): the schema, New Node and file diagnostics.**
 
 - **Schema.** `package.json` associates `*.node.json` with `schemas/node.schema.json`, so VS Code's JSON support validates node files and completes their fields.
-- **New Node** (`blueprintVisualScripting.newNode`; Command Palette, or a folder's menu in the Explorer) asks for a name and a category. It writes `<Name>.node.json` in that folder (else the workspace's `nodes` folder) and opens it. The node (`newNodeDefinition` in src/core/node-files.ts) has exec pins, a float input and output, and a snippet returning the input for each language the workspace's graphs use (TypeScript when there are none yet). Its type is `user.<category>.<name>`.
+- **New Node** (`nodecraft.newNode`; Command Palette, or a folder's menu in the Explorer) asks for a name and a category. It writes `<Name>.node.json` in that folder (else the workspace's `nodes` folder) and opens it. The node (`newNodeDefinition` in src/core/node-files.ts) has exec pins, a float input and output, and a snippet returning the input for each language the workspace's graphs use (TypeScript when there are none yet). Its type is `user.<category>.<name>`.
 - **File diagnostics.** `NodeLibraries` keeps each node file's text and checks it (`nodeFileProblems`):
   - A `${pin}` with no such data input: a warning on the placeholder.
   - A language the workspace's graphs use with no snippet for it: information on `"languages"`, unless the language's own pack implements the node.
@@ -355,7 +355,7 @@ Classes from code as **parents** of graph classes (Unreal's Blueprint subclassin
   - One with no snippet for the pack (and no implementation of its own in the pack) isn't applicable.
   - `simulateNodeExamples` runs the same graphs in Simulate.
 - **Test Node Library** (Command Palette, or a node file's or folder's Explorer menu; workspace trust required) tests the active node file, or the folder's node files. It runs them in Simulate and in each language the workspace's graphs use, with the `runCommands` setting, and writes the reports to the output channel.
-- **The SDK.** `blueprint-conformance <pack> --nodes <file or folder>` does the same for one pack, built-in or not, and exits with 1 when an example fails. The SDK exports `runNodeExamples`, `simulateNodeExamples` and `loadNodeFiles`.
+- **The SDK.** `nodecraft-conformance <pack> --nodes <file or folder>` does the same for one pack, built-in or not, and exits with 1 when an example fails. The SDK exports `runNodeExamples`, `simulateNodeExamples` and `loadNodeFiles`.
 - **Tests.**
   - Conformance: the example graph, Simulate, TypeScript and Python (a wrong example, no examples, no snippet), and the CLI's exit codes.
   - Integration: the command's reports.

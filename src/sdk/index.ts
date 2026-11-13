@@ -1,6 +1,6 @@
 // The language pack SDK (docs/language-breadth.md, "The public API and the pack SDK"): what a pack
 // author needs to write a language pack, and the conformance suite to check it. Published as
-// @blueprint-visual-scripting/pack-sdk; nothing here depends on VS Code.
+// @nodecraft/pack-sdk; nothing here depends on VS Code.
 
 // The API version packs are written against (a pack sets `apiVersion` to it), and the API the
 // extension gives other extensions. A change that breaks packs is a new major version of the SDK

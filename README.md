@@ -1,15 +1,17 @@
-# Blueprint Visual Scripting for VS Code
+# NodeCraft
 
-A language-neutral, Blueprint-style visual scripting editor for Visual Studio Code. Graphs compile to readable code in TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby or PHP, committed next to them and run through the project's own toolchain.
+NodeCraft brings Unreal Blueprint-style visual scripting to VS Code. Build node graphs that compile to readable code in 12 languages (TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP), then run, test and debug them node by node with each language's own tools. Your own functions become nodes.
+
+Generated code is committed next to each graph, so the project builds without the extension. NodeCraft is not affiliated with or endorsed by Epic Games; Unreal Engine and Blueprint are Epic's trademarks, named here only to describe what the editor follows.
 
 ## Where to start
 
-VS Code's **Welcome** page has a walkthrough, **Get Started with Blueprint Visual Scripting** (Command Palette: **Welcome: Open Walkthrough...**), that goes through the steps below one at a time.
+VS Code's **Welcome** page has a walkthrough, **Get Started with NodeCraft** (Command Palette: **Welcome: Open Walkthrough...**), that goes through the steps below one at a time.
 
 - **Getting it:** it isn't on the Marketplace yet; [try it from source](#try-it-from-source).
-- **A new project:** run **Blueprint Visual Scripting: New Project...** from the Command Palette, pick a language and start from the Tour ([Graphs in your project](#graphs-in-your-project)).
-- **A codebase you have:** **Blueprint Visual Scripting: Set Up in This Project** says what graphs there need, and changes nothing until you apply it.
-- **Coming from Unreal:** [docs/coming-from-unreal.md](docs/coming-from-unreal.md) (**Blueprint Visual Scripting: Coming from Unreal** opens it) maps each of Unreal's Blueprint concepts to its equivalent here, and says which don't apply. The gestures and shortcuts are Unreal's ([Editor interaction reference](#editor-interaction-reference)).
+- **A new project:** run **NodeCraft: New Project...** from the Command Palette, pick a language and start from the Tour ([Graphs in your project](#graphs-in-your-project)).
+- **A codebase you have:** **NodeCraft: Set Up in This Project** says what graphs there need, and changes nothing until you apply it.
+- **Coming from Unreal:** [docs/coming-from-unreal.md](docs/coming-from-unreal.md) (**NodeCraft: Coming from Unreal** opens it) maps each of Unreal's Blueprint concepts to its equivalent here, and says which don't apply. The gestures and shortcuts are Unreal's ([Editor interaction reference](#editor-interaction-reference)).
 - **Running graphs:** [Run, Simulate and Debug](#run-simulate-and-debug) lists what each language needs.
 - **Settings:** [Settings](#settings).
 - **Working on the extension itself:** [Development](#development).
@@ -36,15 +38,15 @@ VS Code's **Welcome** page has a walkthrough, **Get Started with Blueprint Visua
 The extension isn't published yet, so it runs from this repository:
 
 1. Open this folder in VS Code and run `npm install`.
-2. Press `F5` (or choose **Run Blueprint Visual Scripting Extension** in Run and Debug). An Extension Development Host opens the `sample` workspace.
+2. Press `F5` (or choose **Run NodeCraft Extension** in Run and Debug). An Extension Development Host opens the `sample` workspace.
 3. Open `sample/demo.vgraph`.
-4. Click **Compile**. The graph's target language is JavaScript, so `demo.vgraph.js` appears next to it. Pick another language in the toolbar to generate TypeScript (`demo.vgraph.ts`) or Python (`demo_vgraph.py`) instead. Saving the graph also compiles it (setting: `blueprintVisualScripting.compileOnSave`).
-   **New Graph** (Command Palette) starts a graph in the language of the project files nearest to where it's saved, so a repository with a TypeScript `web/` and a Python `api/` gets the right one in each; the `blueprintVisualScripting.defaultLanguage` setting overrides that per folder. Structs and enums can be shared between those languages, and [examples/multi-language](examples/multi-language/README.md) shows a graph calling code in another language ([docs/multi-language.md](docs/multi-language.md)).
-5. Click **▶ Run** to run the generated code with the language's toolchain (below), or **Simulate** to run the graph inside the editor. Output appears in the `Blueprint Visual Scripting` Output channel.
+4. Click **Compile**. The graph's target language is JavaScript, so `demo.vgraph.js` appears next to it. Pick another language in the toolbar to generate TypeScript (`demo.vgraph.ts`) or Python (`demo_vgraph.py`) instead. Saving the graph also compiles it (setting: `nodecraft.compileOnSave`).
+   **New Graph** (Command Palette) starts a graph in the language of the project files nearest to where it's saved, so a repository with a TypeScript `web/` and a Python `api/` gets the right one in each; the `nodecraft.defaultLanguage` setting overrides that per folder. Structs and enums can be shared between those languages, and [examples/multi-language](examples/multi-language/README.md) shows a graph calling code in another language ([docs/multi-language.md](docs/multi-language.md)).
+5. Click **▶ Run** to run the generated code with the language's toolchain (below), or **Simulate** to run the graph inside the editor. Output appears in the `NodeCraft` Output channel.
 
 ## Run, Simulate and Debug
 
-**Simulate** runs a graph's built-in nodes inside the editor, in any language and in no toolchain; it can't run your own code. **Run**, **Run Tests** and **Debug** run the generated code with the language's toolchain, found on the PATH (the `blueprintVisualScripting.runCommands` setting names another), and Debug with the language's VS Code debugger:
+**Simulate** runs a graph's built-in nodes inside the editor, in any language and in no toolchain; it can't run your own code. **Run**, **Run Tests** and **Debug** run the generated code with the language's toolchain, found on the PATH (the `nodecraft.runCommands` setting names another), and Debug with the language's VS Code debugger:
 
 | Language | Run needs | Debug needs |
 |---|---|---|
@@ -77,12 +79,12 @@ The TypeScript configuration includes the DOM library definitions because VS Cod
 | `npm test` | Runs every test: unit tests, then browser tests of the webview |
 | `npm run test:unit` / `npm run test:webview` | Run one group |
 | `npm run test:conformance` | Runs every fixture graph in Simulate and as generated TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP, and checks they print the same output (part of `npm test`; needs Node.js 22.18+, Python 3, the .NET SDK, g++ or clang++, Cargo, a JDK, Go, Lua 5.4, Godot 4 as `godot` or in the `GODOT` environment variable, Ruby, and PHP with mbstring; missing tools skip their tests) |
-| `npm run corpus:tools` | Installs the Node.js tools the corpus of project layouts runs (TypeScript 5, ESLint with typescript-eslint, Node.js's types) into a cache folder outside the repository, and downloads PHP's (Composer, PHPStan and PHP_CodeSniffer, each a `.phar`) into it; the other languages' tools (mypy, Pyright, Ruff, pnpm, dotnet, Maven, Gradle, cargo, go, staticcheck, CMake, make, RuboCop, luacheck, Godot as `GODOT` or `godot`) come from the PATH. The corpus (`test/conformance/corpus.test.ts`, part of `npm test`) copies each project in `test/fixtures/projects`, compiles graphs into it as Compile does, then runs the project's own build, checkers, tests and entry point. A missing tool skips its step; a layout with skipped steps is reported as todo, and `BLUEPRINT_CORPUS_REQUIRE_TOOLS=1` makes it fail instead |
+| `npm run corpus:tools` | Installs the Node.js tools the corpus of project layouts runs (TypeScript 5, ESLint with typescript-eslint, Node.js's types) into a cache folder outside the repository, and downloads PHP's (Composer, PHPStan and PHP_CodeSniffer, each a `.phar`) into it; the other languages' tools (mypy, Pyright, Ruff, pnpm, dotnet, Maven, Gradle, cargo, go, staticcheck, CMake, make, RuboCop, luacheck, Godot as `GODOT` or `godot`) come from the PATH. The corpus (`test/conformance/corpus.test.ts`, part of `npm test`) copies each project in `test/fixtures/projects`, compiles graphs into it as Compile does, then runs the project's own build, checkers, tests and entry point. A missing tool skips its step; a layout with skipped steps is reported as todo, and `NODECRAFT_CORPUS_REQUIRE_TOOLS=1` makes it fail instead |
 | `npm run test:integration` | Launches VS Code with the extension and runs smoke tests inside it, in the sample workspace, a multi-root workspace, and the sample again in Restricted Mode (not part of `npm test`) |
 | `npm run test:integration:debuggers` | The same, with your installed VS Code extensions loaded, so debugging generated Python (Python Debugger extension), C# (C# extension), C++ and Rust (C/C++ extension), Java (Debugger for Java), Go (Go extension), Lua (Lua Debug), GDScript (godot-tools, with the `GODOT` environment variable set), Ruby (rdbg) and PHP (PHP Debug, with Xdebug in php.ini) is tested too |
-| `npm run build:sdk` / `npm run test:sdk` | Builds the language pack SDK (`packages/pack-sdk`, with the conformance suite and its `blueprint-conformance` command) / and runs its command once |
+| `npm run build:sdk` / `npm run test:sdk` | Builds the language pack SDK (`packages/pack-sdk`, with the conformance suite and its `nodecraft-conformance` command) / and runs its command once |
 
-The browser tests drive the real webview bundle in an installed Microsoft Edge or Google Chrome through `playwright-core` (no browser download). Set `BLUEPRINT_TEST_BROWSER` to a Chromium executable to use a different one; without any browser those tests are skipped.
+The browser tests drive the real webview bundle in an installed Microsoft Edge or Google Chrome through `playwright-core` (no browser download). Set `NODECRAFT_TEST_BROWSER` to a Chromium executable to use a different one; without any browser those tests are skipped.
 
 Source layout:
 
@@ -157,15 +159,15 @@ double area(double width, double height);
 - A marked function that can't be a node (a generator, rest parameters, generics, …) gets a warning in its file with the reason. On one that could be, the lightbulb offers **Expose as Blueprint node**.
 - **Expose Functions as Nodes...**, on a source file in the Explorer (or the editor's context menu), marks the functions you pick in one edit you review first. On a C or C++ source file it works through the file's header: it marks the declarations there, adds the missing ones, or makes the header (with `extern "C"` for a C file).
 - When a function's signature changes, its nodes keep their old pins and show a warning until you choose **Refresh Node** in the node's menu, or **Refresh All Nodes** in the Command Palette. A renamed or moved function shows an error, and the node menu offers **Replace with …** when it can tell where the function went.
-- The setting `blueprintVisualScripting.exposeAllFunctions` exposes every public function, by each language's rule, without markers.
+- The setting `nodecraft.exposeAllFunctions` exposes every public function, by each language's rule, without markers.
 
 sample/node-authoring has marked TypeScript and Python code, used from graphs in both. The full design is in [docs/code-as-nodes.md](docs/code-as-nodes.md).
 
 ## Graphs in your project
 
-To start one, run **Blueprint Visual Scripting: New Project...** and pick a language and a folder. It writes a small project in that language's usual layout (a `package.json`, `pyproject.toml`, `.csproj`, `CMakeLists.txt`, `Cargo.toml`, `pom.xml`, `go.mod`, `project.godot`, ...) with a first graph, an entry point that runs it, a `.gitignore`, a `.gitattributes` marking generated files, and a README saying how to run it with and without VS Code. The first graph is either Hello, which prints "Hello from Blueprint", or the **Tour**: a graph with a variable, a For Loop, a pure function, a structure, Branch and a Test Case, whose comments say what to try (a breakpoint in Simulate, Run, Run Tests, Debug). Then it opens the graph and offers Run.
+To start one, run **NodeCraft: New Project...** and pick a language and a folder. It writes a small project in that language's usual layout (a `package.json`, `pyproject.toml`, `.csproj`, `CMakeLists.txt`, `Cargo.toml`, `pom.xml`, `go.mod`, `project.godot`, ...) with a first graph, an entry point that runs it, a `.gitignore`, a `.gitattributes` marking generated files, and a README saying how to run it with and without VS Code. The first graph is either Hello, which prints "Hello from Blueprint", or the **Tour**: a graph with a variable, a For Loop, a pure function, a structure, Branch and a Test Case, whose comments say what to try (a breakpoint in Simulate, Run, Run Tests, Debug). Then it opens the graph and offers Run.
 
-In a codebase you have, **Blueprint Visual Scripting: Set Up in This Project** (also in a folder's menu in the Explorer) reports each project it finds: its build, its language version against what generated code needs, where graphs would generate, and its checkers. It also lists what generated code needs before it builds (a CMake include, a Rust module block), what can't be done and why, and optional changes (`.gitattributes`, Ruff's and Prettier's ignores, a Composer classmap, a first graph). Each change has **Show Change** and **Apply**, and nothing changes until you apply it.
+In a codebase you have, **NodeCraft: Set Up in This Project** (also in a folder's menu in the Explorer) reports each project it finds: its build, its language version against what generated code needs, where graphs would generate, and its checkers. It also lists what generated code needs before it builds (a CMake include, a Rust module block), what can't be done and why, and optional changes (`.gitattributes`, Ruff's and Prettier's ignores, a Composer classmap, a first graph). Each change has **Show Change** and **Apply**, and nothing changes until you apply it.
 
 A graph's generated file sits next to it, in the project's own style, and the project's code uses it like any other module ([docs/project-integration.md](docs/project-integration.md)):
 
@@ -180,11 +182,11 @@ new Report().start();
 - **Your project's language version.** When the project declares an older version than generated code needs (Java 11 in `pom.xml`, where generated Java needs 17), Problems shows a warning once, on the file that declares it. The graph still compiles: the project may build with a newer toolchain.
 - **Constants are worked out when compiling.** A Branch on a constant leaves only the side that runs, and a value nothing reads leaves no code. A breakpoint on a node that left no code can't stop when debugging the generated code, and Debug says which ones. Simulate still stops there.
 - **A float wired into an int is truncated toward zero** (7.5 becomes 7), as Unreal converts it, in Simulate and every language ([docs/semantics.md](docs/semantics.md)).
-- **Large workspaces.** Scanning stops at `blueprintVisualScripting.scanLimit` files of each kind (5000), and says so when it does.
+- **Large workspaces.** Scanning stops at `nodecraft.scanLimit` files of each kind (5000), and says so when it does.
 
 ## The Codebase Map
 
-**Blueprint Visual Scripting: Show Codebase Map** (also in a folder's menu in the Explorer) draws the workspace's code and graphs, flowing top to bottom. It reads every file with tree-sitter in all twelve languages, runs nothing, and works in Restricted Mode ([docs/codebase-map.md](docs/codebase-map.md)).
+**NodeCraft: Show Codebase Map** (also in a folder's menu in the Explorer) draws the workspace's code and graphs, flowing top to bottom. It reads every file with tree-sitter in all twelve languages, runs nothing, and works in Restricted Mode ([docs/codebase-map.md](docs/codebase-map.md)).
 
 - **Four views:**
   - **Architecture:** projects, folders and files, with their imports. Importers sit above what they import, and cycles are outlined.
@@ -229,26 +231,26 @@ Example:
 
 The `languages` map holds one snippet per target language, by language id (`typescript`, `javascript`, `python`, `csharp`, ...). A snippet is a function body: its data inputs are parameters (`${pinId}` always works, and ids that are valid identifiers can be used directly) and its return value is the node's first data output. Compiling a graph to a language whose snippet is missing is a compile error. Simulate can run JavaScript snippets only; other languages run through generated code.
 
-Node files are checked against the node schema as you write them. Their problems show in the editor: a `${pin}` with no such input, a type another file defines too, a language the workspace uses with no snippet. **New Node** writes one to start from. A node may list `examples` (inputs and the outputs they give), and **Test Node Library** runs them in Simulate and in each language the workspace's graphs use; `blueprint-conformance <pack> --nodes <folder>` does the same from the command line ([docs/node-authoring.md](docs/node-authoring.md)).
+Node files are checked against the node schema as you write them. Their problems show in the editor: a `${pin}` with no such input, a type another file defines too, a language the workspace uses with no snippet. **New Node** writes one to start from. A node may list `examples` (inputs and the outputs they give), and **Test Node Library** runs them in Simulate and in each language the workspace's graphs use; `nodecraft-conformance <pack> --nodes <folder>` does the same from the command line ([docs/node-authoring.md](docs/node-authoring.md)).
 
 ### Framework events
 
 A node library can also add events that a framework runs, such as a command-line tool's commands. An event definition uses the implementation `{ "kind": "event", "method": "OnCommand" }`; its data outputs are the event's parameters. Each class that uses the event gets a public method named after `method` (`onCommand` in TypeScript and JavaScript, `on_command` in Python, `OnCommand` in C#), which the framework's host code calls. See `sample/visual-nodes/CLI/OnCommand.node.json`.
 
-A graph's **Main** event is the program's entry point: Run calls it after Start, with the `blueprintVisualScripting.runArguments` setting as its Args.
+A graph's **Main** event is the program's entry point: Run calls it after Start, with the `nodecraft.runArguments` setting as its Args.
 
 
 ## Settings
 
 | Setting | Default | What it does |
 |---|---|---|
-| `blueprintVisualScripting.compileOnSave` | `true` | Compile a graph whenever it's saved. When off, graphs compile on Compile (F7), Run, Run Tests and Debug. |
-| `blueprintVisualScripting.defaultLanguage` | empty | The language of new graphs in a folder, by language id (`typescript`, `python`, `gdscript`, ...). Set it per folder; when empty, New Graph uses the nearest project files. |
-| `blueprintVisualScripting.runCommands` | `{}` | The command Run, Run Tests and Debug start for a language, by language id, in place of the one on the PATH: `{ "python": ["C:/Python313/python.exe"] }`. |
-| `blueprintVisualScripting.runArguments` | `[]` | The arguments a graph's **Main** event gets (its Args) under Run, Simulate and Debug, passed as they are. |
-| `blueprintVisualScripting.exposeAllFunctions` | `false` | Show every public function as a node, by each language's rule, without `@blueprint`. Class members still need it. |
-| `blueprintVisualScripting.scanLimit` | `5000` | The most files of each kind the extension scans in a workspace (source files, graphs, node files, package manifests), and the Codebase Map in each folder. A scan that reaches it says so. |
-| `blueprintVisualScripting.autoSaveDelay` | `150` | Milliseconds the graph editor waits after a change before writing it to the file's text document (the file still saves as usual). |
+| `nodecraft.compileOnSave` | `true` | Compile a graph whenever it's saved. When off, graphs compile on Compile (F7), Run, Run Tests and Debug. |
+| `nodecraft.defaultLanguage` | empty | The language of new graphs in a folder, by language id (`typescript`, `python`, `gdscript`, ...). Set it per folder; when empty, New Graph uses the nearest project files. |
+| `nodecraft.runCommands` | `{}` | The command Run, Run Tests and Debug start for a language, by language id, in place of the one on the PATH: `{ "python": ["C:/Python313/python.exe"] }`. |
+| `nodecraft.runArguments` | `[]` | The arguments a graph's **Main** event gets (its Args) under Run, Simulate and Debug, passed as they are. |
+| `nodecraft.exposeAllFunctions` | `false` | Show every public function as a node, by each language's rule, without `@blueprint`. Class members still need it. |
+| `nodecraft.scanLimit` | `5000` | The most files of each kind the extension scans in a workspace (source files, graphs, node files, package manifests), and the Codebase Map in each folder. A scan that reaches it says so. |
+| `nodecraft.autoSaveDelay` | `150` | Milliseconds the graph editor waits after a change before writing it to the file's text document (the file still saves as usual). |
 
 In Restricted Mode, `runCommands` and `runArguments` are read from your user settings only, never from the workspace's.
 

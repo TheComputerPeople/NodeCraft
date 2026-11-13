@@ -15,8 +15,8 @@ import { javascriptPack } from '../../../src/core/languages/javascript';
 import { detectNewGraphLanguage } from '../../../src/extension/languages';
 import { tarball } from '../../tar';
 
-const EXTENSION_ID = 'local.blueprint-visual-scripting';
-const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
+const EXTENSION_ID = 'local.nodecraft';
+const VIEW_TYPE = 'nodecraft.graphEditor';
 
 type Test = { name: string; run: () => Promise<void> };
 // Thrown by a test that can't run here (a debugger extension that isn't loaded).
@@ -63,7 +63,7 @@ test('activates when a .vgraph file opens in the graph editor', async () => {
 
 test('registers the New Graph command', async () => {
   const commands = await vscode.commands.getCommands(true);
-  assert.ok(commands.includes('blueprintVisualScripting.createGraph'));
+  assert.ok(commands.includes('nodecraft.createGraph'));
 });
 
 // The Getting Started walkthrough (docs/release.md, step 5): each step's links and completion
@@ -81,7 +81,7 @@ test('the walkthrough opens; its links, completion commands and media are all th
     assert.ok(fs.existsSync(path.join(extension.extensionPath, step.media.markdown)), `${step.id}: ${step.media.markdown}`);
   }
   await vscode.commands.executeCommand('workbench.action.openWalkthrough', `${EXTENSION_ID}#${walkthrough.id}`, false);
-  await vscode.commands.executeCommand('blueprintVisualScripting.comingFromUnreal');
+  await vscode.commands.executeCommand('nodecraft.comingFromUnreal');
   await waitFor(() => vscode.window.tabGroups.all.some((g) => g.tabs.some((t) => /coming-from-unreal\.md/.test(t.label))), 'the guide open in the Markdown preview');
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 });
@@ -93,14 +93,14 @@ test("the graph tabs' Back and Forward are commands, keyed only while they can g
   const extension = vscode.extensions.getExtension(EXTENSION_ID)!;
   const keys = (extension.packageJSON as { contributes: { keybindings: { command: string; key: string; when: string }[] } }).contributes.keybindings;
   for (const [command, key, context] of [['graphBack', 'alt+left', 'graphCanGoBack'], ['graphForward', 'alt+right', 'graphCanGoForward']]) {
-    assert.ok(commands.includes(`blueprintVisualScripting.${command}`), command);
-    const binding = keys.find((k) => k.command === `blueprintVisualScripting.${command}`);
+    assert.ok(commands.includes(`nodecraft.${command}`), command);
+    const binding = keys.find((k) => k.command === `nodecraft.${command}`);
     assert.equal(binding?.key, key);
-    assert.match(binding?.when ?? '', new RegExp(`activeCustomEditorId == blueprintVisualScripting\\.graphEditor && blueprintVisualScripting\\.${context}$`));
+    assert.match(binding?.when ?? '', new RegExp(`activeCustomEditorId == nodecraft\\.graphEditor && nodecraft\\.${context}$`));
   }
   // With a graph editor focused, the commands reach it without failing.
-  await vscode.commands.executeCommand('blueprintVisualScripting.graphBack');
-  await vscode.commands.executeCommand('blueprintVisualScripting.graphForward');
+  await vscode.commands.executeCommand('nodecraft.graphBack');
+  await vscode.commands.executeCommand('nodecraft.graphForward');
 });
 
 // docs/codebase-map.md, Part 1: the workspace's index, built in the parsing worker inside VS Code's
@@ -181,7 +181,7 @@ test('Show Codebase Map draws the folder, and opening a box shows what it holds'
   const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
   const folder = vscode.workspace.workspaceFolders![0];
   try {
-    const scene = await vscode.commands.executeCommand<{ boxes: { id: string; kind: string; parent?: string; expanded: boolean }[] }>('blueprintVisualScripting.showCodebaseMap', folder.uri);
+    const scene = await vscode.commands.executeCommand<{ boxes: { id: string; kind: string; parent?: string; expanded: boolean }[] }>('nodecraft.showCodebaseMap', folder.uri);
     assert.ok(scene?.boxes.some((b) => b.id === 'm:countdown' && !b.expanded), 'the countdown folder is on the map, closed');
     assert.ok(vscode.window.tabGroups.activeTabGroup.activeTab?.label.startsWith('Codebase Map'), 'the map is the active tab');
     const opened = await api.codeMapPanels.toggleIn(folder, 'm:countdown');
@@ -216,7 +216,7 @@ test('the Codebase Map focuses on a box, finds the calls between two, and goes b
   const folder = vscode.workspace.workspaceFolders![0];
   const countdown = 'g:countdown/Countdown.vgraph#EventGraph';
   try {
-    await vscode.commands.executeCommand('blueprintVisualScripting.showCodebaseMap', folder.uri);
+    await vscode.commands.executeCommand('nodecraft.showCodebaseMap', folder.uri);
     const fromCountdown = await api.codeMapPanels.callsIn(folder, countdown, 'callees');
     // (Something the countdown's calls reach, past what it calls itself.)
     const called = new Set(fromCountdown?.arrows.filter((a) => a.from === countdown).map((a) => a.to));
@@ -249,20 +249,20 @@ test('Show in Codebase Map reveals a file, or the function at the cursor; the fl
   const folder = vscode.workspace.workspaceFolders![0];
   type Revealed = { scene: { mode: string; boxes: { id: string }[] }; focus?: string } | undefined;
   try {
-    const countdown = await vscode.commands.executeCommand<Revealed>('blueprintVisualScripting.showInCodebaseMap', vscode.Uri.joinPath(folder.uri, 'countdown', 'Countdown.vgraph'));
+    const countdown = await vscode.commands.executeCommand<Revealed>('nodecraft.showInCodebaseMap', vscode.Uri.joinPath(folder.uri, 'countdown', 'Countdown.vgraph'));
     assert.equal(countdown?.focus, 'g:countdown/Countdown.vgraph', 'the graph file is centred and selected');
     assert.equal(countdown?.scene.mode, 'architecture');
     const tally = await vscode.window.showTextDocument(vscode.Uri.joinPath(folder.uri, 'node-authoring', 'lib', 'tally.ts'));
     tally.selection = new vscode.Selection(21, 4, 21, 4);
-    const add = await vscode.commands.executeCommand<Revealed>('blueprintVisualScripting.showInCodebaseMap');
+    const add = await vscode.commands.executeCommand<Revealed>('nodecraft.showInCodebaseMap');
     assert.equal(add?.scene.mode, 'structure', 'a declaration is shown in the structure');
     assert.ok(add?.focus === 's:node-authoring/lib/tally.ts#Tally.add' || add?.focus === 's:node-authoring/lib/tally.ts#Tally', `the method (or its class) is selected: ${add?.focus}`);
     await vscode.window.showTextDocument(tally.document);
-    const calls = await vscode.commands.executeCommand<{ mode: string; calls?: { root?: string } }>('blueprintVisualScripting.showCallFlow');
+    const calls = await vscode.commands.executeCommand<{ mode: string; calls?: { root?: string } }>('nodecraft.showCallFlow');
     assert.equal(calls?.mode, 'calls');
     assert.equal(calls?.calls?.root, 's:node-authoring/lib/tally.ts#Tally.add');
     await vscode.window.showTextDocument(tally.document);
-    const flow = await vscode.commands.executeCommand<{ mode: string; flow?: { label: string } }>('blueprintVisualScripting.showControlFlow');
+    const flow = await vscode.commands.executeCommand<{ mode: string; flow?: { label: string } }>('nodecraft.showControlFlow');
     assert.equal(flow?.mode, 'flow');
     assert.equal(flow?.flow?.label, 'add');
     const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
@@ -288,13 +288,13 @@ test("the Codebase Map's bridges: hover, Expose as Node and Open Graph; its tree
       await new Promise((resolve) => setTimeout(resolve, 250));
       index = await api.codeMap.codeIndex(folder);
     }
-    await vscode.commands.executeCommand('blueprintVisualScripting.showCodebaseMap', folder.uri);
+    await vscode.commands.executeCommand('nodecraft.showCodebaseMap', folder.uri);
     // A function's hover: its signature and doc comment, from its code.
     assert.deepEqual(await api.codeMapPanels.hoverIn(folder, id), { signature: 'export function doubleIt(n: number): number', doc: 'Doubles a number.' });
     assert.equal(await api.codeMapPanels.hoverIn(folder, 'f:node-authoring/lib/map_bridge.ts'), undefined, 'a file has none');
 
     // The tree: the folder's code, down to the function, in the Explorer.
-    await vscode.commands.executeCommand('blueprintVisualScripting.codebaseStructure.focus');
+    await vscode.commands.executeCommand('nodecraft.codebaseStructure.focus');
     const tree = api.structureTree;
     const node = { folder, id: halve };
     const chain: { folder: vscode.WorkspaceFolder; id?: string }[] = [node];
@@ -307,7 +307,7 @@ test("the Codebase Map's bridges: hover, Expose as Node and Open Graph; its tree
     const item = await tree.getTreeItem(node);
     assert.equal(item.label, 'halveIt');
     assert.equal(item.contextValue, 'codemap-function-exposable');
-    assert.equal(item.command?.command, 'blueprintVisualScripting.openMapEntity');
+    assert.equal(item.command?.command, 'nodecraft.openMapEntity');
     const resolved = await tree.resolveTreeItem(item, node);
     const tooltip = (resolved.tooltip as vscode.MarkdownString).value;
     assert.match(tooltip, /export function halveIt\(n: number\): number/);
@@ -316,14 +316,14 @@ test("the Codebase Map's bridges: hover, Expose as Node and Open Graph; its tree
     await vscode.commands.executeCommand(item.command!.command, ...item.command!.arguments!);
     assert.equal(vscode.window.activeTextEditor?.document.uri.fsPath, source.fsPath);
     assert.equal(vscode.window.activeTextEditor?.selection.active.line, 6);
-    const shown = await vscode.commands.executeCommand<{ focus?: string }>('blueprintVisualScripting.showInCodebaseMap', node);
+    const shown = await vscode.commands.executeCommand<{ focus?: string }>('nodecraft.showInCodebaseMap', node);
     assert.equal(shown?.focus, halve);
 
     // Open Graph: a graph's box opens its file in the graph editor.
     await api.codeMapPanels.openIn(folder, 'g:countdown/Countdown.vgraph#EventGraph');
     await waitFor(() => {
       const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
-      return input instanceof vscode.TabInputCustom && input.viewType === 'blueprintVisualScripting.graphEditor' && input.uri.path.endsWith('/countdown/Countdown.vgraph');
+      return input instanceof vscode.TabInputCustom && input.viewType === 'nodecraft.graphEditor' && input.uri.path.endsWith('/countdown/Countdown.vgraph');
     }, 'the countdown in the graph editor', 15000);
 
     // Expose as Node, from its box: only it is marked, and it becomes a node.
@@ -334,7 +334,7 @@ test("the Codebase Map's bridges: hover, Expose as Node and Open Graph; its tree
     assert.ok(!marked.split('export function doubleIt')[1].includes('@blueprint'), 'only the function chosen');
     await waitFor(() => !!api.registry.get('fn:typescript:node-authoring/lib/map_bridge.ts#doubleIt'), 'the Double It node', 20000);
     // And from the tree, as a pure node.
-    const exposed = await vscode.commands.executeCommand<string[]>('blueprintVisualScripting.exposeAsNode', node, { pure: true });
+    const exposed = await vscode.commands.executeCommand<string[]>('nodecraft.exposeAsNode', node, { pure: true });
     assert.deepEqual(exposed?.map((f) => path.basename(f)), ['map_bridge.ts']);
     assert.match(await readText(source), /\/\/ Halves a number\.[\s\S]*@blueprint pure[^\n]*\r?\nexport function halveIt/);
     await waitFor(() => !!api.registry.get('fn:typescript:node-authoring/lib/map_bridge.ts#halveIt'), 'the Halve It node', 20000);
@@ -352,7 +352,7 @@ test("a new graph takes its folder's language, and the folder's setting wins", a
   fs.mkdirSync(path.join(folder, 'web'), { recursive: true });
   fs.writeFileSync(path.join(folder, 'api', 'pyproject.toml'), '[project]\nname = "api"\n');
   fs.writeFileSync(path.join(folder, 'web', 'tsconfig.json'), '{}\n');
-  const settings = vscode.workspace.getConfiguration('blueprintVisualScripting');
+  const settings = vscode.workspace.getConfiguration('nodecraft');
   try {
     const languageOf = async (file: string) => (await detectNewGraphLanguage(builtinLanguagePacks(), workspaceFile(`multi/${file}`)))?.id;
     assert.equal(await languageOf('api/handlers/New.vgraph'), 'python');
@@ -414,11 +414,11 @@ async function editGraph(uri: vscode.Uri, change: (graph: Record<string, unknown
 
 test('Compile writes the generated file next to the graph', async () => {
   const graph = workspaceFile('demo.vgraph');
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  await vscode.commands.executeCommand('nodecraft.compile', graph);
   const output = workspaceFile('demo.vgraph.js');
   assert.ok(await exists(output), 'demo.vgraph.js was written');
   const text = await readText(output);
-  assert.match(text, /^\/\/ Generated by Blueprint Visual Scripting from demo\.vgraph\./);
+  assert.match(text, /^\/\/ Generated by NodeCraft from demo\.vgraph\./);
   assert.match(text, /export class BlueprintDemo/);
   assert.deepEqual(vscode.languages.getDiagnostics(graph), []);
 });
@@ -433,7 +433,7 @@ test("Compile warns when the graph's project declares an older language version 
     graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], nodes: [{ id: 's', type: 'core:event.start', position: { x: 0, y: 0 }, properties: {} }], connections: [] }]
   }));
   try {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await vscode.commands.executeCommand('nodecraft.compile', graph);
     // Once for the project, on the file that declares the version, rather than on each graph.
     const warning = vscode.languages.getDiagnostics(workspaceFile('legacy-java/pom.xml')).find((d) => d.code === 'project-version');
     assert.ok(warning, 'the version warning');
@@ -457,11 +457,11 @@ test('saving a graph compiles it', async () => {
 
 test('switching the language replaces the old generated file', async () => {
   const graph = workspaceFile('demo.vgraph');
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  await vscode.commands.executeCommand('nodecraft.compile', graph);
   await editGraph(graph, (g) => {
     g.language = 'python';
   });
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  await vscode.commands.executeCommand('nodecraft.compile', graph);
   assert.ok(await exists(workspaceFile('demo_vgraph.py')), 'demo_vgraph.py was written');
   assert.equal(await exists(workspaceFile('demo.vgraph.js')), false, 'the stale JavaScript file is gone');
 });
@@ -471,7 +471,7 @@ test('renaming a graph moves its generated file, and deleting it removes the fil
   const renamed = workspaceFile('renamed.vgraph');
   const save = await vscode.workspace.openTextDocument(graph);
   await save.save();
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  await vscode.commands.executeCommand('nodecraft.compile', graph);
   assert.ok(await exists(workspaceFile('legacy.vgraph.js')));
 
   const rename = new vscode.WorkspaceEdit();
@@ -497,11 +497,11 @@ test('overlapping compiles of a graph take turns, and the last one wins', async 
   await editGraph(graph, (g) => {
     g.language = 'javascript';
   });
-  const first = vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  const first = vscode.commands.executeCommand('nodecraft.compile', graph);
   await editGraph(graph, (g) => {
     g.language = 'python';
   });
-  const others = [1, 2, 3].map(() => vscode.commands.executeCommand('blueprintVisualScripting.compile', graph));
+  const others = [1, 2, 3].map(() => vscode.commands.executeCommand('nodecraft.compile', graph));
   await Promise.all([first, ...others]);
   assert.ok(await exists(workspaceFile('demo_vgraph.py')), 'the latest language\'s file is there');
   assert.equal(await exists(workspaceFile('demo.vgraph.js')), false, 'and the older one\'s is gone');
@@ -518,7 +518,7 @@ test('renaming a graph onto a file of the user\'s leaves the file alone, and say
   })));
   await vscode.workspace.fs.writeFile(mine, new TextEncoder().encode(text));
   try {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await vscode.commands.executeCommand('nodecraft.compile', graph);
     assert.ok(await exists(workspaceFile('collide.vgraph.js')));
     const rename = new vscode.WorkspaceEdit();
     rename.renameFile(graph, renamed);
@@ -535,7 +535,7 @@ test('renaming a graph onto a file of the user\'s leaves the file alone, and say
 
 test('compile errors appear in the Problems panel', async () => {
   const graph = workspaceFile('broken.vgraph');
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  await vscode.commands.executeCommand('nodecraft.compile', graph);
   const problems = vscode.languages.getDiagnostics(graph);
   assert.equal(problems.length, 1);
   assert.equal(problems[0].severity, vscode.DiagnosticSeverity.Error);
@@ -576,14 +576,14 @@ test('a compile that fails is reported in Problems', async () => {
   })));
   // A generated file that can't be written: read-only. (A folder there is the user's, which
   // compiling doesn't write over: docs/audit.md, second pass.)
-  await vscode.workspace.fs.writeFile(output, new TextEncoder().encode('// Generated by Blueprint Visual Scripting from stuck.vgraph.\n'));
+  await vscode.workspace.fs.writeFile(output, new TextEncoder().encode('// Generated by NodeCraft from stuck.vgraph.\n'));
   fs.chmodSync(output.fsPath, 0o444);
   try {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await vscode.commands.executeCommand('nodecraft.compile', graph);
     const problems = vscode.languages.getDiagnostics(graph);
     assert.equal(problems.length, 1, JSON.stringify(problems));
     assert.equal(problems[0].severity, vscode.DiagnosticSeverity.Error);
-    assert.match(problems[0].message, /^Compiling stopped: .+ The Blueprint Visual Scripting output has the details\.$/s);
+    assert.match(problems[0].message, /^Compiling stopped: .+ The NodeCraft output has the details\.$/s);
   } finally {
     fs.chmodSync(output.fsPath, 0o666);
     await vscode.workspace.fs.delete(output);
@@ -649,7 +649,7 @@ function projectGraph(name: string, language: string, type: string): string {
 async function compileOnceFound(graph: vscode.Uri): Promise<void> {
   const deadline = Date.now() + 15000;
   for (;;) {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await vscode.commands.executeCommand('nodecraft.compile', graph);
     const problems = vscode.languages.getDiagnostics(graph);
     if (!problems.some((p) => p.code === 'unknown-node-type' || p.code === 'function-missing')) {
       assert.deepEqual(problems.map((p) => p.message), []);
@@ -700,7 +700,7 @@ test('functions marked @blueprint become nodes that generated code imports', asy
   await write('lib/score.ts', '/** @blueprint pure */\nexport function twice(value: number): number {\n  return value * 2;\n}\n');
   const deadline = Date.now() + 15000;
   for (;;) {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', tsGraph);
+    await vscode.commands.executeCommand('nodecraft.compile', tsGraph);
     const problems = vscode.languages.getDiagnostics(tsGraph);
     if (problems.some((p) => p.code === 'function-missing')) {
       assert.match(problems[0].message, /double in lib\/score\.ts no longer exists/);
@@ -760,7 +760,7 @@ test('New Project writes a project in a new folder of a folder that has files, o
   const parent = workspaceFile('new-projects');
   await vscode.workspace.fs.writeFile(workspaceFile('new-projects/notes.txt'), new TextEncoder().encode('not empty\n'));
   try {
-    const graph = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.newProject', { language: 'javascript', folder: parent, name: 'Hello Game' });
+    const graph = await vscode.commands.executeCommand<vscode.Uri>('nodecraft.newProject', { language: 'javascript', folder: parent, name: 'Hello Game' });
     assert.equal(graph?.toString(), workspaceFile('new-projects/hello-game/src/Main.vgraph').toString());
     for (const file of ['package.json', 'src/main.js', 'src/Main.vgraph.js', '.gitignore', '.gitattributes', 'README.md']) {
       await vscode.workspace.fs.stat(workspaceFile(`new-projects/hello-game/${file}`));
@@ -777,12 +777,12 @@ test('New Project writes a project in a new folder of a folder that has files, o
 test('New Project starts from the Tour when asked: the graph and its structure compile in the workspace', async () => {
   const parent = workspaceFile('tour-project');
   try {
-    const graph = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.newProject', { language: 'typescript', folder: parent, name: 'Tour', start: 'tour' });
+    const graph = await vscode.commands.executeCommand<vscode.Uri>('nodecraft.newProject', { language: 'typescript', folder: parent, name: 'Tour', start: 'tour' });
     assert.equal(graph?.toString(), workspaceFile('tour-project/src/Main.vgraph').toString());
     for (const file of ['src/Summary.vgraph', 'src/Summary.vgraph.ts', 'src/Main.vgraph.ts', 'src/Main.vgraph.test.ts']) await vscode.workspace.fs.stat(workspaceFile(`tour-project/${file}`));
     assert.match(await readText(workspaceFile('tour-project/src/Main.vgraph.ts')), /Welcome to the Tour/);
     // Compile in the editor knows the structure beside it, as the workspace does.
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await vscode.commands.executeCommand('nodecraft.compile', graph);
     const errors = () => vscode.languages.getDiagnostics(graph!).filter((d) => d.severity === vscode.DiagnosticSeverity.Error);
     assert.deepEqual(errors().map((d) => d.message), []);
   } finally {
@@ -796,16 +796,16 @@ test('Set Up in This Project reports a folder\'s project; its first graph and .g
   await vscode.workspace.fs.writeFile(workspaceFile('setup-project/package.json'), new TextEncoder().encode('{ "name": "setup-app", "type": "module" }\n'));
   await vscode.workspace.fs.writeFile(workspaceFile('setup-project/src/index.js'), new TextEncoder().encode('export const ready = true;\n'));
   try {
-    const report = await vscode.commands.executeCommand<{ root: string; items: { kind: string; title: string; change?: { id: string } }[] }[]>('blueprintVisualScripting.setUpProject', folder);
+    const report = await vscode.commands.executeCommand<{ root: string; items: { kind: string; title: string; change?: { id: string } }[] }[]>('nodecraft.setUpProject', folder);
     const optional = report?.flatMap((p) => p.items).filter((i) => i.kind === 'optional') ?? [];
     const first = optional.find((i) => /first graph/.test(i.title));
     const attributes = optional.find((i) => /gitattributes/.test(i.title));
     assert.ok(first?.change && attributes?.change, JSON.stringify(report));
     await waitFor(() => vscode.window.tabGroups.all.some((g) => g.tabs.some((t) => t.label === 'Set Up in This Project')), 'the report open');
-    assert.equal(await vscode.commands.executeCommand('blueprintVisualScripting.applySetupChange', first.change.id), true);
+    assert.equal(await vscode.commands.executeCommand('nodecraft.applySetupChange', first.change.id), true);
     const output = workspaceFile('setup-project/src/Hello.vgraph.js').fsPath;
     await waitFor(() => fs.existsSync(output) && /Hello from Blueprint/.test(fs.readFileSync(output, 'utf8')), 'the first graph compiled', 20000);
-    assert.equal(await vscode.commands.executeCommand('blueprintVisualScripting.applySetupChange', attributes.change.id), true);
+    assert.equal(await vscode.commands.executeCommand('nodecraft.applySetupChange', attributes.change.id), true);
     assert.match(await readText(workspaceFile('setup-project/.gitattributes')), /^\*\.vgraph\.\* linguist-generated$/m);
   } finally {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -820,14 +820,14 @@ test('Expose Functions as Nodes marks a file\'s picked functions, which become n
   const native = workspaceFile('native/expose-me.c');
   await vscode.workspace.fs.writeFile(native, new TextEncoder().encode('double area(double width, double height) {\n    return width * height;\n}\n'));
   try {
-    const changed = await vscode.commands.executeCommand<string[]>('blueprintVisualScripting.exposeFunctions', source, { names: ['shout'], pure: true });
+    const changed = await vscode.commands.executeCommand<string[]>('nodecraft.exposeFunctions', source, { names: ['shout'], pure: true });
     assert.deepEqual(changed?.map((f) => path.basename(f)), ['expose-me.ts']);
     assert.match(await readText(source), /^\/\*\* @blueprint pure \*\/\nexport function shout/m);
     assert.doesNotMatch(await readText(source), /@blueprint pure \*\/\nexport function whisper/, 'only what was picked');
     await waitFor(() => !!api.registry.get('fn:typescript:lib/expose-me.ts#shout'), 'the Shout node', 20000);
 
     const header = workspaceFile('native/expose-me.h');
-    const fromC = await vscode.commands.executeCommand<string[]>('blueprintVisualScripting.exposeFunctions', native, {});
+    const fromC = await vscode.commands.executeCommand<string[]>('nodecraft.exposeFunctions', native, {});
     assert.deepEqual(fromC?.map((f) => path.basename(f)).sort(), ['expose-me.c', 'expose-me.h']);
     const headerText = await readText(header);
     assert.match(headerText, /extern "C" \{[\s\S]*\/\/\/ @blueprint\r?\ndouble area\(double width, double height\);/);
@@ -840,7 +840,7 @@ test('Expose Functions as Nodes marks a file\'s picked functions, which become n
 });
 
 test('New Node writes a node file to start from; node files show their problems', async () => {
-  const created = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.newNode', workspaceFile('lib'), { name: 'Clamp Health', category: 'Combat' });
+  const created = await vscode.commands.executeCommand<vscode.Uri>('nodecraft.newNode', workspaceFile('lib'), { name: 'Clamp Health', category: 'Combat' });
   assert.equal(created?.toString(), workspaceFile('lib/ClampHealth.node.json').toString());
   const definition = JSON.parse(await readText(created)) as NodeDefinition;
   assert.equal(definition.type, 'user.combat.clamp-health');
@@ -875,7 +875,7 @@ test("Test Node Library runs a node file's examples in Simulate and in generated
   };
   await vscode.workspace.fs.writeFile(file, new TextEncoder().encode(JSON.stringify(halve, null, 2)));
   try {
-    const reports = await vscode.commands.executeCommand<{ pack: string; results: { fixture: string; status: string; message?: string }[] }[]>('blueprintVisualScripting.testNodeLibrary', file, ['typescript']);
+    const reports = await vscode.commands.executeCommand<{ pack: string; results: { fixture: string; status: string; message?: string }[] }[]>('nodecraft.testNodeLibrary', file, ['typescript']);
     assert.deepEqual(reports.map((r) => [r.pack, r.results.map((x) => x.status)]), [['simulate', ['failed']], ['typescript', ['failed']]]);
     for (const report of reports) assert.match(report.results[0].message ?? '', /Example 2, inputs \{"value":2\}: expected \["3"\], printed \["1"\]/);
   } finally {
@@ -908,7 +908,7 @@ test('Add Blueprint Package copies a graph package into the workspace, generates
   const api = (vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi).testing;
   const type = 'lib:blueprint-packages/combat-graphs/combat.vgraph#Half';
 
-  const target = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.addBlueprintPackage', workspaceFile('vendor/combat-graphs'));
+  const target = await vscode.commands.executeCommand<vscode.Uri>('nodecraft.addBlueprintPackage', workspaceFile('vendor/combat-graphs'));
   assert.equal(target?.toString(), workspaceFile('blueprint-packages/combat-graphs').toString());
   const added = JSON.parse(await readText(workspaceFile('blueprint-packages/combat-graphs/combat.vgraph'))) as { languages?: string[] };
   assert.ok(added.languages?.includes('python'), `generated for the workspace's Python graphs too: ${JSON.stringify(added.languages)}`);
@@ -919,7 +919,7 @@ test('Add Blueprint Package copies a graph package into the workspace, generates
 
   // A newer version replaces it, without asking.
   await write('vendor/combat-graphs/combat.vgraph-package.json', manifest('2.0.0'));
-  await vscode.commands.executeCommand('blueprintVisualScripting.addBlueprintPackage', workspaceFile('vendor/combat-graphs'));
+  await vscode.commands.executeCommand('nodecraft.addBlueprintPackage', workspaceFile('vendor/combat-graphs'));
   await waitFor(() => api.registry.get(type)?.library?.version === '2.0.0', 'the new version on its nodes', 20000);
 });
 
@@ -967,7 +967,7 @@ test("Add Blueprint Package installs from the registry the workspace's .npmrc na
   const userConfig = process.env.NPM_CONFIG_USERCONFIG;
   process.env.NPM_CONFIG_USERCONFIG = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vg-npmrc-')), 'none');
   try {
-    const target = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.addBlueprintPackage', { npm: '@studio/brawl' });
+    const target = await vscode.commands.executeCommand<vscode.Uri>('nodecraft.addBlueprintPackage', { npm: '@studio/brawl' });
     assert.equal(target?.toString(), workspaceFile('blueprint-packages/studio-brawl').toString());
     assert.ok(fs.existsSync(workspaceFile('blueprint-packages/studio-brawl/brawl.vgraph-package.json').fsPath), 'the Blueprint folder was added');
     assert.ok(!fs.existsSync(workspaceFile('blueprint-packages/studio-brawl/package.json').fsPath), "the npm package's own files weren't");
@@ -998,7 +998,7 @@ test('the functions of a function library graph become nodes that other graphs i
       ]
     }]
   }, null, 2));
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', library);
+  await vscode.commands.executeCommand('nodecraft.compile', library);
   assert.match(await readText(workspaceFile('mathlib/Helpers.vgraph.ts')), /^export function doubleIt\(value: number\): number \{$/m);
 
   const caller = workspaceFile('uses-lib.vgraph');
@@ -1031,7 +1031,7 @@ test('the macros of a macro library graph are expanded in the graphs that use th
   }, null, 2));
   const deadline = Date.now() + 15000;
   for (;;) {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', caller);
+    await vscode.commands.executeCommand('nodecraft.compile', caller);
     const problems = vscode.languages.getDiagnostics(caller);
     if (!problems.length) break;
     if (Date.now() > deadline) throw new Error(`The macro library was never found: ${problems.map((p) => p.message).join('; ')}`);
@@ -1048,7 +1048,7 @@ test('structs and enums in the workspace become types and nodes that graphs impo
     schemaVersion: 3, name: 'Faction', kind: 'enumeration', language: 'typescript', variables: [], graphs: [],
     enumerators: [{ id: 'red', name: 'Red' }, { id: 'blue', name: 'Light Blue' }]
   }, null, 2));
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', team);
+  await vscode.commands.executeCommand('nodecraft.compile', team);
   assert.match(await readText(workspaceFile('types/Faction.vgraph.ts')), /^export const Faction = \{$/m);
 
   const caller = workspaceFile('uses-team.vgraph');
@@ -1086,7 +1086,7 @@ test('the utility nodes are built in: a graph uses Slugify with nothing in the w
       ]
     }]
   }, null, 2)));
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  await vscode.commands.executeCommand('nodecraft.compile', graph);
   assert.deepEqual(vscode.languages.getDiagnostics(graph).map((d) => d.message), []);
   const generated = workspaceFile('slug.vgraph.js');
   const { execFileSync } = await import('node:child_process');
@@ -1100,7 +1100,7 @@ test('a shared struct is generated for each of its languages, and graphs in each
   const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
   const vec = { schemaVersion: 3, name: 'Vec', kind: 'structure', language: 'typescript', languages: ['python'], graphs: [], variables: [{ id: 'x', name: 'X', type: { id: 'float' }, defaultValue: 1 }] };
   await write('shared/Vec.vgraph', vec);
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', workspaceFile('shared/Vec.vgraph'));
+  await vscode.commands.executeCommand('nodecraft.compile', workspaceFile('shared/Vec.vgraph'));
   assert.match(await readText(workspaceFile('shared/Vec.vgraph.ts')), /class Vec/);
   assert.match(await readText(workspaceFile('shared/vec_vgraph.py')), /^class Vec/m);
 
@@ -1122,7 +1122,7 @@ test('a shared struct is generated for each of its languages, and graphs in each
   edit.replace(open.uri, new vscode.Range(0, 0, open.lineCount, 0), JSON.stringify({ ...vec, languages: undefined }, null, 2));
   await vscode.workspace.applyEdit(edit);
   await open.save();
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', open.uri);
+  await vscode.commands.executeCommand('nodecraft.compile', open.uri);
   assert.equal(fs.existsSync(workspaceFile('shared/vec_vgraph.py').fsPath), false);
 });
 
@@ -1223,14 +1223,14 @@ test('another extension registers a language pack and a node library, then remov
     }]
   }, null, 2)));
   try {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await vscode.commands.executeCommand('nodecraft.compile', graph);
     assert.match(await readText(workspaceFile('echo.vgraph.echo.js')), /return 'Hello, ' \+ name;/);
     assert.deepEqual(vscode.languages.getDiagnostics(graph), []);
   } finally {
     library.dispose();
     pack.dispose();
   }
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  await vscode.commands.executeCommand('nodecraft.compile', graph);
   assert.match(vscode.languages.getDiagnostics(graph).map((d) => d.message).join(' '), /Unknown graph language "echo"/);
 });
 
@@ -1257,7 +1257,7 @@ test('a declarative pack loads from a workspace file, and its problems show on t
     await write(definition);
     const deadline = Date.now() + 15000;
     while (!(await exists(generated)) && Date.now() < deadline) {
-      await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+      await vscode.commands.executeCommand('nodecraft.compile', graph);
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     assert.match(await readText(generated), /console\.log\("hi from a workspace pack"\);/);
@@ -1274,7 +1274,7 @@ test('a declarative pack loads from a workspace file, and its problems show on t
 // Phase 6's exit check (docs/language-breadth.md): the C pack is a separate extension
 // (examples/c-language-pack) that registers a declarative definition through the public API alone.
 test('exit check: a separate extension adds C, and its graphs compile and run', async () => {
-  assert.ok(vscode.extensions.getExtension('local.blueprint-c-language-pack'), 'the C pack extension is loaded');
+  assert.ok(vscode.extensions.getExtension('local.nodecraft-c-language-pack'), 'the C pack extension is loaded');
   const graph = workspaceFile('hello_c.vgraph');
   const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
   await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({
@@ -1292,7 +1292,7 @@ test('exit check: a separate extension adds C, and its graphs compile and run', 
   // The C extension activates once startup finishes.
   const deadline = Date.now() + 30000;
   while (!(await exists(generated)) && Date.now() < deadline) {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await vscode.commands.executeCommand('nodecraft.compile', graph);
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   assert.ok(await exists(generated), `It doesn't compile: ${vscode.languages.getDiagnostics(graph).map((d) => d.message).join('; ')}`);
@@ -1341,7 +1341,7 @@ test('node packages resolve with extension libraries, and graphs remember their 
         connections: [{ id: 'c', fromNode: 's', fromPin: 'execOut', toNode: 'h', toPin: 'execIn' }]
       }]
     });
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await vscode.commands.executeCommand('nodecraft.compile', graph);
     assert.ok(await exists(workspaceFile('hit.vgraph.js')), 'it compiles');
     assert.match(vscode.languages.getDiagnostics(graph).map((d) => d.message).join('\n'), /combat-nodes is now version 2\.0\.0, a new major version \(this graph was made with 1\.3\.0\)/);
   } finally {
@@ -1381,7 +1381,7 @@ test("a pack's output plan owns a file and adds a fenced block to the user's bui
   fs.writeFileSync(workspaceFile('build.txt').fsPath, 'project demo\n');
   try {
     await write('BuiltOne');
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph('BuiltOne'));
+    await vscode.commands.executeCommand('nodecraft.compile', graph('BuiltOne'));
     assert.equal(text('vgraph-sources.txt'), 'BuiltOne.vgraph.built.js\n');
     await waitFor(() => asked.length === 1, 'the hook to be proposed');
     assert.match(vscode.languages.getDiagnostics(graph('BuiltOne')).map((d) => d.message).join(' '), /isn't registered with the build yet: Add vgraph-sources.txt to build.txt/);
@@ -1389,11 +1389,11 @@ test("a pack's output plan owns a file and adds a fenced block to the user's bui
 
     // Declined: not asked again, until the command offers it again; then accepted.
     await write('BuiltTwo');
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph('BuiltTwo'));
+    await vscode.commands.executeCommand('nodecraft.compile', graph('BuiltTwo'));
     assert.equal(asked.length, 1);
     assert.equal(text('vgraph-sources.txt'), 'BuiltOne.vgraph.built.js\nBuiltTwo.vgraph.built.js\n');
     answer = 'accept';
-    await vscode.commands.executeCommand('blueprintVisualScripting.registerGeneratedFiles');
+    await vscode.commands.executeCommand('nodecraft.registerGeneratedFiles');
     await waitFor(() => asked.length === 2, 'the hook to be offered again');
     await waitFor(() => text('build.txt').includes('# vgraph:begin'), 'the block to be added');
     assert.equal(text('build.txt'), 'project demo\n# vgraph:begin\nsources 2\n# vgraph:end\n');
@@ -1422,11 +1422,11 @@ test("Compile writes a graph's tests to their own file; Run Tests and Simulate T
     }]
   };
   await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify(document, null, 2)));
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  await vscode.commands.executeCommand('nodecraft.compile', graph);
   const tests = workspaceFile('tested.vgraph.test.js');
   assert.match(await readText(tests), /test\("Holds", \(\) => \{\n {2}new Tested\(\)\.testHolds\(\);/);
-  await vscode.commands.executeCommand('blueprintVisualScripting.runTests', graph);
-  await vscode.commands.executeCommand('blueprintVisualScripting.simulateTests', graph);
+  await vscode.commands.executeCommand('nodecraft.runTests', graph);
+  await vscode.commands.executeCommand('nodecraft.simulateTests', graph);
 
   // Without tests, the test file goes.
   await editGraph(graph, (g) => {
@@ -1434,7 +1434,7 @@ test("Compile writes a graph's tests to their own file; Run Tests and Simulate T
     events.nodes = [];
     events.connections = [];
   });
-  await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+  await vscode.commands.executeCommand('nodecraft.compile', graph);
   assert.equal(await exists(tests), false);
 });
 
@@ -1456,10 +1456,10 @@ test('Simulate Tests of a graph that runs for hours returns at once, and Stop en
   };
   await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify(document, null, 2)));
   try {
-    await vscode.commands.executeCommand('blueprintVisualScripting.simulateTests', graph);
+    await vscode.commands.executeCommand('nodecraft.simulateTests', graph);
     await waitFor(() => !!api.provider.currentDebug(), 'Simulate to show as running', 5000);
     assert.equal(api.provider.currentDebug()!.stack, undefined, 'running, not paused');
-    await vscode.commands.executeCommand('blueprintVisualScripting.debug.stop');
+    await vscode.commands.executeCommand('nodecraft.debug.stop');
     await waitFor(() => !api.provider.currentDebug(), 'Stop to end it', 5000);
   } finally {
     api.provider.currentDebug()?.act('stop');
@@ -1479,7 +1479,7 @@ async function debugSample(language: string, generatedFile: string, folder = '')
   const api = (vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi).testing;
   await api.marks.breakpoints.set(graph, [{ graphId: 'EventGraph', nodeId: 'add_1', enabled: true }]);
   try {
-    await vscode.commands.executeCommand('blueprintVisualScripting.debug', graph);
+    await vscode.commands.executeCommand('nodecraft.debug', graph);
     const paused = () => api.provider.currentDebug()?.stack;
     await waitFor(() => !!paused(), 'the debugger to stop at the breakpoint', 180000);
     assert.deepEqual(paused()![0], { ...paused()![0], graphId: 'EventGraph', nodeId: 'add_1' });
@@ -1544,7 +1544,7 @@ async function exitCheck(language: string, folder = ''): Promise<void> {
   const until = (what: string, ready: (frames: string[]) => boolean) => waitFor(() => !!stack() && ready(stack()!), what, 60000)
     .catch((error: Error) => { throw new Error(`${error.message}; the stack: ${JSON.stringify(api.provider.currentDebug()?.stack ?? 'running')}`); });
   try {
-    await vscode.commands.executeCommand('blueprintVisualScripting.debug', graph);
+    await vscode.commands.executeCommand('nodecraft.debug', graph);
     await until('the stop at the call', (frames) => frames[0] === 'EventGraph/call');
     const debug = api.provider.currentDebug()!;
 
@@ -1684,7 +1684,7 @@ async function codeParentDebug(language: 'typescript' | 'python'): Promise<void>
   for (const graph of [knightGraph, arenaGraph]) {
     const deadline = Date.now() + 20000;
     for (;;) {
-      await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+      await vscode.commands.executeCommand('nodecraft.compile', graph);
       const problems = vscode.languages.getDiagnostics(graph).filter((p) => p.severity === vscode.DiagnosticSeverity.Error);
       if (!problems.length) break;
       if (Date.now() > deadline) throw new Error(`${path.basename(graph.fsPath)} never compiled: ${problems.map((p) => p.message).join('; ')}`);
@@ -1700,7 +1700,7 @@ async function codeParentDebug(language: 'typescript' | 'python'): Promise<void>
     .catch((error: Error) => { throw new Error(`${error.message}; the stack: ${JSON.stringify(frames() ?? 'running')}`); });
   const inKnight = (nodeId: string) => (f: NonNullable<ReturnType<typeof top>>) => !f.external && f.uri.toString() === knightGraph.toString() && f.nodeId === nodeId;
   try {
-    await vscode.commands.executeCommand('blueprintVisualScripting.debug', arenaGraph);
+    await vscode.commands.executeCommand('nodecraft.debug', arenaGraph);
     // The code's turn calls hit: the debugger stops in Knight's Event hit, below the code's frame.
     await until("the stop in Knight's Event hit", inKnight('p2'));
     const below = frames()![1];
@@ -1831,7 +1831,7 @@ test('Debug passes the run arguments as they are, ${...} included', async () => 
     graphs: [{ id: 'EventGraph', name: 'EventGraph', kind: 'event', comments: [], connections: [], nodes: [{ id: 'main', type: 'core:event.main', position: { x: 0, y: 0 }, properties: {} }] }]
   };
   await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify(document, null, 2)));
-  const settings = vscode.workspace.getConfiguration('blueprintVisualScripting', graph);
+  const settings = vscode.workspace.getConfiguration('nodecraft', graph);
   const args = ['${userHome}', '${env:PATH}', 'plain'];
   await settings.update('runArguments', args, vscode.ConfigurationTarget.Workspace);
   const launched: vscode.DebugConfiguration[] = [];
@@ -1840,7 +1840,7 @@ test('Debug passes the run arguments as they are, ${...} included', async () => 
   });
   const api = (vscode.extensions.getExtension(EXTENSION_ID)!.exports as ExtensionApi).testing;
   try {
-    await vscode.commands.executeCommand('blueprintVisualScripting.debug', graph);
+    await vscode.commands.executeCommand('nodecraft.debug', graph);
     await waitFor(() => launched.length > 0, 'the debug session to start', 60000);
     await waitFor(() => !api.provider.currentDebug(), 'the session to end', 60000);
     const code = (launched[0].runtimeArgs as string[]).at(-1)!;
@@ -1893,7 +1893,7 @@ test('a declarative pack imports marked functions through the language server', 
     // The language server may take a while to start.
     const deadline = Date.now() + 60000;
     while (!(await exists(generated)) && Date.now() < deadline) {
-      await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+      await vscode.commands.executeCommand('nodecraft.compile', graph);
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
     assert.ok(await exists(generated), `It doesn't compile: ${vscode.languages.getDiagnostics(graph).map((d) => d.message).join('; ')}`);
@@ -1976,7 +1976,7 @@ test('Debug does the same in generated C# (coreclr)', async () => {
 export async function run(): Promise<void> {
   const failures: string[] = [];
   let skipped = 0;
-  const filter = process.env.BLUEPRINT_IT_FILTER ?? '';
+  const filter = process.env.NODECRAFT_IT_FILTER ?? '';
   const selected = tests.filter((t) => t.name.includes(filter));
   for (const { name, run: body } of selected) {
     try {
@@ -2014,7 +2014,7 @@ test('Go functions marked @blueprint become nodes through gopls', async () => {
   const generated = workspaceFile('gomod/graphs/uses_go_vgraph.go');
   const deadline = Date.now() + 90000;
   while (!(await exists(generated)) && Date.now() < deadline) {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    await vscode.commands.executeCommand('nodecraft.compile', graph);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   assert.ok(await exists(generated), `It doesn't compile: ${vscode.languages.getDiagnostics(graph).map((d) => d.message).join('; ')}`);
@@ -2030,7 +2030,7 @@ test('Go functions marked @blueprint become nodes through gopls', async () => {
   const counterGenerated = workspaceFile('gomod/graphs/uses_counter_vgraph.go');
   const until = Date.now() + 90000;
   while (!(await exists(counterGenerated)) && Date.now() < until) {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', counterGraph);
+    await vscode.commands.executeCommand('nodecraft.compile', counterGraph);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   assert.ok(await exists(counterGenerated), `It doesn't compile: ${vscode.languages.getDiagnostics(counterGraph).map((d) => d.message).join('; ')}`);
@@ -2054,7 +2054,7 @@ test('Go functions marked @blueprint become nodes through gopls', async () => {
   const addGenerated = workspaceFile('gomod/graphs/uses_add_vgraph.go');
   const addUntil = Date.now() + 90000;
   while (!(await exists(addGenerated)) && Date.now() < addUntil) {
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', addGraph);
+    await vscode.commands.executeCommand('nodecraft.compile', addGraph);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   assert.ok(await exists(addGenerated), `It doesn't compile: ${vscode.languages.getDiagnostics(addGraph).map((d) => d.message).join('; ')}`);

@@ -12,5 +12,5 @@ with the graph: teammates build it without the extension.
 Saving a graph compiles it too.
 
 **Run** runs the generated code with the language's own toolchain (Node.js, Python, .NET, Cargo, a
-JDK, Go, ...) and shows what it prints in the **Blueprint Visual Scripting** output. Problems show on
+JDK, Go, ...) and shows what it prints in the **NodeCraft** output. Problems show on
 the nodes, in **Compiler Results** and in the Problems panel.

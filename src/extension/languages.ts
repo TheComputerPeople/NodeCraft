@@ -15,7 +15,7 @@ export async function detectWorkspaceLanguage(languages: LanguagePackRegistry): 
 // defaultLanguage setting for its folder, else the nearest marker files above it, else the
 // workspace's.
 export async function detectNewGraphLanguage(languages: LanguagePackRegistry, target: vscode.Uri): Promise<LanguagePack | undefined> {
-  const setting = vscode.workspace.getConfiguration('blueprintVisualScripting', target).get<string>('defaultLanguage')?.trim();
+  const setting = vscode.workspace.getConfiguration('nodecraft', target).get<string>('defaultLanguage')?.trim();
   const root = vscode.workspace.getWorkspaceFolder(target)?.uri.fsPath;
   const folders: string[][] = [];
   for (let dir = path.dirname(target.fsPath); root !== undefined && !path.relative(root, dir).startsWith('..'); dir = path.dirname(dir)) {

@@ -77,7 +77,7 @@ export function resolvePackages(packages: NodePackage[], loose: NodeDefinition[]
       else if (!satisfies(dependency.version, range)) problems.push({ origin: pkg.origin, package: pkg.name, message: `${pkg.name} needs ${name} ${range}, but version ${dependency.version} is installed.` });
     }
     if (pkg.engines?.blueprint && !satisfies(`${apiVersion}.0.0`, pkg.engines.blueprint)) {
-      problems.push({ origin: pkg.origin, package: pkg.name, message: `${pkg.name} is for Blueprint Visual Scripting API ${pkg.engines.blueprint}, but this extension's API version is ${apiVersion}.` });
+      problems.push({ origin: pkg.origin, package: pkg.name, message: `${pkg.name} is for NodeCraft API ${pkg.engines.blueprint}, but this extension's API version is ${apiVersion}.` });
     }
   }
   const definitions = new Map<string, NodeDefinition>();

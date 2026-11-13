@@ -20,7 +20,7 @@ import { GraphDebug, SimulateDebug } from './graph-debug';
 import { SimulateListener, SimulateSession } from './simulate-session';
 import { createNonce, renderEditorHtml } from './webview-html';
 
-const VIEW_TYPE = 'blueprintVisualScripting.graphEditor';
+const VIEW_TYPE = 'nodecraft.graphEditor';
 
 type PanelSet = Set<vscode.WebviewPanel>;
 
@@ -168,7 +168,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
             this.post(webviewPanel, { type: 'debugValues', requestId: message.requestId, values: await this.readValues(document.uri, message.pins ?? []) });
             break;
           case 'debug':
-            if (this.ensureTrusted(webviewPanel)) await vscode.commands.executeCommand('blueprintVisualScripting.debug', document.uri);
+            if (this.ensureTrusted(webviewPanel)) await vscode.commands.executeCommand('nodecraft.debug', document.uri);
             break;
           case 'reveal':
             if (message.target?.uri) await this.reveal(message.target);
@@ -474,7 +474,7 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
     const output = this.output();
     output.clear();
     output.show(true);
-    const args = vscode.workspace.getConfiguration('blueprintVisualScripting', document.uri).get<string[]>('runArguments', []);
+    const args = vscode.workspace.getConfiguration('nodecraft', document.uri).get<string[]>('runArguments', []);
     const emit = (event: RuntimeLogEvent): void => {
       // Each event goes to the editors of the file its node is in.
       this.broadcast(this.fileUri(document.uri, event.document).toString(), { type: 'runtimeEvent', event });
@@ -672,11 +672,11 @@ const MAX_FIND_RESULTS = 500;
 // A Simulate without breakpoints shows Running and Stop once it has run this long.
 const SHOW_RUNNING_MS = 500;
 const RESTRICTED_MODE_MESSAGE = 'Running graphs is disabled in Restricted Mode. Trust this workspace to run graphs.';
-const SAVE_DELAY_SETTING = 'blueprintVisualScripting.autoSaveDelay';
+const SAVE_DELAY_SETTING = 'nodecraft.autoSaveDelay';
 const DEFAULT_SAVE_DELAY_MS = 150;
 
 function setContext(key: string, value: boolean): void {
-  void vscode.commands.executeCommand('setContext', `blueprintVisualScripting.${key}`, value);
+  void vscode.commands.executeCommand('setContext', `nodecraft.${key}`, value);
 }
 
 function relativePath(root: string, file: string): string {

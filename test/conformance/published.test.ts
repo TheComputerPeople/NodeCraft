@@ -63,7 +63,7 @@ describe('published conformance suite', () => {
     assert.ok(report.passed > 10);
   });
 
-  test('blueprint-conformance runs a pack and exits with 0 when nothing fails', async () => {
+  test('nodecraft-conformance runs a pack and exits with 0 when nothing fails', async () => {
     const log = console.log;
     const printed: string[] = [];
     console.log = (text: string) => printed.push(text);

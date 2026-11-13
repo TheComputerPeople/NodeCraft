@@ -25,7 +25,7 @@ export class SetupView implements vscode.Disposable {
   show(folder: string): ProjectSetup[] {
     this.root = folder;
     if (!this.panel) {
-      this.panel = vscode.window.createWebviewPanel('blueprintVisualScripting.setUp', 'Set Up in This Project', vscode.ViewColumn.Active, { enableScripts: true, localResourceRoots: [] });
+      this.panel = vscode.window.createWebviewPanel('nodecraft.setUp', 'Set Up in This Project', vscode.ViewColumn.Active, { enableScripts: true, localResourceRoots: [] });
       this.panel.onDidDispose(() => (this.panel = undefined), undefined, this.disposables);
       this.panel.webview.onDidReceiveMessage((message: { type: 'show' | 'apply' | 'refresh'; id?: string }) => void this.receive(message), undefined, this.disposables);
     } else this.panel.reveal();
@@ -59,7 +59,7 @@ export class SetupView implements vscode.Disposable {
     if (change.open) {
       const graph = vscode.Uri.file(path.join(this.root, change.open));
       await vscode.commands.executeCommand('vscode.openWith', graph, GRAPH_VIEW_TYPE);
-      await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+      await vscode.commands.executeCommand('nodecraft.compile', graph);
     }
     this.refresh();
     return true;

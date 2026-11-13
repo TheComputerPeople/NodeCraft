@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { NodeRegistry } from '../../../src/core/registry';
 
-const EXTENSION_ID = 'local.blueprint-visual-scripting';
+const EXTENSION_ID = 'local.nodecraft';
 
 interface StructureNode {
   folder: vscode.WorkspaceFolder;
@@ -62,8 +62,8 @@ for (const [name, language, graph, output, command] of [
   test(`${name}: its graph compiles in its folder, in ${language}, calling its folder's code, and runs`, async () => {
     const root = folder(name).uri;
     const graphUri = vscode.Uri.joinPath(root, graph);
-    await vscode.commands.executeCommand('vscode.openWith', graphUri, 'blueprintVisualScripting.graphEditor');
-    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graphUri);
+    await vscode.commands.executeCommand('vscode.openWith', graphUri, 'nodecraft.graphEditor');
+    await vscode.commands.executeCommand('nodecraft.compile', graphUri);
     const generated = path.join(root.fsPath, output);
     await waitFor(() => fs.existsSync(generated), `${output}`);
     const run = spawnSync(command[0], command.slice(1), { cwd: root.fsPath, encoding: 'utf8' });
@@ -89,7 +89,7 @@ test("the Codebase Map's tree has each folder, with its own code", async () => {
 
 test("Set Up reports each folder's project, in its own language", async () => {
   for (const [name, language] of [['web', 'typescript'], ['api', 'python']] as const) {
-    const report = await vscode.commands.executeCommand<{ root: string; languages: string[] }[]>('blueprintVisualScripting.setUpProject', folder(name).uri);
+    const report = await vscode.commands.executeCommand<{ root: string; languages: string[] }[]>('nodecraft.setUpProject', folder(name).uri);
     // One project in each folder, holding graphs of the folder's language (an npm project's may be
     // JavaScript too), and not the other folder's.
     assert.equal(report?.length, 1, `${name}: ${JSON.stringify(report)}`);
