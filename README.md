@@ -4,7 +4,7 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 
 ## Where to start
 
-- **A new project:** run **Blueprint Visual Scripting: New Project...** from the Command Palette and pick a language ([Graphs in your project](#graphs-in-your-project)).
+- **A new project:** run **Blueprint Visual Scripting: New Project...** from the Command Palette, pick a language and start from the Tour ([Graphs in your project](#graphs-in-your-project)).
 - **A codebase you have:** **Blueprint Visual Scripting: Set Up in This Project** says what graphs there need, and changes nothing until you apply it.
 - **Coming from Unreal:** [docs/coming-from-unreal.md](docs/coming-from-unreal.md) maps each of Unreal's Blueprint concepts to its equivalent here, and says which don't apply. The gestures and shortcuts are Unreal's ([Editor interaction reference](#editor-interaction-reference)).
 - **Running graphs:** [Run, Simulate and Debug](#run-simulate-and-debug) lists what each language needs.
@@ -158,7 +158,7 @@ sample/node-authoring has marked TypeScript and Python code, used from graphs in
 
 ## Graphs in your project
 
-To start one, run **Blueprint Visual Scripting: New Project...** and pick a language and a folder. It writes a small project in that language's usual layout (a `package.json`, `pyproject.toml`, `.csproj`, `CMakeLists.txt`, `Cargo.toml`, `pom.xml`, `go.mod`, `project.godot`, ...) with a first graph that prints "Hello from Blueprint", an entry point that runs it, a `.gitignore`, a `.gitattributes` marking generated files, and a README saying how to run it with and without VS Code. Then it opens the graph and offers Run.
+To start one, run **Blueprint Visual Scripting: New Project...** and pick a language and a folder. It writes a small project in that language's usual layout (a `package.json`, `pyproject.toml`, `.csproj`, `CMakeLists.txt`, `Cargo.toml`, `pom.xml`, `go.mod`, `project.godot`, ...) with a first graph, an entry point that runs it, a `.gitignore`, a `.gitattributes` marking generated files, and a README saying how to run it with and without VS Code. The first graph is either Hello, which prints "Hello from Blueprint", or the **Tour**: a graph with a variable, a For Loop, a pure function, a structure, Branch and a Test Case, whose comments say what to try (a breakpoint in Simulate, Run, Run Tests, Debug). Then it opens the graph and offers Run.
 
 In a codebase you have, **Blueprint Visual Scripting: Set Up in This Project** (also in a folder's menu in the Explorer) reports each project it finds: its build, its language version against what generated code needs, where graphs would generate, and its checkers. It also lists what generated code needs before it builds (a CMake include, a Rust module block), what can't be done and why, and optional changes (`.gitattributes`, Ruff's and Prettier's ignores, a Composer classmap, a first graph). Each change has **Show Change** and **Apply**, and nothing changes until you apply it.
 

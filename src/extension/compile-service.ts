@@ -9,7 +9,7 @@ import { PinExpression } from '../core/language-pack';
 import { CompileReport, GraphDocument, RunStatus } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { parseDocument } from '../core/serializer';
-import { cppRunSources, csharpRunSources, godotProject, goPackage, goRunSources, javaProject, rustRunSources } from './placement';
+import { runSetup } from './run-setup';
 import { compileGraphFile, outputPathsFor } from './graph-compile';
 import { ProjectVersionCheck } from './projects';
 import { OutputPlans } from './output-plans';
@@ -155,17 +155,7 @@ export class CompileService implements vscode.Disposable {
     if (!result.output || !compiled.outputPath) return finish({ report: report(diagnostics, language) }, graph);
     const outputPath = compiled.outputPath;
     const testPath = compiled.testPath;
-    // Java finds the project's classes in its source roots (javac's -sourcepath).
-    const javaRoots = language === 'java' ? javaProject(graphDir, root).sourceRoots : [];
-    const importRoots = javaRoots.length ? javaRoots : result.output.importRoots?.map((r) => path.join(root, r));
-    const sources = language === 'csharp' ? csharpRunSources(graphDir, root, outputPath, result.output.importedFiles ?? [])
-      : language === 'cpp' ? cppRunSources(outputPath)
-      : language === 'rust' ? rustRunSources(outputPath, root, result.output.importedFiles ?? []).generated
-      : language === 'java' ? (result.output.importedFiles ?? []).map((f) => path.join(root, f))
-      : language === 'go' ? goRunSources(outputPath) : undefined;
-    const goModule = language === 'go' ? goPackage(graphDir, root).module : undefined;
-    const crate = language === 'rust' ? rustRunSources(outputPath, root, result.output.importedFiles ?? []).crate : undefined;
-    const projectDir = language === 'gdscript' ? godotProject(graphDir, root) : undefined;
+    const { importRoots, sources, crate, goModule, projectDir } = runSetup(language, outputPath, root, result.output);
     const generated: GeneratedFile = { graph: document.uri, outputPath, language, nodeLines: result.output.nodeLines, codeBreaks: result.output.codeBreaks ?? [], pinExpressions: result.output.pinExpressions ?? [] };
     this.generated.set(document.uri.toString(), generated);
     this.compiled.fire(generated);

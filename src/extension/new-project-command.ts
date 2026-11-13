@@ -1,6 +1,7 @@
-// Blueprint: New Project… (docs/project-integration.md, part 4): asks for a language and a folder (an
-// empty one, or a new one in it), writes the project (new-project.ts), opens its graph, compiles it
-// and offers Run. Tests give the answers instead of being asked.
+// Blueprint: New Project… (docs/project-integration.md, part 4): asks for a language, the first graph
+// (Hello, or the Tour: docs/release.md, step 4) and a folder (an empty one, or a new one in it),
+// writes the project (new-project.ts), opens its graph, compiles it and offers Run. Tests give the
+// answers instead of being asked.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
@@ -13,15 +14,23 @@ export interface NewProjectAnswers {
   // The folder the project goes in: itself when it's empty, else a new folder in it.
   folder: vscode.Uri;
   name?: string;
+  // Hello when not given.
+  start?: 'hello' | 'tour';
 }
 
-export async function newProject(given?: NewProjectAnswers): Promise<vscode.Uri | undefined> {
+// `known`: makes the workspace know the project's graph files before its first graph compiles.
+export async function newProject(given?: NewProjectAnswers, known?: (graphs: vscode.Uri[]) => Promise<void>): Promise<vscode.Uri | undefined> {
   const packs = builtinLanguagePacks().all();
   const language = given?.language ?? (await vscode.window.showQuickPick(
     packs.map((p) => ({ label: p.displayName, id: p.id })),
     { title: 'New Project', placeHolder: "The project's language" }
   ))?.id;
   if (!language) return undefined;
+  const start = given ? given.start ?? 'hello' : (await vscode.window.showQuickPick([
+    { label: 'Tour', detail: 'A graph that shows variables, a loop, a function, a struct, Branch and a test, with comments on what to try.', start: 'tour' as const },
+    { label: 'Hello', detail: 'A graph that prints "Hello from Blueprint".', start: 'hello' as const }
+  ], { title: 'New Project', placeHolder: 'Start from' }))?.start;
+  if (!start) return undefined;
   const parent = given?.folder ?? (await vscode.window.showOpenDialog({ title: 'New Project', canSelectFolders: true, canSelectFiles: false, canSelectMany: false, openLabel: 'Create Project Here' }))?.[0];
   if (!parent) return undefined;
   const empty = !fs.existsSync(parent.fsPath) || fs.readdirSync(parent.fsPath).length === 0;
@@ -42,7 +51,7 @@ export async function newProject(given?: NewProjectAnswers): Promise<vscode.Uri 
       // Its versions: what generated code needs, or the installed toolchain's when that's newer.
       const toolVersion = await detectToolVersion(language);
       const javaBuild = language === 'java' ? await detectJavaBuild() : undefined;
-      return createProject(folder, language, name.trim(), { ...(toolVersion ? { toolVersion } : {}), ...(javaBuild ? { javaBuild } : {}) });
+      return createProject(folder, language, name.trim(), { start, ...(toolVersion ? { toolVersion } : {}), ...(javaBuild ? { javaBuild } : {}) });
     });
   } catch (error) {
     void vscode.window.showErrorMessage(`The project couldn't be created: ${error instanceof Error ? error.message : String(error)}`);
@@ -56,10 +65,12 @@ export async function newProject(given?: NewProjectAnswers): Promise<vscode.Uri 
     else if (choice === 'Add to Workspace') vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, { uri: vscode.Uri.file(folder) });
     return graph;
   }
+  await known?.(created.project.graphs.map((file) => vscode.Uri.file(path.join(folder, file))));
   await vscode.commands.executeCommand('vscode.openWith', graph, GRAPH_VIEW_TYPE);
   await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
   if (!given) {
-    const choice = await vscode.window.showInformationMessage(`Created ${name.trim()}: ${path.basename(created.graph)} prints "Hello from Blueprint".`, 'Run');
+    const prints = start === 'tour' ? 'is the Tour: its comments say what to try' : 'prints "Hello from Blueprint"';
+    const choice = await vscode.window.showInformationMessage(`Created ${name.trim()}: ${path.basename(created.graph)} ${prints}.`, 'Run');
     if (choice === 'Run') await vscode.commands.executeCommand('blueprintVisualScripting.run', graph);
   }
   return graph;

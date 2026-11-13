@@ -72,6 +72,14 @@ export class GraphLibraries implements vscode.Disposable {
     this.subscriptions.forEach((s) => s.dispose());
   }
 
+  // Reads these files now, without waiting for the file watcher: New Project compiles its graph right
+  // after writing the files beside it (the Tour's structure).
+  async update(uris: vscode.Uri[]): Promise<void> {
+    for (const uri of uris) if (uri.scheme === 'file') this.changed.add(uri.toString());
+    clearTimeout(this.timer);
+    await this.flush();
+  }
+
   private queue(uri: vscode.Uri): void {
     if (uri.scheme !== 'file') return;
     this.changed.add(uri.toString());

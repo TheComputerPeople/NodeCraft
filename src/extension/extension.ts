@@ -279,7 +279,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   );
   // New Project (docs/project-integration.md, part 4): a project in a language's usual layout, with a
   // first graph that runs.
-  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newProject', (given?: NewProjectAnswers) => newProject(given)));
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newProject', (given?: NewProjectAnswers) => newProject(given, (graphs) => graphLibraries.update(graphs))));
   // Set Up in This Project (docs/project-integration.md, part 5): a report on the folder picked in the
   // Explorer (else the workspace folder), with each change it offers to make.
   const setupView = new SetupView(languages);

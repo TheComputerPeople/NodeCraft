@@ -754,6 +754,23 @@ test('New Project writes a project in a new folder of a folder that has files, o
   }
 });
 
+test('New Project starts from the Tour when asked: the graph and its structure compile in the workspace', async () => {
+  const parent = workspaceFile('tour-project');
+  try {
+    const graph = await vscode.commands.executeCommand<vscode.Uri>('blueprintVisualScripting.newProject', { language: 'typescript', folder: parent, name: 'Tour', start: 'tour' });
+    assert.equal(graph?.toString(), workspaceFile('tour-project/src/Main.vgraph').toString());
+    for (const file of ['src/Summary.vgraph', 'src/Summary.vgraph.ts', 'src/Main.vgraph.ts', 'src/Main.vgraph.test.ts']) await vscode.workspace.fs.stat(workspaceFile(`tour-project/${file}`));
+    assert.match(await readText(workspaceFile('tour-project/src/Main.vgraph.ts')), /Welcome to the Tour/);
+    // Compile in the editor knows the structure beside it, as the workspace does.
+    await vscode.commands.executeCommand('blueprintVisualScripting.compile', graph);
+    const errors = () => vscode.languages.getDiagnostics(graph!).filter((d) => d.severity === vscode.DiagnosticSeverity.Error);
+    assert.deepEqual(errors().map((d) => d.message), []);
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    await vscode.workspace.fs.delete(parent, { recursive: true });
+  }
+});
+
 test('Set Up in This Project reports a folder\'s project; its first graph and .gitattributes apply as undoable edits', async () => {
   const folder = workspaceFile('setup-project');
   await vscode.workspace.fs.writeFile(workspaceFile('setup-project/package.json'), new TextEncoder().encode('{ "name": "setup-app", "type": "module" }\n'));

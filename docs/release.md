@@ -167,3 +167,37 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
   - every **Blueprint Visual Scripting:** command it names exists;
   - the Assets table has each kind New Graph offers;
   - every `@` tag it names is read by the scanners.
+
+## Built (step 4)
+
+- **The Tour** (src/extension/tour.ts): a class graph named Main, so each language's entry point
+  runs it, with a `Summary` structure in its own file beside it.
+  - Start prints a welcome, then a For Loop from 1 to 5 prints each number through a pure function,
+    Describe ("1 is odd"), and adds it to a Total variable.
+  - Then it prints a Make Summary (`{"Count":5,"Total":15}`) and branches on Total > 10.
+  - A Test Case asserts Describe's text for 4 and 7.
+  - Four comment boxes say what to try: Run or Simulate; a breakpoint on the loop's Print, hovering
+    and stepping, and Debug; the structure; Run Tests and Simulate Tests.
+  - Its layout was checked in the webview, so no wire runs backwards.
+- **New Project** asks whether to start from the Tour or from Hello.
+  - `createProject` writes and compiles every graph of the project. Their types are registered
+    first, as the workspace knows them, and the build registration lists every generated file.
+  - The project's README says how to use the Tour.
+- **Found by the integration test:** New Project compiled the graph before the workspace had
+  scanned the structure beside it, so the editor reported "Unknown node type struct:Summary.make".
+  `GraphLibraries.update` now reads the project's graph files first.
+- **Run's setup** (src/extension/run-setup.ts): what Run, Run Tests and Debug need besides the
+  generated file was moved out of compile-service.ts, free of the vscode API, so tests run a project
+  as Run does. That covers import roots, the sources built with it, the crate, the Go module and the
+  Godot project.
+- **Tests:**
+  - unit (tour.test.ts):
+    - the Tour and its structure pass the graph-file check;
+    - Simulate prints the Tour's lines, and Simulate Tests passes;
+    - both graphs compile without problems in all twelve languages;
+    - New Project writes the Tour only when asked.
+  - conformance (new-project.test.ts): in each of the twelve languages, the Tour's project builds and
+    passes its checkers, its entry point prints the Tour's lines, and its Test Case passes when run as
+    Run Tests runs it (`dotnet build -warnaserror`, clippy, mypy `--strict`, PHPStan level 9, ...).
+  - integration: New Project with the Tour in TypeScript writes both graphs and their generated
+    files, and Compile in the editor reports no errors.

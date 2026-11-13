@@ -1,5 +1,6 @@
 // New Project (docs/project-integration.md, part 4): a minimal project in a language's usual layout,
-// with a first class graph that prints "Hello from Blueprint", an entry point that runs it, and what
+// with a first class graph that prints "Hello from Blueprint" (or the Tour, tour.ts, with its
+// structure beside it), an entry point that runs it, and what
 // every project gets: a .gitignore for the build output, .gitattributes marking generated files,
 // and a README. Its versions are what generated code needs, or the installed toolchain's when that
 // is newer, written where the project model reads them back (src/extension/projects.ts). Free of
@@ -13,7 +14,9 @@ import { GraphDocument } from '../core/model';
 import { NodeRegistry } from '../core/registry';
 import { compareVersionNumbers } from '../core/versions';
 import { applyAcceptedPlan, compileGraphFile } from './graph-compile';
+import { graphFileNodes } from './placement';
 import { runCommand } from './runner';
+import { tourGraph, tourSummary } from './tour';
 
 export const HELLO = 'Hello from Blueprint';
 
@@ -22,6 +25,8 @@ export interface NewProjectOptions {
   toolVersion?: string;
   // Java: Maven, or Gradle (the command picks Gradle when it's on the PATH and Maven isn't).
   javaBuild?: 'maven' | 'gradle';
+  // The first graph: Hello (the default), or the Tour (docs/release.md, step 4).
+  start?: 'hello' | 'tour';
 }
 
 export interface NewProject {
@@ -29,6 +34,8 @@ export interface NewProject {
   files: Record<string, string>;
   // The first graph, relative to the project folder.
   graph: string;
+  // Every graph file, the first one first, relative to the project folder.
+  graphs: string[];
   // How the project runs without VS Code, from its folder.
   run: string;
 }
@@ -257,11 +264,19 @@ export function newProjectFiles(language: string, name: string, options: NewProj
       throw new Error(`New Project has no layout for ${language}.`);
   }
   const pack = builtinLanguagePacks().get(language)!;
-  files[first] = `${JSON.stringify(helloGraph(language), null, 2)}\n`;
+  const graphs = firstGraphs(language, first, options.start);
+  for (const [file, doc] of Object.entries(graphs)) files[file] = `${JSON.stringify(doc, null, 2)}\n`;
   files['.gitignore'] = ignore.length ? `${ignore.join('\n')}\n` : '';
   files['.gitattributes'] = gitAttributes(language);
-  files['README.md'] = readme(name, pack.displayName, first, run);
-  return { files, graph: first, run };
+  files['README.md'] = readme(name, pack.displayName, first, run, options.start);
+  return { files, graph: first, graphs: Object.keys(graphs), run };
+}
+
+// The first graph's file and the files beside it: the Tour's structure.
+function firstGraphs(language: string, first: string, start: NewProjectOptions['start']): Record<string, GraphDocument> {
+  if (start !== 'tour') return { [first]: helloGraph(language) };
+  const folder = first.includes('/') ? first.slice(0, first.lastIndexOf('/') + 1) : '';
+  return { [first]: tourGraph(language), [`${folder}Summary.vgraph`]: tourSummary(language) };
 }
 
 // Generated files marked as generated, so diffs and statistics treat them so (docs/project-
@@ -274,13 +289,15 @@ export function gitAttributes(language: string): string {
   return `# Files Blueprint Visual Scripting generates from graphs.\n${patterns.map((p) => `${p} linguist-generated`).join('\n')}\n`;
 }
 
-function readme(name: string, language: string, graph: string, run: string): string {
+function readme(name: string, language: string, graph: string, run: string, start: NewProjectOptions['start']): string {
+  const tour = start === 'tour';
   return [
     `# ${name}`, '',
     `A ${language} project with graphs made in Blueprint Visual Scripting.`, '',
+    ...(tour ? [`\`${graph}\` is the Tour: its comments say what to try in it, from Simulate with a breakpoint to Run Tests.`, ''] : []),
     '## Run it', '',
     `- **In VS Code**, with the Blueprint Visual Scripting extension: open \`${graph}\` and press **Run** (or F5 to debug it).`,
-    `- **Without VS Code:** \`${run}\`. It prints "${HELLO}".`, '',
+    `- **Without VS Code:** \`${run}\`. ${tour ? "It prints the Tour's lines, starting with a welcome." : `It prints "${HELLO}".`}`, '',
     'Graphs compile when they are saved. Their generated files sit next to them and are committed with the project, so it builds without the extension.', ''
   ].join('\n');
 }
@@ -297,17 +314,27 @@ export async function createProject(folder: string, language: string, name: stri
   }
   const graph = path.join(folder, project.graph);
   const languages = new LanguagePackRegistry(builtinLanguagePacks().all());
-  const compiled = await compileGraphFile(helloGraph(language), graph, folder, {
-    registry: new NodeRegistry(),
-    languages,
-    write: async (file, text) => {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, text);
-    },
-    remove: async (file) => fs.rmSync(file, { force: true }),
-    register: async (pack, root, outputFile) => applyAcceptedPlan(pack, root, [outputFile], outputFile)
-  });
-  return { graph, project, diagnostics: compiled.diagnostics.map((d) => `${d.severity}: ${d.message}`) };
+  const graphs = project.graphs.map((file) => ({ file: path.join(folder, file), doc: JSON.parse(project.files[file]) as GraphDocument }));
+  // The graphs' types first, as the workspace knows them (the Tour's structure), then each compiled.
+  const registry = new NodeRegistry();
+  for (const { file, doc } of graphs) registry.registerMany(graphFileNodes(doc, file, folder, languages) ?? []);
+  const generator = languages.get(language)!.generator!;
+  const outputs = graphs.map(({ file }) => path.join(path.dirname(file), generator.outputFileName(path.basename(file))));
+  const diagnostics: string[] = [];
+  for (const { file, doc } of graphs) {
+    const compiled = await compileGraphFile(doc, file, folder, {
+      registry,
+      languages,
+      write: async (written, text) => {
+        fs.mkdirSync(path.dirname(written), { recursive: true });
+        fs.writeFileSync(written, text);
+      },
+      remove: async (removed) => fs.rmSync(removed, { force: true }),
+      register: async (pack, root, outputFile) => applyAcceptedPlan(pack, root, outputs, outputFile)
+    });
+    diagnostics.push(...compiled.diagnostics.map((d) => `${d.severity}: ${d.message}`));
+  }
+  return { graph, project, diagnostics };
 }
 
 // The installed toolchain's version for a language, as its tool reports it, or undefined.

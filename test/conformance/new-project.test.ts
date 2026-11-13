@@ -1,15 +1,24 @@
 // New Project (docs/project-integration.md, part 4) in each of the 12 languages: the project it
 // writes compiles its graph without warnings, declares versions the project model reads back without
 // a warning, marks its generated files in .gitattributes, passes its checkers and runs from its own
-// entry point, printing "Hello from Blueprint". A tool that isn't installed is skipped, by name, as
-// in the corpus; with BLUEPRINT_CORPUS_REQUIRE_TOOLS set it fails.
+// entry point, printing "Hello from Blueprint". The Tour (docs/release.md, step 4) does the same,
+// printing its lines, and its Test Case passes as Run Tests runs it. A tool that isn't installed is
+// skipped, by name, as in the corpus; with BLUEPRINT_CORPUS_REQUIRE_TOOLS set it fails.
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { LanguagePackRegistry } from '../../src/core/language-pack';
 import { builtinLanguagePacks } from '../../src/core/languages';
+import { GraphDocument } from '../../src/core/model';
+import { NodeRegistry } from '../../src/core/registry';
 import { HELLO, createProject, detectToolVersion, newProjectFiles, projectNames } from '../../src/extension/new-project';
+import { compileGraphFile } from '../../src/extension/graph-compile';
+import { graphFileNodes } from '../../src/extension/placement';
 import { projectVersionCheck } from '../../src/extension/projects';
+import { runSetup } from '../../src/extension/run-setup';
+import { ToolNotFoundError, runGeneratedCode } from '../../src/extension/runner';
+import { TOUR_OUTPUT, TOUR_TEST } from '../../src/extension/tour';
 import { CorpusStep, PYTHON, corpusWorkDir, runSteps } from './corpus';
 
 const workDir = corpusWorkDir();
@@ -20,10 +29,10 @@ const NAME = 'Hello Game';
 const names = projectNames(NAME);
 const exe = (file: string) => `./${file}${process.platform === 'win32' ? '.exe' : ''}`;
 const GODOT = process.env.GODOT ?? 'godot';
-const run = (command: string[], extra: Partial<CorpusStep> = {}): CorpusStep => ({ name: 'run', command, stdout: [HELLO], ...extra });
-
-// Each language's checkers, then its entry point.
-const STEPS: Record<string, CorpusStep[]> = {
+// Each language's checkers, then its entry point, which prints `stdout`.
+function steps(stdout: string[]): Record<string, CorpusStep[]> {
+const run = (command: string[], extra: Partial<CorpusStep> = {}): CorpusStep => ({ name: 'run', command, stdout, ...extra });
+return {
   typescript: [{ name: 'tsc', command: ['node_modules/typescript/bin/tsc', '-p', '.'], check: true }, run(['node', 'src/main.ts'])],
   javascript: [run(['node', 'src/main.js'])],
   python: [
@@ -63,8 +72,32 @@ const STEPS: Record<string, CorpusStep[]> = {
     run(['php', '-d', 'error_reporting=-1', '-d', 'display_errors=stderr', 'bin/main.php'], { probe: ['php', '--version'], env: { XDEBUG_MODE: 'off' }, quiet: true })
   ]
 };
+}
+const STEPS = steps([HELLO]);
+const TOUR_STEPS = steps(TOUR_OUTPUT);
 // Java with Gradle, as New Project makes it when Gradle is on the PATH and Maven isn't.
-const GRADLE: CorpusStep[] = [run(['gradle', '--no-daemon', '-q', '--offline', 'run'], { probe: ['gradle', '-v'], timeoutMs: 900000 })];
+const GRADLE: CorpusStep[] = [{ name: 'run', command: ['gradle', '--no-daemon', '-q', '--offline', 'run'], stdout: [HELLO], probe: ['gradle', '-v'], timeoutMs: 900000 }];
+
+// Runs the Tour's Test Case as Run Tests does: the graph compiled as the workspace sees it, with
+// what Run needs in this language (run-setup.ts).
+async function runTourTests(folder: string, graph: string, language: string) {
+  const languages = new LanguagePackRegistry(builtinLanguagePacks().all());
+  const generator = languages.get(language)!.generator!;
+  const registry = new NodeRegistry();
+  const summary = path.join(path.dirname(graph), 'Summary.vgraph');
+  registry.registerMany(graphFileNodes(JSON.parse(fs.readFileSync(summary, 'utf8')) as GraphDocument, summary, folder, languages) ?? []);
+  const doc = JSON.parse(fs.readFileSync(graph, 'utf8')) as GraphDocument;
+  const compiled = await compileGraphFile(doc, graph, folder, {
+    registry, languages, write: async (file, text) => fs.writeFileSync(file, text), remove: async () => {}
+  });
+  const output = compiled.result.output!;
+  const outputPath = compiled.outputPath!;
+  const testFile = compiled.testPath;
+  return runGeneratedCode(generator.runner!, outputPath, output.className, {
+    cwd: path.dirname(graph), timeoutMs: 600000, ...runSetup(language, outputPath, folder, output),
+    tests: { ...(testFile ? { testFile } : {}), cases: output.tests! }
+  });
+}
 
 describe('New Project', () => {
   test('every built-in language has a layout and steps', () => {
@@ -106,6 +139,34 @@ describe('New Project', () => {
       if (requireTools) assert.deepEqual(skipped.map((s) => s.message), [], 'BLUEPRINT_CORPUS_REQUIRE_TOOLS: every tool is installed');
       if (skipped.length === results.length) t.skip(skipped.map((s) => s.message).join('; '));
       else if (skipped.length) t.todo(`partly checked: ${skipped.map((s) => s.message).join('; ')}`);
+    });
+  }
+
+  for (const language of Object.keys(TOUR_STEPS)) {
+    test(`${language}: the Tour builds, passes its checkers, runs, and its test passes`, { concurrency: true }, async (t) => {
+      const folder = path.join(workDir, `tour-${language}`);
+      const toolVersion = await detectToolVersion(language);
+      const { graph, project, diagnostics } = await createProject(folder, language, NAME, { toolVersion, start: 'tour' });
+      assert.deepEqual(diagnostics, [], 'the graphs compile without warnings');
+      assert.equal(project.graphs.length, 2);
+      const results = await runSteps(TOUR_STEPS[language], folder);
+      for (const step of results) t.diagnostic(step.status === 'skipped' ? `skipped: ${step.message}` : `${step.step}: ${step.status}`);
+      const failed = results.filter((s) => s.status === 'failed');
+      assert.deepEqual(failed.map((s) => s.step), [], failed.map((s) => s.message).join('\n\n'));
+      const skipped = results.filter((s) => s.status === 'skipped');
+      if (requireTools) assert.deepEqual(skipped.map((s) => s.message), [], 'BLUEPRINT_CORPUS_REQUIRE_TOOLS: every tool is installed');
+      if (skipped.length === results.length) return t.skip(skipped.map((s) => s.message).join('; '));
+      let outcome;
+      try {
+        outcome = await runTourTests(folder, graph, language);
+      } catch (error) {
+        if (error instanceof ToolNotFoundError) return t.skip(error.message);
+        throw error;
+      }
+      const text = outcome.stdout + outcome.stderr;
+      assert.equal(outcome.exitCode, 0, text);
+      assert.ok(text.includes(TOUR_TEST), text);
+      if (skipped.length) t.todo(`partly checked: ${skipped.map((s) => s.message).join('; ')}`);
     });
   }
 });
