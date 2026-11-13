@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
-const EXTENSION_ID = 'local.nodecraft';
+const EXTENSION_ID = 'DevinBrasher.nodecraft';
 
 interface StructureNode {
   folder: vscode.WorkspaceFolder;

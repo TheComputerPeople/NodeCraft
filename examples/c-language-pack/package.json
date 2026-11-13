@@ -3,14 +3,14 @@
   "displayName": "C for NodeCraft",
   "description": "Compiles NodeCraft graphs to C: a declarative language pack, registered through the extension's public API.",
   "version": "1.0.0",
-  "publisher": "local",
+  "publisher": "DevinBrasher",
   "license": "MIT",
   "private": true,
   "engines": {
     "vscode": ">=1.140.0"
   },
   "categories": ["Programming Languages"],
-  "extensionDependencies": ["local.nodecraft"],
+  "extensionDependencies": ["DevinBrasher.nodecraft"],
   "activationEvents": ["onStartupFinished"],
   "main": "./extension.js",
   "scripts": {

@@ -5,7 +5,7 @@ const vscode = require('vscode');
 const definition = require('./c.vgraph-language.json');
 
 async function activate(context) {
-  const extension = vscode.extensions.getExtension('local.nodecraft');
+  const extension = vscode.extensions.getExtension('DevinBrasher.nodecraft');
   if (!extension) return;
   const api = await extension.activate();
   context.subscriptions.push(api.registerDeclarativePack(definition));

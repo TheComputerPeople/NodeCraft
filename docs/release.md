@@ -413,6 +413,8 @@ is Epic's own name for Unreal's feature.
     `NODECRAFT_CORPUS_REQUIRE_TOOLS`).
 - **The repository** is `github.com/<user>/NodeCraft`: `repository`, `homepage` and `bugs` in
   package.json, and the schemas' `$id`s. That's what lets `vsce` rewrite the README's links.
+- **The publisher** is `DevinBrasher` (display name Devin Brasher), so the extension's id is
+  `DevinBrasher.nodecraft`. The C pack example uses the same publisher.
 - **Kept:** Unreal's own terms for what the editor copies. These are Blueprint Class, Blueprint
   Interface, Blueprint Function and Macro Library, My Blueprint, Blueprint packages, and the
   `@blueprint` marker in code.

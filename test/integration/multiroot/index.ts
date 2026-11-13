@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { NodeRegistry } from '../../../src/core/registry';
 
-const EXTENSION_ID = 'local.nodecraft';
+const EXTENSION_ID = 'DevinBrasher.nodecraft';
 
 interface StructureNode {
   folder: vscode.WorkspaceFolder;

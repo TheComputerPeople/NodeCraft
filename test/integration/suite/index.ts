@@ -15,7 +15,7 @@ import { javascriptPack } from '../../../src/core/languages/javascript';
 import { detectNewGraphLanguage } from '../../../src/extension/languages';
 import { tarball } from '../../tar';
 
-const EXTENSION_ID = 'local.nodecraft';
+const EXTENSION_ID = 'DevinBrasher.nodecraft';
 const VIEW_TYPE = 'nodecraft.graphEditor';
 
 type Test = { name: string; run: () => Promise<void> };
@@ -1274,7 +1274,7 @@ test('a declarative pack loads from a workspace file, and its problems show on t
 // Phase 6's exit check (docs/language-breadth.md): the C pack is a separate extension
 // (examples/c-language-pack) that registers a declarative definition through the public API alone.
 test('exit check: a separate extension adds C, and its graphs compile and run', async () => {
-  assert.ok(vscode.extensions.getExtension('local.nodecraft-c-language-pack'), 'the C pack extension is loaded');
+  assert.ok(vscode.extensions.getExtension('DevinBrasher.nodecraft-c-language-pack'), 'the C pack extension is loaded');
   const graph = workspaceFile('hello_c.vgraph');
   const node = (id: string, type: string, properties: Record<string, unknown> = {}) => ({ id, type, position: { x: 0, y: 0 }, properties });
   await vscode.workspace.fs.writeFile(graph, new TextEncoder().encode(JSON.stringify({
