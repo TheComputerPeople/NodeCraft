@@ -211,6 +211,11 @@
         "title": "Stop Debugging",
         "category": "Blueprint Visual Scripting",
         "enablement": "blueprintVisualScripting.debugging"
+      },
+      {
+        "command": "blueprintVisualScripting.comingFromUnreal",
+        "title": "Coming from Unreal",
+        "category": "Blueprint Visual Scripting"
       }
     ],
     "customEditors": [
@@ -506,6 +511,96 @@
         "command": "blueprintVisualScripting.debug.stop",
         "key": "shift+f5",
         "when": "activeCustomEditorId == blueprintVisualScripting.graphEditor && blueprintVisualScripting.debugging"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "gettingStarted",
+        "title": "Get Started with Blueprint Visual Scripting",
+        "description": "Make a graph, run it in your language, debug it node by node, and use your own code as nodes.",
+        "featuredFor": [
+          "**/*.vgraph"
+        ],
+        "steps": [
+          {
+            "id": "newProject",
+            "title": "Make a project",
+            "description": "Start a project in any of twelve languages, from the Tour: a graph whose comments say what to try.\n[New Project](command:blueprintVisualScripting.newProject)\nHave code already? [Set Up in This Project](command:blueprintVisualScripting.setUpProject) says what graphs need there.",
+            "media": {
+              "markdown": "walkthrough/new-project.md"
+            },
+            "completionEvents": [
+              "onCommand:blueprintVisualScripting.newProject",
+              "onCommand:blueprintVisualScripting.createGraph"
+            ]
+          },
+          {
+            "id": "compileRun",
+            "title": "Compile and Run",
+            "description": "Open a graph and press **Compile** (F7) to write its code next to it, then **Run** to run that code with your language's toolchain.\n[Open a Graph](command:workbench.action.quickOpen?%5B%22.vgraph%22%5D)",
+            "media": {
+              "markdown": "walkthrough/compile-run.md"
+            },
+            "completionEvents": [
+              "onContext:blueprintVisualScripting.hasRun"
+            ]
+          },
+          {
+            "id": "simulate",
+            "title": "Simulate, with breakpoints",
+            "description": "Select a node and press F9 for a breakpoint, then **Simulate**: the graph runs in the editor and pauses there. Hover a pin for its value, and F10 steps.",
+            "media": {
+              "markdown": "walkthrough/simulate.md"
+            },
+            "completionEvents": [
+              "onContext:blueprintVisualScripting.debugPaused"
+            ]
+          },
+          {
+            "id": "debug",
+            "title": "Debug in your language",
+            "description": "**Debug** (F5) runs the generated code under your language's debugger, stopping at the same breakpoints and stepping node by node.",
+            "media": {
+              "markdown": "walkthrough/debug.md"
+            },
+            "completionEvents": [
+              "onContext:blueprintVisualScripting.hasDebugged"
+            ]
+          },
+          {
+            "id": "codeAsNodes",
+            "title": "Your code as nodes",
+            "description": "Mark a function `@blueprint` and it's a node. On a source file, Expose Functions as Nodes marks the ones you pick.\n[Expose Functions as Nodes](command:blueprintVisualScripting.exposeFunctions)",
+            "media": {
+              "markdown": "walkthrough/code-as-nodes.md"
+            },
+            "completionEvents": [
+              "onCommand:blueprintVisualScripting.exposeFunctions"
+            ]
+          },
+          {
+            "id": "codebaseMap",
+            "title": "See the whole codebase",
+            "description": "The Codebase Map draws your code and graphs top to bottom: architecture, structure, call flow and control flow.\n[Show Codebase Map](command:blueprintVisualScripting.showCodebaseMap)",
+            "media": {
+              "markdown": "walkthrough/codebase-map.md"
+            },
+            "completionEvents": [
+              "onCommand:blueprintVisualScripting.showCodebaseMap"
+            ]
+          },
+          {
+            "id": "comingFromUnreal",
+            "title": "Coming from Unreal",
+            "description": "Unreal's Blueprint concepts and what they are here: assets, events, nodes, reflection, and what doesn't apply.\n[Open the Guide](command:blueprintVisualScripting.comingFromUnreal)",
+            "media": {
+              "markdown": "walkthrough/unreal.md"
+            },
+            "completionEvents": [
+              "onCommand:blueprintVisualScripting.comingFromUnreal"
+            ]
+          }
+        ]
       }
     ]
   },

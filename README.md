@@ -4,9 +4,11 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 
 ## Where to start
 
+VS Code's **Welcome** page has a walkthrough, **Get Started with Blueprint Visual Scripting** (Command Palette: **Welcome: Open Walkthrough...**), that goes through the steps below one at a time.
+
 - **A new project:** run **Blueprint Visual Scripting: New Project...** from the Command Palette, pick a language and start from the Tour ([Graphs in your project](#graphs-in-your-project)).
 - **A codebase you have:** **Blueprint Visual Scripting: Set Up in This Project** says what graphs there need, and changes nothing until you apply it.
-- **Coming from Unreal:** [docs/coming-from-unreal.md](docs/coming-from-unreal.md) maps each of Unreal's Blueprint concepts to its equivalent here, and says which don't apply. The gestures and shortcuts are Unreal's ([Editor interaction reference](#editor-interaction-reference)).
+- **Coming from Unreal:** [docs/coming-from-unreal.md](docs/coming-from-unreal.md) (**Blueprint Visual Scripting: Coming from Unreal** opens it) maps each of Unreal's Blueprint concepts to its equivalent here, and says which don't apply. The gestures and shortcuts are Unreal's ([Editor interaction reference](#editor-interaction-reference)).
 - **Running graphs:** [Run, Simulate and Debug](#run-simulate-and-debug) lists what each language needs.
 - **Settings:** [Settings](#settings).
 - **Working on the extension itself:** [Development](#development).

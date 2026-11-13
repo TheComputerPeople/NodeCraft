@@ -201,3 +201,30 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
     Run Tests runs it (`dotnet build -warnaserror`, clippy, mypy `--strict`, PHPStan level 9, ...).
   - integration: New Project with the Tour in TypeScript writes both graphs and their generated
     files, and Compile in the editor reports no errors.
+
+## Built (step 5)
+
+- **The walkthrough** (package.json `walkthroughs`, media in walkthrough/): **Get Started with
+  Blueprint Visual Scripting**, featured for workspaces with `.vgraph` files. It has seven steps, each
+  with a Markdown page beside it:
+
+  | Step | Its button | Done when |
+  |---|---|---|
+  | Make a project | New Project, and Set Up in This Project | New Project or New Graph runs |
+  | Compile and Run | Open a Graph | a graph runs |
+  | Simulate, with breakpoints | none | Simulate pauses at a breakpoint |
+  | Debug in your language | none | a Debug session starts |
+  | Your code as nodes | Expose Functions as Nodes | it runs |
+  | See the whole codebase | Show Codebase Map | it runs |
+  | Coming from Unreal | Open the Guide | it runs |
+
+- **Steps done by doing them:** Run sets `blueprintVisualScripting.hasRun`, a started Debug session
+  sets `hasDebugged`, and pausing at a breakpoint sets the existing `debugPaused`. The editor's own
+  buttons don't run commands, so these context keys mark the steps done.
+- **Blueprint Visual Scripting: Coming from Unreal** opens docs/coming-from-unreal.md in the Markdown
+  preview.
+- **Tests** (integration):
+  - every `command:` link in a step and every `onCommand` completion event is a registered command;
+  - every step's media file exists;
+  - the walkthrough opens;
+  - Coming from Unreal opens the guide in the Markdown preview.

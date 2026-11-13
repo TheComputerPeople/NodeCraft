@@ -66,6 +66,26 @@ test('registers the New Graph command', async () => {
   assert.ok(commands.includes('blueprintVisualScripting.createGraph'));
 });
 
+// The Getting Started walkthrough (docs/release.md, step 5): each step's links and completion
+// commands are registered, its media are there, it opens, and so does the Coming from Unreal guide.
+test('the walkthrough opens; its links, completion commands and media are all there', async () => {
+  const extension = vscode.extensions.getExtension(EXTENSION_ID)!;
+  await extension.activate();
+  const commands = new Set(await vscode.commands.getCommands());
+  type Step = { id: string; description: string; media: { markdown: string }; completionEvents: string[] };
+  const [walkthrough] = (extension.packageJSON as { contributes: { walkthroughs: { id: string; steps: Step[] }[] } }).contributes.walkthroughs;
+  assert.equal(walkthrough.steps.length, 7);
+  for (const step of walkthrough.steps) {
+    for (const [, command] of step.description.matchAll(/\(command:([\w.]+)/g)) assert.ok(commands.has(command), `${step.id}: ${command}`);
+    for (const event of step.completionEvents.filter((e) => e.startsWith('onCommand:'))) assert.ok(commands.has(event.slice('onCommand:'.length)), `${step.id}: ${event}`);
+    assert.ok(fs.existsSync(path.join(extension.extensionPath, step.media.markdown)), `${step.id}: ${step.media.markdown}`);
+  }
+  await vscode.commands.executeCommand('workbench.action.openWalkthrough', `${EXTENSION_ID}#${walkthrough.id}`, false);
+  await vscode.commands.executeCommand('blueprintVisualScripting.comingFromUnreal');
+  await waitFor(() => vscode.window.tabGroups.all.some((g) => g.tabs.some((t) => /coming-from-unreal\.md/.test(t.label))), 'the guide open in the Markdown preview');
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+});
+
 // docs/unreal-conventions.md, "Graph tabs": Alt+Left and Alt+Right go through a graph editor's
 // graphs only while there's one to go to, and are VS Code's Go Back and Go Forward otherwise.
 test("the graph tabs' Back and Forward are commands, keyed only while they can go somewhere", async () => {

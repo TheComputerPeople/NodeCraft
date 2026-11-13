@@ -160,6 +160,8 @@ export class CodeDebugService implements vscode.Disposable {
     const started = await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), configuration);
     this.configurations.delete(id);
     if (!started) this.end(debug);
+    // The walkthrough's Debug step (package.json, docs/release.md step 5).
+    else void vscode.commands.executeCommand('setContext', 'blueprintVisualScripting.hasDebugged', true);
   }
 
   // The session the editors show, if a generated-code session is running.

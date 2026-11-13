@@ -213,6 +213,8 @@ export class CompileService implements vscode.Disposable {
     out.show(true);
     out.appendLine(tests ? `Running the tests of ${outcome.report.outputFile} (${pack.displayName})` : `Running ${outcome.report.outputFile} (${pack.displayName})`);
     onStatus({ state: 'running', message: tests ? `Running ${pack.displayName} tests…` : `Running ${pack.displayName}…` });
+    // The walkthrough's Compile and Run step (package.json, docs/release.md step 5).
+    if (!tests) void vscode.commands.executeCommand('setContext', 'blueprintVisualScripting.hasRun', true);
     const configured = vscode.workspace.getConfiguration('blueprintVisualScripting').get<Record<string, string[]>>('runCommands', {});
     try {
       const result = await runGeneratedCode(runner, outcome.outputPath, outcome.className, {

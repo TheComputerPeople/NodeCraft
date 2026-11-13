@@ -277,6 +277,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       await vscode.commands.executeCommand('vscode.open', target);
     })
   );
+  // Coming from Unreal (docs/coming-from-unreal.md), in the Markdown preview: the walkthrough's last
+  // step, and the Command Palette.
+  context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.comingFromUnreal', () =>
+    vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.joinPath(context.extensionUri, 'docs', 'coming-from-unreal.md'))));
   // New Project (docs/project-integration.md, part 4): a project in a language's usual layout, with a
   // first graph that runs.
   context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newProject', (given?: NewProjectAnswers) => newProject(given, (graphs) => graphLibraries.update(graphs))));
