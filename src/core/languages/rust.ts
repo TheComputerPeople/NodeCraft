@@ -3,7 +3,7 @@
 // written through vgraph::get and vgraph::set so no borrow outlives a call: an object can be called
 // back (a dispatcher's handler, an event) while one of its methods runs.
 import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, classInfo, exprType, programClassSpec, userTypes, canComplete } from '../compiler/ir';
-import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, commentLine, dedent, toIdentifier } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import { OutputPlan, PlacementContext } from '../output-plan';
@@ -59,6 +59,13 @@ export function rustEnumMembers(type: EnumInfo): Map<string, string> {
   return new Map(type.enumerators.map((e) => [e.id, scope.claim(e.name, 'pascal')]));
 }
 
+// A path in `#[path = "…"]`: with "/" separators, as a Rust string (a `"` or `\` in a file name
+// would otherwise end it or escape what follows).
+export function rustPath(file: string): string {
+  const escaped = file.replace(/\\/g, '/').replace(/"/g, '\\"').replace(/[\u0000-\u001f\u007f]/g, (c) => `\\u{${c.charCodeAt(0).toString(16)}}`);
+  return `"${escaped}"`;
+}
+
 // The project crate's modules, declared in an inline module whose path is the crate's src folder
 // (so each loads, with its own submodules, as in the crate) and used at the root, so
 // `crate::game::combat` resolves in the scaffold as in the project. Code a graph calls in another
@@ -68,7 +75,7 @@ function projectModules(crate: { src: string; modules: string[]; name?: string }
   return [
     // (Not when a module has the crate's name, which then needs no alias to resolve.)
     ...(crate.name && crate.name !== 'blueprint_run' && !crate.modules.includes(crate.name) ? [`extern crate self as ${crate.name};`] : []),
-    `#[path = "${crate.src.replace(/\\/g, '/')}"]`,
+    `#[path = ${rustPath(crate.src)}]`,
     'mod vgraph_project {',
     ...crate.modules.map((m) => `    pub mod ${m};`),
     '}',
@@ -78,7 +85,6 @@ function projectModules(crate: { src: string; modules: string[]; name?: string }
 
 // The Cargo project Run builds around generated modules.
 export function rustRunProject(modules: { name: string; path: string }[], entry: { module: string; className: string; mainMethod?: string }, crate?: { src: string; modules: string[]; name?: string }): Record<string, string> {
-  const slash = (p: string) => p.replace(/\\/g, '/');
   return {
     'Cargo.toml': ['# Built by Blueprint Visual Scripting to run generated Rust. Safe to delete.', '[package]', 'name = "blueprint_run"', 'version = "0.1.0"', 'edition = "2021"', '', '[[bin]]', 'name = "blueprint_run"', 'path = "main.rs"', '', '[workspace]', ''].join('\n'),
     [`${RUST_RUNTIME_MODULE}.rs`]: RUST_RUNTIME,
@@ -87,7 +93,7 @@ export function rustRunProject(modules: { name: string; path: string }[], entry:
       '// --test first, each test (given as name and method) on a new object.',
       '#![allow(unused)]',
       `mod ${RUST_RUNTIME_MODULE};`,
-      ...modules.map((m) => `#[path = "${slash(m.path)}"]\nmod ${m.name};`),
+      ...modules.map((m) => `#[path = ${rustPath(m.path)}]\nmod ${m.name};`),
       ...projectModules(crate),
       '',
       'fn main() {',
@@ -199,7 +205,7 @@ export function rustPlacement(context: PlacementContext): OutputPlan {
       }
       declared.set(module, file);
       const local = relativePath(src, file);
-      declarations.set(module, `${local === `${module}.rs` ? '' : `#[path = "${local}"]\n`}#[rustfmt::skip]\npub mod ${module};`);
+      declarations.set(module, `${local === `${module}.rs` ? '' : `#[path = ${rustPath(local)}]\n`}#[rustfmt::skip]\npub mod ${module};`);
     }
     const lines = [...declarations].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, text]) => text);
     plan.ownedFiles.push({ path: join(src, `${RUST_RUNTIME_MODULE}.rs`), text: RUST_RUNTIME });
@@ -526,7 +532,7 @@ class RustEmitter {
     const name = this.functionNames.get(fn.id)!;
     const list = params.map((p) => `mut ${p.name}: ${this.typeName(p.type)}`).join(', ');
     const access = this.library || fn.access !== 'private' ? 'pub ' : '';
-    if (fn.description) this.out.line(`/// ${fn.description.replace(/\s+/g, ' ')}`);
+    if (fn.description) this.out.line(`/// ${commentLine(fn.description)}`);
     this.method(`${access}fn ${name}(${free ? '' : '&self'}${!free && list ? ', ' : ''}${list})${returns}`, () => {
       for (const store of fn.event?.stores ?? []) this.out.line(`vgraph::set(&self.${this.slotNames.get(store.slot)}, ${this.paramNames.get(`${fn.id}\u0000${store.param}`)}.clone());`);
       for (const m of locals) this.out.line(`let mut ${this.memberNames.get(m.id)}: ${this.typeName(m.type)} = ${this.coerce(m.initial, m.type)};`);

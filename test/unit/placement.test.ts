@@ -5,6 +5,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { compileDocument } from '../../src/core/compiler';
 import { builtinLanguagePacks } from '../../src/core/languages';
+import { msbuildEscape } from '../../src/core/languages/cpp';
+import { rustPath } from '../../src/core/languages/rust';
 import { NodeRegistry } from '../../src/core/registry';
 import { doc, node, wire } from './helpers';
 import { configCovers, csharpNamespace, detectImportExtension, detectModuleFormat, generatedFrom, goPackage, javaProject, globToRegExp, isGeneratedFrom, parseJsonc, pythonModule, rustModule, rustRunSources, verifyPlacement } from '../../src/extension/placement';
@@ -232,5 +234,20 @@ describe('verifyPlacement', () => {
 describe('parseJsonc', () => {
   test('ignores comments and trailing commas but not slashes in strings', () => {
     assert.deepEqual(parseJsonc('{ /* a */ "url": "http://x//y", // b\n "list": [1, 2,], }'), { url: 'http://x//y', list: [1, 2] });
+  });
+});
+
+// docs/audit.md, step 4: a graph file's name goes into build files as they read it.
+describe('paths in build files', () => {
+  const BACKSLASH = String.fromCharCode(92);
+  test("MSBuild: % $ @ ; ' ? * in an item's Include are written %XX (checked with dotnet msbuild)", () => {
+    assert.equal(msbuildEscape("a;b$c@d%e'f?g*h.cpp"), 'a%3Bb%24c%40d%25e%27f%3Fg%2Ah.cpp');
+    assert.equal(msbuildEscape(`graphs${BACKSLASH}Duel.vgraph.cpp`), `graphs${BACKSLASH}Duel.vgraph.cpp`);
+  });
+
+  test('Rust: a path in #[path = "..."] is a Rust string, with "/" separators', () => {
+    assert.equal(rustPath(`graphs${BACKSLASH}duel_vgraph.rs`), '"graphs/duel_vgraph.rs"');
+    assert.equal(rustPath('say "hi".rs'), `"say ${BACKSLASH}"hi${BACKSLASH}".rs"`);
+    assert.equal(rustPath(`a${String.fromCharCode(10)}b.rs`), `"a${BACKSLASH}u{a}b.rs"`);
   });
 });

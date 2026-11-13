@@ -154,3 +154,44 @@ Not covered by this pass, and left for another:
     file is a folder says `Compiling stopped` in Problems.
 - The editor fuzzer opens each file's first graph only; other graphs and editing actions on broken
   files weren't fuzzed.
+
+### Built (step 4)
+
+- **Collapse to Function in Library** (editor-provider.ts): the host writes only the library just
+  picked for that graph, once, inside its workspace folder, and only a function library; a new
+  library must be in the graph's folder. Whatever the editor's message names otherwise is ignored.
+- **Paths in build files:**
+  - MSBuild: a generated file's path in `vgraph.targets` gets MSBuild's escaping (`%XX` for
+    `% $ @ ; ' ? *`) before XML's (`msbuildEscape`, cpp.ts). Checked with `dotnet msbuild`: files
+    named `cost$x`, `at@home`, `a;b`, `100%` and `it's` are all found.
+  - Rust: a path in `#[path = "…"]` is a Rust string (`rustPath`, rust.ts).
+- **A function's description in a comment** (`commentLine`, compiler/names.ts, in every language):
+  each run of whitespace, and U+0085, becomes one space. Each language's own hazard is escaped:
+  - C#: U+0085 ended `///` (JavaScript's `\s` doesn't match it);
+  - Java: `\u` escapes are decoded before comments are read, so every backslash is doubled;
+  - PHP: `?>` ends PHP code even in a `//` comment, so it becomes `? >`;
+  - C++: a comment ending in a backslash took the method's line into it.
+  - A conformance fixture (descriptions.vgraph) has all of them, plus line breaks of every kind
+    and other languages' comment and string delimiters. It passes in all 12 languages, and failed
+    in C++, C#, Java and PHP before.
+- **Python:** a NaN or infinite literal would be written as `float("nan")` or `float("inf")`.
+  None can come from a file, since JSON has neither.
+- **Lint:** the unused imports and variable are gone. Left, and why:
+  - three unused names in destructuring that drop a field (`_version`, `_`, `_path`);
+  - 148 conditions the types say are always true: values read from files, which aren't always
+    what their types say;
+  - 36 values turned into strings that the types allow to be objects: node properties, which
+    are strings in practice and give `[object Object]` otherwise, not a crash;
+  - the rest are deliberate: NaN checks (`x !== x`), the Function constructor that runs a
+    JavaScript code node in Simulate and checks identifiers, a sparse array as a regex match's
+    fallback, Simulate's thrown return signal, and promise executors that keep `resolve`.
+- **Dependencies:** `npm audit fix` moved `fast-uri` (through `ajv`, tests only) to 3.1.9;
+  `npm audit` finds nothing.
+- **Tests:** unit (placement.test.ts) for both escapes; integration for the library save (not
+  picked, outside the folder, not a function library, once); the conformance fixture.
+
+## Status
+
+All four steps are done. Not covered, as listed above: generated code beyond the conformance tests
+and the corpus, the debugger integrations in depth, concurrency between compiles, and the webview
+and Codebase Map code beyond their HTML and messages.

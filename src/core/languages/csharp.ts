@@ -1,7 +1,7 @@
 // C# pack: generates a C# class per graph from Visual IR, and runs it through a small console
 // project (docs/program-structure.md, "C# language pack").
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, exprType, userTypes, canComplete, classInfo, codeParentInfo, programClassSpec, interfaceInfo, isCodeClassId } from '../compiler/ir';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent } from '../compiler/names';
+import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, exprType, userTypes, canComplete, classInfo, codeParentInfo, programClassSpec, interfaceInfo, isCodeClassId } from '../compiler/ir';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, commentLine, dedent } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { scanCSharp } from '../importing/csharp-scanner';
@@ -709,7 +709,7 @@ class CSharpEmitter {
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name, 'keep', '_'));
     const fields = this.outputFields.get(fn.id)!;
     const returns = fn.outputs.length > 1 ? `(${fn.outputs.map((o) => `${this.typeName(o.type)} ${fields.get(o.id)}`).join(', ')})` : fn.code && fn.outputs.length ? this.codeTypeName(fn.outputs[0].type) : fn.outputs[0]?.type ?? (fn.outputs.length ? { id: 'any' } : undefined);
-    if (fn.description) this.out.line(`/// <summary>${fn.description.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\s+/g, ' ')}</summary>`);
+    if (fn.description) this.out.line(`/// <summary>${commentLine(fn.description).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</summary>`);
     // Private methods can't be virtual; the others can be overridden.
     const access = this.library ? 'public' : fn.access === 'private' ? 'private' : `${fn.access ?? 'public'} ${fn.overrides ? 'override' : 'virtual'}`;
     this.method(access, this.functionNames.get(fn.id)!, params, returns, () => {

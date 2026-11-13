@@ -525,6 +525,44 @@ test('a compile that fails is reported in Problems', async () => {
   }
 });
 
+// docs/audit.md, step 4: Collapse to Function in Library writes only the library just picked for
+// the graph, inside its workspace folder, whatever the editor's message names.
+test('saving a collapsed library writes only the library picked, inside the folder', async () => {
+  const api = (await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as { testing: { provider: unknown } };
+  const provider = api.testing.provider as {
+    pickedLibraries: Map<string, string>;
+    saveLibrary(from: vscode.Uri, library: { path: string; document: unknown }): Promise<void>;
+  };
+  const graph = workspaceFile('demo.vgraph');
+  const library = (name: string) => ({ schemaVersion: 3, name, kind: 'functionLibrary', language: 'javascript', variables: [], graphs: [] });
+  const outside = vscode.Uri.joinPath(workspaceFile('demo.vgraph'), '..', '..', 'escaped.vgraph');
+  const unpicked = workspaceFile('Unpicked.vgraph');
+  const picked = workspaceFile('Picked.vgraph');
+  try {
+    await provider.saveLibrary(graph, { path: '../escaped.vgraph', document: library('Escaped') });
+    await provider.saveLibrary(graph, { path: 'Unpicked.vgraph', document: library('Unpicked') });
+    // Picked, but the message names another file, or isn't a function library.
+    provider.pickedLibraries.set(graph.toString(), 'Picked.vgraph');
+    await provider.saveLibrary(graph, { path: 'Unpicked.vgraph', document: library('Unpicked') });
+    provider.pickedLibraries.set(graph.toString(), '../escaped.vgraph');
+    await provider.saveLibrary(graph, { path: '../escaped.vgraph', document: library('Escaped') });
+    assert.equal(await exists(outside), false, 'nothing written outside the workspace folder');
+    assert.equal(await exists(unpicked), false, 'nothing written that was not picked');
+    provider.pickedLibraries.set(graph.toString(), 'Picked.vgraph');
+    await provider.saveLibrary(graph, { path: 'Picked.vgraph', document: { ...library('Picked'), kind: 'class' } });
+    assert.equal(await exists(picked), false, 'only a function library');
+    provider.pickedLibraries.set(graph.toString(), 'Picked.vgraph');
+    await provider.saveLibrary(graph, { path: 'Picked.vgraph', document: library('Picked') });
+    assert.match(await readText(picked), /"kind": "functionLibrary"/);
+    // Once: the pick is used up.
+    await vscode.workspace.fs.delete(picked);
+    await provider.saveLibrary(graph, { path: 'Picked.vgraph', document: library('Picked') });
+    assert.equal(await exists(picked), false, 'a pick saves once');
+  } finally {
+    for (const uri of [outside, unpicked, picked]) if (await exists(uri)) await vscode.workspace.fs.delete(uri);
+  }
+});
+
 // A graph calling one project function: Start → Double(4) → Print.
 function projectGraph(name: string, language: string, type: string): string {
   const node = (id: string, nodeType: string, properties: Record<string, unknown> = {}) => ({ id, type: nodeType, position: { x: 0, y: 0 }, properties });

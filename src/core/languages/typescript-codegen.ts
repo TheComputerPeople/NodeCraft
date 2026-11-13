@@ -1,7 +1,7 @@
 // Generates TypeScript, or JavaScript with JSDoc types, from Visual IR.
 import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, canComplete, classInfo, codeParentInfo, importKey, exprType, interfaceInfo, isCodeClassId, programClassSpec, userTypes } from '../compiler/ir';
 import { relativeSpecifier, typescriptSpecifier } from '../compiler/module-paths';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, commentLine, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, PinExpression } from '../language-pack';
@@ -679,7 +679,7 @@ class TypeScriptEmitter {
     for (const m of locals) this.memberNames.set(m.id, scope.claim(m.name, 'camel'));
     const slots = this.program.slots.filter((x) => x.function === fn.id);
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name));
-    if (fn.description) this.out.line(`// ${fn.description.replace(/\s+/g, ' ')}`);
+    if (fn.description) this.out.line(`// ${commentLine(fn.description)}`);
     this.method(this.functionNames.get(fn.id)!, params, this.resultType(fn), fn.access ?? false, () => {
       // A custom event keeps the inputs other flows read, as Unreal keeps an event's outputs.
       for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotRef(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)};`);

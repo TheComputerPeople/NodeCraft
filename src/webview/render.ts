@@ -1,7 +1,6 @@
 import { canAddPin, definitionFor } from '../core/editing';
 import { deprecationMessage } from '../core/metadata';
 import { GraphConnection, GraphNode, NodeDefinition, PinDefinition } from '../core/model';
-import { SEQUENCE } from '../core/resolve';
 import { addPin, beginRewireFromConnection, insertRerouteAt, onNodeMouseDown, onPinMouseDown, removeConnection } from './actions';
 import { breakpointOn } from './breakpoints';
 import { pausedNodeId } from './debugger';

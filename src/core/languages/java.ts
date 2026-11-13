@@ -3,7 +3,7 @@
 // outputs return them as an Object[], ints are longs, strings compare with equals, and a method's
 // end must be reachable before it returns a default.
 import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, calleeSignature, canComplete, classInfo, codeParentInfo, exprType, interfaceInfo, isCodeClassId, programClassSpec, userTypes } from '../compiler/ir';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, commentLine, dedent } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { scanJava } from '../importing/java-scanner';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
@@ -716,7 +716,9 @@ class JavaEmitter {
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name, 'keep', '_'));
     const returns = fn.outputs.length > 1 ? 'Object[]' : fn.code && fn.outputs.length && spelling?.returns ? spelling.returns : fn.outputs[0]?.type ?? undefined;
     this.out.endNode();
-    if (fn.description) this.out.line(`/** ${fn.description.replace(/\*\//g, '* /').replace(/\s+/g, ' ')} */`);
+    // Java decodes \u escapes before it reads comments, so the escape of "*" followed by "/" would
+    // end this one: doubling every backslash leaves none that starts an escape.
+    if (fn.description) this.out.line(`/** ${commentLine(fn.description).replace(/\\/g, '\\\\').replace(/\*\//g, '* /')} */`);
     if (fn.code) this.out.line('@Override');
     const access = this.library ? 'public' : fn.access ?? 'public';
     this.method(access, this.functionNames.get(fn.id)!, params, returns, () => {

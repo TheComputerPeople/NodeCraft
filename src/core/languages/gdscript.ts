@@ -3,9 +3,9 @@
 // (gdscript-runtime.ts) by its name: a copy goes next to every generated file. GDScript has no
 // exceptions, so a failure is recorded (vg.fail) and generated code returns after any statement that
 // may have failed.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, codeParentInfo, isCodeClassId, targetCallParams } from '../compiler/ir';
+import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, codeParentInfo, isCodeClassId, targetCallParams } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, commentLine, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
@@ -462,7 +462,7 @@ class GdscriptEmitter {
     const returns = fn.outputs.length > 1 ? '-> Array' : fn.outputs.length === 1 ? (fn.code && annotation(fn.outputs[0].type) ? `-> ${annotation(fn.outputs[0].type).slice(2)}` : '') : '-> void';
     this.failReturn = fn.outputs.length === 0 ? 'return' : `return ${fn.outputs.length === 1 ? defaults[0] : `[${defaults.join(', ')}]`}`;
     this.method(this.functionNames.get(fn.id)!, params, returns, () => {
-      if (fn.description) this.out.line(`# ${fn.description.replace(/\s+/g, ' ')}`);
+      if (fn.description) this.out.line(`# ${commentLine(fn.description)}`);
       for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotRef(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)}`);
       for (const m of locals) this.out.line(`var ${this.memberNames.get(m.id)} = ${this.value(m.initial, m.type)}`);
       for (const x of slots) this.out.line(`var ${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)}`);

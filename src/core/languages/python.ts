@@ -2,7 +2,7 @@
 import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, broadcastParams, canComplete, classInfo, codeParentInfo, exprType, importKey, interfaceInfo, isCodeClassId, programClassSpec, userTypes, targetCallParams } from '../compiler/ir';
 import { pythonImportRoot, pythonModuleName } from '../compiler/module-paths';
 import { scanPython } from '../importing/python-scanner';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, commentLine, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression } from '../language-pack';
@@ -596,7 +596,6 @@ class PythonEmitter {
       header.line();
     }
     // Project code, one import per module (docs/code-as-nodes.md, "Generated imports").
-    const byModule = new Map<string, string[]>();
     // Only what the code uses: a class imports every type its parent's members use, and projects'
     // checkers reject the ones it doesn't (Pyright's reportUnusedImport, Ruff's F401).
     const code = pythonCodeOnly(body.toString());
@@ -730,7 +729,7 @@ class PythonEmitter {
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name));
     const returns = fn.outputs.length > 1 ? `tuple[${fn.outputs.map((o) => this.typeName(o.type)).join(', ')}]` : fn.outputs[0]?.type ?? (fn.outputs.length ? { id: 'any' } : undefined);
     this.method(this.functionNames.get(fn.id)!, params, returns, () => {
-      if (fn.description) this.out.line(`# ${fn.description.replace(/\s+/g, ' ')}`);
+      if (fn.description) this.out.line(`# ${commentLine(fn.description)}`);
       // A custom event keeps the inputs other flows read, as Unreal keeps an event's outputs.
       for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotRef(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)}`);
       for (const m of locals) this.out.line(`${this.memberNames.get(m.id)}: ${this.typeName(m.type)} = ${this.value(m.initial, m.type)}`);
@@ -1172,6 +1171,9 @@ function literal(value: unknown): string {
   if (value === null || value === undefined) return 'None';
   if (value === true) return 'True';
   if (value === false) return 'False';
+  // (JSON has no NaN or infinities, so a graph file can't hold one; were one computed, it would be
+  // written as Python's, not JSON.stringify's null.)
+  if (typeof value === 'number' && !Number.isFinite(value)) return Number.isNaN(value) ? 'float("nan")' : `${value < 0 ? '-' : ''}float("inf")`;
   if (typeof value === 'number' || typeof value === 'string') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(literal).join(', ')}]`;
   if (typeof value === 'object') return `{${Object.entries(value).map(([k, v]) => `${JSON.stringify(k)}: ${literal(v)}`).join(', ')}}`;

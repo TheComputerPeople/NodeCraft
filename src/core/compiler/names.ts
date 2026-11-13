@@ -50,6 +50,13 @@ export function toIdentifier(raw: string, style: NameStyle): string {
 }
 
 // Removes the common leading indentation from a code snippet and drops blank edge lines.
+// A function's description as one line of a comment (docs/audit.md, step 4): every run of
+// whitespace, and U+0085 (a line break in C#, which `\s` doesn't match), becomes one space.
+// Languages whose comments end or join lines in other ways escape those themselves.
+export function commentLine(text: string): string {
+  return text.replace(/[\s\u0085]+/g, ' ').trim();
+}
+
 export function dedent(code: string): string[] {
   const lines = code.replace(/\r\n/g, '\n').split('\n');
   while (lines.length && !lines[0].trim()) lines.shift();

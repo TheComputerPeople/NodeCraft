@@ -2,9 +2,9 @@
 // IR. Files require each other with require_once; the support file (php-runtime.ts) is a companion
 // next to every generated file. Containers are the support file's VgList, VgMap and VgSet, shared by
 // reference, since PHP copies its arrays on assignment.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, codeParentInfo, isCodeClassId, targetCallParams } from '../compiler/ir';
+import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, canComplete, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, codeParentInfo, isCodeClassId, targetCallParams } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, commentLine, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
@@ -512,7 +512,8 @@ class PhpEmitter {
     const slots = this.program.slots.filter((x) => x.function === fn.id);
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name, 'camel'));
     this.method(this.functionNames.get(fn.id)!, params, () => {
-      if (fn.description) this.out.line(`// ${fn.description.replace(/\s+/g, ' ')}`);
+      // ?> ends PHP code even in a // comment.
+      if (fn.description) this.out.line(`// ${commentLine(fn.description).replace(/\?>/g, '? >')}`);
       for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotRef(store.slot)} = $${this.paramNames.get(`${fn.id}\u0000${store.param}`)};`);
       for (const m of locals) this.out.line(`$${this.memberNames.get(m.id)} = ${this.value(m.initial, m.type)};`);
       for (const x of slots) this.out.line(`$${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)};`);

@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 3,
+  "name": "Descriptions",
+  "kind": "class",
+  "language": "typescript",
+  "variables": [],
+  "graphs": [
+    {
+      "id": "EventGraph",
+      "name": "EventGraph",
+      "kind": "event",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "core:event.start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "say",
+          "type": "core:function.call",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Say"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "c1",
+          "fromNode": "start",
+          "fromPin": "execOut",
+          "toNode": "say",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "Say",
+      "name": "Say",
+      "kind": "function",
+      "signature": {
+        "inputs": [],
+        "outputs": [],
+        "description": "Says ok. Hazards for comments: */ and \\u002a/ end Java's; ?> ends PHP; a line break\nand a CR\rand NEL\u0085and LS\u2028and PS\u2029; \"\"\" and ''' and ]] and --[[ and =begin and <summary> & </summary>; a trailing backslash \\"
+      },
+      "nodes": [
+        {
+          "id": "entry",
+          "type": "core:function.entry",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Say"
+          }
+        },
+        {
+          "id": "print",
+          "type": "core:console.print",
+          "position": {
+            "x": 200,
+            "y": 0
+          },
+          "properties": {
+            "pin:value": "ok"
+          }
+        },
+        {
+          "id": "return",
+          "type": "core:function.return",
+          "position": {
+            "x": 400,
+            "y": 0
+          },
+          "properties": {
+            "graph": "Say"
+          }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w1",
+          "fromNode": "entry",
+          "fromPin": "execOut",
+          "toNode": "print",
+          "toPin": "execIn"
+        },
+        {
+          "id": "w2",
+          "fromNode": "print",
+          "fromPin": "execOut",
+          "toNode": "return",
+          "toPin": "execIn"
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "metadata": {
+    "description": "Conformance fixture: a function's description, written as a comment in every language, can't end the comment or join the next line to it (docs/audit.md, step 4): line breaks of every kind, */ and its escaped form for Java, ?> for PHP, a trailing backslash for C++.",
+    "expectedOutput": [
+      "ok"
+    ]
+  }
+}

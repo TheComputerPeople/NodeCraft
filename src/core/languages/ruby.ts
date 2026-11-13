@@ -1,9 +1,9 @@
 // Ruby pack (docs/more-languages.md, "Ruby"): generates a Ruby file (one class per graph) from Visual
 // IR. Files require each other with require_relative, and the support file (ruby-runtime.ts) is a
 // companion: a copy goes next to every generated file.
-import { IrBlock, IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, codeParentInfo, isCodeClassId, dataPins, targetCallParams, canComplete } from '../compiler/ir';
+import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrProgram, IrStatement, classInfo, exprType, interfaceInfo, programClassSpec, userTypes, broadcastParams, calleeSignature, codeParentInfo, isCodeClassId, dataPins, targetCallParams, canComplete } from '../compiler/ir';
 import { relativeSpecifier } from '../compiler/module-paths';
-import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, InheritedMembers, NameScope, claimClassMembers, codeInheritedMembers, commentLine, dedent, toIdentifier } from '../compiler/names';
 import type { ClassInfo, InterfaceInfo } from '../objects';
 import { CodeWriter } from '../compiler/writer';
 import { CodeDebugger, CodeGenerator, CodeRunner, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
@@ -410,7 +410,7 @@ class RubyEmitter {
     const slots = this.program.slots.filter((x) => x.function === fn.id);
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name, 'snake'));
     this.method(this.functionNames.get(fn.id)!, params, () => {
-      if (fn.description) this.out.line(`# ${fn.description.replace(/\s+/g, ' ')}`);
+      if (fn.description) this.out.line(`# ${commentLine(fn.description)}`);
       for (const store of fn.event?.stores ?? []) this.out.line(`${this.slotRef(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)}`);
       for (const m of locals) this.out.line(`${this.memberNames.get(m.id)} = ${this.value(m.initial, m.type)}`);
       for (const x of slots) this.out.line(`${this.slotNames.get(x.id)} = ${this.defaultFor(x.type)}`);

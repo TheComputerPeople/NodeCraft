@@ -35,6 +35,8 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly panelsByDocument = new Map<string, PanelSet>();
   // Find in All Blueprints hits to show once their file's editor has loaded.
   private readonly pendingReveals = new Map<string, RevealTarget>();
+  // The function library each graph's Collapse to Function in Library picked, by graph URI.
+  private readonly pickedLibraries = new Map<string, string>();
   // The debugging session the editors show (docs/debugging.md): Simulate's, or generated code's.
   private debug: GraphDebug | undefined;
 
@@ -173,9 +175,14 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
           case 'findReferences':
             this.post(webviewPanel, { type: 'findResults', results: await this.findAcrossGraphs(key, (doc, resolve) => findReferences(doc, message.nodeType ?? '', resolve)) });
             break;
-          case 'pickFunctionLibrary':
-            this.post(webviewPanel, { type: 'functionLibrary', library: await this.pickFunctionLibrary(document) });
+          case 'pickFunctionLibrary': {
+            // saveLibrary writes only the library picked here.
+            const library = await this.pickFunctionLibrary(document);
+            if (library) this.pickedLibraries.set(document.uri.toString(), library.path);
+            else this.pickedLibraries.delete(document.uri.toString());
+            this.post(webviewPanel, { type: 'functionLibrary', library });
             break;
+          }
           case 'saveLibrary':
             if (message.library) await this.saveLibrary(document.uri, message.library);
             break;
@@ -409,7 +416,10 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
       filters: { 'Visual Graph': ['vgraph'] },
       saveLabel: 'Create Function Library'
     });
-    if (!target || !vscode.workspace.getWorkspaceFolder(target)) return undefined;
+    if (!target || vscode.workspace.getWorkspaceFolder(target)?.uri.toString() !== folder.uri.toString()) {
+      if (target) void vscode.window.showWarningMessage('Put the function library in the same workspace folder as the graph.');
+      return undefined;
+    }
     const name = path.basename(target.fsPath, '.vgraph');
     // Its only function will be the collapsed one.
     const library = { ...newDocument(name, language, 'functionLibrary'), graphs: [] };
@@ -417,10 +427,16 @@ export class GraphEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   // Writes a library the webview collapsed nodes into, and saves it, so it compiles as on save.
+  // Only the library just picked for this graph (pickFunctionLibrary), inside its workspace folder:
+  // the editor's message can't name another file to write (docs/audit.md, step 4).
   private async saveLibrary(from: vscode.Uri, library: LibraryFile): Promise<void> {
+    const picked = this.pickedLibraries.get(from.toString());
+    this.pickedLibraries.delete(from.toString());
     const folder = vscode.workspace.getWorkspaceFolder(from);
-    if (!folder) return;
+    if (!folder || picked === undefined || library.path !== picked || library.document?.kind !== 'functionLibrary') return;
     const uri = vscode.Uri.joinPath(folder.uri, ...library.path.split('/'));
+    const inside = path.relative(folder.uri.fsPath, uri.fsPath);
+    if (!inside || inside.startsWith('..') || path.isAbsolute(inside) || !inside.toLowerCase().endsWith('.vgraph')) return;
     const create = new vscode.WorkspaceEdit();
     create.createFile(uri, { ignoreIfExists: true });
     await vscode.workspace.applyEdit(create);

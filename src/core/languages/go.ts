@@ -2,7 +2,7 @@
 // IR, in its folder's package. The package's support code is one file (go-runtime.ts). Run builds a
 // scratch module that maps the generated files into a package of its own (`go build -overlay`).
 import { IrCallee, IrCodeHelper, IrExpr, IrFunction, IrImport, IrProgram, IrStatement, calleeSignature, classInfo, exprType, interfaceInfo, programClassSpec, userTypes } from '../compiler/ir';
-import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, dedent, toIdentifier } from '../compiler/names';
+import { ClassMemberNames, ClassMemberStyles, NameScope, claimClassMembers, commentLine, dedent, toIdentifier } from '../compiler/names';
 import { CodeWriter } from '../compiler/writer';
 import { CodeGenerator, GenerateOptions, GeneratedCode, LanguagePack, PinExpression, RunContext } from '../language-pack';
 import { OutputPlan, PlacementContext } from '../output-plan';
@@ -458,7 +458,7 @@ class GoEmitter {
     for (const m of locals) this.memberNames.set(m.id, scope.claim(m.name, 'camel'));
     const slots = this.program.slots.filter((x) => x.function === fn.id);
     for (const x of slots) this.slotNames.set(x.id, scope.claim(x.name, 'camel'));
-    if (fn.description) this.out.line(`// ${fn.description.replace(/\s+/g, ' ')}`);
+    if (fn.description) this.out.line(`// ${commentLine(fn.description)}`);
     this.method(this.functionNames.get(fn.id)!, params, fn.outputs.map((o) => o.type), () => {
       for (const store of fn.event?.stores ?? []) this.out.line(`self.${this.slotNames.get(store.slot)} = ${this.paramNames.get(`${fn.id}\u0000${store.param}`)}`);
       const names: string[] = [];
