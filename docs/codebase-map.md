@@ -235,7 +235,7 @@ Across all four:
   Framework handlers (routes, controllers) need calls, and move to step 4.
 - **The indexer** (`src/extension/code-indexer.ts`, vscode-free) walks a folder.
   - **Folders skipped:** dependencies, plus `bin/`, `obj/`, `build/`, `target/` and `x64/` only beside their build's project file. A Node or Lua project's `bin/` holds its programs.
-  - **Reading files:** each file is read by the worker. Results are cached by content hash, in a cache that's discarded when the queries or grammars change. Files over 1 MB are indexed by name.
+  - **Reading files:** each file is read by the worker. Results are cached by content hash, in a cache that's discarded when the queries or grammars change. Files over 1 MB are indexed by name, read only as far as a generated file's header. Files are read a few at a time, without blocking the extension host. Each file's parse and query stop after 2 s (docs/audit.md, third pass): such a file is by name only until it changes, and one the parser fails on is by name only that time, with a warning; the rest of the map is drawn either way. A rebuild that finishes after a newer one is dropped.
   - **Settings:** it follows `scanLimit` and `files.exclude`.
 - **The service** (`src/extension/code-map-service.ts`) keeps each workspace folder's index in the extension, cached in workspace storage.
   - Nothing is parsed until something asks for an index.

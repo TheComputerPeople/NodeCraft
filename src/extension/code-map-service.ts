@@ -22,6 +22,9 @@ export class CodeMapService implements vscode.Disposable {
   private parser: ParseService | undefined;
   private readonly indexes = new Map<string, Promise<IndexResult>>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
+  // The latest rebuild started, by folder: an older one that finishes after it is dropped
+  // (docs/audit.md, third pass).
+  private readonly rebuilds = new Map<string, number>();
   private readonly changed = new vscode.EventEmitter<vscode.WorkspaceFolder>();
   private readonly disposables: vscode.Disposable[] = [this.changed];
   private readonly warned = new Set<string>();
@@ -41,7 +44,13 @@ export class CodeMapService implements vscode.Disposable {
     watcher.onDidDelete(touched, undefined, this.disposables);
     this.disposables.push(watcher);
     vscode.workspace.onDidChangeWorkspaceFolders((e) => {
-      for (const folder of e.removed) this.indexes.delete(folder.uri.toString());
+      for (const folder of e.removed) {
+        const key = folder.uri.toString();
+        this.indexes.delete(key);
+        clearTimeout(this.timers.get(key));
+        this.timers.delete(key);
+        this.rebuilds.delete(key);
+      }
     }, undefined, this.disposables);
   }
 
@@ -118,9 +127,13 @@ export class CodeMapService implements vscode.Disposable {
     clearTimeout(this.timers.get(key));
     this.timers.set(key, setTimeout(() => {
       this.timers.delete(key);
+      const rebuild = (this.rebuilds.get(key) ?? 0) + 1;
+      this.rebuilds.set(key, rebuild);
       const rebuilt = this.build(folder);
-      // Until the new index is ready, the old one answers.
+      // Until the new index is ready, the old one answers; an older rebuild, or a removed folder's,
+      // doesn't replace it.
       void rebuilt.then(() => {
+        if (this.rebuilds.get(key) !== rebuild) return;
         this.indexes.set(key, rebuilt);
         this.changed.fire(folder);
       }, () => undefined);
@@ -143,6 +156,10 @@ export class CodeMapService implements vscode.Disposable {
       const open = 'Open Settings';
       void vscode.window.showWarningMessage(`The Codebase Map read the first ${limit} source files of ${folder.name} and left out ${result.skipped}. Raise blueprintVisualScripting.scanLimit to map them all.`, open)
         .then((choice) => choice && vscode.commands.executeCommand('workbench.action.openSettings', 'blueprintVisualScripting.scanLimit'));
+    }
+    if (result.failed && !this.warned.has(`failed:${folder.uri.toString()}`)) {
+      this.warned.add(`failed:${folder.uri.toString()}`);
+      void vscode.window.showWarningMessage(`The Codebase Map couldn't read ${result.failed} source file${result.failed === 1 ? '' : 's'} of ${folder.name}, so ${result.failed === 1 ? "it's" : "they're"} on the map by name only.`);
     }
     return result;
   }

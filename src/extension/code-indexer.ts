@@ -10,6 +10,7 @@ import { FileFacts, QUERIES } from '../core/codemap/facts';
 import { generatedFrom, isGeneratedSupport } from '../core/codemap/generated';
 import { GrammarId, grammarForFile, grammarForShebang, mayBeScript } from '../core/parsing/grammars';
 import { parseDocument } from '../core/serializer';
+import { TOO_LONG } from './code-parser';
 import { ParseService } from './parse-service';
 import { findProjects } from './projects';
 
@@ -24,8 +25,12 @@ const BUILD_OUTPUT: Record<string, RegExp> = {
   target: /^(Cargo\.toml|pom\.xml)$/, x64: /\.(vcxproj|sln)$/, Debug: /\.(vcxproj|sln|csproj)$/, Release: /\.(vcxproj|sln|csproj)$/
 };
 
-// Files larger than this are indexed by name only (a generated parser, a bundled library).
+// Files larger than this are indexed by name only (a generated parser, a bundled library), and read
+// only as far as a generated file's header.
 export const MAX_FILE_BYTES = 1024 * 1024;
+const HEAD_BYTES = 512;
+// Files read and parsed at a time, so a large folder's files aren't all in memory at once.
+const READ_AT_ONCE = 16;
 
 // Facts by path and content hash, kept between runs (in the extension's workspace storage).
 export interface FactsCache {
@@ -105,10 +110,28 @@ export interface IndexResult {
   parsed: number;
   // Source files past the limit, left out.
   skipped: number;
+  // Source files the parser failed on (a crashed worker), on the map by name only.
+  failed: number;
   milliseconds: number;
 }
 
 const toPosix = (p: string) => p.split(path.sep).join('/');
+
+// The start of a file, as text.
+async function readHead(file: string): Promise<string | undefined> {
+  try {
+    const handle = await fs.promises.open(file, 'r');
+    try {
+      const head = Buffer.alloc(HEAD_BYTES);
+      const { bytesRead } = await handle.read(head, 0, HEAD_BYTES, 0);
+      return head.subarray(0, bytesRead).toString('utf8');
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return undefined;
+  }
+}
 
 // The grammar of a script without an extension, from its `#!` line.
 function scriptGrammar(file: string): GrammarId | undefined {
@@ -223,12 +246,31 @@ export async function indexFolder(root: string, options: IndexOptions): Promise<
   const limit = options.limit ?? Infinity;
   const sources = listed.sources.slice(0, limit);
   let parsed = 0;
+  let failed = 0;
   const files: IndexFile[] = [];
-  await Promise.all(sources.map(async (relative) => {
+  // A few files at a time, read without blocking (docs/audit.md, third pass).
+  let next = 0;
+  const readOne = async (relative: string): Promise<void> => {
     const grammar = listed.grammars.get(relative)!;
+    const full = path.join(root, relative);
+    let size: number;
+    try {
+      size = (await fs.promises.stat(full)).size;
+    } catch {
+      return;
+    }
+    const nameOnly = (): FileFacts => ({ grammar, declarations: [], imports: [], entries: [], calls: [], bases: [], errors: 0 });
+    // A file too large to parse: by name, with what its head says (a generated file's header).
+    if (size > MAX_FILE_BYTES) {
+      const head = await readHead(full);
+      if (head === undefined) return;
+      const graph = generatedFrom(head);
+      files.push({ path: relative, facts: nameOnly(), ...(graph ? { generatedFrom: graph } : isGeneratedSupport(relative, head) ? { generatedFrom: 'support' } : {}) });
+      return;
+    }
     let bytes: Buffer;
     try {
-      bytes = fs.readFileSync(path.join(root, relative));
+      bytes = await fs.promises.readFile(full);
     } catch {
       return;
     }
@@ -236,14 +278,23 @@ export async function indexFolder(root: string, options: IndexOptions): Promise<
     const hash = crypto.createHash('sha1').update(bytes).digest('hex');
     let facts = options.cache?.get(relative, hash);
     if (!facts) {
-      facts = bytes.length > MAX_FILE_BYTES
-        ? { grammar, declarations: [], imports: [], entries: [], calls: [], bases: [], errors: 0 }
-        : await options.parser.facts(grammar, text);
-      options.cache?.set(relative, hash, facts);
+      try {
+        facts = await options.parser.facts(grammar, text);
+        options.cache?.set(relative, hash, facts);
+      } catch (error) {
+        // A file that takes too long is by name only, until it changes; one the parser fails on is
+        // by name only this time. Either way the rest of the map is drawn.
+        facts = nameOnly();
+        if (error instanceof Error && error.message === TOO_LONG) options.cache?.set(relative, hash, facts);
+        else failed++;
+      }
       parsed++;
     }
     const graph = generatedFrom(text);
     files.push({ path: relative, facts, ...(graph ? { generatedFrom: graph } : isGeneratedSupport(relative, text) ? { generatedFrom: 'support' } : {}) });
+  };
+  await Promise.all(Array.from({ length: Math.min(READ_AT_ONCE, sources.length) }, async () => {
+    while (next < sources.length) await readOne(sources[next++]);
   }));
   files.sort((a, b) => a.path.localeCompare(b.path));
   const graphs: IndexGraph[] = [];
@@ -255,5 +306,5 @@ export async function indexFolder(root: string, options: IndexOptions): Promise<
     }
   }
   const index = buildCodeIndex({ files, graphs, projects: indexProjects(root), folderName: path.basename(root) });
-  return { index, files: files.length, parsed, skipped: listed.sources.length - sources.length, milliseconds: performance.now() - started };
+  return { index, files: files.length, parsed, failed, skipped: listed.sources.length - sources.length, milliseconds: performance.now() - started };
 }

@@ -477,6 +477,31 @@ Codebase Map.
   - integration: Debug of a graph with Main passes `${userHome}` and `${env:PATH}` as they are; the
     GDScript debugger tests (`npm run test:integration:debuggers`) still debug through godot-tools.
 
+### Built (step 3)
+
+- **Time limits** (code-parser.ts): a file's parse and its query each stop after 2 s, through
+  tree-sitter's progress callbacks. A file that takes longer is on the map by name only, and cached
+  that way, so it isn't read again until it changes. (A match limit doesn't help: the query on 200 KB
+  of unclosed brackets still took 40 s with one.)
+- **One file doesn't fail the map** (code-indexer.ts): a file the parser fails on is by name only;
+  that isn't cached, and the map warns once how many files it couldn't read.
+- **Reading** (code-indexer.ts): 16 files at a time, asynchronously, so a large folder's files
+  aren't all read on the extension host at once or held in memory together; a file over 1 MB is read
+  only as far as a generated file's header (512 bytes).
+- **Rebuilds** (code-map-service.ts): each folder's latest rebuild is counted, and an older one that
+  finishes after it doesn't replace the index; a removed folder's pending rebuild is cancelled, and
+  one already running doesn't put the folder back.
+- **Deep nesting:** the control flow of code nested deeper than the walker goes says "This code is
+  nested too deeply to draw." instead of "Maximum call stack size exceeded".
+- **Tests** (unit, code-map-limits.test.ts): the query stops at the limit in JavaScript, Python and
+  Rust (about 2.2 s, where it took 40 to 70 s); a file that takes too long is on the map by name and
+  isn't read again, while the folder's other files are; a file the parser fails on leaves the rest of
+  the map and isn't cached; a file over 1 MB is shown as its graph from its header without being
+  parsed; deep nesting says so. The rebuild order has no test of its own: two rebuilds can't be made
+  to finish in a given order from a test.
+
 ### Status
 
-Steps 1 and 2 of 3 are done.
+All three steps of the third pass are done. Not covered: ending processes on macOS and Linux, and
+the scratch folder's check on Linux and macOS, which the tests here run only on Windows (their
+Linux and macOS parts are skipped).

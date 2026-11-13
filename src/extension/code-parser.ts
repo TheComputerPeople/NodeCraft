@@ -27,6 +27,21 @@ export interface ParseSummary {
 
 export const MAX_ERRORS = 20;
 
+// A file's parse, and its query, each stop after this long (docs/audit.md, third pass): some text
+// (deep nesting that never closes) parses in milliseconds but takes the query a minute, and the map
+// waits for every file. A file that takes longer is on the map by name only.
+export const PARSE_TIME_LIMIT_MS = 2000;
+export const TOO_LONG = 'Reading this file took too long.';
+// The control flow of code nested deeper than the walker goes.
+export const TOO_DEEP = 'This code is nested too deeply to draw.';
+
+// A progress callback that stops the work once `ms` have passed; `stopped` says whether it did.
+function deadline(ms: number): { stop: () => boolean; stopped: () => boolean } {
+  const end = performance.now() + ms;
+  let stopped = false;
+  return { stop: () => (stopped ||= performance.now() > end), stopped: () => stopped };
+}
+
 let initialized: Promise<void> | undefined;
 
 export class CodeParser {
@@ -58,10 +73,11 @@ export class CodeParser {
   }
 
   // The tree of `text`. The caller deletes it (tree.delete()): trees live in WebAssembly memory.
-  async parse(grammar: GrammarId, text: string): Promise<Tree> {
+  async parse(grammar: GrammarId, text: string, limitMs = PARSE_TIME_LIMIT_MS): Promise<Tree> {
     this.parser.setLanguage(await this.language(grammar));
-    const tree = this.parser.parse(text);
-    if (!tree) throw new Error(`The ${grammar} parser gave no tree.`);
+    const time = deadline(limitMs);
+    const tree = this.parser.parse(text, null, { progressCallback: time.stop });
+    if (!tree) throw new Error(time.stopped() ? TOO_LONG : `The ${grammar} parser gave no tree.`);
     return tree;
   }
 
@@ -78,11 +94,14 @@ export class CodeParser {
 
   // What a file declares and imports (docs/codebase-map.md, Part 2): its grammar's query, read by
   // src/core/codemap/facts.ts.
-  async facts(grammar: GrammarId, text: string): Promise<FileFacts> {
+  async facts(grammar: GrammarId, text: string, limitMs = PARSE_TIME_LIMIT_MS): Promise<FileFacts> {
     const query = await this.query(grammar);
-    const tree = await this.parse(grammar, text);
+    const tree = await this.parse(grammar, text, limitMs);
     try {
-      const matches: QueryMatch[] = query.matches(tree.rootNode).map((match) => ({
+      const time = deadline(limitMs);
+      const found = query.matches(tree.rootNode, { progressCallback: time.stop });
+      if (time.stopped()) throw new Error(TOO_LONG);
+      const matches: QueryMatch[] = found.map((match) => ({
         captures: match.captures.filter((c) => !c.name.startsWith('_')).map(({ name, node }) => ({
           name, type: node.type,
           startRow: node.startPosition.row, endRow: node.endPosition.row, startIndex: node.startIndex, endIndex: node.endIndex, startColumn: node.startPosition.column,
@@ -100,6 +119,8 @@ export class CodeParser {
     const tree = await this.parse(grammar, text);
     try {
       return flowchartAt(grammar, tree.rootNode, line);
+    } catch (error) {
+      throw error instanceof RangeError ? new Error(TOO_DEEP) : error;
     } finally {
       tree.delete();
     }
