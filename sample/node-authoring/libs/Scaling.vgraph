@@ -1,36 +1,40 @@
 {
   "schemaVersion": 3,
+  "name": "Scaling",
+  "kind": "functionLibrary",
   "language": "typescript",
-  "name": "Knight",
-  "kind": "class",
-  "parent": "object:Fighter",
+  "languages": [
+    "python"
+  ],
   "variables": [],
   "graphs": [
     {
-      "id": "EventGraph",
-      "name": "EventGraph",
-      "kind": "event",
-      "nodes": [],
-      "connections": [],
-      "comments": []
-    },
-    {
-      "id": "AttackPower",
-      "name": "Attack Power",
+      "id": "TimesTen",
+      "name": "Times Ten",
       "kind": "function",
       "signature": {
-        "pure": true,
-        "inputs": [],
-        "outputs": [
+        "inputs": [
           {
-            "id": "power",
-            "name": "Power",
+            "id": "value",
+            "name": "Value",
             "kind": "data",
             "type": {
-              "id": "int"
+              "id": "float"
             }
           }
-        ]
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "Result",
+            "kind": "data",
+            "type": {
+              "id": "float"
+            }
+          }
+        ],
+        "pure": true,
+        "category": "Scaling"
       },
       "nodes": [
         {
@@ -41,64 +45,53 @@
             "y": 0
           },
           "properties": {
-            "graph": "AttackPower"
+            "graph": "TimesTen"
           }
         },
         {
-          "id": "parent",
-          "type": "core:object.parent",
-          "position": {
-            "x": 0,
-            "y": 160
-          },
-          "properties": {
-            "function": "Attack Power"
-          }
-        },
-        {
-          "id": "double",
+          "id": "times",
           "type": "core:math.multiply",
           "position": {
-            "x": 240,
-            "y": 140
+            "x": 220,
+            "y": 40
           },
           "properties": {
-            "pin:b": 2
+            "pin:b": 10
           }
         },
         {
           "id": "ret",
           "type": "core:function.return",
           "position": {
-            "x": 460,
+            "x": 440,
             "y": 0
           },
           "properties": {
-            "graph": "AttackPower"
+            "graph": "TimesTen"
           }
         }
       ],
       "connections": [
         {
-          "id": "w1",
+          "id": "entry.execOut->ret.execIn",
           "fromNode": "entry",
           "fromPin": "execOut",
           "toNode": "ret",
           "toPin": "execIn"
         },
         {
-          "id": "w2",
-          "fromNode": "parent",
-          "fromPin": "power",
-          "toNode": "double",
+          "id": "entry.points->times.a",
+          "fromNode": "entry",
+          "fromPin": "value",
+          "toNode": "times",
           "toPin": "a"
         },
         {
-          "id": "w3",
-          "fromNode": "double",
+          "id": "times.returnValue->ret.score",
+          "fromNode": "times",
           "fromPin": "returnValue",
           "toNode": "ret",
-          "toPin": "power"
+          "toPin": "result"
         }
       ],
       "comments": []

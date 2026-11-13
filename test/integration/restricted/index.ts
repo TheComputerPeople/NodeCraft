@@ -50,17 +50,17 @@ test('the Codebase Map draws the folder and its four views, with hovers and the 
   const folder = vscode.workspace.workspaceFolders![0];
   try {
     const scene = await vscode.commands.executeCommand<Scene>('blueprintVisualScripting.showCodebaseMap', folder.uri);
-    assert.ok(scene?.boxes.some((b) => b.id === 'm:arena'), 'the architecture: the arena folder is on the map');
-    const opened = await api.codeMapPanels.toggleIn(folder, 'm:arena');
-    assert.ok(opened?.boxes.some((b) => b.id === 'g:arena/Game.vgraph'), "opening it shows the folder's graphs");
+    assert.ok(scene?.boxes.some((b) => b.id === 'm:countdown'), 'the architecture: the countdown folder is on the map');
+    const opened = await api.codeMapPanels.toggleIn(folder, 'm:countdown');
+    assert.ok(opened?.boxes.some((b) => b.id === 'g:countdown/Countdown.vgraph'), "opening it shows the folder's graphs");
     const structure = await api.codeMapPanels.modeIn(folder, 'structure');
-    assert.ok(structure?.arrows.some((a) => a.kind === 'inherits' && a.from === 'g:arena/Knight.vgraph' && a.to === 'g:arena/Fighter.vgraph'), 'the structure: Knight extends Fighter');
+    assert.ok(structure?.arrows.some((a) => a.kind === 'inherits' && a.from === 'g:countdown/DoubleCounter.vgraph' && a.to === 'g:countdown/Counter.vgraph'), 'the structure: DoubleCounter extends Counter');
     const calls = await api.codeMapPanels.callsIn(folder);
-    assert.ok((calls?.calls?.starts ?? 0) > 0 && calls?.boxes.some((b) => b.id === 'g:arena/Game.vgraph#EventGraph'), 'the call flow starts from the game');
-    const flow = await api.codeMapPanels.flowIn(folder, 's:node-authoring/lib/dojo.ts#Trainee.train');
-    assert.equal(flow?.flow?.label, 'train', 'the control flow of a method');
+    assert.ok((calls?.calls?.starts ?? 0) > 0 && calls?.boxes.some((b) => b.id === 'g:countdown/Countdown.vgraph#EventGraph'), 'the call flow starts from the countdown');
+    const flow = await api.codeMapPanels.flowIn(folder, 's:node-authoring/lib/tally.ts#Tally.add');
+    assert.equal(flow?.flow?.label, 'add', 'the control flow of a method');
     assert.deepEqual(flow?.boxes.map((b) => b.flowKind), ['start', 'end', 'block', 'return']);
-    assert.match((await api.codeMapPanels.hoverIn(folder, 's:node-authoring/lib/dojo.ts#Trainee.train'))?.signature ?? '', /train\(/, "a method's hover");
+    assert.match((await api.codeMapPanels.hoverIn(folder, 's:node-authoring/lib/tally.ts#Tally.add'))?.signature ?? '', /add\(/, "a method's hover");
     const top = await api.structureTree.getChildren();
     assert.ok(top.some((n) => n.id?.startsWith('p:')), `the tree: ${JSON.stringify(top.map((n) => n.id))}`);
     await api.codeMapPanels.modeIn(folder, 'architecture');

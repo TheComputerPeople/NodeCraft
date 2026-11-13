@@ -12,7 +12,7 @@ from typing import Any, cast
 class Features:
     def __init__(self) -> None:
         self.Lives: int = 3
-        self.Hero: str = "Ada"
+        self.Author: str = "Ada"
         self.Score: Any = None
         self._double_result: float = 0
 
@@ -25,8 +25,8 @@ class Features:
         self._double_result = self._user_math_double(self.Lives)
         # Print (print_double)
         print(_format_value(self._double_result))
-        # Print (print_hero)
-        print(self.Hero)
+        # Print (print_author)
+        print(self.Author)
         self._run_shared()
         self._run_shared()
 

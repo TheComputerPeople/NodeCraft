@@ -43,7 +43,7 @@ export interface CodeSimulator {
 }
 
 export interface GenerateOptions {
-  // The graph file's name, e.g. "Inventory.vgraph", for the generated file's header.
+  // The graph file's name, e.g. "Items.vgraph", for the generated file's header.
   sourceFileName: string;
   // JavaScript only: the project's module system (from the nearest package.json).
   moduleFormat?: 'esm' | 'commonjs';
@@ -66,7 +66,7 @@ export interface GenerateOptions {
   // are of the generated file's crate.
   crate?: string;
   // Python: the generated module's name as the project imports it, with its packages
-  // ("game.graphs.inventory_vgraph"), when it's in a package. Its test file imports it so, which
+  // ("app.graphs.items_vgraph"), when it's in a package. Its test file imports it so, which
   // type checkers can follow.
   module?: string;
 }
@@ -117,7 +117,7 @@ export interface RunContext {
   // (languages that build before running, such as C#).
   sources?: string[];
   // Rust: the crate the code calls into, as its src folder and the top-level modules its root
-  // declares, for the scaffold to declare the same way (`crate::game::combat` resolves as in the crate).
+  // declares, for the scaffold to declare the same way (`crate::app::values` resolves as in the crate).
   crate?: { src: string; modules: string[]; name?: string };
   // Go: the project's module (its path and folder), which Run's scratch module requires so the code
   // can import the project's packages.
@@ -169,7 +169,7 @@ export interface CodeGenerator {
   // have none for it (a declarative pack's `snippets`): function bodies over the node's inputs.
   snippets?: Record<string, string>;
   // Name of the generated file for a graph file, following the language's import rules
-  // (docs/output-placement.md): "Inventory.vgraph" → "Inventory.vgraph.ts" or "inventory_vgraph.py".
+  // (docs/output-placement.md): "Items.vgraph" → "Items.vgraph.ts" or "items_vgraph.py".
   outputFileName(graphFileName: string): string;
   // Name of the generated test file, for languages that write one (GeneratedCode.testFile).
   testFileName?(graphFileName: string): string;

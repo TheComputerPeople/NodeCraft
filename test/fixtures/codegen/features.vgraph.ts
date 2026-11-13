@@ -4,7 +4,7 @@
 
 export class Features {
   Lives: number = 3;
-  Hero: string = "Ada";
+  Author: string = "Ada";
   Score: unknown = null;
   private double_result: number = 0;
 
@@ -17,8 +17,8 @@ export class Features {
     this.double_result = this.user_math_double(this.Lives);
     // Print (print_double)
     console.log(String(this.double_result));
-    // Print (print_hero)
-    console.log(this.Hero);
+    // Print (print_author)
+    console.log(this.Author);
     this.run_shared();
     this.run_shared();
   }

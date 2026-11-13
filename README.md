@@ -5,7 +5,7 @@ A language-neutral, Blueprint-style visual scripting editor for Visual Studio Co
 ## What is included
 
 - A `.vgraph` custom editor that looks and behaves like Unreal Engine's Blueprint editor: the same gestures, shortcuts, pin colors and node styles, so Blueprint users can start without relearning (see the reference below).
-- **Blueprints**: a `.vgraph` file is a class, function library or macro library holding graphs, functions, macros and variables, managed in the **My Blueprint** panel and opened in **tabs** above the graph, with Back and Forward as in Unreal. Classes construct each other, inherit from each other or from a class in your code (with overrides and Parent calls), implement Blueprint Interfaces and Cast To them; custom events, event dispatchers and Delay work as in Unreal. sample/arena is a small program built only in graphs that uses all of it. Functions and macros work as in Unreal, including Collapse to Function and Collapse to Macro, and the functions and macros of library files can be used from any graph in the library's languages (a function library can be generated for several), including through **Collapse to Function in Library**. **Structures** and **enumerations** are files too, edited in a field or value list, with Make, Break, Set Members and Switch on nodes.
+- **Blueprints**: a `.vgraph` file is a class, function library or macro library holding graphs, functions, macros and variables, managed in the **My Blueprint** panel and opened in **tabs** above the graph, with Back and Forward as in Unreal. Classes construct each other, inherit from each other or from a class in your code (with overrides and Parent calls), implement Blueprint Interfaces and Cast To them; custom events, event dispatchers and Delay work as in Unreal. sample/countdown is a small program built only in graphs that uses all of it. Functions and macros work as in Unreal, including Collapse to Function and Collapse to Macro, and the functions and macros of library files can be used from any graph in the library's languages (a function library can be generated for several), including through **Collapse to Function in Library**. **Structures** and **enumerations** are files too, edited in a field or value list, with Make, Break, Set Members and Switch on nodes.
 - **Execution and data pins**, with Unreal's wiring rules, inline values for unconnected inputs, automatic **To String** conversion, reroute nodes, comment boxes, copy and paste, alignment tools and Find.
 - **Your code as nodes**, the equivalent of Unreal's `BlueprintCallable` and `BlueprintReadWrite`: functions marked `@blueprint` in the project's code, in all twelve languages (C++: in headers; Go: through gopls), appear in the palette, and generated code imports them. So do classes' constructors, methods and properties (with Target pins), functions with several outputs, and async functions (as latent nodes). Nodes notice when the code changes, double-click (F12) opens the code, and the code shows warnings and **Expose** quick fixes (see below). sample/node-authoring uses all of it in TypeScript and Python.
 - **In your language's terms**: the Language menu changes what the editor calls things (Python's Make List, `list[int]` and Dict; C#'s List, HashSet and Dictionary). Hovering a node in the palette or the Add Node menu shows its code in the language, and each language has its standard library's own nodes: regular expressions (Lua's patterns in Lua) and MD5, SHA-1 and SHA-256 hashes. An audit runs every node in every language against Simulate ([docs/language-context.md](docs/language-context.md)).
@@ -68,35 +68,35 @@ As Unreal exposes C++ functions marked `UFUNCTION(BlueprintCallable)`, the exten
 
 ```ts
 /**
- * Subtracts damage from health, never going below zero.
+ * Subtracts an amount from a value, never going below zero.
  * @blueprint
- * @category Combat
+ * @category Math
  */
-export function applyDamage(health: number, amount = 10): number {
-  return Math.max(0, health - amount);
+export function subtractToZero(value: number, amount = 10): number {
+  return Math.max(0, value - amount);
 }
 ```
 
 ```python
-def is_alive(health: float) -> bool:
+def is_positive(value: float) -> bool:
     """@blueprint pure"""
-    return health > 0
+    return value > 0
 ```
 
 ```csharp
-public static class Loot
+public static class Rates
 {
-    /// <summary>A random drop chance.</summary>
+    /// <summary>A rate that grows with each step.</summary>
     /// @blueprint pure
-    public static double DropChance(int level) => 0.1 + level * 0.01;
+    public static double RateAt(int step) => 0.1 + step * 0.01;
 }
 ```
 
 ```cpp
-// combat.h
-namespace combat {
+// shapes.h
+namespace shapes {
 /// @blueprint pure
-double critChance(long long level);
+double area(double width, double height);
 }
 ```
 
@@ -106,19 +106,19 @@ double critChance(long long level);
 
   ```ts
   /** @blueprint */
-  export abstract class Actor {
+  export abstract class Item {
     /** @blueprint */
-    health = 100;
+    count = 100;
     readonly name: string;
     /** @blueprint */
     protected constructor(name: string) { this.name = name; }
     /** @blueprint overridable */
-    hit(damage: number): void { this.health -= damage; }
+    take(amount: number): void { this.count -= amount; }
     /** @blueprint */
     abstract describe(): string;
   }
   ```
-- TypeScript and JavaScript functions must be exported; Python functions are top-level `def`s; C# methods are `public` or `internal` static methods (C# has no free functions); C++ functions are free functions declared in a header (generated code includes it), called by their namespace; Rust functions are `pub` free functions, called through their module in the crate (`crate::game::combat::damage`), or in another crate of the workspace by its name (`corpus_core::text::title`). Run compiles the C# project's files with the generated one, for C++ the implementation file next to each header, and for Rust the crate's modules. The palette shows only the functions the graph's language can call (a TypeScript graph can also call JavaScript).
+- TypeScript and JavaScript functions must be exported; Python functions are top-level `def`s; C# methods are `public` or `internal` static methods (C# has no free functions); C++ functions are free functions declared in a header (generated code includes it), called by their namespace; Rust functions are `pub` free functions, called through their module in the crate (`crate::app::values::clamp`), or in another crate of the workspace by its name (`corpus_core::text::title`). Run compiles the C# project's files with the generated one, for C++ the implementation file next to each header, and for Rust the crate's modules. The palette shows only the functions the graph's language can call (a TypeScript graph can also call JavaScript).
 - Generated code imports each function the way the project does: relative TypeScript imports follow `tsconfig.json`, JavaScript uses the module's own extension, and Python imports by module name. **Run** finds them too.
 - A marked function that can't be a node (a generator, rest parameters, generics, …) gets a warning in its file with the reason. On one that could be, the lightbulb offers **Expose as Blueprint node**.
 - **Expose Functions as Nodes...**, on a source file in the Explorer (or the editor's context menu), marks the functions you pick in one edit you review first. On a C or C++ source file it works through the file's header: it marks the declarations there, adds the missing ones, or makes the header (with `extern "C"` for a C file).
@@ -136,13 +136,13 @@ In a codebase you have, **Blueprint Visual Scripting: Set Up in This Project** (
 A graph's generated file sits next to it, in the project's own style, and the project's code uses it like any other module ([docs/project-integration.md](docs/project-integration.md)):
 
 ```ts
-import { Game } from './graphs/Game.vgraph.ts';
+import { Report } from './graphs/Report.vgraph.ts';
 
-new Game().start();
+new Report().start();
 ```
 
 - **It passes the project's checks.** Generated code builds under the strictest settings: `tsc` with every strictness option, mypy `--strict` and Pyright strict, C# with `AnalysisLevel` `latest-all` and warnings as errors, `javac -Xlint:all -Werror`, `-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror`, clippy's pedantic lints, `go vet` and staticcheck, PHPStan at level 9, and Godot's warnings as errors. Each file is marked generated for the tools that skip such files: `// <auto-generated/>` in C#, `/* eslint-disable */` in TypeScript and JavaScript, `# flake8: noqa` and `# pylint: skip-file` in Python, Go's `// Code generated ... DO NOT EDIT.`, `# rubocop:disable all`, `-- luacheck: ignore` and `// phpcs:ignoreFile`.
-- **Delay and async nodes** wait in a queue that Run drives. When your own code runs a class with them, run the queue after `start()`: `run_latent_actions()` from the generated module in Python, `Game.RunLatentActions()` in C#, `Game.runLatentActions()` in Java, and the support module's in the other languages (docs/code-as-nodes.md). TypeScript and JavaScript need nothing.
+- **Delay and async nodes** wait in a queue that Run drives. When your own code runs a class with them, run the queue after `start()`: `run_latent_actions()` from the generated module in Python, `Report.RunLatentActions()` in C#, `Report.runLatentActions()` in Java, and the support module's in the other languages (docs/code-as-nodes.md). TypeScript and JavaScript need nothing.
 - **Your project's language version.** When the project declares an older version than generated code needs (Java 11 in `pom.xml`, where generated Java needs 17), Problems shows a warning once, on the file that declares it. The graph still compiles: the project may build with a newer toolchain.
 - **Constants are worked out when compiling.** A Branch on a constant leaves only the side that runs, and a value nothing reads leaves no code. A breakpoint on a node that left no code can't stop when debugging the generated code, and Debug says which ones. Simulate still stops there.
 - **A float wired into an int is truncated toward zero** (7.5 becomes 7), as Unreal converts it, in Simulate and every language ([docs/semantics.md](docs/semantics.md)).

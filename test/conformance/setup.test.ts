@@ -65,7 +65,7 @@ describe('Set Up in This Project', { concurrency: 3 }, () => {
     const { root } = await prepareLayout(layout('py-src-layout'), workDir);
     const found = items(setupReport(root, languages), 'found').map((i) => `${i.title}: ${i.detail ?? ''}`);
     assert.ok(found.some((f) => /^Build: python/.test(f)), found.join('\n'));
-    assert.ok(found.some((f) => /Python graphs: \d+ in the project/.test(f) && /generates src\/corpus_game\/blueprint\/arena\/example_vgraph\.py, which other code imports as corpus_game\.blueprint\.arena\.example_vgraph/.test(f) && /and graphs in \d+ more folders/.test(f)), found.join('\n'));
+    assert.ok(found.some((f) => /Python graphs: \d+ in the project/.test(f) && /generates src\/corpus_game\/blueprint\/countdown\/example_vgraph\.py, which other code imports as corpus_game\.blueprint\.countdown\.example_vgraph/.test(f) && /and graphs in \d+ more folders/.test(f)), found.join('\n'));
     assert.ok(found.some((f) => /^Checkers: .*Ruff/.test(f)), found.join('\n'));
   });
 
@@ -89,7 +89,7 @@ describe('Set Up in This Project', { concurrency: 3 }, () => {
     const classmap = items(setupReport(root, languages), 'optional').find((i) => /Composer/.test(i.title));
     assert.ok(classmap?.change);
     apply(root, classmap.change);
-    assert.deepEqual((JSON.parse(fs.readFileSync(path.join(root, 'composer.json'), 'utf8')) as { autoload: { classmap: string[] } }).autoload.classmap.sort(), ['src/Blueprint/arena/', 'src/Blueprint/audit/', 'src/Blueprint/duel/', 'src/Blueprint/graphs/', 'src/Blueprint/tests/', 'src/Graphs/']);
+    assert.deepEqual((JSON.parse(fs.readFileSync(path.join(root, 'composer.json'), 'utf8')) as { autoload: { classmap: string[] } }).autoload.classmap.sort(), ['src/Blueprint/audit/', 'src/Blueprint/countdown/', 'src/Blueprint/graphs/', 'src/Blueprint/pair/', 'src/Blueprint/tests/', 'src/Graphs/']);
     await assertPasses([
       { name: 'composer dump-autoload', command: ['phar/composer.phar', 'dump-autoload', '--no-interaction'], env: { XDEBUG_MODE: 'off' } },
       { name: 'autoloaded', command: ['php', '-r', "require 'vendor/autoload.php'; echo \\Corpus\\Graphs\\Greeting::greet('ada'), PHP_EOL;"], probe: ['php', '--version'], env: { XDEBUG_MODE: 'off' }, stdout: ['Hello, Ada!'] }

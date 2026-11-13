@@ -486,7 +486,7 @@ class DeclarationParser {
     const params: ScannedParam[] = [];
     for (const [all, to] of this.splitCommas(start, end)) {
       if (all >= to) continue;
-      // A constructor's parameter property (`public health: number`): the modifiers aren't the name.
+      // A constructor's parameter property (`public count: number`): the modifiers aren't the name.
       let from = all;
       while (from + 1 < to && ['public', 'private', 'protected', 'readonly', 'override'].includes(this.tokens[from].text) && this.tokens[from + 1].kind === 'name') from++;
       const first = this.tokens[from];

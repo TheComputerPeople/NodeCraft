@@ -27,8 +27,8 @@
             "y": 0
           },
           "properties": {
-            "graph": "ApplyDamage",
-            "pin:health": 25,
+            "graph": "SubtractToZero",
+            "pin:value": 25,
             "pin:amount": 10
           }
         },
@@ -58,8 +58,8 @@
             "y": 0
           },
           "properties": {
-            "graph": "ApplyDamage",
-            "pin:health": 5
+            "graph": "SubtractToZero",
+            "pin:value": 5
           }
         },
         {
@@ -187,7 +187,7 @@
         {
           "id": "w2",
           "fromNode": "n1",
-          "fromPin": "newHealth",
+          "fromPin": "result",
           "toNode": "n2",
           "toPin": "value"
         },
@@ -201,7 +201,7 @@
         {
           "id": "w4",
           "fromNode": "n1",
-          "fromPin": "alive",
+          "fromPin": "positive",
           "toNode": "n3",
           "toPin": "value"
         },
@@ -222,7 +222,7 @@
         {
           "id": "w7",
           "fromNode": "n4",
-          "fromPin": "newHealth",
+          "fromPin": "result",
           "toNode": "n5",
           "toPin": "value"
         },
@@ -236,7 +236,7 @@
         {
           "id": "w9",
           "fromNode": "n4",
-          "fromPin": "alive",
+          "fromPin": "positive",
           "toNode": "n6",
           "toPin": "value"
         },
@@ -335,8 +335,8 @@
       "comments": []
     },
     {
-      "id": "ApplyDamage",
-      "name": "Apply Damage",
+      "id": "SubtractToZero",
+      "name": "Subtract To Zero",
       "kind": "function",
       "nodes": [
         {
@@ -347,7 +347,7 @@
             "y": 0
           },
           "properties": {
-            "graph": "ApplyDamage"
+            "graph": "SubtractToZero"
           }
         },
         {
@@ -385,7 +385,7 @@
             "y": 0
           },
           "properties": {
-            "graph": "ApplyDamage"
+            "graph": "SubtractToZero"
           }
         }
       ],
@@ -400,7 +400,7 @@
         {
           "id": "w2",
           "fromNode": "entry",
-          "fromPin": "health",
+          "fromPin": "value",
           "toNode": "n1",
           "toPin": "a"
         },
@@ -423,7 +423,7 @@
           "fromNode": "n2",
           "fromPin": "returnValue",
           "toNode": "return",
-          "toPin": "newHealth"
+          "toPin": "result"
         },
         {
           "id": "w6",
@@ -437,15 +437,15 @@
           "fromNode": "n3",
           "fromPin": "returnValue",
           "toNode": "return",
-          "toPin": "alive"
+          "toPin": "positive"
         }
       ],
       "comments": [],
       "signature": {
         "inputs": [
           {
-            "id": "health",
-            "name": "Health",
+            "id": "value",
+            "name": "Value",
             "kind": "data",
             "type": {
               "id": "float"
@@ -463,16 +463,16 @@
         ],
         "outputs": [
           {
-            "id": "newHealth",
-            "name": "New Health",
+            "id": "result",
+            "name": "Result",
             "kind": "data",
             "type": {
               "id": "float"
             }
           },
           {
-            "id": "alive",
-            "name": "Alive",
+            "id": "positive",
+            "name": "Positive",
             "kind": "data",
             "type": {
               "id": "bool"

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "language": "typescript",
-  "name": "Team",
+  "name": "Shade",
   "kind": "enumeration",
   "variables": [],
   "graphs": [],

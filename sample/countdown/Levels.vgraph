@@ -1,31 +1,31 @@
 {
   "schemaVersion": 3,
   "language": "typescript",
-  "name": "Stats",
+  "name": "Levels",
   "kind": "structure",
   "graphs": [],
   "variables": [
     {
-      "id": "health",
-      "name": "Health",
+      "id": "amount",
+      "name": "Amount",
       "type": {
         "id": "int"
       },
       "defaultValue": 10
     },
     {
-      "id": "attack",
-      "name": "Attack",
+      "id": "step",
+      "name": "Step",
       "type": {
         "id": "int"
       },
       "defaultValue": 3
     },
     {
-      "id": "team",
-      "name": "Team",
+      "id": "shade",
+      "name": "Shade",
       "type": {
-        "id": "enum:Team"
+        "id": "enum:Shade"
       },
       "defaultValue": "red"
     }

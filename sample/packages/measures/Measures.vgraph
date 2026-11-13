@@ -1,22 +1,19 @@
 {
   "schemaVersion": 3,
-  "name": "Scoring",
+  "name": "Measures",
   "kind": "functionLibrary",
   "language": "typescript",
-  "languages": [
-    "python"
-  ],
   "variables": [],
   "graphs": [
     {
-      "id": "Bonus",
-      "name": "Bonus",
+      "id": "ToCentimeters",
+      "name": "To Centimeters",
       "kind": "function",
       "signature": {
         "inputs": [
           {
-            "id": "points",
-            "name": "Points",
+            "id": "meters",
+            "name": "Meters",
             "kind": "data",
             "type": {
               "id": "float"
@@ -25,8 +22,8 @@
         ],
         "outputs": [
           {
-            "id": "score",
-            "name": "Score",
+            "id": "centimeters",
+            "name": "Centimeters",
             "kind": "data",
             "type": {
               "id": "float"
@@ -34,7 +31,7 @@
           }
         ],
         "pure": true,
-        "category": "Scoring"
+        "category": "Measures"
       },
       "nodes": [
         {
@@ -45,7 +42,7 @@
             "y": 0
           },
           "properties": {
-            "graph": "Bonus"
+            "graph": "ToCentimeters"
           }
         },
         {
@@ -56,7 +53,7 @@
             "y": 40
           },
           "properties": {
-            "pin:b": 10
+            "pin:b": 100
           }
         },
         {
@@ -67,7 +64,7 @@
             "y": 0
           },
           "properties": {
-            "graph": "Bonus"
+            "graph": "ToCentimeters"
           }
         }
       ],
@@ -80,18 +77,18 @@
           "toPin": "execIn"
         },
         {
-          "id": "entry.points->times.a",
+          "id": "entry.count->times.a",
           "fromNode": "entry",
-          "fromPin": "points",
+          "fromPin": "meters",
           "toNode": "times",
           "toPin": "a"
         },
         {
-          "id": "times.returnValue->ret.score",
+          "id": "times.returnValue->ret.distance",
           "fromNode": "times",
           "fromPin": "returnValue",
           "toNode": "ret",
-          "toPin": "score"
+          "toPin": "centimeters"
         }
       ],
       "comments": []

@@ -68,7 +68,7 @@ export function rustPath(file: string): string {
 
 // The project crate's modules, declared in an inline module whose path is the crate's src folder
 // (so each loads, with its own submodules, as in the crate) and used at the root, so
-// `crate::game::combat` resolves in the scaffold as in the project. Code a graph calls in another
+// `crate::app::values` resolves in the scaffold as in the project. Code a graph calls in another
 // crate of the workspace (`corpus_core::text`) is the scaffold's own, by that crate's name.
 function projectModules(crate: { src: string; modules: string[]; name?: string } | undefined): string[] {
   if (!crate?.modules.length) return [];
@@ -415,7 +415,7 @@ class RustEmitter {
   }
 
   // A pin's value as a debugger reads it in a paused method: a field through its RefCell
-  // (`self->score.value.value`), a local or parameter by name, a literal as is. Undefined when the
+  // (`self->total.value.value`), a local or parameter by name, a literal as is. Undefined when the
   // debugger can't read it without running code.
   private debugExpr(e: IrExpr): string | undefined {
     switch (e.kind) {

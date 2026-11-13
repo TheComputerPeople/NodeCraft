@@ -1,0 +1,8 @@
+{
+  "name": "measures",
+  "version": "1.0.0",
+  "description": "Unit conversions.",
+  "graphs": [
+    "*.vgraph"
+  ]
+}

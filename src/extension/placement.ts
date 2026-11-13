@@ -255,7 +255,7 @@ function listFiles(dir: string, extension: string, skip: string[]): string[] {
   return found;
 }
 
-// A Rust source file's module in its crate (src/game/combat.rs is game::combat; a crate root is ""),
+// A Rust source file's module in its crate (src/app/values.rs is app::values; a crate root is ""),
 // or undefined when it isn't in a crate's src folder.
 export function rustModule(file: string, stopDir: string): string | undefined {
   const manifest = findUp(path.dirname(file), 'Cargo.toml', stopDir);

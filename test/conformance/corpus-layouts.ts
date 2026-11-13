@@ -218,7 +218,7 @@ export const LAYOUTS: Layout[] = [
   // ---- C++ ----
   {
     // A library subproject the graphs call, and warnings as errors.
-    name: 'cpp-cmake', language: 'cpp', body: 'src/blueprint', programs: ['arena'],
+    name: 'cpp-cmake', language: 'cpp', body: 'src/blueprint', programs: ['countdown'],
     code: ['lib/include/corpus/text.h', 'src/features/count.h', 'src/features/divide.h', 'src/features/fetch.h', 'src/features/actor.h'],
     graphs: [greeting('src/graphs/Greeting.vgraph', 'title'), ...featureGraphs('src/graphs', 'cpp', CPP_FEATURES)],
     steps: [
@@ -248,7 +248,7 @@ export const LAYOUTS: Layout[] = [
   },
   {
     // A Visual Studio project, built by MSBuild at warning level 4 with warnings as errors.
-    name: 'cpp-vcxproj', language: 'cpp', code: ['names.h'], body: 'blueprint', programs: ['arena'],
+    name: 'cpp-vcxproj', language: 'cpp', code: ['names.h'], body: 'blueprint', programs: ['countdown'],
     graphs: [greeting('graphs/Greeting.vgraph', 'title')],
     steps: [
       { name: 'MSBuild', command: [MSBUILD, 'Game.vcxproj', '/p:Configuration=Debug', '/p:Platform=x64', '/nologo', '/v:minimal', '/nodeReuse:false'], probe: [MSBUILD, '-version'], timeoutMs: 900000 },

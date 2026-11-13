@@ -251,7 +251,7 @@ async function generate(layout: Layout, root: string, result: LayoutResult, regi
 }
 
 // The body's programs, whose graphs use each other (the others' graphs stand alone).
-const PROGRAMS = ['arena', 'duel'];
+const PROGRAMS = ['countdown', 'pair'];
 
 // A file of the project's code as the extension reads it: with the pack's scanner, or (Go) from what
 // the language server reports, which goSymbols reads from the text as gopls would give it.
@@ -308,8 +308,8 @@ function body(layout: Layout, root: string): { file: string; doc: GraphDocument 
   const groups: Record<string, { name: string; doc: GraphDocument }[]> = {
     audit: [{ name: 'Audit.vgraph', doc: auditGraph(auditCases(builtinNodeDefinitions(), pack), layout.language) }],
     graphs: [read(path.join(repoRoot, 'sample/demo.vgraph')), ...vgraphs('test/fixtures/graphs')],
-    ...((layout.programs ?? PROGRAMS).includes('arena') ? { arena: vgraphs('sample/arena') } : {}),
-    ...((layout.programs ?? PROGRAMS).includes('duel') ? { duel: vgraphs('test/fixtures/programs/duel') } : {}),
+    ...((layout.programs ?? PROGRAMS).includes('countdown') ? { countdown: vgraphs('sample/countdown') } : {}),
+    ...((layout.programs ?? PROGRAMS).includes('pair') ? { pair: vgraphs('test/fixtures/programs/pair') } : {}),
     tests: vgraphs('test/fixtures/tests')
   };
   if (layout.language === 'python') {
@@ -473,8 +473,8 @@ const FEATURES: Record<string, { file: string; build: FeatureBuild; output: stri
   classes: { file: 'Counting', build: codeClassGraph, output: CODE_CLASS_OUTPUT },
   outputs: { file: 'Dividing', build: severalOutputsGraph, output: SEVERAL_OUTPUTS_OUTPUT },
   generics: { file: 'Firsts', build: genericsGraph, output: GENERICS_OUTPUT },
-  // A graph class extending the code's Actor (docs/code-classes-as-parents.md), named Paladin: the
-  // body's arena has a Knight, and C++'s classes share the global namespace.
+  // A graph class extending the code's Actor (docs/code-classes-as-parents.md), named Paladin, a
+  // name no class of the body's programs has: C++'s classes share the global namespace.
   parents: {
     file: 'Questing', build: (definitions, language) => gameGraph(language, actorCode(definitions), 'Questing', 'Paladin'), output: CODE_PARENTS_OUTPUT,
     before: [{ file: 'Paladin', build: (definitions, language) => knightGraph(language, actorCode(definitions), 'Paladin') }]

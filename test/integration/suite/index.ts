@@ -90,10 +90,10 @@ test('the Codebase Map indexes the workspace, and follows a change', async () =>
   const folder = vscode.workspace.workspaceFolders![0];
   const index = await api.codeMap.codeIndex(folder);
   const ids = new Set(index.entities.map((e) => e.id));
-  for (const id of ['g:demo.vgraph', 'g:arena/Game.vgraph', 'f:node-authoring/lib/dojo.ts', 'f:node-authoring/game/dojo.py']) assert.ok(ids.has(id), id);
-  assert.ok(!ids.has('f:arena/Game.vgraph.ts') && !ids.has('f:demo.vgraph.js'), 'generated code is shown as its graph');
-  assert.ok(index.imports.some((e) => e.from === 'g:arena/Game.vgraph' && e.to === 'g:arena/Knight.vgraph'), 'a graph imports the graphs it uses');
-  assert.ok(index.entities.find((e) => e.id === 'g:arena/Game.vgraph')?.entries?.length, "the game's Start event is an entry point");
+  for (const id of ['g:demo.vgraph', 'g:countdown/Countdown.vgraph', 'f:node-authoring/lib/tally.ts', 'f:node-authoring/app/tally.py']) assert.ok(ids.has(id), id);
+  assert.ok(!ids.has('f:countdown/Countdown.vgraph.ts') && !ids.has('f:demo.vgraph.js'), 'generated code is shown as its graph');
+  assert.ok(index.imports.some((e) => e.from === 'g:countdown/Countdown.vgraph' && e.to === 'g:countdown/DoubleCounter.vgraph'), 'a graph imports the graphs it uses');
+  assert.ok(index.entities.find((e) => e.id === 'g:countdown/Countdown.vgraph')?.entries?.length, "the countdown's Start event is an entry point");
 
   const changed = new Promise<void>((resolve) => {
     const listener = api.codeMap.onDidChange(() => {
@@ -118,17 +118,17 @@ test("the Codebase Map asks the language's server what a guessed call is", async
   const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
   const folder = vscode.workspace.workspaceFolders![0];
   const file = workspaceFile('node-authoring/lib/map_calls.ts');
-  fs.writeFileSync(file.fsPath, "import { Trainee } from './dojo';\n\nexport function coach(t: Trainee): number {\n  return t.train(2);\n}\n");
+  fs.writeFileSync(file.fsPath, "import { Tally } from './tally';\n\nexport function addTwo(t: Tally): number {\n  return t.add(2);\n}\n");
   try {
     let index = await api.codeMap.codeIndex(folder);
     const deadline = Date.now() + 15000;
-    while (!index.calls.some((c) => c.from === 's:node-authoring/lib/map_calls.ts#coach') && Date.now() < deadline) {
+    while (!index.calls.some((c) => c.from === 's:node-authoring/lib/map_calls.ts#addTwo') && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 250));
       index = await api.codeMap.codeIndex(folder);
     }
-    const call = index.calls.find((c) => c.from === 's:node-authoring/lib/map_calls.ts#coach');
+    const call = index.calls.find((c) => c.from === 's:node-authoring/lib/map_calls.ts#addTwo');
     assert.ok(call, 'the call is in the index');
-    assert.equal(call.to, 's:node-authoring/lib/dojo.ts#Trainee.train');
+    assert.equal(call.to, 's:node-authoring/lib/tally.ts#Tally.add');
     assert.equal(call.certain, false, 'a method on a variable is a guess');
     // --disable-extensions turns off the built-in TypeScript extension too (npm run
     // test:integration:debuggers runs with it).
@@ -139,7 +139,7 @@ test("the Codebase Map asks the language's server what a guessed call is", async
       resolved = await api.codeMap.definitionAt(folder, call.path, call.line, call.column);
       if (!resolved) await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    assert.equal(resolved, 's:node-authoring/lib/dojo.ts#Trainee.train');
+    assert.equal(resolved, 's:node-authoring/lib/tally.ts#Tally.add');
   } finally {
     fs.rmSync(file.fsPath, { force: true });
   }
@@ -149,10 +149,10 @@ test("the Codebase Map asks the language's server what a guessed call is", async
 test("the Codebase Map draws a function's control flow", async () => {
   const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
   const folder = vscode.workspace.workspaceFolders![0];
-  const chart = await api.codeMap.flowchart(folder, 'node-authoring/lib/dojo.ts', 22);
-  assert.equal(chart?.name, 'train');
+  const chart = await api.codeMap.flowchart(folder, 'node-authoring/lib/tally.ts', 22);
+  assert.equal(chart?.name, 'add');
   assert.deepEqual(chart?.nodes.map((n) => n.kind), ['start', 'end', 'block', 'return']);
-  assert.equal(await api.codeMap.flowchart(folder, 'node-authoring/lib/dojo.ts', 1), undefined);
+  assert.equal(await api.codeMap.flowchart(folder, 'node-authoring/lib/tally.ts', 1), undefined);
 });
 
 // docs/codebase-map.md, Part 3: Show Codebase Map opens the folder's map, laid out in the extension
@@ -162,27 +162,27 @@ test('Show Codebase Map draws the folder, and opening a box shows what it holds'
   const folder = vscode.workspace.workspaceFolders![0];
   try {
     const scene = await vscode.commands.executeCommand<{ boxes: { id: string; kind: string; parent?: string; expanded: boolean }[] }>('blueprintVisualScripting.showCodebaseMap', folder.uri);
-    assert.ok(scene?.boxes.some((b) => b.id === 'm:arena' && !b.expanded), 'the arena folder is on the map, closed');
+    assert.ok(scene?.boxes.some((b) => b.id === 'm:countdown' && !b.expanded), 'the countdown folder is on the map, closed');
     assert.ok(vscode.window.tabGroups.activeTabGroup.activeTab?.label.startsWith('Codebase Map'), 'the map is the active tab');
-    const opened = await api.codeMapPanels.toggleIn(folder, 'm:arena');
-    assert.ok(opened?.boxes.some((b) => b.id === 'g:arena/Game.vgraph' && b.parent === 'm:arena'), "the folder's graphs are shown inside it");
+    const opened = await api.codeMapPanels.toggleIn(folder, 'm:countdown');
+    assert.ok(opened?.boxes.some((b) => b.id === 'g:countdown/Countdown.vgraph' && b.parent === 'm:countdown'), "the folder's graphs are shown inside it");
     // The structure: graph files list their graphs, and a graph class points at its parent.
     const structure = await api.codeMapPanels.modeIn(folder, 'structure');
     assert.equal(structure?.mode, 'structure');
-    assert.ok(structure?.boxes.find((b) => b.id === 'g:arena/Game.vgraph')?.members?.length, "the game's graphs are listed in its box");
-    assert.ok(structure?.arrows.some((a) => a.kind === 'inherits' && a.from === 'g:arena/Knight.vgraph' && a.to === 'g:arena/Fighter.vgraph'), 'Knight extends Fighter');
-    // The call flow: from the entry points (the game's Start), and from the game's event graph down.
+    assert.ok(structure?.boxes.find((b) => b.id === 'g:countdown/Countdown.vgraph')?.members?.length, "the countdown's graphs are listed in its box");
+    assert.ok(structure?.arrows.some((a) => a.kind === 'inherits' && a.from === 'g:countdown/DoubleCounter.vgraph' && a.to === 'g:countdown/Counter.vgraph'), 'DoubleCounter extends Counter');
+    // The call flow: from the entry points (the countdown's Start), and from the countdown's event graph down.
     const entries = await api.codeMapPanels.callsIn(folder);
     assert.equal(entries?.mode, 'calls');
-    assert.ok((entries?.calls?.starts ?? 0) > 0 && entries?.boxes.some((b) => b.id === 'g:arena/Game.vgraph#EventGraph'), 'the game starts the flow');
-    const fromGame = await api.codeMapPanels.callsIn(folder, 'g:arena/Game.vgraph#EventGraph');
-    assert.ok(fromGame?.boxes.some((b) => b.id === 'g:arena/Game.vgraph#EventGraph' && b.root));
-    assert.ok(fromGame?.arrows.some((a) => a.kind === 'calls' && a.from === 'g:arena/Game.vgraph#EventGraph'), 'the game calls on, down the map');
+    assert.ok((entries?.calls?.starts ?? 0) > 0 && entries?.boxes.some((b) => b.id === 'g:countdown/Countdown.vgraph#EventGraph'), 'the countdown starts the flow');
+    const fromCountdown = await api.codeMapPanels.callsIn(folder, 'g:countdown/Countdown.vgraph#EventGraph');
+    assert.ok(fromCountdown?.boxes.some((b) => b.id === 'g:countdown/Countdown.vgraph#EventGraph' && b.root));
+    assert.ok(fromCountdown?.arrows.some((a) => a.kind === 'calls' && a.from === 'g:countdown/Countdown.vgraph#EventGraph'), 'the countdown calls on, down the map');
     // A function's control flow, from its code.
-    const train = await api.codeMapPanels.flowIn(folder, 's:node-authoring/lib/dojo.ts#Trainee.train');
-    assert.equal(train?.mode, 'flow');
-    assert.equal(train?.flow?.label, 'train');
-    assert.deepEqual(train?.boxes.map((b) => b.flowKind), ['start', 'end', 'block', 'return']);
+    const add = await api.codeMapPanels.flowIn(folder, 's:node-authoring/lib/tally.ts#Tally.add');
+    assert.equal(add?.mode, 'flow');
+    assert.equal(add?.flow?.label, 'add');
+    assert.deepEqual(add?.boxes.map((b) => b.flowKind), ['start', 'end', 'block', 'return']);
     await api.codeMapPanels.modeIn(folder, 'architecture');
   } finally {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -194,27 +194,27 @@ test('Show Codebase Map draws the folder, and opening a box shows what it holds'
 test('the Codebase Map focuses on a box, finds the calls between two, and goes back and forward', async () => {
   const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
   const folder = vscode.workspace.workspaceFolders![0];
-  const game = 'g:arena/Game.vgraph#EventGraph';
+  const countdown = 'g:countdown/Countdown.vgraph#EventGraph';
   try {
     await vscode.commands.executeCommand('blueprintVisualScripting.showCodebaseMap', folder.uri);
-    const fromGame = await api.codeMapPanels.callsIn(folder, game, 'callees');
-    // (Something the game's calls reach, past what it calls itself.)
-    const called = new Set(fromGame?.arrows.filter((a) => a.from === game).map((a) => a.to));
-    const reached = fromGame?.boxes.find((b) => !b.root && !b.id.startsWith('in:') && b.kind !== 'unresolved' && !called.has(b.id))
-      ?? fromGame?.boxes.find((b) => called.has(b.id));
-    assert.ok(reached, 'the game calls something');
+    const fromCountdown = await api.codeMapPanels.callsIn(folder, countdown, 'callees');
+    // (Something the countdown's calls reach, past what it calls itself.)
+    const called = new Set(fromCountdown?.arrows.filter((a) => a.from === countdown).map((a) => a.to));
+    const reached = fromCountdown?.boxes.find((b) => !b.root && !b.id.startsWith('in:') && b.kind !== 'unresolved' && !called.has(b.id))
+      ?? fromCountdown?.boxes.find((b) => called.has(b.id));
+    assert.ok(reached, 'the countdown calls something');
     // Focus: what it calls below it, what calls it above.
     const focus = await api.codeMapPanels.callsIn(folder, reached.id, 'both');
     assert.equal(focus?.calls?.direction, 'both');
     assert.ok(focus?.arrows.some((a) => a.to === reached.id), 'its callers are above it');
-    // The path from the game to it.
-    const path = await api.codeMapPanels.pathIn(folder, game, reached.id);
+    // The path from the countdown to it.
+    const path = await api.codeMapPanels.pathIn(folder, countdown, reached.id);
     assert.ok((path?.calls?.path?.length ?? 0) >= 1, 'a path of calls');
-    assert.ok(path?.boxes.some((b) => b.id === game && b.root) && path.boxes.some((b) => b.id === reached.id && b.root), 'both ends are marked');
-    // Back to the focus, back to the game's flow, forward to the focus.
+    assert.ok(path?.boxes.some((b) => b.id === countdown && b.root) && path.boxes.some((b) => b.id === reached.id && b.root), 'both ends are marked');
+    // Back to the focus, back to the countdown's flow, forward to the focus.
     assert.equal((await api.codeMapPanels.historyIn(folder, 'back'))?.calls?.direction, 'both');
     const before = await api.codeMapPanels.historyIn(folder, 'back');
-    assert.equal(before?.calls?.root, game);
+    assert.equal(before?.calls?.root, countdown);
     assert.equal(before?.calls?.path, undefined);
     assert.equal((await api.codeMapPanels.historyIn(folder, 'forward'))?.calls?.root, reached.id);
     await api.codeMapPanels.modeIn(folder, 'architecture');
@@ -229,22 +229,22 @@ test('Show in Codebase Map reveals a file, or the function at the cursor; the fl
   const folder = vscode.workspace.workspaceFolders![0];
   type Revealed = { scene: { mode: string; boxes: { id: string }[] }; focus?: string } | undefined;
   try {
-    const game = await vscode.commands.executeCommand<Revealed>('blueprintVisualScripting.showInCodebaseMap', vscode.Uri.joinPath(folder.uri, 'arena', 'Game.vgraph'));
-    assert.equal(game?.focus, 'g:arena/Game.vgraph', 'the graph file is centred and selected');
-    assert.equal(game?.scene.mode, 'architecture');
-    const dojo = await vscode.window.showTextDocument(vscode.Uri.joinPath(folder.uri, 'node-authoring', 'lib', 'dojo.ts'));
-    dojo.selection = new vscode.Selection(21, 4, 21, 4);
-    const train = await vscode.commands.executeCommand<Revealed>('blueprintVisualScripting.showInCodebaseMap');
-    assert.equal(train?.scene.mode, 'structure', 'a declaration is shown in the structure');
-    assert.ok(train?.focus === 's:node-authoring/lib/dojo.ts#Trainee.train' || train?.focus === 's:node-authoring/lib/dojo.ts#Trainee', `the method (or its class) is selected: ${train?.focus}`);
-    await vscode.window.showTextDocument(dojo.document);
+    const countdown = await vscode.commands.executeCommand<Revealed>('blueprintVisualScripting.showInCodebaseMap', vscode.Uri.joinPath(folder.uri, 'countdown', 'Countdown.vgraph'));
+    assert.equal(countdown?.focus, 'g:countdown/Countdown.vgraph', 'the graph file is centred and selected');
+    assert.equal(countdown?.scene.mode, 'architecture');
+    const tally = await vscode.window.showTextDocument(vscode.Uri.joinPath(folder.uri, 'node-authoring', 'lib', 'tally.ts'));
+    tally.selection = new vscode.Selection(21, 4, 21, 4);
+    const add = await vscode.commands.executeCommand<Revealed>('blueprintVisualScripting.showInCodebaseMap');
+    assert.equal(add?.scene.mode, 'structure', 'a declaration is shown in the structure');
+    assert.ok(add?.focus === 's:node-authoring/lib/tally.ts#Tally.add' || add?.focus === 's:node-authoring/lib/tally.ts#Tally', `the method (or its class) is selected: ${add?.focus}`);
+    await vscode.window.showTextDocument(tally.document);
     const calls = await vscode.commands.executeCommand<{ mode: string; calls?: { root?: string } }>('blueprintVisualScripting.showCallFlow');
     assert.equal(calls?.mode, 'calls');
-    assert.equal(calls?.calls?.root, 's:node-authoring/lib/dojo.ts#Trainee.train');
-    await vscode.window.showTextDocument(dojo.document);
+    assert.equal(calls?.calls?.root, 's:node-authoring/lib/tally.ts#Tally.add');
+    await vscode.window.showTextDocument(tally.document);
     const flow = await vscode.commands.executeCommand<{ mode: string; flow?: { label: string } }>('blueprintVisualScripting.showControlFlow');
     assert.equal(flow?.mode, 'flow');
-    assert.equal(flow?.flow?.label, 'train');
+    assert.equal(flow?.flow?.label, 'add');
     const api = ((await vscode.extensions.getExtension(EXTENSION_ID)!.activate()) as ExtensionApi).testing;
     await api.codeMapPanels.modeIn(folder, 'architecture');
   } finally {
@@ -300,11 +300,11 @@ test("the Codebase Map's bridges: hover, Expose as Node and Open Graph; its tree
     assert.equal(shown?.focus, halve);
 
     // Open Graph: a graph's box opens its file in the graph editor.
-    await api.codeMapPanels.openIn(folder, 'g:arena/Game.vgraph#EventGraph');
+    await api.codeMapPanels.openIn(folder, 'g:countdown/Countdown.vgraph#EventGraph');
     await waitFor(() => {
       const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
-      return input instanceof vscode.TabInputCustom && input.viewType === 'blueprintVisualScripting.graphEditor' && input.uri.path.endsWith('/arena/Game.vgraph');
-    }, 'the game in the graph editor', 15000);
+      return input instanceof vscode.TabInputCustom && input.viewType === 'blueprintVisualScripting.graphEditor' && input.uri.path.endsWith('/countdown/Countdown.vgraph');
+    }, 'the countdown in the graph editor', 15000);
 
     // Expose as Node, from its box: only it is marked, and it becomes a node.
     const changed = await api.codeMapPanels.exposeIn(folder, id, {});

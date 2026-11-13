@@ -510,7 +510,7 @@ export function standardLibraryDefinitions(): NodeDefinition[] {
       javascript: 'return minimum + Math.floor(Math.random() * (maximum - minimum + 1));',
       python: 'import random\nreturn random.randint(minimum, maximum)',
       csharp: 'return Random.Shared.Next(minimum, maximum + 1);'
-    }, { description: 'A random whole number from Min to Max, both included. A new one each time it is read.', keywords: ['random', 'rand', 'dice'] }),
+    }, { description: 'A random whole number from Min to Max, both included. A new one each time it is read.', keywords: ['random', 'rand'] }),
 
     // ---- String ---------------------------------------------------------------------------------------
     node('core:string.append', 'Append', 'String', [input('a', 'A', 'string', ''), input('b', 'B', 'string', '')], output('string'), {

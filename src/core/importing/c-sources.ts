@@ -17,7 +17,7 @@ export interface SourceFunction {
   name: string;
   // 1-based, in the source.
   line: number;
-  // Its namespace (C++), as the scanner gives it ("game", "a::b").
+  // Its namespace (C++), as the scanner gives it ("app", "a::b").
   container?: string;
   // The declaration for the header, from the definition: "double add(double a, double b);".
   declaration: string;

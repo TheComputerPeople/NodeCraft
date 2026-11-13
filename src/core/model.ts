@@ -114,7 +114,7 @@ export interface FunctionImplementation {
   path: string;
   // The function's exported name.
   name: string;
-  // Python: the module's import name, e.g. "game.combat".
+  // Python: the module's import name, e.g. "app.values".
   module?: string;
   // A function of a graph library: its .vgraph file (workspace-relative) and function graph, so
   // Simulate can run it (src/core/libraries.ts).
@@ -160,7 +160,7 @@ export interface CodeMember {
   kind: 'construct' | 'method' | 'get' | 'set';
   // The method's or property's name in the code (absent for construct).
   name?: string;
-  // The class's type ("native:Warrior"), and the type of the class it extends, so an object of it
+  // The class's type ("native:Item"), and the type of the class it extends, so an object of it
   // wires where the base class is expected.
   type: string;
   base?: string;

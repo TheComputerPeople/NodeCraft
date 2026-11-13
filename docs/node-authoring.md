@@ -442,16 +442,16 @@ A sample workspace with TypeScript and Python graphs uses every path:
 
 It runs from Run in both languages, and Go to Definition reaches each source. Each language's interop test (`test/conformance/<language>.test.ts`) also covers code classes and several outputs, and async in the languages that have it.
 
-**Built (step 16).** The workspace is sample/node-authoring; its package's source, as shared, is sample/packages/drills.
+**Built (step 16).** The workspace is sample/node-authoring; its package's source, as shared, is sample/packages/measures.
 
 - **What's in it.**
-  - `lib/dojo.ts` and `game/dojo.py`: a Trainee class with a constructor, a `health` property, `train`, `split` (two outputs) and an async `rest`.
-  - `libs/Scoring.vgraph`: a function library generated for both languages.
+  - `lib/tally.ts` and `app/tally.py`: a Tally class with a constructor, a `total` property, `add`, `split` (two outputs) and an async `settle`.
+  - `libs/Scaling.vgraph`: a function library generated for both languages.
   - `nodes/Clamp01.node.json`: a snippet node with three examples.
-  - `blueprint-packages/drills`: the package as Add Blueprint Package leaves it, generated for Python too.
-  - `graphs/DojoTs.vgraph` and `graphs/DojoPy.vgraph`: the same graph in each language, using all of them.
+  - `blueprint-packages/measures`: the package as Add Blueprint Package leaves it, generated for Python too.
+  - `graphs/TallyTs.vgraph` and `graphs/TallyPy.vgraph`: the same graph in each language, using all of them.
 - **The test** (test/conformance/node-authoring.test.ts) builds the nodes as the extension does: it scans the code, reads the libraries for both languages, tags the package's, and reads the node file.
-  - It compiles the libraries in both languages, then runs each graph, which prints 8, 0, 8, 420, 1, 800 and 42.
+  - It compiles the libraries in both languages, then runs each graph, which prints 8, 0, 8, 420, 1, 200 and 42.
   - It checks that every node has a definition to go to (the code's line, the library's graph, the node file).
   - It checks that the package's version is recorded, and that the node library's examples pass in both languages.
 - **In VS Code.** Running, Go to Definition, the quick fixes, New Node, Test Node Library and Add Blueprint Package are each covered by the integration suite (steps 9 and 12 to 15).

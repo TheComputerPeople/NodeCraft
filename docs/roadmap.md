@@ -162,7 +162,7 @@ Goal: the full set of Blueprint authoring concepts, each enabled per language th
 
 Exit: a non-trivial program (classes, functions, events, async) is built entirely in graphs and runs correctly from generated TypeScript, Python and C#.
 
-Status: complete (October 2026), with the deferrals below. The exit program, sample/arena, is built only in graphs: an enum, a struct, a class with a function of several outputs and an event dispatcher, a subclass that overrides a function and calls its parent, and a Game that constructs both, binds a custom event to the dispatcher, fights in a For Loop with Break with a macro, switches on the enum and ends after a Delay. The conformance suite runs it in Simulate and as generated TypeScript, JavaScript (ES modules and CommonJS), Python and C# with identical output, and type-checks the TypeScript and JavaScript under `--strict`.
+Status: complete (October 2026), with the deferrals below. The exit program, sample/countdown, is built only in graphs: an enum, a struct, a class with a function of several outputs and an event dispatcher, a subclass that overrides a function and calls its parent, and a Countdown that constructs both, binds a custom event to the dispatcher, counts down in a For Loop with Break with a macro, switches on the enum and ends after a Delay. The conformance suite runs it in Simulate and as generated TypeScript, JavaScript (ES modules and CommonJS), Python and C# with identical output, and type-checks the TypeScript and JavaScript under `--strict`.
 
 - **Deferred:** classes from the project's code as parent classes (Phase 3's deferral stands), Test Case events (Phase 5, with debugging), sets and map keys of structs or enums, a pure Cast To, and MultiGate's Is Random.
 
@@ -234,7 +234,7 @@ Status: complete (October 2026), with the deferrals below.
   - The pack SDK and the published conformance suite.
   - The public API, and output plans with consented build hooks.
   - C++, Rust, Java and Go as Tier 1 packs, each with placement, symbol import and debugging. Java and Go were added after the exit check, once their toolchains were installed.
-    - Java passes all 20 fixtures; Go passes all but the arena (inheritance), as Rust does.
+    - Java passes all 20 fixtures; Go passes all but the countdown (inheritance), as Rust does.
     - Java debugs with the Debugger for Java, Go with Delve. Both pass the Debug test and the Phase 5 exit check.
     - Go imports project functions through gopls.
   - The declarative format, with workspace packs and Tier 2 symbol import through the language server.

@@ -111,4 +111,4 @@ Unreal's standard macros, as built-in nodes with Unreal's pins:
 
 A sample program built only in graphs exercises classes, inheritance, functions with several outputs, a macro, a struct, an enum, a loop, an event dispatcher and a Delay, and prints the same output from generated TypeScript, Python and C# (and Simulate). It joins the conformance suite.
 
-Done: sample/arena (Team, Stats, Fighter, Knight and Game). The conformance suite's "exit program" tests compile its files as the workspace service would see them and check the printed lines in Simulate and every target.
+Done: sample/countdown (Shade, Levels, Counter, DoubleCounter and Countdown). The conformance suite's "exit program" tests compile its files as the workspace service would see them and check the printed lines in Simulate and every target.

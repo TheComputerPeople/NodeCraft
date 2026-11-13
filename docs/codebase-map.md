@@ -350,7 +350,7 @@ Across all four:
 - **Structure:** files open into their types and functions, and namespaces into what they hold.
   - **Members:** a type lists its members (methods with `()`, nested types) in its box, up to twelve, then "+N more". A graph file lists its graphs.
   - **Inheritance** is the only arrow. It's laid out from parent to child, so parents sit above their children, and drawn from the child to its parent with a hollow head.
-  - **Graph classes** stand beside code classes, with their parents (Knight extends Fighter in the sample's arena).
+  - **Graph classes** stand beside code classes, with their parents (DoubleCounter extends Counter in the sample's countdown).
 - **Lifting moves into core** (`liftArrows` in `scene.ts`): the cycles are found on the lifted arrows, which the layout worker now takes as they are.
 - **Tested:**
   - **The scene:** each view's boxes and arrows, files opening only in the structure view, cycles marked and not marked, members and their limit.
@@ -376,7 +376,7 @@ Across all four:
   - *Callers* shows everything that reaches it, from above, with the start at the bottom.
 
   Arrows always run from caller to callee, so callers sit above what they call either way.
-- **Crossing between code and graphs:** a call to a graph file leads into its graphs, and on into what they call, so code calls a graph and the graph calls code in one picture. A graph's call to a library graph resolves the library's path from the graph's folder when it isn't from the workspace folder (as the sample's graphs name `libs/Scoring.vgraph`).
+- **Crossing between code and graphs:** a call to a graph file leads into its graphs, and on into what they call, so code calls a graph and the graph calls code in one picture. A graph's call to a library graph resolves the library's path from the graph's folder when it isn't from the workspace folder (as the sample's graphs name `libs/Scaling.vgraph`).
 - **What's marked:**
   - **Recursion** (a function calling itself) and calls that come back round are marked like import cycles. Their arrows are kept through lifting.
   - **Guessed calls** are dashed.

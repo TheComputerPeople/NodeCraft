@@ -32,11 +32,11 @@ const doc = (file: string): GraphDocument => parseDocument(read(file), path.base
 
 // The workspace's nodes, as the extension finds them: its code, its libraries (each generated in
 // both languages), its package's library (tagged with the package), and its node files.
-const LIBRARIES = ['libs/Scoring.vgraph', 'blueprint-packages/drills/Drills.vgraph'];
+const LIBRARIES = ['libs/Scaling.vgraph', 'blueprint-packages/measures/Measures.vgraph'];
 const lines = new Map<string, number>();
 function workspaceNodes(): NodeDefinition[] {
   const nodes: NodeDefinition[] = [];
-  for (const [language, file, module] of [['typescript', 'lib/dojo.ts', undefined], ['python', 'game/dojo.py', 'game.dojo']] as const) {
+  for (const [language, file, module] of [['typescript', 'lib/tally.ts', undefined], ['python', 'app/tally.py', 'app.tally']] as const) {
     const exposed = exposeFunctions(languages.get(language)!.importer!.scan!(read(file)), { language, path: file, module, exposeAll: false });
     nodes.push(...exposed.definitions);
     for (const [type, line] of exposed.lines) lines.set(type, line);
@@ -48,7 +48,7 @@ function workspaceNodes(): NodeDefinition[] {
       return { generatedPath: generated, ...(language === 'python' ? { module: pythonModule(path.join(root, generated), root).module } : {}) };
     };
     const definitions = graphFileDefinitions(library, { document: file, ...output('typescript'), others: { python: output('python') } }, languages.get('typescript')!.generator, (l) => languages.get(l)?.generator)!;
-    const manifest = path.join(path.dirname(file), 'drills.vgraph-package.json');
+    const manifest = path.join(path.dirname(file), 'measures.vgraph-package.json');
     nodes.push(...(fs.existsSync(path.join(root, manifest)) ? tagPackageDefinitions(definitions, JSON.parse(read(manifest))) : definitions));
   }
   nodes.push(parseNodeDefinition(read('nodes/Clamp01.node.json'))!);
@@ -71,13 +71,13 @@ function compile(file: string, language: string): { file: string; className: str
 describe('Phase 9 exit check: sample/node-authoring', () => {
   for (const file of LIBRARIES) for (const language of ['typescript', 'python']) compile(file, language);
 
-  for (const [graph, language] of [['graphs/DojoTs.vgraph', 'typescript'], ['graphs/DojoPy.vgraph', 'python']] as const) {
+  for (const [graph, language] of [['graphs/TallyTs.vgraph', 'typescript'], ['graphs/TallyPy.vgraph', 'python']] as const) {
     test(`${graph} runs in ${language} and prints what it expects`, async (t) => {
       const { file, className } = compile(graph, language);
       let outcome;
       try {
         outcome = await runGeneratedCode(languages.get(language)!.generator!.runner!, file, className, {
-          cwd: path.dirname(file), importRoots: [root, path.join(root, 'libs'), path.join(root, 'blueprint-packages/drills')], timeoutMs: 120000
+          cwd: path.dirname(file), importRoots: [root, path.join(root, 'libs'), path.join(root, 'blueprint-packages/measures')], timeoutMs: 120000
         });
       } catch (error) {
         if (error instanceof ToolNotFoundError) return t.skip(error.message);
@@ -88,7 +88,7 @@ describe('Phase 9 exit check: sample/node-authoring', () => {
   }
 
   test("each node reaches its definition: the class's code at its line, the libraries' graphs, the node file", () => {
-    for (const graph of ['graphs/DojoTs.vgraph', 'graphs/DojoPy.vgraph']) {
+    for (const graph of ['graphs/TallyTs.vgraph', 'graphs/TallyPy.vgraph']) {
       const document = doc(graph);
       const resolve = createResolver(registry, document);
       for (const node of document.graphs[0].nodes.filter((n) => !n.type.startsWith('core:'))) {
@@ -102,16 +102,16 @@ describe('Phase 9 exit check: sample/node-authoring', () => {
   });
 
   test("the package's nodes carry its version, which graphs using them record", () => {
-    const laps = registry.get('lib:blueprint-packages/drills/Drills.vgraph#Laps')!;
-    assert.deepEqual(laps.library, { name: 'drills', version: '1.0.0' });
-    const document = doc('graphs/DojoTs.vgraph');
+    const measure = registry.get('lib:blueprint-packages/measures/Measures.vgraph#ToCentimeters')!;
+    assert.deepEqual(measure.library, { name: 'measures', version: '1.0.0' });
+    const document = doc('graphs/TallyTs.vgraph');
     syncLibraryVersions(document, (type) => registry.get(type));
-    assert.deepEqual(document.metadata?.libraries, { drills: '1.0.0' });
+    assert.deepEqual(document.metadata?.libraries, { measures: '1.0.0' });
   });
 
   for (const language of ['typescript', 'python']) {
     test(`the node library's examples pass in ${language}`, async (t) => {
-      const report = await runNodeExamples(languages.get(language)!, [registry.get('user.dojo.clamp01')!]);
+      const report = await runNodeExamples(languages.get(language)!, [registry.get('user.values.clamp01')!]);
       if (report.skipped) return t.skip(report.results[0].message);
       assert.equal(report.passed, 1, formatReport(report));
     });

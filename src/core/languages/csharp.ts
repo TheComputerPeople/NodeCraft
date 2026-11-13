@@ -566,7 +566,7 @@ class CSharpEmitter {
     // A function's node outputs are locals; one nobody reads is not worth a warning.
     header.line('#pragma warning disable CS0219');
     // The security analyzers check generated files too: Random and MD5 or SHA-1 are what the nodes
-    // that use them are for (Random Integer, a game's dice; a file's checksum).
+    // that use them are for (Random Integer; a file's checksum).
     header.line('#pragma warning disable CA5350, CA5351, CA5394');
     // A project that writes its documentation file (GenerateDocumentationFile) asks every public
     // member for an XML comment; the compiler asks generated files too.

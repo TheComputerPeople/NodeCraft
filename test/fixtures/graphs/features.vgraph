@@ -13,8 +13,8 @@
       "defaultValue": 3
     },
     {
-      "id": "v_hero",
-      "name": "Hero",
+      "id": "v_author",
+      "name": "Author",
       "type": {
         "id": "string"
       },
@@ -114,18 +114,18 @@
           "properties": {}
         },
         {
-          "id": "get_hero",
+          "id": "get_author",
           "type": "core:variable.get",
           "position": {
             "x": 1150,
             "y": 150
           },
           "properties": {
-            "variable": "v_hero"
+            "variable": "v_author"
           }
         },
         {
-          "id": "print_hero",
+          "id": "print_author",
           "type": "core:console.print",
           "position": {
             "x": 1400,
@@ -206,14 +206,14 @@
           "id": "c9",
           "fromNode": "print_double",
           "fromPin": "execOut",
-          "toNode": "print_hero",
+          "toNode": "print_author",
           "toPin": "execIn"
         },
         {
           "id": "c10",
-          "fromNode": "get_hero",
+          "fromNode": "get_author",
           "fromPin": "value",
-          "toNode": "print_hero",
+          "toNode": "print_author",
           "toPin": "value"
         },
         {

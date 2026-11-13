@@ -1961,22 +1961,22 @@ describe('Main', () => {
   }
 });
 
-// Phase 4's exit program (docs/program-structure.md, "Exit check"): sample/arena, built only in
+// Phase 4's exit program (docs/program-structure.md, "Exit check"): sample/countdown, built only in
 // graphs, in each language from the same files.
-describe('exit program (sample/arena)', () => {
-  const FILES = ['Team', 'Stats', 'Fighter', 'Knight', 'Game'];
-  const read = (name: string, language: string): GraphDocument => ({ ...parseDocument(fs.readFileSync(path.join(repoRoot, 'sample/arena', `${name}.vgraph`), 'utf8')).document, language });
-  const EXPECTED = read('Game', 'typescript').metadata!.expectedOutput as string[];
+describe('exit program (sample/countdown)', () => {
+  const FILES = ['Shade', 'Levels', 'Counter', 'DoubleCounter', 'Countdown'];
+  const read = (name: string, language: string): GraphDocument => ({ ...parseDocument(fs.readFileSync(path.join(repoRoot, 'sample/countdown', `${name}.vgraph`), 'utf8')).document, language });
+  const EXPECTED = read('Countdown', 'typescript').metadata!.expectedOutput as string[];
 
-  // The workspace as the extension sees it: each file's types and classes, generated into arena/.
+  // The workspace as the extension sees it: each file's types and classes, generated into countdown/.
   function registryFor(language: string): NodeRegistry {
     const r = registry();
     const generator = languages.get(language)!.generator!;
     for (const name of FILES) {
       const doc = read(name, language);
       const fileName = generator.outputFileName(`${name}.vgraph`);
-      const module = language === 'python' ? fileName.replace(/\.py$/, '') : language === 'csharp' ? 'Arena' : undefined;
-      const source = { document: `arena/${name}.vgraph`, generatedPath: `arena/${fileName}`, ...(module ? { module } : {}) };
+      const module = language === 'python' ? fileName.replace(/\.py$/, '') : language === 'csharp' ? 'Countdown' : undefined;
+      const source = { document: `countdown/${name}.vgraph`, generatedPath: `countdown/${fileName}`, ...(module ? { module } : {}) };
       const type = declaredType(doc, source);
       if (type) r.registerMany(userTypeDefinitions(type));
       const cls = declaredClass(doc, source);
@@ -1987,26 +1987,26 @@ describe('exit program (sample/arena)', () => {
 
   test('Simulate', () => {
     const events: RuntimeLogEvent[] = [];
-    const load = (file: string) => (file.startsWith('arena/') ? read(path.basename(file, '.vgraph'), 'typescript') : undefined);
-    new GraphRuntime(registryFor('typescript'), (e) => events.push(e), languages, load).run(read('Game', 'typescript'));
+    const load = (file: string) => (file.startsWith('countdown/') ? read(path.basename(file, '.vgraph'), 'typescript') : undefined);
+    new GraphRuntime(registryFor('typescript'), (e) => events.push(e), languages, load).run(read('Countdown', 'typescript'));
     assert.deepEqual(events.filter((e) => e.kind === 'error'), []);
     assert.deepEqual(events.filter((e) => e.kind === 'log').map((e) => e.message), EXPECTED);
   });
 
   function build(key: string, language: string, generate: Partial<GenerateOptions> = {}): { file: string; className: string; dir: string; files: string[]; importRoots?: string[] } {
-    const dir = path.join(workDir, `arena-${key}`, 'arena');
+    const dir = path.join(workDir, `countdown-${key}`, 'countdown');
     fs.mkdirSync(dir, { recursive: true });
     const r = registryFor(language);
-    let game: { file: string; className: string; importRoots?: string[] } | undefined;
+    let main: { file: string; className: string; importRoots?: string[] } | undefined;
     const files = FILES.map((name) => {
-      const result = compileDocument(read(name, language), { registry: r, languages, generate: { sourceFileName: `${name}.vgraph`, outputDir: 'arena', namespace: 'Arena', ...generate } });
+      const result = compileDocument(read(name, language), { registry: r, languages, generate: { sourceFileName: `${name}.vgraph`, outputDir: 'countdown', namespace: 'Countdown', ...generate } });
       assert.deepEqual(result.diagnostics, [], name);
       const file = path.join(dir, result.output!.fileName);
       fs.writeFileSync(file, result.output!.text);
-      if (name === 'Game') game = { file, className: result.output!.className, importRoots: result.output!.importRoots?.map((root) => path.join(dir, '..', root)) };
+      if (name === 'Countdown') main = { file, className: result.output!.className, importRoots: result.output!.importRoots?.map((root) => path.join(dir, '..', root)) };
       return file;
     });
-    return { ...game!, dir, files };
+    return { ...main!, dir, files };
   }
 
   for (const target of [

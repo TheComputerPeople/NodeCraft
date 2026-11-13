@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "name": "DojoPy",
+  "name": "TallyPy",
   "kind": "class",
   "language": "python",
   "variables": [],
@@ -21,7 +21,7 @@
         },
         {
           "id": "construct",
-          "type": "fn:python:game/dojo.py#Trainee:new",
+          "type": "fn:python:app/tally.py#Tally:new",
           "position": {
             "x": 200,
             "y": 0
@@ -31,14 +31,14 @@
           }
         },
         {
-          "id": "train",
-          "type": "fn:python:game/dojo.py#Trainee:train",
+          "id": "add",
+          "type": "fn:python:app/tally.py#Tally:add",
           "position": {
             "x": 420,
             "y": 0
           },
           "properties": {
-            "pin:hours": 3
+            "pin:amount": 3
           }
         },
         {
@@ -52,7 +52,7 @@
         },
         {
           "id": "split",
-          "type": "fn:python:game/dojo.py#Trainee:split",
+          "type": "fn:python:app/tally.py#Tally:split",
           "position": {
             "x": 840,
             "y": 0
@@ -79,7 +79,7 @@
         },
         {
           "id": "set",
-          "type": "fn:python:game/dojo.py#Trainee:set:health",
+          "type": "fn:python:app/tally.py#Tally:set:total",
           "position": {
             "x": 1460,
             "y": 0
@@ -90,7 +90,7 @@
         },
         {
           "id": "get",
-          "type": "fn:python:game/dojo.py#Trainee:get:health",
+          "type": "fn:python:app/tally.py#Tally:get:total",
           "position": {
             "x": 1460,
             "y": 220
@@ -98,8 +98,8 @@
           "properties": {}
         },
         {
-          "id": "bonus",
-          "type": "lib:libs/Scoring.vgraph#Bonus",
+          "id": "scale",
+          "type": "lib:libs/Scaling.vgraph#TimesTen",
           "position": {
             "x": 1660,
             "y": 220
@@ -117,7 +117,7 @@
         },
         {
           "id": "clamp",
-          "type": "user.dojo.clamp01",
+          "type": "user.values.clamp01",
           "position": {
             "x": 1880,
             "y": 220
@@ -136,14 +136,14 @@
           "properties": {}
         },
         {
-          "id": "laps",
-          "type": "lib:blueprint-packages/drills/Drills.vgraph#Laps",
+          "id": "measure",
+          "type": "lib:blueprint-packages/measures/Measures.vgraph#ToCentimeters",
           "position": {
             "x": 2080,
             "y": 220
           },
           "properties": {
-            "pin:count": 2
+            "pin:meters": 2
           }
         },
         {
@@ -156,8 +156,8 @@
           "properties": {}
         },
         {
-          "id": "rest",
-          "type": "fn:python:game/dojo.py#Trainee:rest",
+          "id": "settle",
+          "type": "fn:python:app/tally.py#Tally:settle",
           "position": {
             "x": 2280,
             "y": 0
@@ -185,15 +185,15 @@
           "toPin": "execIn"
         },
         {
-          "id": "construct.execOut->train.execIn",
+          "id": "construct.execOut->add.execIn",
           "fromNode": "construct",
           "fromPin": "execOut",
-          "toNode": "train",
+          "toNode": "add",
           "toPin": "execIn"
         },
         {
-          "id": "train.execOut->p1.execIn",
-          "fromNode": "train",
+          "id": "add.execOut->p1.execIn",
+          "fromNode": "add",
           "fromPin": "execOut",
           "toNode": "p1",
           "toPin": "execIn"
@@ -248,24 +248,24 @@
           "toPin": "execIn"
         },
         {
-          "id": "p6.execOut->rest.execIn",
+          "id": "p6.execOut->settle.execIn",
           "fromNode": "p6",
           "fromPin": "execOut",
-          "toNode": "rest",
+          "toNode": "settle",
           "toPin": "execIn"
         },
         {
-          "id": "rest.completed->p7.execIn",
-          "fromNode": "rest",
+          "id": "settle.completed->p7.execIn",
+          "fromNode": "settle",
           "fromPin": "completed",
           "toNode": "p7",
           "toPin": "execIn"
         },
         {
-          "id": "construct.returnValue->train.target",
+          "id": "construct.returnValue->add.target",
           "fromNode": "construct",
           "fromPin": "returnValue",
-          "toNode": "train",
+          "toNode": "add",
           "toPin": "target"
         },
         {
@@ -290,15 +290,15 @@
           "toPin": "target"
         },
         {
-          "id": "construct.returnValue->rest.target",
+          "id": "construct.returnValue->settle.target",
           "fromNode": "construct",
           "fromPin": "returnValue",
-          "toNode": "rest",
+          "toNode": "settle",
           "toPin": "target"
         },
         {
-          "id": "train.returnValue->p1.value",
-          "fromNode": "train",
+          "id": "add.returnValue->p1.value",
+          "fromNode": "add",
           "fromPin": "returnValue",
           "toNode": "p1",
           "toPin": "value"
@@ -318,16 +318,16 @@
           "toPin": "value"
         },
         {
-          "id": "get.returnValue->bonus.points",
+          "id": "get.returnValue->scale.value",
           "fromNode": "get",
           "fromPin": "returnValue",
-          "toNode": "bonus",
-          "toPin": "points"
+          "toNode": "scale",
+          "toPin": "value"
         },
         {
-          "id": "bonus.score->p4.value",
-          "fromNode": "bonus",
-          "fromPin": "score",
+          "id": "scale.result->p4.value",
+          "fromNode": "scale",
+          "fromPin": "result",
           "toNode": "p4",
           "toPin": "value"
         },
@@ -339,15 +339,15 @@
           "toPin": "value"
         },
         {
-          "id": "laps.distance->p6.value",
-          "fromNode": "laps",
-          "fromPin": "distance",
+          "id": "measure.centimeters->p6.value",
+          "fromNode": "measure",
+          "fromPin": "centimeters",
           "toNode": "p6",
           "toPin": "value"
         },
         {
-          "id": "rest.returnValue->p7.value",
-          "fromNode": "rest",
+          "id": "settle.returnValue->p7.value",
+          "fromNode": "settle",
           "fromPin": "returnValue",
           "toNode": "p7",
           "toPin": "value"
@@ -376,7 +376,7 @@
       "8",
       "420",
       "1",
-      "800",
+      "200",
       "42"
     ]
   }

@@ -395,7 +395,7 @@ export interface CodeClassInfo {
   kind: 'code-class';
   // "code:<language>:<path>#<Class>": what a graph class's `parent` names.
   id: string;
-  // Its objects' pin type ("native:Actor"), and its base class's.
+  // Its objects' pin type ("native:Item"), and its base class's.
   type: string;
   base?: string;
   // Its name in the code (with its namespace or module path, as its member nodes' implementations

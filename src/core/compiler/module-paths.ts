@@ -1,7 +1,7 @@
 // How generated code names the project modules it imports (docs/code-as-nodes.md, "Generated
 // imports"). Paths are relative to the workspace folder, with "/" separators.
 
-// A relative specifier from a folder to a file: "./combat.ts", "../lib/math.js".
+// A relative specifier from a folder to a file: "./values.ts", "../lib/math.js".
 export function relativeSpecifier(fromDir: string, to: string): string {
   const from = segments(fromDir);
   const target = segments(to);
@@ -34,7 +34,7 @@ function segments(path: string): string[] {
 }
 
 // The folder Python must have on sys.path to import `module` from `path` (both as in
-// FunctionImplementation): "src/game/combat.py" as "game.combat" needs "src".
+// FunctionImplementation): "src/app/values.py" as "app.values" needs "src".
 export function pythonImportRoot(path: string, module: string): string {
   const parts = segments(path.replace(/\.py$/i, ''));
   if (parts[parts.length - 1] === '__init__') parts.pop();

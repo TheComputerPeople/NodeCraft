@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "language": "typescript",
-  "name": "Fighter",
+  "name": "Counter",
   "kind": "class",
   "variables": [
     {
@@ -10,21 +10,21 @@
       "type": {
         "id": "string"
       },
-      "defaultValue": "Fighter"
+      "defaultValue": "Counter"
     },
     {
-      "id": "stats",
-      "name": "Stats",
+      "id": "levels",
+      "name": "Levels",
       "type": {
-        "id": "struct:Stats"
+        "id": "struct:Levels"
       },
       "defaultValue": {}
     }
   ],
   "dispatchers": [
     {
-      "id": "defeated",
-      "name": "Defeated",
+      "id": "emptied",
+      "name": "Emptied",
       "inputs": [
         {
           "id": "name",
@@ -47,14 +47,14 @@
       "comments": []
     },
     {
-      "id": "TakeHit",
-      "name": "Take Hit",
+      "id": "Take",
+      "name": "Take",
       "kind": "function",
       "signature": {
         "inputs": [
           {
-            "id": "damage",
-            "name": "Damage",
+            "id": "amount",
+            "name": "Amount",
             "kind": "data",
             "type": {
               "id": "int"
@@ -71,8 +71,8 @@
             }
           },
           {
-            "id": "defeated",
-            "name": "Defeated",
+            "id": "emptied",
+            "name": "Emptied",
             "kind": "data",
             "type": {
               "id": "bool"
@@ -89,23 +89,23 @@
             "y": 0
           },
           "properties": {
-            "graph": "TakeHit"
+            "graph": "Take"
           }
         },
         {
-          "id": "stats",
+          "id": "levels",
           "type": "core:variable.get",
           "position": {
             "x": 0,
             "y": 200
           },
           "properties": {
-            "variable": "stats"
+            "variable": "levels"
           }
         },
         {
           "id": "before",
-          "type": "struct:Stats.break",
+          "type": "struct:Levels.break",
           "position": {
             "x": 200,
             "y": 160
@@ -123,20 +123,20 @@
         },
         {
           "id": "lower",
-          "type": "struct:Stats.set-members",
+          "type": "struct:Levels.set-members",
           "position": {
             "x": 620,
             "y": 0
           },
           "properties": {
             "members": [
-              "health"
+              "amount"
             ]
           }
         },
         {
           "id": "after",
-          "type": "struct:Stats.break",
+          "type": "struct:Levels.break",
           "position": {
             "x": 820,
             "y": 220
@@ -144,14 +144,14 @@
           "properties": {}
         },
         {
-          "id": "stats2",
+          "id": "levels2",
           "type": "core:variable.get",
           "position": {
             "x": 620,
             "y": 260
           },
           "properties": {
-            "variable": "stats"
+            "variable": "levels"
           }
         },
         {
@@ -186,38 +186,38 @@
           }
         },
         {
-          "id": "defeated",
+          "id": "emptied",
           "type": "core:dispatcher.call",
           "position": {
             "x": 1460,
             "y": -80
           },
           "properties": {
-            "dispatcher": "defeated"
+            "dispatcher": "emptied"
           }
         },
         {
-          "id": "lost",
+          "id": "empty",
           "type": "core:function.return",
           "position": {
             "x": 1700,
             "y": -80
           },
           "properties": {
-            "graph": "TakeHit",
-            "pin:defeated": true
+            "graph": "Take",
+            "pin:emptied": true
           }
         },
         {
-          "id": "standing",
+          "id": "notEmpty",
           "type": "core:function.return",
           "position": {
             "x": 1700,
             "y": 120
           },
           "properties": {
-            "graph": "TakeHit",
-            "pin:defeated": false
+            "graph": "Take",
+            "pin:emptied": false
           }
         }
       ],
@@ -231,7 +231,7 @@
         },
         {
           "id": "w2",
-          "fromNode": "stats",
+          "fromNode": "levels",
           "fromPin": "value",
           "toNode": "before",
           "toPin": "struct"
@@ -239,20 +239,20 @@
         {
           "id": "w3",
           "fromNode": "before",
-          "fromPin": "health",
+          "fromPin": "amount",
           "toNode": "sub",
           "toPin": "a"
         },
         {
           "id": "w4",
           "fromNode": "entry",
-          "fromPin": "damage",
+          "fromPin": "amount",
           "toNode": "sub",
           "toPin": "b"
         },
         {
           "id": "w5",
-          "fromNode": "stats",
+          "fromNode": "levels",
           "fromPin": "value",
           "toNode": "lower",
           "toPin": "struct"
@@ -262,7 +262,7 @@
           "fromNode": "sub",
           "fromPin": "returnValue",
           "toNode": "lower",
-          "toPin": "health"
+          "toPin": "amount"
         },
         {
           "id": "w7",
@@ -273,7 +273,7 @@
         },
         {
           "id": "w8",
-          "fromNode": "stats2",
+          "fromNode": "levels2",
           "fromPin": "value",
           "toNode": "after",
           "toPin": "struct"
@@ -281,7 +281,7 @@
         {
           "id": "w9",
           "fromNode": "after",
-          "fromPin": "health",
+          "fromPin": "amount",
           "toNode": "down",
           "toPin": "a"
         },
@@ -296,58 +296,58 @@
           "id": "w11",
           "fromNode": "branch",
           "fromPin": "true",
-          "toNode": "defeated",
+          "toNode": "emptied",
           "toPin": "execIn"
         },
         {
           "id": "w12",
           "fromNode": "name",
           "fromPin": "value",
-          "toNode": "defeated",
+          "toNode": "emptied",
           "toPin": "name"
         },
         {
           "id": "w13",
-          "fromNode": "defeated",
+          "fromNode": "emptied",
           "fromPin": "execOut",
-          "toNode": "lost",
+          "toNode": "empty",
           "toPin": "execIn"
         },
         {
           "id": "w14",
           "fromNode": "branch",
           "fromPin": "false",
-          "toNode": "standing",
+          "toNode": "notEmpty",
           "toPin": "execIn"
         },
         {
           "id": "w15",
           "fromNode": "after",
-          "fromPin": "health",
-          "toNode": "lost",
+          "fromPin": "amount",
+          "toNode": "empty",
           "toPin": "remaining"
         },
         {
           "id": "w16",
           "fromNode": "after",
-          "fromPin": "health",
-          "toNode": "standing",
+          "fromPin": "amount",
+          "toNode": "notEmpty",
           "toPin": "remaining"
         }
       ],
       "comments": []
     },
     {
-      "id": "AttackPower",
-      "name": "Attack Power",
+      "id": "StepSize",
+      "name": "Step Size",
       "kind": "function",
       "signature": {
         "pure": true,
         "inputs": [],
         "outputs": [
           {
-            "id": "power",
-            "name": "Power",
+            "id": "size",
+            "name": "Size",
             "kind": "data",
             "type": {
               "id": "int"
@@ -364,23 +364,23 @@
             "y": 0
           },
           "properties": {
-            "graph": "AttackPower"
+            "graph": "StepSize"
           }
         },
         {
-          "id": "stats",
+          "id": "levels",
           "type": "core:variable.get",
           "position": {
             "x": 0,
             "y": 160
           },
           "properties": {
-            "variable": "stats"
+            "variable": "levels"
           }
         },
         {
           "id": "fields",
-          "type": "struct:Stats.break",
+          "type": "struct:Levels.break",
           "position": {
             "x": 220,
             "y": 120
@@ -395,7 +395,7 @@
             "y": 0
           },
           "properties": {
-            "graph": "AttackPower"
+            "graph": "StepSize"
           }
         }
       ],
@@ -409,7 +409,7 @@
         },
         {
           "id": "w2",
-          "fromNode": "stats",
+          "fromNode": "levels",
           "fromPin": "value",
           "toNode": "fields",
           "toPin": "struct"
@@ -417,9 +417,9 @@
         {
           "id": "w3",
           "fromNode": "fields",
-          "fromPin": "attack",
+          "fromPin": "step",
           "toNode": "ret",
-          "toPin": "power"
+          "toPin": "size"
         }
       ],
       "comments": []

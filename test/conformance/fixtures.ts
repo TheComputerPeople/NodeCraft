@@ -12,7 +12,7 @@ export function repoFixtures(): FixtureSet {
   return {
     fixtures: [
       ...graphs.map((file) => ({ name: `graphs/${path.basename(file)}`, kind: 'graph' as const, files: [file] })),
-      { name: 'programs/arena', kind: 'program', files: programFiles(path.join(repoRoot, 'sample/arena')) },
+      { name: 'programs/countdown', kind: 'program', files: programFiles(path.join(repoRoot, 'sample/countdown')) },
       ...fs.readdirSync(path.join(repoRoot, 'test/fixtures/programs')).sort().map((name) => ({ name: `programs/${name}`, kind: 'program' as const, files: programFiles(path.join(repoRoot, 'test/fixtures/programs', name)) })),
       ...fs.readdirSync(testsDir).filter((f) => f.endsWith('.vgraph')).sort().map((f) => ({ name: `tests/${f}`, kind: 'tests' as const, files: [path.join(testsDir, f)] }))
     ],

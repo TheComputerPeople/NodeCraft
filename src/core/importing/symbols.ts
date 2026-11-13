@@ -73,7 +73,7 @@ export interface ScannedClass {
   title?: string;
   line: number;
   doc: DocComment;
-  // The type its objects have on pins ("native:Player"), and the type of the class it extends.
+  // The type its objects have on pins ("native:Item"), and the type of the class it extends.
   type: TypeRef;
   base?: TypeRef;
   // Its declared constructor. A class without one is constructed with no arguments, and the
@@ -297,7 +297,7 @@ export function deprecationOf(doc: DocComment): { message?: string } | undefined
 // The nodes of a class's marked members: Construct from its constructor, a node per method with a
 // Target pin, and Get and Set for each property.
 function classDefinitions(cls: ScannedClass, options: ExposeOptions, lines: Map<string, number>): NodeDefinition[] {
-  // Without its namespace or module ("Game.Player", "game::Player").
+  // Without its namespace or module ("App.Item", "app::Item").
   const simple = cls.title ?? cls.name.split(/::|\.|\\/).pop()!;
   const member = (kind: CodeMember['kind'], name?: string): CodeMember => ({ kind, ...(name ? { name } : {}), type: cls.type.id, ...(cls.base ? { base: cls.base.id } : {}) });
   const target: PinDefinition = { id: 'target', name: 'Target', kind: 'data', direction: 'input', type: cls.type };
@@ -408,8 +408,8 @@ export function tupleOutputs(doc: DocComment, types: (TypeRef | undefined)[], na
   return chosen.map((name, i) => ({ name, ...(types[i] ? { type: types[i] } : {}) }));
 }
 
-// A name in words, as Unreal displays function and parameter names: "applyDamage",
-// "apply_damage" and "ApplyDamage" all become "Apply Damage"; "loadHTTPPage" becomes "Load HTTP Page".
+// A name in words, as Unreal displays function and parameter names: "clampValue",
+// "clamp_value" and "ClampValue" all become "Clamp Value"; "loadHTTPPage" becomes "Load HTTP Page".
 export function words(name: string): string {
   const parts = name.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+/g) ?? [name];
   return parts.map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');

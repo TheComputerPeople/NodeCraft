@@ -867,7 +867,7 @@ class TypeScriptEmitter {
         if (!s.results.length) out.line(`${call};`);
         else if (fn.outputs.length === 1) out.line(`${this.slotRef(s.results[0].slot)} = ${call};`);
         else {
-          // Each output into its slot: ({ health: this.slotA, alive: this.slotB } = this.f(...)).
+          // Each output into its slot: ({ total: this.slotA, valid: this.slotB } = this.f(...)).
           const fields = this.outputFields.get(fn.id)!;
           out.line(`({ ${s.results.map((r) => `${fields.get(r.output)}: ${this.slotRef(r.slot)}`).join(', ')} } = ${call});`);
         }

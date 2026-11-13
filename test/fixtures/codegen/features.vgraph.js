@@ -6,7 +6,7 @@ export class Features {
   /** @type {number} */
   Lives = 3;
   /** @type {string} */
-  Hero = "Ada";
+  Author = "Ada";
   /** @type {unknown} */
   Score = null;
   /** @type {number} */
@@ -21,8 +21,8 @@ export class Features {
     this._double_result = this._user_math_double(this.Lives);
     // Print (print_double)
     console.log(String(this._double_result));
-    // Print (print_hero)
-    console.log(this.Hero);
+    // Print (print_author)
+    console.log(this.Author);
     this._run_shared();
     this._run_shared();
   }

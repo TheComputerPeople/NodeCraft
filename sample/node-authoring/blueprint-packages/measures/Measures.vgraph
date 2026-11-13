@@ -1,19 +1,22 @@
 {
   "schemaVersion": 3,
-  "name": "Drills",
+  "name": "Measures",
   "kind": "functionLibrary",
   "language": "typescript",
+  "languages": [
+    "python"
+  ],
   "variables": [],
   "graphs": [
     {
-      "id": "Laps",
-      "name": "Laps",
+      "id": "ToCentimeters",
+      "name": "To Centimeters",
       "kind": "function",
       "signature": {
         "inputs": [
           {
-            "id": "count",
-            "name": "Count",
+            "id": "meters",
+            "name": "Meters",
             "kind": "data",
             "type": {
               "id": "float"
@@ -22,8 +25,8 @@
         ],
         "outputs": [
           {
-            "id": "distance",
-            "name": "Distance",
+            "id": "centimeters",
+            "name": "Centimeters",
             "kind": "data",
             "type": {
               "id": "float"
@@ -31,7 +34,7 @@
           }
         ],
         "pure": true,
-        "category": "Drills"
+        "category": "Measures"
       },
       "nodes": [
         {
@@ -42,7 +45,7 @@
             "y": 0
           },
           "properties": {
-            "graph": "Laps"
+            "graph": "ToCentimeters"
           }
         },
         {
@@ -53,7 +56,7 @@
             "y": 40
           },
           "properties": {
-            "pin:b": 400
+            "pin:b": 100
           }
         },
         {
@@ -64,7 +67,7 @@
             "y": 0
           },
           "properties": {
-            "graph": "Laps"
+            "graph": "ToCentimeters"
           }
         }
       ],
@@ -79,7 +82,7 @@
         {
           "id": "entry.count->times.a",
           "fromNode": "entry",
-          "fromPin": "count",
+          "fromPin": "meters",
           "toNode": "times",
           "toPin": "a"
         },
@@ -88,7 +91,7 @@
           "fromNode": "times",
           "fromPin": "returnValue",
           "toNode": "ret",
-          "toPin": "distance"
+          "toPin": "centimeters"
         }
       ],
       "comments": []

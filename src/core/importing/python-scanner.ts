@@ -210,7 +210,7 @@ function scanClass(lines: LogicalLine[], i: number, result: ModuleScan, typeVars
     const skip = (memberName: string, reason: string, doc: DocComment): void => {
       if (isMarked(doc)) result.skipped.push({ name: `${name}.${memberName}`, line: member.line, reason, marked: true });
     };
-    // An annotated attribute (`health: int = 100`), documented by a string on the next line.
+    // An annotated attribute (`count: int = 100`), documented by a string on the next line.
     const attribute = /^([A-Za-z_]\w*)\s*:\s*([^=]+?)\s*(=.*)?$/.exec(member.text);
     if (attribute && !/^(def|class|async)\b/.test(member.code)) {
       const next = body[k + 1];

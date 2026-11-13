@@ -41,7 +41,7 @@ export interface PaletteEntry {
 }
 
 // Every node type, except that variable Get/Set nodes are offered once per declared variable
-// ("Get Score", "Set Score"), as in Unreal's action menu, and project functions and code nodes only
+// ("Get Total", "Set Total"), as in Unreal's action menu, and project functions and code nodes only
 // when the graph's language can call or compile them.
 // What the graph's language can express (src/core/capabilities.ts); the editor offers nothing else.
 export function languageCapabilities(): LanguageCapabilities {
@@ -327,6 +327,6 @@ export function flushSave(): void {
   // And the version of each node package it uses.
   syncLibraryVersions(state.document, (type) => state.defByType.get(type));
   postToHost({ type: 'applyDocument', document: state.document });
-  // Don't hide a message an action just showed (e.g. "Deleted Health and 2 nodes").
+  // Don't hide a message an action just showed (e.g. "Deleted Total and 2 nodes").
   if (dom.status.textContent === 'Unsaved changes') setStatus('Saved');
 }

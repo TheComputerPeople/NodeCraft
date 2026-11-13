@@ -266,7 +266,7 @@ What doesn't:
   | lua-scripts | a script folder with a `.luarc.json`; luacheck, `lua` |
   | gd-addon | an addon with the code the graphs call; `godot --import`, every script compiled with Godot's default warnings as errors, the main scene |
 
-  - The body (the node audit and the conformance fixtures) is in go-module, rust-bin, cpp-cmake, ruby-gem, php-composer-lib, lua-rock and gd-addon. A body program using what a language lacks (inheritance in Go, Rust and Lua) is reported as not applicable, as the conformance suite reports it. C++ takes only the arena program, whose classes share names with the duel's in the global namespace.
+  - The body (the node audit and the conformance fixtures) is in go-module, rust-bin, cpp-cmake, ruby-gem, php-composer-lib, lua-rock and gd-addon. A body program using what a language lacks (inheritance in Go, Rust and Lua) is reported as not applicable, as the conformance suite reports it. C++ takes only the countdown program, whose classes share names with the pair's in the global namespace.
   - A step that only checks (a linter, a type checker) doesn't hold up the steps after it when its tool is missing; a step whose stderr must be empty fails on an interpreter's warnings.
   - **PHP's tools** (Composer, PHPStan, PHP_CodeSniffer) are `.phar` files `npm run corpus:tools` downloads. Composer won't start without PHP's openssl extension, even to write the autoloader (which needs no network), so the corpus loads it for them (`-d extension=openssl`) when the installed PHP has it but doesn't load it; the php.ini stays as it is. luacheck wasn't installed when this was built, so the Lua layouts are partly checked.
 - **Found by the layouts, and fixed:**
@@ -314,7 +314,7 @@ What doesn't:
 | C++ | `CMakeLists.txt` including the extension's generated-files include, `src/main.cpp`, `src/Main.vgraph` |
 | Rust | `Cargo.toml`, `src/main.rs` declaring the generated module, `src/Main.vgraph` |
 | Java | `pom.xml` (or `build.gradle` if Gradle is on the PATH and Maven isn't), `src/main/java/<package>/Main.vgraph` |
-| Go | `go.mod`, `main.go` calling the generated package, `game/Main.vgraph` |
+| Go | `go.mod`, `main.go` calling the generated package, `app/Main.vgraph` |
 | Lua | `.luarc.json` (the Lua found on the PATH), `main.lua`, `Main.vgraph` |
 | GDScript | `project.godot`, a main scene running the graph's class, `Main.vgraph` |
 | Ruby | `Gemfile`, `.ruby-version`, `lib/main.rb`, `lib/Main.vgraph` |

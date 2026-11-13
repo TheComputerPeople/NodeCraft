@@ -15,7 +15,7 @@ using System.Linq;
 public class Features
 {
     public int Lives = 3;
-    public string Hero = "Ada";
+    public string Author = "Ada";
     public object? Score = null;
     private double _double_result = 0;
 
@@ -29,8 +29,8 @@ public class Features
         _double_result = UserMathDouble(Lives);
         // Print (print_double)
         Console.WriteLine(FormatNumber(_double_result));
-        // Print (print_hero)
-        Console.WriteLine(Hero);
+        // Print (print_author)
+        Console.WriteLine(Author);
         RunShared();
         RunShared();
     }

@@ -22,7 +22,7 @@ describe('published conformance suite', () => {
       assert.equal(report.failed, 0, formatReport(report));
       assert.equal(report.skipped, 0, formatReport(report));
       for (const result of report.results.filter((r) => r.status === 'not-applicable')) assert.match(result.message ?? '', /has no (inheritance|interfaces)/, formatReport(report));
-      assert.deepEqual(report.results.filter((r) => r.status === 'not-applicable').map((r) => r.fixture), pack.capabilities.inheritance ? [] : ['programs/arena']);
+      assert.deepEqual(report.results.filter((r) => r.status === 'not-applicable').map((r) => r.fixture), pack.capabilities.inheritance ? [] : ['programs/countdown']);
     });
   }
 
@@ -32,7 +32,7 @@ describe('published conformance suite', () => {
     const pack = declarativePack(JSON.parse(fs.readFileSync(path.join(repoRoot, 'test/fixtures/declarative/minijs.vgraph-language.json'), 'utf8')));
     const report = await runConformance(pack, { fixtures: repoFixtures() });
     assert.equal(report.failed, 0, formatReport(report));
-    assert.deepEqual(report.results.filter((r) => r.status === 'not-applicable').map((r) => r.fixture), ['graphs/events.vgraph', 'graphs/latent.vgraph', 'programs/arena', 'programs/duel'], formatReport(report));
+    assert.deepEqual(report.results.filter((r) => r.status === 'not-applicable').map((r) => r.fixture), ['graphs/events.vgraph', 'graphs/latent.vgraph', 'programs/countdown', 'programs/pair'], formatReport(report));
   });
 
   // Phase 6's exit check (docs/language-breadth.md): the C pack, a separate extension's declarative
@@ -44,7 +44,7 @@ describe('published conformance suite', () => {
     assert.equal(report.failed, 0, formatReport(report));
     assert.equal(report.skipped, 0, formatReport(report));
     const notApplicable = report.results.filter((r) => r.status === 'not-applicable');
-    assert.deepEqual(notApplicable.map((r) => r.fixture), ['graphs/containers.vgraph', 'graphs/events.vgraph', 'graphs/latent.vgraph', 'graphs/utilities-arrays.vgraph', 'graphs/utilities-collections.vgraph', 'graphs/utilities-maps.vgraph', 'graphs/utilities-sets.vgraph', 'programs/arena', 'programs/duel'], formatReport(report));
+    assert.deepEqual(notApplicable.map((r) => r.fixture), ['graphs/containers.vgraph', 'graphs/events.vgraph', 'graphs/latent.vgraph', 'graphs/utilities-arrays.vgraph', 'graphs/utilities-collections.vgraph', 'graphs/utilities-maps.vgraph', 'graphs/utilities-sets.vgraph', 'programs/countdown', 'programs/pair'], formatReport(report));
     for (const result of notApplicable) assert.match(result.message ?? '', /C has no (arrays|sets|maps|event dispatchers|latent actions|object references)/);
   });
 

@@ -297,7 +297,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   // New Node (docs/node-authoring.md, gap 8): a snippet node to start from, in the folder picked in
   // the Explorer (else the workspace's nodes folder), with a snippet for each language its graphs use.
   context.subscriptions.push(vscode.commands.registerCommand('blueprintVisualScripting.newNode', async (folder?: vscode.Uri, given?: { name: string; category: string }): Promise<vscode.Uri | undefined> => {
-    const name = given?.name ?? await vscode.window.showInputBox({ prompt: "The node's name", placeHolder: 'Clamp Health', validateInput: (v) => (v.trim() ? undefined : 'Give the node a name.') });
+    const name = given?.name ?? await vscode.window.showInputBox({ prompt: "The node's name", placeHolder: 'Clamp Value', validateInput: (v) => (v.trim() ? undefined : 'Give the node a name.') });
     if (!name?.trim()) return undefined;
     const category = given?.category ?? await vscode.window.showInputBox({ prompt: 'Its category in the palette ("|" nests one in another)', value: 'My Nodes' });
     if (category === undefined) return undefined;

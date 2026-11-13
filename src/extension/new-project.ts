@@ -33,11 +33,11 @@ export interface NewProject {
   run: string;
 }
 
-// The names a project's name gives: its folder's ("My Game" is my-game), a package's (my_game), a
-// class's or namespace's (MyGame) and a Java package's or Go module's (mygame).
+// The names a project's name gives: its folder's ("My App" is my-app), a package's (my_app), a
+// class's or namespace's (MyApp) and a Java package's or Go module's (myapp).
 export function projectNames(name: string): { slug: string; snake: string; pascal: string; lower: string } {
-  const snake = toIdentifier(name, 'snake') || 'game';
-  return { slug: snake.replace(/_/g, '-'), snake, pascal: toIdentifier(name, 'pascal') || 'Game', lower: snake.replace(/_/g, '') };
+  const snake = toIdentifier(name, 'snake') || 'app';
+  return { slug: snake.replace(/_/g, '-'), snake, pascal: toIdentifier(name, 'pascal') || 'App', lower: snake.replace(/_/g, '') };
 }
 
 // The first graph: Start prints "Hello from Blueprint".
@@ -193,14 +193,14 @@ export function newProjectFiles(language: string, name: string, options: NewProj
       break;
     }
     case 'go':
-      first = graph('game');
+      first = graph('app');
       run = 'go run .';
       ignore = [`/${n.lower}`, `/${n.lower}.exe`];
       files = {
         'go.mod': `module ${n.lower}\n\ngo ${atLeast('1.21', v, 2)}\n`,
         'main.go': [
-          `// Command ${n.lower} runs the Main graph: go run .`, 'package main', '', `import "${n.lower}/game"`, '', 'func main() {',
-          '\tgame.NewMain().Start()', '\t// Delays and channels the graph waits on.', '\tgame.VgRunLatentActions()', '}', ''
+          `// Command ${n.lower} runs the Main graph: go run .`, 'package main', '', `import "${n.lower}/app"`, '', 'func main() {',
+          '\tapp.NewMain().Start()', '\t// Delays and channels the graph waits on.', '\tapp.VgRunLatentActions()', '}', ''
         ].join('\n')
       };
       break;

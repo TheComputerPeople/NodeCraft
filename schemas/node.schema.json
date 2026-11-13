@@ -214,7 +214,7 @@
           "type": "string"
         },
         "module": {
-          "description": "function, Python only: the module's import name, such as game.combat.",
+          "description": "function, Python only: the module's import name, such as app.values.",
           "type": "string"
         },
         "method": {
