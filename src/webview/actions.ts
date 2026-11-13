@@ -1,4 +1,5 @@
 // User actions that change the graph, plus the pointer gestures that lead to them.
+import { pinName } from './keyboard';
 import { copyNodes, pasteNodes } from '../core/clipboard';
 import * as editing from '../core/editing';
 import * as edits from '../core/blueprint-edits';
@@ -38,8 +39,11 @@ export function addNode(type: string, position: Point, properties: Record<string
   state.graph.nodes.push(node);
   state.selectedNodeIds = new Set([node.id]);
   state.selectedNodeId = node.id;
+  // The keyboard goes on to the new node (docs/release.md, step 8), and the status line says it.
+  state.focus = { node: node.id };
   markDirty();
   render();
+  setStatus(`Added ${editing.definitionFor(node, lookupDefinition).displayName}.`);
   return node.id;
 }
 
@@ -52,11 +56,13 @@ export function deleteSelected(): void {
     setStatus(fixed[0].type === FUNCTION_ENTRY ? "A function's entry node can't be deleted." : "A macro's Inputs and Outputs nodes can't be deleted.");
     if (!state.selectedNodeIds.size) return;
   }
+  const count = state.selectedNodeIds.size;
   editing.deleteNodes(state.graph, new Set(state.selectedNodeIds));
   state.selectedNodeIds.clear();
   state.selectedNodeId = null;
   markDirty();
   render();
+  setStatus(`Deleted ${count} node${count === 1 ? '' : 's'}.`);
 }
 
 // Unreal's Collapse to Function: the selection becomes a new function, called where it was.
@@ -184,6 +190,7 @@ export function connectNewNode(newNodeId: string, source: editing.PinAddress): v
   editing.connect(graph, lookupDefinition, endpoints, newConnectionId());
   markDirty();
   render();
+  setStatus(`Added ${editing.definitionFor(node, lookupDefinition).displayName}, connected to ${sourceDef.name || (sourceDef.kind === 'exec' ? 'the exec pin' : sourceDef.id)}.`);
 }
 
 // Palette entries that could take a wire dragged out of the draft's pin.
@@ -212,7 +219,15 @@ export function connectPins(a: editing.PinAddress, b: editing.PinAddress): boole
   }
   markDirty();
   render();
-  if (plan.convert) setStatus('Added a To String conversion.');
+  const name = (address: editing.PinAddress) => {
+    const node = state.graph?.nodes.find((n) => n.id === address.node);
+    const def = node && editing.definitionFor(node, lookupDefinition);
+    const pin = def && [...def.inputs, ...def.outputs].find((p) => p.id === address.pin);
+    return `${def?.displayName ?? address.node}: ${pin ? pinName(pin) : address.pin}`;
+  };
+  const { endpoints } = plan;
+  const wired = `Connected ${name({ node: endpoints.fromNode, pin: endpoints.fromPin })} to ${name({ node: endpoints.toNode, pin: endpoints.toPin })}`;
+  setStatus(plan.convert ? `${wired}, through a To String conversion.` : `${wired}.`);
   return true;
 }
 

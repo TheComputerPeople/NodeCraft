@@ -43,7 +43,7 @@ export function renderEditorHtml({ cspSource, nonce, scriptUri, styleUri }: Webv
       <label class="language-picker" title="Target language for generated code"><span>Language</span><select id="language" aria-label="Target language"></select></label>
       <button id="fit" title="Fit graph">Fit</button>
       <span id="graph-name">Untitled</span>
-      <span id="status">Ready</span>
+      <span id="status" role="status" aria-live="polite">Ready</span>
     </div>
     <nav id="graph-tabs" aria-label="Open graphs">
       <button id="graph-back" class="graph-nav" title="Back to the previous graph (Alt+Left, or the mouse's Back button)" aria-label="Back" disabled>&#x2190;</button>

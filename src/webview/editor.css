@@ -116,7 +116,7 @@ button, input { font: inherit; color: inherit; }
 #canvas-wrap:focus { outline: none; }
 #canvas-wrap.keyboard { box-shadow: inset 0 0 0 1px var(--vscode-focusBorder, #007fd4); }
 #canvas-wrap.keyboard .node.kb-focus { box-shadow: 0 0 0 4px var(--vscode-focusBorder, #007fd4), 0 6px 18px rgba(0,0,0,.35); }
-#canvas-wrap.keyboard .pin.kb-focus { box-shadow: 0 0 0 3px var(--vscode-focusBorder, #007fd4); }
+#canvas-wrap.keyboard .pin-row.kb-focus-row { outline: 2px solid var(--vscode-focusBorder, #007fd4); outline-offset: 1px; border-radius: 3px; }
 .node.executing { box-shadow: 0 0 0 2px var(--node-color), 0 0 18px color-mix(in srgb, var(--node-color) 60%, transparent); }
 .node-header { padding: 5px 10px; border-radius: 7px 7px 0 0; cursor: grab; color: #fff; background: linear-gradient(90deg, color-mix(in srgb, var(--node-color) 90%, black), color-mix(in srgb, var(--node-color) 35%, transparent)); }
 .node-header:active { cursor: grabbing; }
@@ -323,3 +323,25 @@ button, input { font: inherit; color: inherit; }
 .find-kind { color: var(--muted); flex: 0 0 auto; text-transform: capitalize; }
 .find-where { color: var(--muted); flex: 0 0 auto; }
 .find-empty { color: var(--muted); cursor: default; }
+
+/* Forced colors (Windows High Contrast; docs/release.md, step 8): the system's colors replace the
+   theme's, so every part a node or wire is drawn with stays visible, and selection and the keyboard's
+   focus use Highlight. Pins keep their shapes; their types are in their labels. */
+@media (forced-colors: active) {
+  .node { border: 1px solid CanvasText; }
+  .node.selected { outline: 2px solid Highlight; }
+  #canvas-wrap.keyboard { box-shadow: none; outline: 1px solid Highlight; outline-offset: -1px; }
+  #canvas-wrap.keyboard .node.kb-focus { box-shadow: none; outline: 3px solid Highlight; outline-offset: 3px; }
+  #canvas-wrap.keyboard .pin-row.kb-focus-row { outline: 2px solid Highlight; }
+  .pin { border-color: CanvasText; }
+  .pin.connected { background: CanvasText; }
+  .pin.exec { forced-color-adjust: none; background: CanvasText; }
+  .pin.exec:not(.connected)::after { forced-color-adjust: none; background: Canvas; }
+  .edge { stroke: CanvasText; }
+  .edge.hover, .edge.active { stroke: Highlight; }
+  .edge.draft { stroke: Highlight; }
+  .edge-pulse { stroke: Highlight; }
+  .node-badge { forced-color-adjust: none; background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
+  .node-breakpoint { forced-color-adjust: none; background: Highlight; border: 1px solid CanvasText; }
+  .node-breakpoint.disabled { background: Canvas; }
+}

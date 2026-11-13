@@ -55,7 +55,7 @@ export function initKeyboard(): void {
 // Marks the focused node or pin, after a redraw or a move.
 export function syncKeyboardFocus(): void {
   const canvas = dom.canvasWrap;
-  document.querySelectorAll('.kb-focus').forEach((el) => el.classList.remove('kb-focus'));
+  document.querySelectorAll('.kb-focus, .kb-focus-row').forEach((el) => el.classList.remove('kb-focus', 'kb-focus-row'));
   document.getElementById(FOCUS_ID)?.removeAttribute('id');
   let focus = state.focus;
   if (focus && !state.graph?.nodes.some((n) => n.id === focus!.node)) focus = state.focus = null;
@@ -70,6 +70,8 @@ export function syncKeyboardFocus(): void {
     return;
   }
   el.classList.add('kb-focus');
+  // A pin's ring goes around its row: an exec pin's arrow shape would clip a ring of its own.
+  if (focus?.pin) el.closest('.pin-row')?.classList.add('kb-focus-row');
   el.id = FOCUS_ID;
   canvas.setAttribute('aria-activedescendant', FOCUS_ID);
 }

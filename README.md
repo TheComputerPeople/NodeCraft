@@ -362,3 +362,9 @@ The editor follows Unreal Engine 5's Blueprint editor. [docs/unreal-conventions.
 | Add Node: choose a result / add it | Type to search, Up and Down / Enter (the first result until you move) |
 | My Blueprint's graphs, variables and dispatchers | Tab to them; Enter opens or selects, F2 renames, Delete deletes, Shift + F10 opens the item's menu |
 | The palette | Tab to a node; Enter adds it to the graph |
+
+With a screen reader, the graph reads out the node or pin the keyboard is on: a node's title, kind,
+breakpoint and problems ("Branch, flow control"), and a pin's name, type, direction and what it's
+wired to or its value ("Value, Wildcard input, connected to Add: Result"). The status line
+announces each node added, wire made, node deleted and compile result. In high contrast themes the
+editor uses the system's colors, and selection and the keyboard's focus use its highlight color.

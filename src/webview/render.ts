@@ -1,4 +1,4 @@
-import { syncKeyboardFocus } from './keyboard';
+import { pinName, syncKeyboardFocus } from './keyboard';
 import { canAddPin, definitionFor } from '../core/editing';
 import { deprecationMessage } from '../core/metadata';
 import { GraphConnection, GraphNode, NodeDefinition, PinDefinition } from '../core/model';
@@ -158,7 +158,50 @@ function renderNode(node: GraphNode): HTMLElement {
     if ((e.target as Element).closest('input, select, textarea, button') || !siteOf(node.id)) return;
     goToDefinition(node.id);
   });
+  labelNode(el, def, kind, { breakpoint: breakpoint ? (breakpoint.enabled ? 'breakpoint' : 'disabled breakpoint') : undefined, paused: pausedNodeId() === node.id, severity, messages: [...new Set(diagnostics.map((d) => d.message))] });
   return el;
+}
+
+// What a screen reader says for a node (docs/release.md, step 8): its title, what kind it is, and
+// its breakpoint, pause and problems. The canvas names it through aria-activedescendant.
+const KIND_WORDS: Record<string, string> = {
+  event: 'event', flow: 'flow control', function: 'function', pure: 'pure function',
+  'variable-get': 'get variable', 'variable-set': 'set variable', reroute: 'reroute'
+};
+
+function labelNode(el: HTMLElement, def: NodeDefinition, kind: string, about: { breakpoint?: string; paused: boolean; severity?: string; messages: string[] }): void {
+  const title = el.querySelector('.node-title')?.textContent?.trim() || def.displayName;
+  const parts = [title, KIND_WORDS[kind] ?? 'node'];
+  if (about.breakpoint) parts.push(about.breakpoint);
+  if (about.paused) parts.push('paused here');
+  if (about.severity) parts.push(`${about.severity}: ${about.messages.join('; ')}`);
+  el.setAttribute('role', 'group');
+  el.setAttribute('aria-roledescription', 'node');
+  el.setAttribute('aria-label', parts.join(', '));
+}
+
+// What a screen reader says for a pin: its name, type and direction, then what it's wired to, or the
+// value it has on the node.
+function pinLabel(node: GraphNode, pin: PinDefinition): string {
+  const graph = state.graph;
+  const kind = pin.kind === 'exec' ? 'exec' : shownType(pin.type);
+  const parts = [pinName(pin), `${kind} ${pin.direction}`];
+  const ends = graph?.connections
+    .filter((c) => (pin.direction === 'input' ? c.toNode === node.id && c.toPin === pin.id : c.fromNode === node.id && c.fromPin === pin.id))
+    .map((c) => {
+      const [otherNode, otherPin] = pin.direction === 'input' ? [c.fromNode, c.fromPin] : [c.toNode, c.toPin];
+      const other = graph.nodes.find((n) => n.id === otherNode);
+      if (!other) return otherNode;
+      const def = definitionFor(other, lookupDefinition);
+      const p = [...def.inputs, ...def.outputs].find((x) => x.id === otherPin);
+      return `${def.displayName}: ${p ? pinName(p) : otherPin}`;
+    }) ?? [];
+  if (ends.length) parts.push(`connected to ${ends.join(', ')}`);
+  else if (pin.kind === 'data' && pin.direction === 'input') {
+    const value = node.properties[`pin:${pin.id}`] ?? pin.defaultValue;
+    parts.push(value === undefined || value === null || value === '' ? 'not connected' : `value ${typeof value === 'string' ? value : JSON.stringify(value)}`);
+  } else parts.push('not connected');
+  return parts.join(', ');
 }
 
 // Unreal's Advanced View: advanced inputs show when the node's arrow is open, or when they're wired
@@ -208,6 +251,9 @@ function renderPin(node: GraphNode, pin: PinDefinition, showLabel: boolean): HTM
   if (pin.type?.container) handle.dataset.container = pin.type.container;
   handle.style.setProperty('--pin-color', pinColor(pin));
   handle.title = pin.kind === 'exec' ? 'Execution pin' : `${pin.name || pin.id} (${shownType(pin.type)})`;
+  handle.setAttribute('role', 'button');
+  handle.setAttribute('aria-roledescription', 'pin');
+  handle.setAttribute('aria-label', pinLabel(node, pin));
   handle.addEventListener('mousedown', (e) => onPinMouseDown(node, pin, e));
   handle.addEventListener('dragstart', (e) => e.preventDefault());
   // Hovering a pin highlights its wires, as in Unreal.

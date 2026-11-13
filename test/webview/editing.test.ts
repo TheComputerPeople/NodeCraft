@@ -286,7 +286,7 @@ describe('editing tools', () => {
     const conv = g.nodes.find((n) => n.type === 'core:convert.to-string')!;
     assert.ok(g.connections.some((c) => c.fromNode === 'add_1' && c.toNode === conv.id));
     assert.ok(g.connections.some((c) => c.fromNode === conv.id && c.toNode === 'set_label' && c.toPin === 'value'));
-    assert.equal(await e.page.textContent('#status'), 'Added a To String conversion.');
+    assert.equal(await e.page.textContent('#status'), 'Connected Add: Result to Set Label: Label, through a To String conversion.');
   });
 
   test('unchecking Context Sensitive lists every node when dragging from a pin', async (t) => {

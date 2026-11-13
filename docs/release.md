@@ -317,3 +317,39 @@ Recommended. They're confirmed when the user says so, and the plan follows them.
 
   editing.test.ts's pin menus now start with Connect to, and interactions.test.ts nudges with
   Ctrl+arrows.
+
+## Built (step 8)
+
+- **Nodes** (render.ts) are groups with the role description "node". Each is labelled with its
+  title, what kind it is (event, flow control, function, pure function, get or set variable), its
+  breakpoint, "paused here", and its problems ("error: ...").
+- **Pins** are labelled with their name and their type and direction ("bool input", "exec output").
+  The label goes on with what they're wired to ("connected to Add: Result"), the value they have on
+  the node ("value 20"), or "not connected". An exec pin with no name is Exec or Then.
+- **Announcements:** the status line is a polite `status` live region, so what it says is read out.
+  - Adding a node says "Added Branch.", and adding one from a pin adds ", connected to ...".
+  - Wiring says "Connected Add: Result to Print: Value.", output first, from a drag or Connect to,
+    noting a To String conversion when there is one.
+  - Deleting says "Deleted 2 nodes.".
+  - The compile result was already there.
+
+  A node added from the keyboard gets the keyboard's focus.
+- **Menus** are named by their title, or "Actions" for the floating ones.
+- **Forced colors** (Windows High Contrast) have a `@media (forced-colors: active)` block:
+  - nodes have a border, and wires take the system's text color;
+  - exec pins keep their arrow, since a forced background would have hidden it;
+  - selection, the keyboard's focus and hovered wires use Highlight;
+  - badges and breakpoints stay visible.
+
+  The focused pin's ring goes around its row, in either mode: an exec pin's arrow clips a ring of its
+  own, which hid it in step 7.
+- **Tests** (webview, accessibility.test.ts):
+  - Chromium's own accessibility tree (over CDP) has no unnamed interactive element. That was checked
+    with the event graph, a node selected, a node menu, Add Node, a variable's details and its menu,
+    and a function's graph. It found the unnamed node menu, now named.
+  - The labels of Branch, a wired Value, B's value and Start's exec output are checked, and the
+    canvas's `aria-activedescendant` names the focused node.
+  - The status line says "Added Flip Flop.", "Connected ... to Flip Flop: Exec.", "Deleted 1 node." and
+    "Compile failed: 1 error", and the node's label carries the error.
+  - In emulated forced colors, nodes have a solid border, exec pins a fill, wires a stroke, and the
+    focused pin's row and the selected node a solid outline.

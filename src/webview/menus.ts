@@ -9,7 +9,7 @@ import { showPreview } from './preview';
 import { alignSelection, distributeSelection, straightenConnections } from './align';
 import { addBreakpoints, breakpointOn, enableBreakpoints, removeBreakpoints } from './breakpoints';
 import { PaletteEntry, functionProblem, libraryProblem, lookupDefinition, paletteEntries, searchText } from './document';
-import { dom, escapeHtml, setStatus } from './dom';
+import { dom, escapeHtml } from './dom';
 import { nodeTitle, pinName } from './keyboard';
 import { headerColor } from './style';
 import { deleteSelectedComments, selectedCommentIds, startCommentRename } from './comments';
@@ -131,6 +131,7 @@ function setActiveResult(index: number, scroll = true): void {
 // Home and End move through them (docs/release.md, step 6). Enter and Space are the buttons' own.
 function readyMenu(): void {
   dom.contextMenu.setAttribute('role', 'menu');
+  dom.contextMenu.setAttribute('aria-label', dom.contextMenu.querySelector('.context-title')?.textContent?.trim() || 'Actions');
   const items = menuItems();
   for (const item of items) {
     item.setAttribute('role', 'menuitem');
@@ -250,9 +251,8 @@ function showConnectMenu(nodeId: string, pinId: string, clientX: number, clientY
     button.addEventListener('click', () => {
       const target = candidates[Number(button.dataset.action)];
       hideContextMenu();
-      if (target && connectPins({ node: nodeId, pin: pinId }, { node: target.node, pin: target.pin })) {
-        setStatus(`Connected ${nodeTitle(nodeId)}: ${pinName(source)} to ${target.label}.`);
-      }
+      // connectPins says what it wired, output first.
+      if (target) connectPins({ node: nodeId, pin: pinId }, { node: target.node, pin: target.pin });
     });
   });
 }
@@ -413,5 +413,6 @@ export function hideContextMenu(): void {
   if (dom.contextMenu.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   dom.contextMenu.hidden = true;
   dom.contextMenu.removeAttribute('role');
+  dom.contextMenu.removeAttribute('aria-label');
   state.context = null;
 }

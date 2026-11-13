@@ -15,6 +15,7 @@ export function showFloatingMenu(items: MenuItem[], clientX: number, clientY: nu
   const menu = dom.floatingMenu;
   menu.innerHTML = '';
   menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', 'Actions');
   returnFocus = document.activeElement instanceof HTMLElement && !menu.contains(document.activeElement) ? document.activeElement : null;
   for (const item of items) {
     const button = document.createElement('button');
