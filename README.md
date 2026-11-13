@@ -8,7 +8,7 @@ Generated code is committed next to each graph, so the project builds without th
 
 VS Code's **Welcome** page has a walkthrough, **Get Started with NodeCraft** (Command Palette: **Welcome: Open Walkthrough...**), that goes through the steps below one at a time.
 
-- **Getting it:** it isn't on the Marketplace yet; [try it from source](#try-it-from-source).
+- **Getting it:** install **NodeCraft** from the Visual Studio Marketplace (in VS Code's Extensions view, search for NodeCraft), or [run it from source](#run-it-from-source).
 - **A new project:** run **NodeCraft: New Project...** from the Command Palette, pick a language and start from the Tour ([Graphs in your project](#graphs-in-your-project)).
 - **A codebase you have:** **NodeCraft: Set Up in This Project** says what graphs there need, and changes nothing until you apply it.
 - **Coming from Unreal:** [docs/coming-from-unreal.md](docs/coming-from-unreal.md) (**NodeCraft: Coming from Unreal** opens it) maps each of Unreal's Blueprint concepts to its equivalent here, and says which don't apply. The gestures and shortcuts are Unreal's ([Editor interaction reference](#editor-interaction-reference)).
@@ -33,9 +33,9 @@ VS Code's **Welcome** page has a walkthrough, **Get Started with NodeCraft** (Co
 - The **Codebase Map**: your whole workspace, code and graphs, drawn top to bottom in four views to drill through (architecture, structure, call flow, a function's control flow), with Expose as Node and Open Graph on its boxes (see below).
 - Saving goes through VS Code's text document, so undo, redo, dirty state and source control work as usual.
 
-## Try it from source
+## Run it from source
 
-The extension isn't published yet, so it runs from this repository:
+To work on the extension, or try changes before they're published:
 
 1. Open this folder in VS Code and run `npm install`.
 2. Press `F5` (or choose **Run NodeCraft Extension** in Run and Debug). An Extension Development Host opens the `sample` workspace.
@@ -82,6 +82,8 @@ The TypeScript configuration includes the DOM library definitions because VS Cod
 | `npm run corpus:tools` | Installs the Node.js tools the corpus of project layouts runs (TypeScript 5, ESLint with typescript-eslint, Node.js's types) into a cache folder outside the repository, and downloads PHP's (Composer, PHPStan and PHP_CodeSniffer, each a `.phar`) into it; the other languages' tools (mypy, Pyright, Ruff, pnpm, dotnet, Maven, Gradle, cargo, go, staticcheck, CMake, make, RuboCop, luacheck, Godot as `GODOT` or `godot`) come from the PATH. The corpus (`test/conformance/corpus.test.ts`, part of `npm test`) copies each project in `test/fixtures/projects`, compiles graphs into it as Compile does, then runs the project's own build, checkers, tests and entry point. A missing tool skips its step; a layout with skipped steps is reported as todo, and `NODECRAFT_CORPUS_REQUIRE_TOOLS=1` makes it fail instead |
 | `npm run test:integration` | Launches VS Code with the extension and runs smoke tests inside it, in the sample workspace, a multi-root workspace, and the sample again in Restricted Mode (not part of `npm test`) |
 | `npm run test:integration:debuggers` | The same, with your installed VS Code extensions loaded, so debugging generated Python (Python Debugger extension), C# (C# extension), C++ and Rust (C/C++ extension), Java (Debugger for Java), Go (Go extension), Lua (Lua Debug), GDScript (godot-tools, with the `GODOT` environment variable set), Ruby (rdbg) and PHP (PHP Debug, with Xdebug in php.ini) is tested too |
+| `npm run package` | Builds `nodecraft-<version>.vsix` with `vsce`, then checks it (`scripts/check-package.js`): every module its code needs and every file package.json points to is inside, and nothing only for development |
+| `npm run test:package` | Installs the newest `.vsix` into a VS Code of its own and checks the installed extension activates, makes a project and opens the Codebase Map |
 | `npm run build:sdk` / `npm run test:sdk` | Builds the language pack SDK (`packages/pack-sdk`, with the conformance suite and its `nodecraft-conformance` command) / and runs its command once |
 
 The browser tests drive the real webview bundle in an installed Microsoft Edge or Google Chrome through `playwright-core` (no browser download). Set `NODECRAFT_TEST_BROWSER` to a Chromium executable to use a different one; without any browser those tests are skipped.

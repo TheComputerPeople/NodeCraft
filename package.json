@@ -2,7 +2,7 @@
   "name": "nodecraft",
   "displayName": "NodeCraft",
   "description": "NodeCraft brings Unreal Blueprint-style visual scripting to VS Code. Build node graphs that compile to readable code in 12 languages (TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP), then run, test and debug them node by node with each language's own tools. Your own functions become nodes.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "DevinBrasher",
   "license": "MIT",
   "repository": {
@@ -625,7 +625,9 @@
     "test:sdk": "node scripts/build-sdk.js && node packages/pack-sdk/dist/cli.js javascript --filter flow",
     "test:integration:debuggers": "npm run compile && npm run build:test && node out/test/integration/runTest.js --with-debuggers",
     "build:test": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\" && tsc -p test",
-    "package": "npm run compile && npx --yes @vscode/vsce package"
+    "package": "npx --yes @vscode/vsce package && node scripts/check-package.js",
+    "vscode:prepublish": "npm run compile",
+    "test:package": "node scripts/test-package.js"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
@@ -637,20 +639,6 @@
     "tree-sitter-cli": "0.27.1",
     "typescript": "^7.0.2"
   },
-  "files": [
-    "dist/**",
-    "grammars/**",
-    "src/**",
-    "schemas/**",
-    "docs/**",
-    "visual-nodes/**",
-    "sample/**",
-    ".vscode/**",
-    "README.md",
-    "LICENSE",
-    "THIRD_PARTY_NOTICES.md",
-    "tsconfig.json"
-  ],
   "dependencies": {
     "elkjs": "0.12.0",
     "web-tree-sitter": "0.27.1"

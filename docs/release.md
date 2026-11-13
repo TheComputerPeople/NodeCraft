@@ -425,3 +425,29 @@ is Epic's own name for Unreal's feature.
   - Lua's support file under the old name is the extension's.
 - The README opens with the project's description, and says NodeCraft isn't affiliated with Epic
   Games.
+
+## 0.1.1: the package fixed
+
+0.1.0 was uploaded to the Marketplace on 2026-11-13 and couldn't activate: "Cannot find module
+'web-tree-sitter'".
+
+- **Cause:** package.json still had the `files` list from an early phase, and `vsce` packaged only
+  what it named. That left out `node_modules`, which holds the runtime libraries `web-tree-sitter`
+  and `elkjs`, and `walkthrough/`, the Getting Started pages. It also put in `src/` and `sample/`.
+  Activation loads the parser (extension → Codebase Map service → indexer → parser), so nothing
+  worked.
+- **Fixed:**
+  - `.vscodeignore` replaces `files`. It leaves everything out, then lets in what's used at runtime:
+    `dist/`, `grammars/`, `schemas/`, `walkthrough/`, `docs/`, the license files, and the production
+    `node_modules`.
+  - `vscode:prepublish` builds before every package.
+  - The version is 0.1.1, with a CHANGELOG.
+  - The README's install line says to get it from the Marketplace.
+- **Checks:**
+  - `npm run package` ends with `scripts/check-package.js`, which reads the `.vsix` itself. Every npm
+    module its code requires and every file package.json points to has to be inside, nothing only
+    for development may be, and the parser has to load from the extracted package. On 0.1.0 it
+    lists all of the above.
+  - `npm run test:package` installs the `.vsix` into a VS Code of its own and checks that the
+    installed extension activates, New Project writes the Tour, and the Codebase Map opens. It
+    passes on 0.1.1, and on 0.1.0 it fails with the users' error.
