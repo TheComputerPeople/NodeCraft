@@ -411,7 +411,7 @@ is Epic's own name for Unreal's feature.
   - the scratch and test folders, and the corpus tools' cache (`nodecraft-corpus`);
   - the test settings (`NODECRAFT_TEST_BROWSER`, `NODECRAFT_IT_FILTER`, `NODECRAFT_CORPUS_TOOLS`,
     `NODECRAFT_CORPUS_REQUIRE_TOOLS`).
-- **The repository** is `github.com/<user>/NodeCraft`: `repository`, `homepage` and `bugs` in
+- **The repository** was assumed to be under the local git user's name on GitHub (wrongly; see "The project links removed"): `repository`, `homepage` and `bugs` in
   package.json, and the schemas' `$id`s. That's what lets `vsce` rewrite the README's links.
 - **The publisher** is `DevinBrasher` (display name Devin Brasher), so the extension's id is
   `DevinBrasher.nodecraft`. The C pack example uses the same publisher.
@@ -476,7 +476,7 @@ with Devin Brasher, and a later move to the Functional Source License stays poss
 
 ## The project links removed
 
-`github.com/<user>/NodeCraft` (above, "The name: NodeCraft") was never NodeCraft's repository,
+The address assumed above ("The name: NodeCraft") was never NodeCraft's repository,
 and the Marketplace's Project Details linked to it. On 2026-11-14 the user chose to remove the links
 until there's a public repository:
 
