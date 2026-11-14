@@ -175,4 +175,4 @@ Types are keyed `int`, `float`, `bool`, `string`, `any`, `array`, `set`, `map`, 
 
 ## License
 
-Copyright (C) 2026 Devin Brasher. The SDK is under the same terms as NodeCraft: the GNU General Public License, version 3 only, with two additional permissions ([LICENSING.md](LICENSING.md)). The Language Pack Exception means your pack doesn't have to be under the GPL: you may write and distribute a pack under terms of your choice, bundle the SDK's helpers into it, and check it with the conformance suite.
+Copyright (C) 2026 TheComputerPeople. The SDK is under the same terms as NodeCraft: the GNU General Public License, version 3 only, with two additional permissions ([LICENSING.md](LICENSING.md)). The Language Pack Exception means your pack doesn't have to be under the GPL: you may write and distribute a pack under terms of your choice, bundle the SDK's helpers into it, and check it with the conformance suite.

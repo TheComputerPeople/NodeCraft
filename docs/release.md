@@ -497,3 +497,10 @@ empty at the time). package.json's `repository`, `homepage` and `bugs` point to 
 rewrites the README's links to the repository's files; they work once the code is pushed there.
 `scripts/marketplace-readme.js` only turns links into text when package.json names no repository.
 The schemas keep their URN `$id`s, and CLA.md still names no address.
+
+## The copyright holder: TheComputerPeople
+
+On 2026-11-14, before the first push to GitHub, the user chose TheComputerPeople, the organization
+the repository is under, as NodeCraft's copyright holder instead of Devin Brasher: LICENSING.md, the
+README's and the pack SDK's License sections, CLA.md ("We") and docs/licensing.md name it. The
+Marketplace publisher is still `DevinBrasher`.

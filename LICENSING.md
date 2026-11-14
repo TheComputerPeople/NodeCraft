@@ -1,6 +1,6 @@
 # NodeCraft license terms
 
-Copyright (C) 2026 Devin Brasher
+Copyright (C) 2026 TheComputerPeople
 
 NodeCraft is free software: you can redistribute it and/or modify it under the terms of the GNU
 General Public License, version 3 only, as published by the Free Software Foundation (the file

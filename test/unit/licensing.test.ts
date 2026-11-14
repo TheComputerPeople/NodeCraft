@@ -23,7 +23,7 @@ test('the extension and the pack SDK point to the terms, which name the license 
     assert.equal(JSON.parse(read(manifest)).license, 'SEE LICENSE IN LICENSING.md', manifest);
   }
   const terms = read('LICENSING.md');
-  assert.match(terms, /^Copyright \(C\) 2026 Devin Brasher$/m);
+  assert.match(terms, /^Copyright \(C\) 2026 TheComputerPeople$/m);
   assert.match(terms, /GNU\s+General Public License, version 3 only/);
   assert.match(terms, /NodeCraft Output Exception/);
   assert.match(terms, /NodeCraft Language Pack Exception/);

@@ -12,7 +12,7 @@ You sign once; it covers all of your contributions, past and future.
 
 ## 1. Definitions
 
-"We" and "Us" mean Devin Brasher, the copyright holder and maintainer of NodeCraft, and anyone to
+"We" and "Us" mean TheComputerPeople, the copyright holder and maintainer of NodeCraft, and anyone to
 whom the copyright in NodeCraft is later transferred.
 
 "You" means the person, or the legal entity on whose behalf that person acts, who signs this

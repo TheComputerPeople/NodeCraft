@@ -378,7 +378,7 @@ editor uses the system's colors, and selection and the keyboard's focus use its 
 
 ## License
 
-Copyright (C) 2026 Devin Brasher.
+Copyright (C) 2026 TheComputerPeople.
 
 NodeCraft is free software under the [GNU General Public License, version 3](LICENSE) only, with two additional permissions ([LICENSING.md](LICENSING.md)):
 

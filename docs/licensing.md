@@ -8,7 +8,7 @@ legal advice, and a lawyer should review the terms before anything depends on th
 
 From 0.1.2, NodeCraft is under the GNU General Public License, version 3 only
 ([LICENSE](../LICENSE)), with two additional permissions ([LICENSING.md](../LICENSING.md)). The
-copyright holder is Devin Brasher. Versions up to 0.1.1 were released under the MIT License, and
+copyright holder is TheComputerPeople. Versions up to 0.1.1 were released under the MIT License, and
 stay usable under it by anyone who has them; the change applies from 0.1.2 on.
 
 | Piece | What it does |
