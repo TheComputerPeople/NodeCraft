@@ -1,9 +1,9 @@
 # What the published extension holds: everything is left out, then what it uses at runtime is let
 # back in. vsce adds the production dependencies (elkjs, web-tree-sitter) from node_modules itself.
-# scripts/check-package.js checks a built .vsix against this.
+# scripts/check-package.js checks a built .vsix against this. The README is the one
+# scripts/marketplace-readme.js writes, which vsce adds itself (--readme-path).
 **
 !package.json
-!README.md
 !CHANGELOG.md
 !LICENSE
 !LICENSING.md

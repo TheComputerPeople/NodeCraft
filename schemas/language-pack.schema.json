@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/TheComputerPeople/NodeCraft/main/schemas/language-pack.schema.json",
+  "$id": "urn:nodecraft:schema:language-pack",
   "title": "Declarative Language Pack",
   "description": "A language pack written as data (docs/language-breadth.md, \"Declarative packs\"): templates for the Visual IR, a type map and capabilities. A workspace file named *.vgraph-language.json is loaded as a pack.",
   "type": "object",

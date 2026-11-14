@@ -473,3 +473,21 @@ with Devin Brasher, and a later move to the Functional Source License stays poss
   `npm run package` refuses a package with a module under any other, and
   `test/unit/licensing.test.ts` checks the production dependencies, the GPL text's hash, the
   manifests and the CLA sentence.
+
+## The project links removed
+
+`github.com/<user>/NodeCraft` (above, "The name: NodeCraft") was never NodeCraft's repository,
+and the Marketplace's Project Details linked to it. On 2026-11-14 the user chose to remove the links
+until there's a public repository:
+
+- package.json has no `repository`, `homepage` or `bugs`, and `npm run package` passes
+  `--allow-missing-repository` to vsce.
+- `scripts/marketplace-readme.js` writes the README the Marketplace shows (`--readme-path`), with
+  links to the repository's other files turned into their text, since they'd lead nowhere.
+  `check-package.js` refuses a package whose README still has one.
+- The schemas' `$id`s are `urn:nodecraft:schema:<name>`. Nothing resolves them.
+- The CLA bot takes the repository and its owner from GitHub (`github.repository`,
+  `github.repository_owner`), and CLA.md and CONTRIBUTING.md name no address.
+
+To add a repository later, put `repository`, `homepage` and `bugs` back in package.json. The
+Marketplace README can then keep its links, since vsce rewrites them to the repository.

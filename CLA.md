@@ -23,8 +23,9 @@ section 5 that you may sign for it.
 pull request, a patch, or by any other means), including changes and additions to existing work.
 Material You mark in writing as "Not a Contribution" when You submit it isn't one.
 
-"NodeCraft" means the software in the repository github.com/TheComputerPeople/NodeCraft and the products
-built from it, including the VS Code extension and the pack SDK.
+"NodeCraft" means the software We publish under that name, wherever its source code is kept, and
+the products built from it, including the VS Code extension (DevinBrasher.nodecraft) and the pack
+SDK.
 
 ## 2. Copyright license
 

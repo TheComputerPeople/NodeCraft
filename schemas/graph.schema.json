@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/TheComputerPeople/NodeCraft/main/schemas/graph.schema.json",
+  "$id": "urn:nodecraft:schema:graph",
   "title": "Blueprint Visual Graph (schema 3)",
   "description": "A .vgraph file: a class, function library or macro library containing one or more graphs, or a structure or enumeration declaring a type.",
   "type": "object",

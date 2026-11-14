@@ -111,6 +111,14 @@ for (const file of pointed.filter(Boolean).map((f) => (typeof f === 'string' ? f
   if (!has(name) && !has(name.toLowerCase())) problems.push(`package.json points to ${clean}, which isn't in the package`);
 }
 
+// The README the Marketplace shows links to no file of the repository, which has no public home
+// (scripts/marketplace-readme.js).
+const readmeName = [...entries.keys()].find((n) => /^extension\/readme\.md$/i.test(n));
+if (readmeName) {
+  const relative = [...entries.get(readmeName)().toString('utf8').matchAll(/(?<!!)\[[^\]]*\]\(([^)\s]+)\)/g)].map((m) => m[1]).filter((t) => !/^(https?:|mailto:|#)/.test(t));
+  if (relative.length) problems.push(`the README links to ${relative.slice(0, 3).join(', ')}${relative.length > 3 ? ' and more' : ''}, which lead nowhere on the Marketplace`);
+}
+
 // The grammars, and nothing that's only for development.
 const grammars = [...entries.keys()].filter((n) => /^extension\/grammars\/.+\.wasm$/.test(n));
 if (grammars.length < 10) problems.push(`only ${grammars.length} grammars are in the package`);

@@ -28,6 +28,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path-to-signatures: signatures/cla.json
-          path-to-document: https://github.com/TheComputerPeople/NodeCraft/blob/main/CLA.md
+          path-to-document: ${{ github.server_url }}/${{ github.repository }}/blob/main/CLA.md
           branch: cla-signatures
-          allowlist: TheComputerPeople,dependabot[bot]
+          allowlist: ${{ github.repository_owner }},dependabot[bot]

@@ -51,7 +51,7 @@ GitHub:
 3. If `main` has branch protection, add the "CLA" check as required, so a pull request can't be
    merged unsigned.
 
-The owner's account (TheComputerPeople) is on the allow list and never asked to sign. Keep the signatures:
+The repository owner's account is on the allow list and never asked to sign. Keep the signatures:
 they're the record that a later relicensing is allowed.
 
 ## Groundwork for the FSL

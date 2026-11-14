@@ -1,18 +1,10 @@
 {
   "name": "nodecraft",
   "displayName": "NodeCraft",
-  "description": "NodeCraft brings Unreal Blueprint-style visual scripting to VS Code. Build node graphs that compile to readable code in 12 languages (TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP), then run, test and debug them node by node with each language's own tools. Your own functions become nodes.",
+  "description": "NodeCraft brings Unreal Blueprint-style visual scripting to VS Code. Build node graphs that compile to readable code in 12 languages (TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP), then run, test and debug them node by node with each language's own tools.",
   "version": "0.1.2",
   "publisher": "DevinBrasher",
   "license": "SEE LICENSE IN LICENSING.md",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/TheComputerPeople/NodeCraft.git"
-  },
-  "homepage": "https://github.com/TheComputerPeople/NodeCraft#readme",
-  "bugs": {
-    "url": "https://github.com/TheComputerPeople/NodeCraft/issues"
-  },
   "engines": {
     "vscode": ">=1.140.0"
   },
@@ -625,7 +617,7 @@
     "test:sdk": "node scripts/build-sdk.js && node packages/pack-sdk/dist/cli.js javascript --filter flow",
     "test:integration:debuggers": "npm run compile && npm run build:test && node out/test/integration/runTest.js --with-debuggers",
     "build:test": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\" && tsc -p test",
-    "package": "npx --yes @vscode/vsce package && node scripts/check-package.js",
+    "package": "node scripts/marketplace-readme.js && npx --yes @vscode/vsce package --allow-missing-repository --readme-path out/marketplace/README.md && node scripts/check-package.js",
     "vscode:prepublish": "npm run compile",
     "test:package": "node scripts/test-package.js"
   },

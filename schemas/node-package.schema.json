@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/TheComputerPeople/NodeCraft/main/schemas/node-package.schema.json",
+  "$id": "urn:nodecraft:schema:node-package",
   "title": "Visual Node Package",
   "description": "A node library package (docs/language-breadth.md, \"Node library versioning\"; docs/node-authoring.md, gap 9): a workspace file named *.vgraph-package.json listing node definition files and graph files, with a version graphs remember.",
   "type": "object",
