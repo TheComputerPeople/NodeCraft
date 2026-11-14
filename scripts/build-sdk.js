@@ -33,4 +33,6 @@ copy(path.join(root, 'test/fixtures/nodes/Fail.node.json'), path.join(fixtures, 
 // The declarative pack schema, and the test pack as an example of one.
 copy(path.join(root, 'schemas/language-pack.schema.json'), path.join(dist, 'schema/language-pack.schema.json'));
 copy(path.join(root, 'test/fixtures/declarative/minijs.vgraph-language.json'), path.join(dist, 'examples/minijs.vgraph-language.json'));
+// The license terms the package is under (LICENSING.md), and the notices of what it bundles.
+for (const f of ['LICENSE', 'LICENSING.md', 'THIRD_PARTY_NOTICES.md']) copy(path.join(root, f), path.join(root, 'packages/pack-sdk', f));
 console.log(`Built ${path.relative(root, dist)}`);

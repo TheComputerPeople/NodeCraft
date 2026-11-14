@@ -375,3 +375,16 @@ breakpoint and problems ("Branch, flow control"), and a pin's name, type, direct
 wired to or its value ("Value, Wildcard input, connected to Add: Result"). The status line
 announces each node added, wire made, node deleted and compile result. In high contrast themes the
 editor uses the system's colors, and selection and the keyboard's focus use its highlight color.
+
+## License
+
+Copyright (C) 2026 Devin Brasher.
+
+NodeCraft is free software under the [GNU General Public License, version 3](LICENSE) only, with two additional permissions ([LICENSING.md](LICENSING.md)):
+
+- **The code it writes is yours.** Generated code, the support code written with it, build lines and the files New Project writes may be used under any terms you choose, in open or closed projects. Your graphs are yours too.
+- **Language packs can have their own license.** A pack that adds a language through NodeCraft's API, pack formats or pack SDK doesn't have to be under the GPL.
+
+Changes to NodeCraft itself that you distribute stay under the GPL, with their source. The name NodeCraft isn't licensed: a modified version needs a name of its own.
+
+Contributions are welcome under the [Contributor License Agreement](CLA.md); see [CONTRIBUTING.md](CONTRIBUTING.md). Version 0.1.1 and earlier were released under the MIT License.

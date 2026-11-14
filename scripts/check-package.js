@@ -3,6 +3,7 @@
 //   and elkjs, and couldn't activate);
 // - every file package.json points to (walkthrough pages, schemas, the icon, the guide the Coming
 //   from Unreal command opens) is in it;
+// - no module in it has a license that would tie NodeCraft to the GPL (scripts/licenses.js);
 // - the grammars are in it, and nothing that isn't needed at runtime (sources, tests) is;
 // - the parser, extracted on its own, loads.
 // Usage: node scripts/check-package.js [file.vsix]
@@ -12,6 +13,7 @@ const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
 const { builtinModules } = require('module');
+const { allowedLicense } = require('./licenses');
 
 const root = path.resolve(__dirname, '..');
 const vsix = process.argv[2]
@@ -82,6 +84,16 @@ for (const dependency of Object.keys(pkg.dependencies ?? {})) {
   if (!has(`node_modules/${dependency}/package.json`)) problems.push(`the dependency ${dependency} isn't in the package`);
 }
 
+// The modules' licenses: none may tie NodeCraft to the GPL (docs/licensing.md).
+for (const name of entries.keys()) {
+  const match = /^extension\/(?:.*\/)?node_modules\/((?:@[^/]+\/)?[^/@][^/]*)\/package\.json$/.exec(name);
+  if (!match) continue;
+  const manifest = JSON.parse(entries.get(name)().toString('utf8'));
+  if (!manifest.name) continue;
+  const license = typeof manifest.license === 'string' ? manifest.license : manifest.license?.type;
+  if (!allowedLicense(license)) problems.push(`${match[1]} is licensed ${license ?? '(not stated)'}, which NodeCraft can't include (docs/licensing.md)`);
+}
+
 // Files package.json points to.
 const pointed = [pkg.main && `${pkg.main.replace(/^\.\//, '')}`];
 if (pkg.icon) pointed.push(pkg.icon);
@@ -89,7 +101,9 @@ for (const walkthrough of pkg.contributes?.walkthroughs ?? []) {
   for (const step of walkthrough.steps) pointed.push(step.media?.markdown, step.media?.image, step.media?.svg);
 }
 for (const v of pkg.contributes?.jsonValidation ?? []) pointed.push(v.url);
-pointed.push('docs/coming-from-unreal.md', 'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md');
+pointed.push('docs/coming-from-unreal.md', 'README.md', 'LICENSE', 'LICENSING.md', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md');
+const seeLicense = /^SEE LICENSE IN (.+)$/.exec(pkg.license ?? '');
+if (seeLicense) pointed.push(seeLicense[1]);
 for (const file of pointed.filter(Boolean).map((f) => (typeof f === 'string' ? f : f.light ?? f.dark)).filter(Boolean)) {
   const clean = file.replace(/^\.\//, '');
   if (/^https?:/.test(clean)) continue;

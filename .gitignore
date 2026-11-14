@@ -15,3 +15,7 @@ test/fixtures/projects/cpp-vcxproj/x64/
 test/fixtures/projects/cpp-vcxproj/.vs/
 test/fixtures/projects/rust-*/**/target/
 test/fixtures/projects/gd-*/.godot/
+# The pack SDK's copies of the license files (scripts/build-sdk.js writes them).
+packages/pack-sdk/LICENSE
+packages/pack-sdk/LICENSING.md
+packages/pack-sdk/THIRD_PARTY_NOTICES.md

@@ -2,7 +2,7 @@
   "name": "@nodecraft/pack-sdk",
   "version": "1.0.0",
   "description": "Write language packs for NodeCraft, and check them with its conformance suite.",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSING.md",
   "main": "dist/index.js",
   "types": "dist/types/sdk/index.d.ts",
   "bin": {
@@ -10,7 +10,10 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "LICENSING.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "engines": {
     "node": ">=22.18"

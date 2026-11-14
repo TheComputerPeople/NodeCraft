@@ -451,3 +451,25 @@ is Epic's own name for Unreal's feature.
   - `npm run test:package` installs the `.vsix` into a VS Code of its own and checks that the
     installed extension activates, New Project writes the Tour, and the Codebase Map opens. It
     passes on 0.1.1, and on 0.1.0 it fails with the users' error.
+
+## 0.1.2: GPL-3.0, with an output exception and a CLA
+
+Decided 2026-11-14: NodeCraft is open source, but nobody may take it and close it. Copyright stays
+with Devin Brasher, and a later move to the Functional Source License stays possible.
+[docs/licensing.md](licensing.md) is the full record.
+
+- **Terms:** LICENSE is the GPL-3.0's text, word for word. LICENSING.md names the copyright holder,
+  "version 3 only", the name's exclusion (section 7(e)), and two section 7 permissions: the Output
+  Exception (what NodeCraft writes into a project is the user's) and the Language Pack Exception
+  (packs may have any license). `package.json`, the extension's and the pack SDK's, says
+  `SEE LICENSE IN LICENSING.md`. The README has a License section; the SDK's README and package carry
+  the same terms.
+- **Contributions:** CLA.md licenses each contribution broadly, including for relicensing, and
+  promises it stays open source (OSI-approved, or becoming so within four years). CONTRIBUTING.md
+  explains it and which third-party licenses can be added. `.github/workflows/cla.yml` runs the CLA
+  Assistant action, pinned to v2.6.1's commit, and needs the setup docs/licensing.md describes once
+  the repository is on GitHub.
+- **Checks:** `scripts/licenses.js` lists the third-party licenses allowed (no GPL-only ones).
+  `npm run package` refuses a package with a module under any other, and
+  `test/unit/licensing.test.ts` checks the production dependencies, the GPL text's hash, the
+  manifests and the CLA sentence.

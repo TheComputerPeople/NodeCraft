@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+- NodeCraft is now licensed under the GNU General Public License, version 3 only, with two
+  additional permissions (LICENSING.md): the code it generates and the files it writes into your
+  project are yours to use under any terms, and language packs may have licenses of their own.
+  Versions up to 0.1.1 were released under the MIT License.
+- Contributions are accepted under a Contributor License Agreement (CLA.md).
+
 ## 0.1.1
 
 - Fixes the package: 0.1.0 left out the extension's runtime libraries (web-tree-sitter and elkjs) and

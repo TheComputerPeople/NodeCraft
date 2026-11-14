@@ -172,3 +172,7 @@ Types are keyed `int`, `float`, `bool`, `string`, `any`, `array`, `set`, `map`, 
 ### Running and debugging
 
 `runner` has candidate `commands` (a list, or lists by platform with a `default`), `run` and `test` arguments, optional `build` arguments with the `executable` they produce, `scaffold` files written to a scratch folder first, `env` and a `missingToolMessage`. Arguments are templates over `file`, `url`, `dir`, `name`, `scaffold`, `className`, `mainMethod`, `exe` (`.exe` on Windows) and `platform`; an argument that is exactly `{{args}}` expands to the program's arguments, and `{{tests}}` to each test's name and method. `debugger` has a `type`, an `extension` (and other ones by `platforms`), optional `build` arguments, and a launch `configuration` whose strings are templates over the same facts plus `cwd`.
+
+## License
+
+Copyright (C) 2026 Devin Brasher. The SDK is under the same terms as NodeCraft: the GNU General Public License, version 3 only, with two additional permissions ([LICENSING.md](LICENSING.md)). The Language Pack Exception means your pack doesn't have to be under the GPL: you may write and distribute a pack under terms of your choice, bundle the SDK's helpers into it, and check it with the conformance suite.

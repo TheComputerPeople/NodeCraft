@@ -2,9 +2,9 @@
   "name": "nodecraft",
   "displayName": "NodeCraft",
   "description": "NodeCraft brings Unreal Blueprint-style visual scripting to VS Code. Build node graphs that compile to readable code in 12 languages (TypeScript, JavaScript, Python, C#, C++, Rust, Java, Go, Lua, GDScript, Ruby and PHP), then run, test and debug them node by node with each language's own tools. Your own functions become nodes.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "DevinBrasher",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSING.md",
   "repository": {
     "type": "git",
     "url": "https://github.com/TheComputerPeople/NodeCraft.git"
