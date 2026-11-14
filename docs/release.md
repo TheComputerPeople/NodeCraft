@@ -491,3 +491,9 @@ until there's a public repository:
 
 To add a repository later, put `repository`, `homepage` and `bugs` back in package.json. The
 Marketplace README can then keep its links, since vsce rewrites them to the repository.
+
+Later on 2026-11-14 the user gave the repository: `github.com/TheComputerPeople/NodeCraft` (public,
+empty at the time). package.json's `repository`, `homepage` and `bugs` point to it again, so vsce
+rewrites the README's links to the repository's files; they work once the code is pushed there.
+`scripts/marketplace-readme.js` only turns links into text when package.json names no repository.
+The schemas keep their URN `$id`s, and CLA.md still names no address.

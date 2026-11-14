@@ -5,6 +5,14 @@
   "version": "0.1.2",
   "publisher": "DevinBrasher",
   "license": "SEE LICENSE IN LICENSING.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheComputerPeople/NodeCraft.git"
+  },
+  "homepage": "https://github.com/TheComputerPeople/NodeCraft#readme",
+  "bugs": {
+    "url": "https://github.com/TheComputerPeople/NodeCraft/issues"
+  },
   "engines": {
     "vscode": ">=1.140.0"
   },

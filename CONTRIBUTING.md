@@ -1,6 +1,7 @@
 # Contributing to NodeCraft
 
-Bug reports, ideas and pull requests are welcome in NodeCraft's source repository.
+Bug reports, ideas and pull requests are welcome at
+[github.com/TheComputerPeople/NodeCraft](https://github.com/TheComputerPeople/NodeCraft).
 
 ## The Contributor License Agreement
 

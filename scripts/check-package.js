@@ -111,8 +111,9 @@ for (const file of pointed.filter(Boolean).map((f) => (typeof f === 'string' ? f
   if (!has(name) && !has(name.toLowerCase())) problems.push(`package.json points to ${clean}, which isn't in the package`);
 }
 
-// The README the Marketplace shows links to no file of the repository, which has no public home
-// (scripts/marketplace-readme.js).
+// The README the Marketplace shows links to no file by a relative path, which would lead nowhere
+// there: vsce rewrites them to the repository, or scripts/marketplace-readme.js turns them into text
+// when there's none.
 const readmeName = [...entries.keys()].find((n) => /^extension\/readme\.md$/i.test(n));
 if (readmeName) {
   const relative = [...entries.get(readmeName)().toString('utf8').matchAll(/(?<!!)\[[^\]]*\]\(([^)\s]+)\)/g)].map((m) => m[1]).filter((t) => !/^(https?:|mailto:|#)/.test(t));

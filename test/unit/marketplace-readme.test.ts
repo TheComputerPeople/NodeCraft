@@ -1,5 +1,6 @@
-// The README the Marketplace shows (scripts/marketplace-readme.js): NodeCraft has no public source
-// repository, so links to its other files become their text; links to web pages and headings stay.
+// The README the Marketplace shows (scripts/marketplace-readme.js) when package.json names no
+// repository: links to the repository's other files become their text; links to web pages and
+// headings stay. (With a repository, vsce rewrites them to it.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -18,7 +19,7 @@ test('links to web pages and headings, and images, are kept', () => {
   assert.equal(marketplaceReadme(text), text);
 });
 
-test('the README, as the Marketplace shows it, links to no file', () => {
+test('the README, as the Marketplace shows it without a repository, links to no file', () => {
   const shown = marketplaceReadme(fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8'));
   const relative = [...shown.matchAll(/(?<!!)\[[^\]]*\]\(([^)\s]+)\)/g)].map((m) => m[1]).filter((t) => !/^(https?:|mailto:|#)/.test(t));
   assert.deepEqual(relative, []);
